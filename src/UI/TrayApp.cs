@@ -15,11 +15,13 @@ internal sealed class TrayApp : ApplicationContext
     private bool _wantConnected;
     private bool _hintShown;
 
-    public AppConfig Config { get; } = AppConfig.Load();
-    public StreamController Controller { get; } = new();
+    public AppConfig Config { get; }
+    public StreamController Controller { get; }
 
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false)
     {
+        Config = AppConfig.Load();
+        Controller = new StreamController(Config.FifoTargetMs);
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
         var menu = new ContextMenuStrip();

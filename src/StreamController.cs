@@ -16,7 +16,13 @@ public sealed class StreamController : IDisposable
 {
     private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
 
-    private readonly AudioFifo _fifo = new(RtpSender.SampleRate, targetMs: 20, capMs: 60);
+    private readonly AudioFifo _fifo;
+
+    public StreamController(int fifoTargetMs = 12)
+    {
+        fifoTargetMs = Math.Clamp(fifoTargetMs, 5, 100);
+        _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10);
+    }
     private readonly object _lock = new();
     private LoopbackCapture? _capture;
     private AirPlayClient? _client;

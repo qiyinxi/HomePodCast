@@ -15,6 +15,9 @@ public sealed class AppConfig
     public int? MeasuredAvOffsetMs { get; set; }
     public int? ArrivalToRenderMs { get; set; }
 
+    /// <summary>Capture→sender FIFO target. Smaller = lower latency, but must cover capture jitter.</summary>
+    public int FifoTargetMs { get; set; } = 12;
+
     [JsonIgnore]
     public static string Directory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HomePodCast");
