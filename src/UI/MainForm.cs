@@ -36,80 +36,100 @@ internal sealed class MainForm : Form
     public MainForm(TrayApp app)
     {
         _app = app;
+        SuspendLayout();
+        // Everything below is in 96-DPI units; WinForms scales it to the monitor's DPI.
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Font = new Font("Microsoft YaHei UI", 9f);
         Text = "HomePod 音响";
-        Font = new Font("Microsoft YaHei UI", 9.5f);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Dpi;
         Icon = Icons.Speaker(Icons.Streaming);
-        ClientSize = new Size(440, 330);
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+        const int fieldWidth = 260;
+        const int textWidth = 380;
+        var stretch = AnchorStyles.Left | AnchorStyles.Right;
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(16, 14, 16, 10),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(14, 12, 14, 10),
             ColumnCount = 3,
-            RowCount = 8,
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 52));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        for (int i = 0; i < 3; i++) layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-        _device.Dock = DockStyle.Fill;
-        _refresh.Dock = DockStyle.Fill;
+        _device.Width = fieldWidth;
+        _device.Anchor = stretch;
+        _refresh.AutoSize = false;
+        _refresh.Size = new Size(64, 27);
+        _refresh.Anchor = stretch;
         layout.Controls.Add(Caption("音箱"), 0, 0);
         layout.Controls.Add(_device, 1, 0);
         layout.Controls.Add(_refresh, 2, 0);
 
-        var statusRow = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 8, 0, 4) };
-        _dot.Margin = new Padding(2, 6, 6, 0);
+        var statusRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 10, 0, 6) };
+        _dot.Margin = new Padding(2, 5, 6, 0);
         _dot.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             using var b = new SolidBrush(Icons.For(_app.Controller.State));
-            e.Graphics.FillEllipse(b, 0, 0, 11, 11);
+            e.Graphics.FillEllipse(b, 0, 0, _dot.Width - 1, _dot.Height - 1);
         };
-        _status.Size = new Size(370, 24);
-        _status.TextAlign = ContentAlignment.MiddleLeft;
+        _status.AutoSize = true;
+        _status.MaximumSize = new Size(textWidth, 0);
+        _status.Margin = new Padding(0, 2, 0, 0);
         statusRow.Controls.AddRange([_dot, _status]);
         layout.Controls.Add(statusRow, 0, 1);
         layout.SetColumnSpan(statusRow, 3);
 
-        _connect.Dock = DockStyle.Fill;
-        _connect.Height = 36;
+        _connect.Anchor = stretch;
+        _connect.MinimumSize = new Size(0, 34);
         _connect.Font = new Font(Font.FontFamily, 10.5f);
+        _connect.Margin = new Padding(3, 0, 3, 8);
         layout.Controls.Add(_connect, 0, 2);
         layout.SetColumnSpan(_connect, 3);
 
-        _volume.Dock = DockStyle.Fill;
-        _volumeValue.Dock = DockStyle.Fill;
+        _volume.AutoSize = false;
+        _volume.Size = new Size(fieldWidth, 32);
+        _volume.Anchor = stretch;
+        _volumeValue.AutoSize = true;
+        _volumeValue.MinimumSize = new Size(32, 0);
+        _volumeValue.Anchor = AnchorStyles.Left;
         layout.Controls.Add(Caption("音量"), 0, 3);
         layout.Controls.Add(_volume, 1, 3);
         layout.Controls.Add(_volumeValue, 2, 3);
 
         foreach (var (_, label) in Latencies) _latency.Items.Add(label);
-        _latency.Dock = DockStyle.Fill;
+        _latency.Anchor = stretch;
         layout.Controls.Add(Caption("延迟"), 0, 4);
         layout.Controls.Add(_latency, 1, 4);
         layout.SetColumnSpan(_latency, 2);
 
-        var options = new FlowLayoutPanel { Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 0) };
+        var options = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 10, 0, 0) };
         _autoconnect.Margin = new Padding(18, 3, 3, 3);
         options.Controls.AddRange([_autostart, _autoconnect]);
         layout.Controls.Add(options, 0, 5);
         layout.SetColumnSpan(options, 3);
 
         _syncTest.AutoSize = true;
+        _syncTest.Anchor = AnchorStyles.Left;
+        _syncTest.Margin = new Padding(3, 8, 3, 6);
         layout.Controls.Add(_syncTest, 0, 6);
         layout.SetColumnSpan(_syncTest, 3);
 
-        _stats.Dock = DockStyle.Fill;
+        _stats.AutoSize = true;
+        _stats.MaximumSize = new Size(textWidth, 0);
         layout.Controls.Add(_stats, 0, 7);
         layout.SetColumnSpan(_stats, 3);
 
         for (int i = 0; i < 8; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
+        ResumeLayout(false);
+        PerformLayout();
 
         _refresh.Click += (_, _) => _app.RefreshDevices();
         _connect.Click += (_, _) => _app.ToggleConnection();
@@ -155,9 +175,9 @@ internal sealed class MainForm : Form
     private static Label Caption(string text) => new()
     {
         Text = text,
-        AutoSize = false,
-        Dock = DockStyle.Fill,
-        TextAlign = ContentAlignment.MiddleLeft,
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        Margin = new Padding(0, 0, 10, 0),
     };
 
     private void LoadFromConfig()

@@ -24,6 +24,9 @@ internal sealed class SyncTestForm : Form
 
     public SyncTestForm(int initialOffsetMs)
     {
+        SuspendLayout();
+        AutoScaleDimensions = new SizeF(96F, 96F); // coordinates below are 96-DPI units
+        AutoScaleMode = AutoScaleMode.Dpi;
         Text = "音画同步测试";
         Font = new Font("Microsoft YaHei UI", 10f);
         BackColor = Color.FromArgb(24, 24, 24);
@@ -74,6 +77,7 @@ internal sealed class SyncTestForm : Form
         AcceptButton = done;
         _offset.ValueChanged += (_, _) => UpdateValue();
         Controls.AddRange([help, _circle, _offset, _value, done]);
+        ResumeLayout(false);
         UpdateValue();
 
         _clicks.ClickScheduled += when => _due.Add(when);

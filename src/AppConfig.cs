@@ -20,7 +20,11 @@ public sealed class AppConfig
 
     private static string FilePath => Path.Combine(Directory, "config.json");
 
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep 卧室 readable
+    };
 
     public static AppConfig Load()
     {
