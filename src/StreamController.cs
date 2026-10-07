@@ -104,7 +104,9 @@ public sealed class StreamController : IDisposable
                 attempt = 0;
                 Set(StreamState.Streaming, $"已连接 · {client.Info.GetValueOrDefault("name")}");
 
-                lostReason = await lost.Task.WaitAsync(ct);
+                using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
+                    lostReason = await lost.Task.WaitAsync(ct);
+                LogStats();
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -170,6 +172,16 @@ public sealed class StreamController : IDisposable
         {
             return false;
         }
+    }
+
+    private void LogStats()
+    {
+        var s = _client?.Sender;
+        if (s == null) return;
+        Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms drift={_capture?.DriftPpm ?? 0:F0}ppm " +
+                 $"underruns={_fifo.Underruns} overflows={_fifo.Overflows} sent={s.PacketsSent} late={s.LateWakeups} " +
+                 $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
+                 $"rtxMiss={s.RetransmitMisses}");
     }
 
     private void TearDown()

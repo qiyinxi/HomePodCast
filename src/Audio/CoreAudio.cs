@@ -78,7 +78,7 @@ internal interface IAudioCaptureClient
     [PreserveSig] int GetNextPacketSize(out uint frames);
 }
 
-[ComImport, Guid("F294ACFC-3146-4483-A7BF-AD7F6E2E7F3A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+[ComImport, Guid("F294ACFC-3146-4483-A7BF-ADDCA7C260E2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IAudioRenderClient
 {
     [PreserveSig] int GetBuffer(uint frames, out IntPtr data);
@@ -87,7 +87,7 @@ internal interface IAudioRenderClient
 
 internal static class CoreAudio
 {
-    public static Guid IidAudioRenderClient = new("F294ACFC-3146-4483-A7BF-AD7F6E2E7F3A");
+    public static Guid IidAudioRenderClient = new("F294ACFC-3146-4483-A7BF-ADDCA7C260E2");
 
     public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;

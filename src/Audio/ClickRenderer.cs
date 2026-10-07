@@ -88,7 +88,7 @@ public sealed class ClickRenderer : IDisposable
         }
         catch (Exception ex) when (!_stop)
         {
-            Log.Warn($"click renderer: {ex.Message}");
+            Log.Warn($"click renderer: {ex}");
         }
         finally
         {

@@ -19,6 +19,7 @@ public static class Program
                 "gui" => RunGui(startHidden: args.Contains("--tray")),
                 "scan" => Scan().GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
+                "clicks" => Clicks(),
                 _ => Help(),
             };
         }
@@ -64,6 +65,15 @@ public static class Program
 
     private static string? Opt(string[] args, string name) =>
         Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+
+    private static int Clicks()
+    {
+        using var r = new ClickRenderer();
+        r.ClickScheduled += when => Log.Info($"click scheduled {Net.MediaClock.ToMs(when - Net.MediaClock.Now):F1} ms from now");
+        r.Start();
+        Thread.Sleep(3500);
+        return 0;
+    }
 
     private static async Task<int> Scan()
     {
