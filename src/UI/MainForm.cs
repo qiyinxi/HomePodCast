@@ -159,10 +159,17 @@ internal sealed class MainForm : Form
             ShowLatency(_latency.Value * LatencyStep);
             if (_loading) return;
             _latencyDebounce.Stop();
-            _latencyDebounce.Start(); // latency is negotiated at SETUP; reconnect once it has been still for 1 s
+            _latencyDebounce.Start(); // latency is negotiated at SETUP: reconnect 1 s after release + stillness
+        };
+        _latency.MouseUp += (_, _) =>
+        {
+            if (!_latencyDebounce.Enabled) return;
+            _latencyDebounce.Stop();
+            _latencyDebounce.Start();
         };
         _latencyDebounce.Tick += (_, _) =>
         {
+            if (_latency.Capture) return; // still held down: wait for release
             _latencyDebounce.Stop();
             _app.SetLatency(_latency.Value * LatencyStep);
         };
