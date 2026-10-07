@@ -4,7 +4,7 @@ namespace HomePodCast.UI;
 
 internal sealed class MainForm : Form
 {
-    private const int LatencyMax = 500, LatencyStep = 5;
+    private const int LatencyMax = 500, LatencyStep = 1;
 
     private readonly TrayApp _app;
     private readonly ComboBox _device = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -14,7 +14,7 @@ internal sealed class MainForm : Form
     private readonly Button _connect = new() { Text = "连接" };
     private readonly TrackBar _volume = new() { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
     private readonly Label _volumeValue = new() { TextAlign = ContentAlignment.MiddleRight };
-    private readonly TrackBar _latency = new() { Maximum = LatencyMax / LatencyStep, TickFrequency = 50 / LatencyStep, SmallChange = 1, LargeChange = 4 };
+    private readonly TrackBar _latency = new() { Maximum = LatencyMax / LatencyStep, TickFrequency = 50 / LatencyStep, SmallChange = 1, LargeChange = 10 };
     private readonly Label _latencyValue = new() { TextAlign = ContentAlignment.MiddleRight };
     private readonly Label _latencyHint = new() { AutoSize = true, ForeColor = Color.DimGray };
     private readonly System.Windows.Forms.Timer _latencyDebounce = new() { Interval = 1000 };
@@ -99,13 +99,16 @@ internal sealed class MainForm : Form
         layout.Controls.Add(_volumeValue, 2, 3);
 
         _latency.AutoSize = false;
-        _latency.Size = new Size(fieldWidth, 32);
-        _latency.Anchor = stretch;
+        _latency.Size = new Size(fieldWidth - 64, 32);
         _latencyValue.AutoSize = true;
         _latencyValue.MinimumSize = new Size(56, 0);
         _latencyValue.Anchor = AnchorStyles.Left;
+        var minus = StepButton("−", -1);
+        var plus = StepButton("+", +1);
+        var latencyRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty, Anchor = AnchorStyles.Left };
+        latencyRow.Controls.AddRange([minus, _latency, plus]);
         layout.Controls.Add(Caption("延迟"), 0, 4);
-        layout.Controls.Add(_latency, 1, 4);
+        layout.Controls.Add(latencyRow, 1, 4);
         layout.Controls.Add(_latencyValue, 2, 4);
         _latencyHint.Margin = new Padding(10, 0, 3, 0);
         layout.Controls.Add(_latencyHint, 1, 5);
@@ -190,6 +193,20 @@ internal sealed class MainForm : Form
         _statsTimer.Tick += (_, _) => UpdateStats();
 
         LoadFromConfig();
+    }
+
+    private Button StepButton(string text, int delta)
+    {
+        var b = new Button
+        {
+            Text = text,
+            Size = new Size(28, 28),
+            Margin = new Padding(0, 2, 0, 0),
+            Font = new Font(Font.FontFamily, 11f, FontStyle.Bold),
+            TabStop = false,
+        };
+        b.Click += (_, _) => _latency.Value = Math.Clamp(_latency.Value + delta, _latency.Minimum, _latency.Maximum);
+        return b;
     }
 
     private void ShowLatency(int ms)
