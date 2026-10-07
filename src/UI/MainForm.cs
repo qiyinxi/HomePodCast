@@ -4,15 +4,7 @@ namespace HomePodCast.UI;
 
 internal sealed class MainForm : Form
 {
-    public static readonly (int Ms, string Label)[] Latencies =
-    [
-        (100, "100 ms · 极限（可能断续）"),
-        (120, "120 ms · 推荐（游戏）"),
-        (150, "150 ms"),
-        (200, "200 ms · Wi-Fi 较差时"),
-        (300, "300 ms"),
-        (500, "500 ms · 最稳"),
-    ];
+    private const int LatencyMax = 500, LatencyStep = 5;
 
     private readonly TrayApp _app;
     private readonly ComboBox _device = new() { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -22,7 +14,10 @@ internal sealed class MainForm : Form
     private readonly Button _connect = new() { Text = "连接" };
     private readonly TrackBar _volume = new() { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
     private readonly Label _volumeValue = new() { TextAlign = ContentAlignment.MiddleRight };
-    private readonly ComboBox _latency = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TrackBar _latency = new() { Maximum = LatencyMax / LatencyStep, TickFrequency = 50 / LatencyStep, SmallChange = 1, LargeChange = 4 };
+    private readonly Label _latencyValue = new() { TextAlign = ContentAlignment.MiddleRight };
+    private readonly Label _latencyHint = new() { AutoSize = true, ForeColor = Color.DimGray };
+    private readonly System.Windows.Forms.Timer _latencyDebounce = new() { Interval = 1000 };
     private readonly CheckBox _autostart = new() { Text = "开机自动启动", AutoSize = true };
     private readonly CheckBox _autoconnect = new() { Text = "启动后自动连接", AutoSize = true };
     private readonly Button _syncTest = new() { Text = "音画同步测试…" };
@@ -103,16 +98,23 @@ internal sealed class MainForm : Form
         layout.Controls.Add(_volume, 1, 3);
         layout.Controls.Add(_volumeValue, 2, 3);
 
-        foreach (var (_, label) in Latencies) _latency.Items.Add(label);
+        _latency.AutoSize = false;
+        _latency.Size = new Size(fieldWidth, 32);
         _latency.Anchor = stretch;
+        _latencyValue.AutoSize = true;
+        _latencyValue.MinimumSize = new Size(56, 0);
+        _latencyValue.Anchor = AnchorStyles.Left;
         layout.Controls.Add(Caption("延迟"), 0, 4);
         layout.Controls.Add(_latency, 1, 4);
-        layout.SetColumnSpan(_latency, 2);
+        layout.Controls.Add(_latencyValue, 2, 4);
+        _latencyHint.Margin = new Padding(10, 0, 3, 0);
+        layout.Controls.Add(_latencyHint, 1, 5);
+        layout.SetColumnSpan(_latencyHint, 2);
 
         var options = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 10, 0, 0) };
         _autoconnect.Margin = new Padding(18, 3, 3, 3);
         options.Controls.AddRange([_autostart, _autoconnect]);
-        layout.Controls.Add(options, 0, 5);
+        layout.Controls.Add(options, 0, 6);
         layout.SetColumnSpan(options, 3);
 
         var tools = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 8, 0, 6) };
@@ -120,15 +122,15 @@ internal sealed class MainForm : Form
         _syncTest.AutoSize = true;
         _syncTest.Margin = new Padding(10, 3, 3, 3);
         tools.Controls.AddRange([_mixer, _syncTest]);
-        layout.Controls.Add(tools, 0, 6);
+        layout.Controls.Add(tools, 0, 7);
         layout.SetColumnSpan(tools, 3);
 
         _stats.AutoSize = true;
         _stats.MaximumSize = new Size(textWidth, 0);
-        layout.Controls.Add(_stats, 0, 7);
+        layout.Controls.Add(_stats, 0, 8);
         layout.SetColumnSpan(_stats, 3);
 
-        for (int i = 0; i < 8; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        for (int i = 0; i < 9; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
         ResumeLayout(false);
         PerformLayout();
@@ -152,9 +154,17 @@ internal sealed class MainForm : Form
             _volumeDebounce.Stop();
             _app.SetVolume(_volume.Value);
         };
-        _latency.SelectedIndexChanged += (_, _) =>
+        _latency.ValueChanged += (_, _) =>
         {
-            if (!_loading && _latency.SelectedIndex >= 0) _app.SetLatency(Latencies[_latency.SelectedIndex].Ms);
+            ShowLatency(_latency.Value * LatencyStep);
+            if (_loading) return;
+            _latencyDebounce.Stop();
+            _latencyDebounce.Start(); // latency is negotiated at SETUP; reconnect once it has been still for 1 s
+        };
+        _latencyDebounce.Tick += (_, _) =>
+        {
+            _latencyDebounce.Stop();
+            _app.SetLatency(_latency.Value * LatencyStep);
         };
         _autostart.CheckedChanged += (_, _) =>
         {
@@ -175,6 +185,19 @@ internal sealed class MainForm : Form
         LoadFromConfig();
     }
 
+    private void ShowLatency(int ms)
+    {
+        _latencyValue.Text = $"{ms} ms";
+        _latencyHint.Text = ms switch
+        {
+            < 110 => "极限：Wi-Fi 稍有波动就会断续",
+            < 140 => "推荐：打游戏",
+            < 250 => "更稳：Wi-Fi 一般时",
+            _ => "最稳：听歌、看视频",
+        };
+        _latencyHint.ForeColor = ms < 110 ? Icons.Error : Color.DimGray;
+    }
+
     private static Label Caption(string text) => new()
     {
         Text = text,
@@ -187,8 +210,9 @@ internal sealed class MainForm : Form
     {
         _loading = true;
         var cfg = _app.Config;
-        int li = Array.FindIndex(Latencies, l => l.Ms == cfg.LatencyMs);
-        _latency.SelectedIndex = li >= 0 ? li : 1;
+        _latency.Minimum = (_app.Controller.SafeLatency(0) + LatencyStep - 1) / LatencyStep;
+        _latency.Value = Math.Clamp(cfg.LatencyMs / LatencyStep, _latency.Minimum, _latency.Maximum);
+        ShowLatency(_latency.Value * LatencyStep);
         _volume.Value = (int)Math.Round(_app.Controller.Volume ?? cfg.Volume ?? 0);
         _volumeValue.Text = cfg.Volume is null && _app.Controller.Volume is null ? "--" : _volume.Value.ToString();
         _autostart.Checked = Autostart.Enabled;

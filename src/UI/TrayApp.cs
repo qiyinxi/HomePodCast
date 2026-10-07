@@ -105,6 +105,7 @@ internal sealed class TrayApp : ApplicationContext
 
     public void SetLatency(int ms)
     {
+        if (Config.LatencyMs == ms) return;
         Config.LatencyMs = ms;
         Config.Save();
         if (_wantConnected) Connect(); // latency is negotiated at SETUP, so reconnect
