@@ -7,7 +7,7 @@ using HomePodCast.Protocol;
 
 namespace HomePodCast.Net;
 
-public sealed record StreamOptions(int LatencyMs, double? VolumePercent);
+public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool LatencyInSync = false);
 
 /// <summary>
 /// One AirPlay 2 realtime audio session to one speaker:
@@ -128,11 +128,12 @@ public sealed class AirPlayClient : IDisposable
         int dataPort = Convert.ToInt32(stream["dataPort"]);
         int controlPort = Convert.ToInt32(stream["controlPort"]);
         Log.Info($"stream ready: data={dataPort} control={controlPort} " +
-                 $"arrivalToRenderLatency={stream.GetValueOrDefault("arrivalToRenderLatencyMs")}ms latency={options.LatencyMs}ms");
+                 $"arrivalToRenderLatency={stream.GetValueOrDefault("arrivalToRenderLatencyMs")}ms latency={options.LatencyMs}ms " +
+                 $"sync={(options.LatencyInSync ? "legacy" : "plain")}");
 
         // --- start: anchor the timeline a little in the future so RECORD/FLUSH fit before packet 0
         _sender = new RtpSender(_control, _rtsp.RemoteIp, dataPort, controlPort, streamKey, _rtsp.SessionId,
-            latencyFrames, fifo);
+            latencyFrames, fifo) { LatencyInSync = options.LatencyInSync };
         _sender.Start(MediaClock.Now + MediaClock.FromMs(250));
 
         _feedbackTimer = new System.Threading.Timer(_ => Feedback(), null, TimeSpan.Zero, FeedbackInterval);

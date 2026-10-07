@@ -10,7 +10,8 @@ namespace HomePodCast.Net;
 /// <summary>
 /// Realtime (type 96) AirPlay 2 audio sender.
 /// One timeline: packet n carries RTP time RtpBase + n*352 and is sent at T0 + n*352/rate; sync packets
-/// map "now" onto the same line, so every packet plays exactly LatencyFrames after it was sent.
+/// map "now" onto the same line; the speaker adds the SETUP latency, so every packet plays
+/// LatencyFrames after it was sent.
 /// </summary>
 public sealed class RtpSender : IDisposable
 {
@@ -35,6 +36,9 @@ public sealed class RtpSender : IDisposable
     private volatile bool _stop;
 
     public int LatencyFrames { get; }
+
+    /// <summary>Legacy (pyatv-style) sync packets that also subtract the latency. Off by default.</summary>
+    public bool LatencyInSync { get; set; }
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public uint RtpBase { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
     public long T0 { get; private set; }
@@ -190,7 +194,10 @@ public sealed class RtpSender : IDisposable
         p[0] = first ? (byte)0x90 : (byte)0x80;
         p[1] = 0xD4;
         BinaryPrimitives.WriteUInt16BigEndian(p.AsSpan(2), 7);
-        BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(4), unchecked(rtpNow - (uint)LatencyFrames));
+        // Measured on HomePod OS 27: it adds the SETUP latency on top of whatever the sync packet
+        // says, so putting the latency here as well (as pyatv does) doubles the real delay.
+        uint anchor = LatencyInSync ? unchecked(rtpNow - (uint)LatencyFrames) : rtpNow;
+        BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(4), anchor);
         BinaryPrimitives.WriteUInt64BigEndian(p.AsSpan(8), MediaClock.NtpAt(now));
         BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(16), rtpNow);
         try { _control.Send(p, p.Length, _controlRemote); } catch (SocketException) { }
