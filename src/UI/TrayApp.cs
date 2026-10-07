@@ -44,6 +44,8 @@ internal sealed class TrayApp : ApplicationContext
             if (Config.Host != host) { Config.Host = host; Config.Save(); }
         }, null);
         Controller.FirewallBlocked += () => _ui.Post(_ => OfferFirewallRule(), null);
+        Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
+        Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ => KickIfWanted(), null);

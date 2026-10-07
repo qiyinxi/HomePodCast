@@ -9,10 +9,11 @@ public sealed class AppConfig
     public string? DeviceId { get; set; }
     public string? DeviceName { get; set; }
     public string? Host { get; set; }
-    public int LatencyMs { get; set; } = 100;
+    public int LatencyMs { get; set; } = 120;
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;
     public int? MeasuredAvOffsetMs { get; set; }
+    public int? ArrivalToRenderMs { get; set; }
 
     [JsonIgnore]
     public static string Directory => Path.Combine(

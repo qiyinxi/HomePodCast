@@ -32,6 +32,17 @@ public sealed class StreamController : IDisposable
     /// <summary>Last volume confirmed on the speaker (percent).</summary>
     public double? Volume { get; private set; }
 
+    /// <summary>The speaker's own arrival-to-playout time, remembered across connections.</summary>
+    public int? ArrivalToRenderMs { get; set; }
+
+    /// <summary>Latency actually requested for the current session (after the safety floor).</summary>
+    public int EffectiveLatencyMs { get; private set; }
+
+    /// <summary>Below the speaker's processing time + this margin, every bit of Wi-Fi jitter is audible.</summary>
+    public const int SafetyMarginMs = 15;
+
+    public int SafeLatency(int requestedMs) => Math.Max(requestedMs, (ArrivalToRenderMs ?? 85) + SafetyMarginMs);
+
     public event Action? Changed;
 
     public void Start(string deviceId, string? host, int latencyMs, double? volume)
@@ -97,9 +108,17 @@ public sealed class StreamController : IDisposable
                 }
 
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var client = await AirPlayClient.ConnectAsync(address, 7000, new StreamOptions(latencyMs, Volume), _fifo, ct);
+                EffectiveLatencyMs = SafeLatency(latencyMs);
+                if (EffectiveLatencyMs != latencyMs)
+                    Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
+                var client = await AirPlayClient.ConnectAsync(address, 7000, new StreamOptions(EffectiveLatencyMs, Volume), _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 _client = client;
+                if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
+                {
+                    ArrivalToRenderMs = a2r;
+                    ArrivalToRenderChanged?.Invoke(a2r);
+                }
                 Volume ??= client.InitialVolumeDb is { } db ? AirPlayClient.DbToPercent(db) : null;
                 attempt = 0;
                 Set(StreamState.Streaming, $"已连接 · {client.Info.GetValueOrDefault("name")}");
@@ -146,6 +165,8 @@ public sealed class StreamController : IDisposable
     public event Action<string>? HostResolved;
 
     public event Action? FirewallBlocked;
+
+    public event Action<int>? ArrivalToRenderChanged;
 
     private static async Task<IPAddress> ResolveAsync(string deviceId, string? host, CancellationToken ct)
     {

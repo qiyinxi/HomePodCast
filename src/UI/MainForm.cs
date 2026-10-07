@@ -6,9 +6,8 @@ internal sealed class MainForm : Form
 {
     public static readonly (int Ms, string Label)[] Latencies =
     [
-        (80, "80 ms · 极限"),
-        (100, "100 ms · 推荐（游戏）"),
-        (120, "120 ms"),
+        (100, "100 ms · 极限（可能断续）"),
+        (120, "120 ms · 推荐（游戏）"),
         (150, "150 ms"),
         (200, "200 ms · Wi-Fi 较差时"),
         (300, "300 ms"),
@@ -253,8 +252,8 @@ internal sealed class MainForm : Form
             return;
         }
         double fifoMs = c.Fifo.Depth * 1000.0 / RtpSender.SampleRate;
-        _stats.Text = $"{source}\n缓冲 {fifoMs:F0} ms · 迟发 {s.LateWakeups} · 断音 {c.Fifo.Underruns} · " +
-                      $"重传 {s.Retransmitted}/{s.RetransmitRequests}";
+        _stats.Text = $"{source}\n延迟 {c.EffectiveLatencyMs} ms · 缓冲 {fifoMs:F0} ms · 迟发 {s.LateWakeups} · " +
+                      $"断音 {c.Fifo.Underruns} · 重传 {s.Retransmitted}/{s.RetransmitRequests}";
     }
 
     protected override void OnVisibleChanged(EventArgs e)

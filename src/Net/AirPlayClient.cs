@@ -33,6 +33,9 @@ public sealed class AirPlayClient : IDisposable
     public int TimingRequests => _timing.RequestsAnswered;
     public double? InitialVolumeDb => Info.TryGetValue("initialVolume", out var v) && v is double d ? d : null;
 
+    /// <summary>Time the speaker says it needs from packet arrival to playout (from the stream SETUP reply).</summary>
+    public int? ArrivalToRenderMs { get; private set; }
+
     /// <summary>Raised once when the session dies (speaker closed it, network gone, taken over...).</summary>
     public event Action<string>? Lost;
 
@@ -127,6 +130,7 @@ public sealed class AirPlayClient : IDisposable
                      ?? throw new InvalidDataException("SETUP stream: no streams in reply");
         int dataPort = Convert.ToInt32(stream["dataPort"]);
         int controlPort = Convert.ToInt32(stream["controlPort"]);
+        if (stream.GetValueOrDefault("arrivalToRenderLatencyMs") is long a2r) ArrivalToRenderMs = (int)a2r;
         Log.Info($"stream ready: data={dataPort} control={controlPort} " +
                  $"arrivalToRenderLatency={stream.GetValueOrDefault("arrivalToRenderLatencyMs")}ms latency={options.LatencyMs}ms " +
                  $"sync={(options.LatencyInSync ? "legacy" : "plain")}");
