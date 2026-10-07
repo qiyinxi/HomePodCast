@@ -154,7 +154,32 @@ internal sealed class TrayApp : ApplicationContext
             return;
         }
         using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
-        if (test.ShowDialog(owner) == DialogResult.OK)
+
+        // Probe our own share of the latency: Windows mix -> packet leaving the PC.
+        var sender = Controller.Client?.Sender;
+        var scheduled = new System.Collections.Concurrent.ConcurrentQueue<long>();
+        var local = new List<double>();
+        test.ClickScheduled += when => scheduled.Enqueue(when);
+        if (sender != null)
+        {
+            sender.OnsetSent = sent =>
+            {
+                while (scheduled.TryPeek(out var w) && sent - w > MediaClock.FromMs(400)) scheduled.TryDequeue(out _);
+                if (scheduled.TryDequeue(out var when) && sent >= when)
+                {
+                    double ms = MediaClock.ToMs(sent - when);
+                    lock (local) local.Add(ms);
+                    Log.Info($"probe: click left the PC {ms:F1} ms after entering the Windows mix " +
+                             $"(+{sender.LatencyFrames * 1000.0 / RtpSender.SampleRate:F0} ms requested playout delay)");
+                }
+            };
+        }
+
+        var result = test.ShowDialog(owner);
+        if (sender != null) sender.OnsetSent = null;
+        if (local.Count > 0)
+            Log.Info($"probe summary: local pipeline median {local.Order().ElementAt(local.Count / 2):F1} ms over {local.Count} clicks");
+        if (result == DialogResult.OK)
         {
             Config.MeasuredAvOffsetMs = test.OffsetMs;
             Config.Save();

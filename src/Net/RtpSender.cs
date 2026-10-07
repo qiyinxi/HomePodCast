@@ -49,6 +49,13 @@ public sealed class RtpSender : IDisposable
     public long Retransmitted;
     public long RetransmitMisses;
 
+    /// <summary>
+    /// When set, report the QPC time at which a sound onset (after ≥300 ms of near-silence) leaves the
+    /// PC. Used by the sync test to measure our own share of the latency.
+    /// </summary>
+    public Action<long>? OnsetSent;
+    private int _quietFrames;
+
     public RtpSender(UdpClient control, IPAddress remote, int dataPort, int controlPort, byte[] streamKey,
         uint ssrc, int latencyFrames, AudioFifo fifo)
     {
@@ -121,10 +128,25 @@ public sealed class RtpSender : IDisposable
             }
 
             if (!_fifo.Read(pcm)) SilentPackets++;
+            if (OnsetSent is { } onset) DetectOnset(pcm, deadline, onset);
             ToS16BigEndian(pcm, payload);
             SendAudio(n, payload, firstPacket);
             firstPacket = false;
             n++;
+        }
+    }
+
+    private void DetectOnset(ReadOnlySpan<float> pcm, long deadline, Action<long> report)
+    {
+        for (int i = 0; i < FramesPerPacket; i++)
+        {
+            if (Math.Abs(pcm[i * 2]) > 0.02f)
+            {
+                if (_quietFrames > SampleRate * 3 / 10)
+                    report(deadline + (long)(i * (double)MediaClock.Frequency / SampleRate));
+                _quietFrames = 0;
+            }
+            else _quietFrames++;
         }
     }
 

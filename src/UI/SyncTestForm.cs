@@ -22,6 +22,9 @@ internal sealed class SyncTestForm : Form
 
     public int OffsetMs => _offsetMs;
 
+    /// <summary>QPC time at which each click enters the Windows mix (raised on the render thread).</summary>
+    public event Action<long>? ClickScheduled;
+
     public SyncTestForm(int initialOffsetMs)
     {
         SuspendLayout();
@@ -80,7 +83,11 @@ internal sealed class SyncTestForm : Form
         ResumeLayout(false);
         UpdateValue();
 
-        _clicks.ClickScheduled += when => _due.Add(when);
+        _clicks.ClickScheduled += when =>
+        {
+            ClickScheduled?.Invoke(when);
+            if (!_due.IsAddingCompleted) _due.Add(when);
+        };
         _flasher = new Thread(FlashLoop) { IsBackground = true, Name = "Sync flasher" };
     }
 
