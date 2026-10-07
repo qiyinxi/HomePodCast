@@ -212,7 +212,7 @@ public sealed class AirPlayClient : IDisposable
             _feedbackFailures++;
             Log.Debug($"feedback failed: {ex.Message}");
         }
-        if (_feedbackFailures >= 3) SignalLost("speaker stopped answering");
+        if (_feedbackFailures >= 3) SignalLost("音箱没有响应（网络中断？）");
     }
 
     private void SignalLost(string reason)

@@ -11,11 +11,12 @@ public static class Program
     public static int Main(string[] args)
     {
         Log.Verbose = args.Contains("--verbose");
-        var cmd = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "help";
+        var cmd = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "gui";
         try
         {
             return cmd switch
             {
+                "gui" => RunGui(startHidden: args.Contains("--tray")),
                 "scan" => Scan().GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 _ => Help(),
@@ -26,6 +27,29 @@ public static class Program
             Log.Error(ex.ToString());
             return 1;
         }
+    }
+
+    private static int RunGui(bool startHidden)
+    {
+        Log.ToConsole = false;
+        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
+
+        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show");
+        using var single = new Mutex(true, @"Local\HomePodCast.Single", out bool first);
+        if (!first)
+        {
+            show.Set(); // ask the running instance to show its window
+            return 0;
+        }
+
+        Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
+        Application.Run(new UI.TrayApp(startHidden, show));
+        return 0;
     }
 
     private static int Help()
@@ -60,7 +84,7 @@ public static class Program
 
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60);
         using var capture = tone ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
-        using var toneGen = tone ? new ToneGenerator(fifo) : null;
+        using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         capture?.Start();
         toneGen?.Start();
 
@@ -86,8 +110,8 @@ public static class Program
     }
 }
 
-/// <summary>Test source: 880 Hz beep for 150 ms every second, generated in real time.</summary>
-internal sealed class ToneGenerator(AudioFifo fifo) : IDisposable
+/// <summary>Test source: N short 880 Hz beeps at the start of every second, generated in real time.</summary>
+internal sealed class ToneGenerator(AudioFifo fifo, int beeps = 1) : IDisposable
 {
     private volatile bool _stop;
     private Thread? _thread;
@@ -105,7 +129,9 @@ internal sealed class ToneGenerator(AudioFifo fifo) : IDisposable
                 for (int i = 0; i < chunk; i++, frame++)
                 {
                     double t = (double)(frame % rate) / rate;
-                    float s = t < 0.15 ? (float)(0.5 * Math.Sin(2 * Math.PI * 880 * frame / rate)) : 0f;
+                    int slot = (int)(t / 0.16);                  // 80 ms beep + 80 ms gap
+                    bool on = slot < beeps && t - slot * 0.16 < 0.08;
+                    float s = on ? (float)(0.5 * Math.Sin(2 * Math.PI * 880 * frame / rate)) : 0f;
                     buf[i * 2] = buf[i * 2 + 1] = s;
                 }
                 fifo.Write(buf);
