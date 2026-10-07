@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace HomePodCast.Audio;
 
 /// <summary>
-/// Plays a short click once per second through the normal Windows output — exactly the path a game's
+/// Plays short clicks at irregular 1.3–2.6 s intervals through the normal Windows output — exactly the path a game's
 /// audio takes — and reports when each click reaches the audio engine, so a visual flash can be shown
 /// at the same moment. Used for the audio/video sync test.
 /// </summary>
@@ -78,7 +78,8 @@ public sealed class ClickRenderer : IDisposable
                         float env = Math.Min(1f, Math.Min(into, clickLen - into) / (rate * 0.002f));
                         s = 0.5f * env * MathF.Sin(2 * MathF.PI * 1000 * into / rate);
                     }
-                    if (into == clickLen) nextClick += rate;
+                    // Irregular spacing so a late click can never line up with the *next* flash.
+                    if (into == clickLen) nextClick += (long)(rate * (1.3 + Random.Shared.NextDouble() * 1.3));
                     WriteFrame(data, (int)i, fmt, s);
                 }
                 render.ReleaseBuffer(frames, 0);

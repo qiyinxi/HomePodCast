@@ -39,7 +39,7 @@ internal sealed class SyncTestForm : Form
 
         var help = new Label
         {
-            Text = "HomePod 每秒「咔」一声，圆圈同时闪一下。\n" +
+            Text = "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n" +
                    "如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n" +
                    "最后的数值 = 打游戏时声音比画面晚多少。",
             AutoSize = false,

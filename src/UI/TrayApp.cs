@@ -18,7 +18,7 @@ internal sealed class TrayApp : ApplicationContext
     public AppConfig Config { get; } = AppConfig.Load();
     public StreamController Controller { get; } = new();
 
-    public TrayApp(bool startHidden, EventWaitHandle showSignal)
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false)
     {
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
@@ -27,6 +27,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_toggleItem);
         menu.Items.Add("打开主界面", null, (_, _) => ShowMain());
+        menu.Items.Add("混音器", null, (_, _) => ShowMixer());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出", null, (_, _) => Quit());
         _toggleItem.Click += (_, _) => ToggleConnection();
@@ -52,6 +53,7 @@ internal sealed class TrayApp : ApplicationContext
 
         OnControllerChanged();
         if (!startHidden) ShowMain();
+        if (openMixer) _ui.Post(_ => ShowMixer(), null);
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
         if (Config.DeviceId != null)
@@ -158,6 +160,19 @@ internal sealed class TrayApp : ApplicationContext
             Config.Save();
             Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
         }
+    }
+
+    private MixerForm? _mixer;
+
+    public void ShowMixer()
+    {
+        if (_mixer == null || _mixer.IsDisposed)
+        {
+            _mixer = new MixerForm(this);
+            _mixer.FormClosed += (_, _) => _mixer = null;
+            _mixer.Show();
+        }
+        _mixer.Activate();
     }
 
     public void ShowMain()

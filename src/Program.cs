@@ -16,7 +16,7 @@ public static class Program
         {
             return cmd switch
             {
-                "gui" => RunGui(startHidden: args.Contains("--tray")),
+                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer")),
                 "scan" => Scan().GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
@@ -30,7 +30,7 @@ public static class Program
         }
     }
 
-    private static int RunGui(bool startHidden)
+    private static int RunGui(bool startHidden, bool openMixer)
     {
         Log.ToConsole = false;
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
@@ -49,7 +49,7 @@ public static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
-        Application.Run(new UI.TrayApp(startHidden, show));
+        Application.Run(new UI.TrayApp(startHidden, show, openMixer));
         return 0;
     }
 

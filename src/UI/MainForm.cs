@@ -27,6 +27,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox _autostart = new() { Text = "开机自动启动", AutoSize = true };
     private readonly CheckBox _autoconnect = new() { Text = "启动后自动连接", AutoSize = true };
     private readonly Button _syncTest = new() { Text = "音画同步测试…" };
+    private readonly Button _mixer = new() { Text = "混音器…" };
     private readonly Label _stats = new() { AutoSize = false, ForeColor = Color.DimGray };
     private readonly System.Windows.Forms.Timer _statsTimer = new() { Interval = 500 };
     private readonly System.Windows.Forms.Timer _volumeDebounce = new() { Interval = 150 };
@@ -115,11 +116,13 @@ internal sealed class MainForm : Form
         layout.Controls.Add(options, 0, 5);
         layout.SetColumnSpan(options, 3);
 
+        var tools = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 8, 0, 6) };
+        _mixer.AutoSize = true;
         _syncTest.AutoSize = true;
-        _syncTest.Anchor = AnchorStyles.Left;
-        _syncTest.Margin = new Padding(3, 8, 3, 6);
-        layout.Controls.Add(_syncTest, 0, 6);
-        layout.SetColumnSpan(_syncTest, 3);
+        _syncTest.Margin = new Padding(10, 3, 3, 3);
+        tools.Controls.AddRange([_mixer, _syncTest]);
+        layout.Controls.Add(tools, 0, 6);
+        layout.SetColumnSpan(tools, 3);
 
         _stats.AutoSize = true;
         _stats.MaximumSize = new Size(textWidth, 0);
@@ -167,6 +170,7 @@ internal sealed class MainForm : Form
             _app.Config.Save();
         };
         _syncTest.Click += (_, _) => _app.RunSyncTest(this);
+        _mixer.Click += (_, _) => _app.ShowMixer();
         _statsTimer.Tick += (_, _) => UpdateStats();
 
         LoadFromConfig();
