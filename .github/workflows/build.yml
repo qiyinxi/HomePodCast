@@ -105,11 +105,15 @@ jobs:
       #     output-artifact-directory: publish/HomePodCast
       # The MSI below packs the exe from publish/HomePodCast, so it picks up the signed one. The MSI itself
       # needs a second signing request after "Build MSI" (upload publish/*.msi as an artifact, submit it the
-      # same way with output-artifact-directory: publish) before the "Upload packages" step.
+      # same way with output-artifact-directory: publish) before the "Upload packages" step. Sign it only
+      # after build.ps1 has finished: the script embeds the language transforms into the file at the end.
 
       - name: Restore .NET tools (WiX)
         run: dotnet tool restore
 
+      # One MSI for all wizard languages: build.ps1 builds a package per culture (installer/i18n/*.wxl) and
+      # embeds each one as a language transform in the en-US package. -Validate runs the ICE checks on every
+      # package and checks that each embedded transform reproduces its culture's package exactly.
       - name: Build MSI
         shell: pwsh
         run: ./installer/build.ps1 -Version '${{ steps.ver.outputs.version }}' -Build ${{ github.run_number }} -Validate

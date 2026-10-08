@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="fi-FI" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="Käynnistä HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast tarvitsee .NET 10 Desktop Runtime (x64) -ympäristön. Lataa se osoitteesta https://dotnet.microsoft.com/download/dotnet/10.0, asenna se ja suorita sitten tämä asennus uudelleen." />
+  <String Id="DowngradeError" Value="HomePodCastin uudempi versio on jo asennettu. Jos haluat asentaa tämän vanhemman version, poista ensin HomePodCastin asennus (asetukset säilyvät)." />
+  <String Id="ShortcutDescription" Value="Suoratoista tämän tietokoneen ääni HomePodiin" />
+  <String Id="FirewallRuleDescription" Value="Sallii lähiverkon AirPlay-kaiuttimien muodostaa yhteyden takaisin HomePodCastiin (kellon synkronointi, kadonneiden pakettien uudelleenpyynnöt). Sääntö poistetaan, kun HomePodCastin asennus poistetaan." />
+
+  <!-- WixToolset.Firewall.wixext 5.0.2 has these progress and error strings only for en-US, es-ES, ja-JP and pl-PL. -->
+  <String Id="msierrFirewallCannotConnect" Value="Yhteyttä Windowsin palomuuriin ei voi muodostaa.  ([2]   [3]   [4]   [5])" />
+  <String Id="WixSchedFirewallExceptionsInstall" Value="Määritetään Windowsin palomuuria" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="Määritetään Windowsin palomuuria" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="Perutaan Windowsin palomuurin muutoksia" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="Lisätään Windowsin palomuurin sääntöjä" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="Perutaan Windowsin palomuurin muutoksia" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="Poistetaan Windowsin palomuurin sääntöjä" />
+</WixLocalization>

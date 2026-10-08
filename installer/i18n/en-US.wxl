@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HomePodCast's own installer strings. The stock wizard dialogs are localized by WixToolset.UI.wixext.
+  en-US is the base language of the MSI; every other culture in this folder becomes an embedded language
+  transform (see installer\README.md). Codepage must be able to hold every character of the culture.
+  The strings are MSI formatted text: write a literal [ or ] as [\[] or [\]].
+-->
+<WixLocalization Culture="en-US" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="Launch HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast needs the .NET 10 Desktop Runtime (x64). Download it from https://dotnet.microsoft.com/download/dotnet/10.0, install it, then run this setup again." />
+  <String Id="DowngradeError" Value="A newer version of HomePodCast is already installed. To install this older version, uninstall HomePodCast first (your settings are kept)." />
+  <String Id="ShortcutDescription" Value="Stream this PC's sound to a HomePod" />
+  <String Id="FirewallRuleDescription" Value="Lets AirPlay speakers on the local network connect back to HomePodCast (clock sync, retransmit requests). Removed when HomePodCast is uninstalled." />
+</WixLocalization>
