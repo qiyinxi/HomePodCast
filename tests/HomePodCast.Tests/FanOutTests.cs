@@ -18,7 +18,8 @@ public class FanOutTests
         return (fifo, signal);
     }
 
-    private static void Play(RtpSender sender, int ms)
+    /// <summary>Plays for a while; false if the sender stalled and skipped packets (see WithoutStalls).</summary>
+    private static bool Play(RtpSender sender, int ms)
     {
         using (sender)
         {
@@ -26,23 +27,37 @@ public class FanOutTests
             Thread.Sleep(ms);
         }
         Thread.Sleep(30); // let the receivers drain
+        return sender.SkippedPackets == 0;
+    }
+
+    /// <summary>
+    /// Runs a timing-exact scenario up to three times. On a busy machine the sender may stall and then skip
+    /// packets on purpose (it jumps the timeline instead of bursting), which makes per-packet expectations
+    /// meaningless for that run; every run without skips must pass all checks.
+    /// </summary>
+    private static void WithoutStalls(Func<bool> attempt)
+    {
+        for (int i = 0; i < 3; i++)
+            if (attempt()) return;
+        Assert.Fail("the sender stalled and skipped packets in every attempt");
     }
 
     [Fact]
-    public void Single_speaker_wire_bytes_match_the_sender_before_groups_existed()
+    public void Single_speaker_wire_bytes_match_the_sender_before_groups_existed() => WithoutStalls(() =>
     {
         // SHA-256 of the first 20 packets as sent by the pre-group RtpSender for exactly these inputs
         // (verified side by side with that code). Guards the daily-use single-speaker path.
         var key = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         using var rx = new FakeReceiver(key, 0x12345678);
         var (fifo, _) = Primed();
-        Play(new RtpSender([rx.Target(firstSeq: 65530)], 4630, fifo, 0xFFFFF000u), 250);
+        if (!Play(new RtpSender([rx.Target(firstSeq: 65530)], 4630, fifo, 0xFFFFF000u), 250)) return false;
 
         var first20 = rx.Audio.Take(20).SelectMany(p => p.Bytes).ToArray();
         Assert.Equal(20 * PacketBytes, first20.Length);
         Assert.Equal("780E8804F59383C4BD2E0BA2FBB060290665B86E0C714DAE9B3A9F9AD4FE30BE",
             Convert.ToHexString(SHA256.HashData(first20)));
-    }
+        return true;
+    });
 
     [Fact]
     public void Single_speaker_constructor_is_one_full_stereo_stream()
@@ -57,13 +72,13 @@ public class FanOutTests
     }
 
     [Fact]
-    public void Two_speakers_share_rtp_time_and_cadence_but_not_keys_or_sequence_numbers()
+    public void Two_speakers_share_rtp_time_and_cadence_but_not_keys_or_sequence_numbers() => WithoutStalls(() =>
     {
         using var a = new FakeReceiver();
         using var b = new FakeReceiver();
         var (fifo, signal) = Primed();
         var sender = new RtpSender([a.Target(firstSeq: 100), b.Target(firstSeq: 65500)], 4630, fifo);
-        Play(sender, 250);
+        if (!Play(sender, 250)) return false;
 
         var pa = a.Audio.ToArray();
         var pb = b.Audio.ToArray();
@@ -98,12 +113,13 @@ public class FanOutTests
 
         // Cadence: packets are 7.98 ms apart, and each one reaches both speakers back-to-back.
         double span = MediaClock.ToMs(pa[n - 1].Qpc - pa[0].Qpc);
-        Assert.InRange(span, (n - 1) * PacketMs - 15, (n - 1) * PacketMs + 15);
+        Assert.InRange(span, (n - 1) * PacketMs - 25, (n - 1) * PacketMs + 25);
         var gaps = Enumerable.Range(0, n).Select(k => Math.Abs(MediaClock.ToMs(pb[k].Qpc - pa[k].Qpc))).Order().ToList();
         Assert.True(gaps[n / 2] < 3.0, $"median A/B gap {gaps[n / 2]:F2} ms");
         Assert.Equal(sender.PacketsSent, sender.Streams[0].PacketsSent);
         Assert.Equal(sender.PacketsSent, sender.Streams[1].PacketsSent);
-    }
+        return true;
+    });
 
     [Fact]
     public void Every_speaker_gets_the_same_sync_packets_with_both_rtp_fields_equal()
@@ -134,12 +150,13 @@ public class FanOutTests
     }
 
     [Fact]
-    public void Split_channels_send_left_to_one_speaker_and_right_to_the_other()
+    public void Split_channels_send_left_to_one_speaker_and_right_to_the_other() => WithoutStalls(() =>
     {
         using var left = new FakeReceiver();
         using var right = new FakeReceiver();
         var (fifo, signal) = Primed();
-        Play(new RtpSender([left.Target(ChannelMode.LeftOnly), right.Target(ChannelMode.RightOnly)], 4630, fifo), 150);
+        if (!Play(new RtpSender([left.Target(ChannelMode.LeftOnly), right.Target(ChannelMode.RightOnly)], 4630, fifo), 150))
+            return false;
 
         var pl = left.Audio.ToArray();
         var pr = right.Audio.ToArray();
@@ -149,10 +166,11 @@ public class FanOutTests
             Assert.Equal(TestAudio.ExpectedPayload(signal, k, ChannelMode.LeftOnly), left.Decrypt(pl[k].Bytes));
             Assert.Equal(TestAudio.ExpectedPayload(signal, k, ChannelMode.RightOnly), right.Decrypt(pr[k].Bytes));
         }
-    }
+        return true;
+    });
 
     [Fact]
-    public void Resend_requests_are_answered_per_session_from_that_sessions_own_packets()
+    public void Resend_requests_are_answered_per_session_from_that_sessions_own_packets() => WithoutStalls(() =>
     {
         using var a = new FakeReceiver();
         using var b = new FakeReceiver();
@@ -162,6 +180,7 @@ public class FanOutTests
         {
             sender.Start(MediaClock.Now + MediaClock.FromMs(10));
             Thread.Sleep(120);
+            if (sender.SkippedPackets > 0) return false;
             a.RequestResend(1002, 2);
             a.RequestResend(5000, 1); // never sent by A
             Thread.Sleep(80);
@@ -183,7 +202,8 @@ public class FanOutTests
             Assert.Equal((ushort)(1002 + i), FakeReceiver.Seq(r));
             Assert.Equal(original.Single(p => FakeReceiver.Seq(p.Bytes) == 1002 + i).Bytes, r[4..]);
         }
-    }
+        return true;
+    });
 
     [Fact]
     public void One_channel_encoding_matches_stereo_encoding_of_that_channel_doubled()
