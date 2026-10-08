@@ -29,7 +29,7 @@
 ## 三、按键与托盘
 
 - [ ] 「设置 → 键盘音量键」=「HomePod 跟随 Windows 音量」（默认）：推流时按音量 +/−、静音键，Windows 和 HomePod 一起变（Windows 100% = 音量上限），Windows 静音时 HomePod 也静音
-- [ ] 同一模式：连接前把 Windows 调到 100%、HomePod 存的是 30% 左右，连接后 Windows 被降到约 30%；再按一次音量 −，HomePod 到 28 左右（不会跳到 98）。在程序里拖 HomePod 音量，Windows 音量跟着变
+- [x] 同一模式：连接前把 Windows 调到 100%、HomePod 存的是 30% 左右，连接后 Windows 被降到约 30%；再按一次音量 −，HomePod 到 28 左右（不会跳到 98）。在程序里拖 HomePod 音量，Windows 音量跟着变（用户 2026-10-08 确认）
   - 日志已验证另一个方向：Windows 12%、HomePod 24% → 连接时 HomePod 降到 12%（2026-10-08 16:53）
 - [ ] 改成「推流时控制 HomePod」：推流时按音量 +/−（按住连续变）、静音键，只有 HomePod 变，Windows 音量不动，屏幕下方弹出 HomePod 音量条约 1.5 秒；断开后按键又调 Windows
 - [ ] 同一模式下进全屏游戏按音量键：游戏不失去焦点、不最小化；独占全屏时不弹音量条
