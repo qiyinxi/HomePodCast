@@ -10,7 +10,7 @@ internal sealed partial class TrayApp
     /// <summary>Called once from the constructor, after the main window exists.</summary>
     private void InitPlayers()
     {
-        _players = new PlayerSync(new PlayerScanner());
+        _players = new PlayerSync(new PlayerScanner(VlcPassword.From(() => Config)));
         _players.Changed += () => _ui.Post(_ => _form.ShowPlayers(), null);
         Controller.Changed += _players.Kick;
         _players.Start(PlayerInput);
@@ -37,6 +37,21 @@ internal sealed partial class TrayApp
         Log.Info($"movie player sync {(on ? "on" : "off")}");
         KickPlayers();
         _form.ShowPlayers();
+    }
+
+    /// <summary>A VLC password was typed in 设置 (it is kept encrypted only).</summary>
+    public bool HasVlcPassword => !string.IsNullOrEmpty(Config.VlcPasswordProtected);
+
+    /// <summary>
+    /// Saves the VLC password typed in 设置, encrypted for this Windows user (null or empty: forget it), and
+    /// tries VLC again at once. Throws when Windows cannot encrypt it; nothing is saved then.
+    /// </summary>
+    public void SetVlcPassword(string? password)
+    {
+        Config.VlcPasswordProtected = string.IsNullOrEmpty(password) ? null : VlcPassword.Protect(password);
+        Config.Save();
+        Log.Info(Config.VlcPasswordProtected == null ? "players: VLC password from Settings cleared" : "players: VLC password from Settings saved (encrypted)");
+        KickPlayers();
     }
 
     /// <summary>Puts every player back to its own delay (app exit).</summary>

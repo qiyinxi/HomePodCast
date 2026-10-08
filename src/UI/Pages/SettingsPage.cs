@@ -4,7 +4,8 @@ using HomePodCast.UI.Controls;
 namespace HomePodCast.UI.Pages;
 
 /// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, local players in the 影视 scene
-/// (and how to switch on their interfaces), the experimental multi-speaker dialog, the A/V sync test, and about.</summary>
+/// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
+/// experimental multi-speaker dialog, the A/V sync test, and about.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
@@ -23,6 +24,10 @@ internal sealed class SettingsPage : ScrollPage
     private readonly ToggleSwitch _playerSync = new();
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
+    private readonly PasswordBox _vlcPassword = new(L.T("VLC 网页接口密码（自动读取失败时填写）"));
+    private readonly FluentButton _vlcSave = new(L.T("保存"));
+    private readonly FluentButton _vlcClear = new(L.T("清除"), ButtonKind.Subtle);
+    private readonly SettingRow _vlcPasswordRow;
 
     public SettingsPage(TrayApp app) : base(L.T("设置"))
     {
@@ -57,6 +62,9 @@ internal sealed class SettingsPage : ScrollPage
         var vlcRow = new SettingRow(Glyph.None, "VLC",
             L.T("工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。" +
                 "HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。"), null);
+        // Typed only when VLC's own password cannot be read or is refused; the line under it says which one is used.
+        _vlcPasswordRow = new SettingRow(Glyph.None, L.T("VLC 网页接口密码（自动读取失败时填写）"), "",
+            Ui.Row(8, null, _vlcPassword, _vlcSave, _vlcClear));
         var manualRow = new SettingRow(Glyph.None, "PotPlayer · MPC-HC · MPC-BE",
             L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
 
@@ -74,10 +82,10 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, forward, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, manualRow, tools, groupRow, syncRow, about, aboutRow]);
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, forward, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, manualRow, groupRow, syncRow, aboutRow })
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
@@ -123,6 +131,10 @@ internal sealed class SettingsPage : ScrollPage
             try { Clipboard.SetText(Players.MpvIpc.ConfigLine); }
             catch (Exception ex) { Log.Warn($"clipboard: {ex.Message}"); }
         };
+        _vlcPassword.PasswordChanged += (_, _) => ShowVlcPasswordButtons();
+        _vlcPassword.Submitted += (_, _) => SaveVlcPassword();
+        _vlcSave.Click += (_, _) => SaveVlcPassword();
+        _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
@@ -151,6 +163,59 @@ internal sealed class SettingsPage : ScrollPage
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
+        ShowPlayers();
+    }
+
+    /// <summary>Which VLC password is in use, or that VLC refused it (never the password); the buttons' state.</summary>
+    public void ShowPlayers()
+    {
+        var (text, problem) = Players.PlayerText.VlcPasswordStatus(_app.PlayerStatuses, _app.HasVlcPassword);
+        var desc = _vlcPasswordRow.DescriptionText;
+        desc.Text = text;
+        desc.Role = problem ? TextRole.Critical : TextRole.Secondary;
+        ShowVlcPasswordButtons();
+    }
+
+    private void ShowVlcPasswordButtons()
+    {
+        bool typed = _vlcPassword.Password.Length > 0;
+        _vlcSave.Enabled = typed;
+        _vlcClear.Enabled = typed || _app.HasVlcPassword;
+    }
+
+    /// <summary>Encrypts and saves what was typed, then empties the box (the saved password is never shown again).</summary>
+    private void SaveVlcPassword()
+    {
+        if (_vlcPassword.Password.Length == 0) return;
+        try
+        {
+            _app.SetVlcPassword(_vlcPassword.Password);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"players: saving the VLC password failed: {ex.Message}");
+            MessageBox.Show(FindForm(), L.F("保存密码失败：{0}", ex.Message), "HomePodCast");
+            return;
+        }
+        _vlcPassword.Clear();
+        ShowPlayers();
+    }
+
+    private void ClearVlcPassword()
+    {
+        _vlcPassword.Clear();
+        if (_app.HasVlcPassword)
+        {
+            try
+            {
+                _app.SetVlcPassword(null);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"players: clearing the VLC password failed: {ex.Message}");
+            }
+        }
+        ShowPlayers();
     }
 
     public void ShowSoundOptions()
@@ -190,6 +255,14 @@ internal sealed class SettingsPage : ScrollPage
         _autostart.Checked = SafeAutostart();
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
+        ShowPlayers();
+    }
+
+    /// <summary>A password typed but not saved is not kept once the page is left.</summary>
+    public override void PageHidden()
+    {
+        _vlcPassword.Clear();
+        ShowVlcPasswordButtons();
     }
 
     protected override void Dispose(bool disposing)
