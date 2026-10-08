@@ -106,6 +106,26 @@ Settings → Keyboard volume keys decides what volume up, volume down and mute d
 
 If the PC has no usable output device (no sound driver, or the device is disabled or unplugged), "HomePod follows the Windows volume" and "Only while Windows is muted" also take the keys over while streaming, until a device is back. The keys still change Windows while a program running as administrator is in front, and with remotes or mice whose software sends media commands instead of key presses; "HomePod follows the Windows volume" picks those changes up.
 
+## FAQ
+
+### The sound stutters now and then
+
+**Why it happens**: the sound crosses two wireless hops, PC → router → HomePod. The HomePod (2nd generation) only has Wi-Fi 4 (802.11n), and people walking by, a raised arm, walls and cabinet doors all block the signal, so once in a while a packet arrives late or gets lost. At 120 ms (Recommended) the HomePod itself takes about 85 ms, which leaves only about 35 ms for network jitter and resent packets; one hiccup longer than that is one stutter.
+
+**What helps, in this order**:
+
+1. Connect the PC with a network cable if you can: two wireless hops become one.
+2. Windows' power saving for the wireless adapter: Control Panel → Power Options → Change plan settings → Change advanced power settings → Wireless Adapter Settings → Power Saving Mode: Maximum Performance, both on battery and plugged in.
+3. Device Manager → Network adapters → your wireless adapter → Properties → Advanced: set Roaming Aggressiveness to the lowest value; if they are there, also set MIMO Power Save Mode to No SMPS and turn Packet Coalescing off. The names vary by adapter.
+4. Where the HomePod stands: in line of sight of the router, not inside a cabinet.
+5. Raise the latency by 10–15 ms: choose Custom under Scene, or press Apply when the Home page suggests it. Below Stream status, the Home page shows how many network hiccups the last 10 minutes had; when they really eat into the margin, a hint says which Wi-Fi hop is to blame and which latency to try. The app never changes the latency by itself.
+
+**Reading the log** (`%APPDATA%\HomePodCast\homepodcast.log`): while streaming, the HomePod and the router are pinged every 100 ms, and a round trip over 30 ms or a missing answer is logged as `network: ping to the speaker took 48 ms` (`the router` for the router, `lost` for no answer). The `stats:` line every minute has `rtx=resent/requested`, `rtxMiss=` (packets asked for too late to resend) and `ping=median/p99/max lost=lost/sent router=…`.
+
+- Only the speaker's ping spikes while the router's stays normal: it's the router → HomePod hop; see step 4.
+- Both spike at the same time: it's the PC's own Wi-Fi; see steps 1–3.
+- Only the router is slow: routers often answer pings to themselves last; the sound is not affected.
+
 ## Building
 
 Requires the .NET 10 SDK.
