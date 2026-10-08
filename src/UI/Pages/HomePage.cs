@@ -216,7 +216,7 @@ internal sealed class HomePage : ScrollPage
         bool live = c.State == StreamState.Streaming && !_tuner.Pending && ms == cfg.LatencyMs;
         int effective = live ? c.EffectiveLatencyMs : c.SafeLatency(ms);
         int captureExtra = c.Capture?.ExtraLatencyMs ?? (_app.Routing.Active ? Audio.RoutedCapture.RoutedExtraLatencyMs : 0);
-        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra);
+        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs);
         _lag.Text = L.F("声音比画面晚约 {0} ms", _lagMs);
         ShowPlayers();
         _loading = loading;

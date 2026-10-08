@@ -64,6 +64,25 @@ public class SceneTests
     }
 
     [Fact]
+    public void The_old_12_ms_fifo_default_is_moved_to_16_but_other_values_stay()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "config.json");
+            File.WriteAllText(path, """{ "FifoTargetMs": 12 }""");
+            Assert.Equal(16, AppConfig.Load(path).FifoTargetMs);
+            File.WriteAllText(path, """{ "FifoTargetMs": 25 }""");
+            Assert.Equal(25, AppConfig.Load(path).FifoTargetMs);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void A_fresh_install_starts_on_the_recommended_scene()
     {
         var cfg = AppConfig.Load(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "config.json"));

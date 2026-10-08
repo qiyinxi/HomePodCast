@@ -171,6 +171,10 @@ internal sealed class LatencyTuner
     /// How much the sound lags the picture: the requested playout delay plus the measured PC-side and
     /// speaker-side extra, plus what the capture path adds (per-app routing). The local API reports the same.
     /// </summary>
-    public static int SoundLagMs(int effectiveLatencyMs, AppConfig config, int captureExtraMs) =>
-        effectiveLatencyMs + config.VideoDelayExtraMs + captureExtraMs;
+    public static int SoundLagMs(int effectiveLatencyMs, AppConfig config, int captureExtraMs,
+        double fifoTargetMs = CalibratedFifoMs) =>
+        effectiveLatencyMs + config.VideoDelayExtraMs + captureExtraMs + (int)Math.Round(fifoTargetMs - CalibratedFifoMs);
+
+    /// <summary>The capture FIFO target in place when VideoDelayExtraMs (36) was measured; the FIFO now adapts.</summary>
+    public const double CalibratedFifoMs = 20;
 }

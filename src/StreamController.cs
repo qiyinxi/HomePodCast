@@ -18,7 +18,7 @@ public sealed partial class StreamController : IDisposable
 
     private readonly AudioFifo _fifo;
 
-    public StreamController(int fifoTargetMs = 12)
+    public StreamController(int fifoTargetMs = AppConfig.DefaultFifoTargetMs)
     {
         fifoTargetMs = Math.Clamp(fifoTargetMs, 5, 100);
         _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10)

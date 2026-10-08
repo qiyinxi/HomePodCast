@@ -15,8 +15,14 @@ public sealed class AppConfig
     public int? MeasuredAvOffsetMs { get; set; }
     public int? ArrivalToRenderMs { get; set; }
 
-    /// <summary>Capture→sender FIFO target. Smaller = lower latency, but must cover capture jitter.</summary>
-    public int FifoTargetMs { get; set; } = 12;
+    /// <summary>
+    /// Capture→sender FIFO starting target (it adapts upward on dropouts). Smaller = lower latency, but must
+    /// cover the 10 ms capture period plus jitter: 12 ms dropped out about once a minute on the test PC
+    /// (2026-10-08), 16 ms ran clean for 10+ minutes. Older configs saved the old default 12; Load moves it to 16.
+    /// </summary>
+    public int FifoTargetMs { get; set; } = DefaultFifoTargetMs;
+
+    public const int DefaultFifoTargetMs = 16;
 
     /// <summary>
     /// How much later than the requested playout delay the HomePod is actually heard, relative to the
@@ -134,7 +140,11 @@ public sealed class AppConfig
         try
         {
             if (File.Exists(path))
-                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
+            {
+                var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
+                if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
+                return cfg;
+            }
         }
         catch (Exception ex)
         {
