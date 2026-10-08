@@ -196,6 +196,8 @@ function renderVideos() {
     parts.push('受版权保护（DRM），无法延迟');
   } else if (vids.some((v) => v.reason === 'video-fullscreen')) {
     parts.push('视频元素单独全屏时无法延迟');
+  } else if (vids.some((v) => v.reason === 'source-unsupported')) {
+    parts.push('此页面的播放器不支持画面延迟');
   } else {
     parts.push('未延迟');
   }
