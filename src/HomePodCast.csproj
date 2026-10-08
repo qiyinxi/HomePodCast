@@ -10,7 +10,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HomePodCast</RootNamespace>
     <AssemblyName>HomePodCast</AssemblyName>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <ServerGarbageCollector>false</ServerGarbageCollector>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
