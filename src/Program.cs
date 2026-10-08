@@ -16,7 +16,8 @@ public static class Program
         {
             return cmd switch
             {
-                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer"), openFlyout: args.Contains("--flyout")),
+                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer"), openFlyout: args.Contains("--flyout"),
+                    testOsd: args.Contains("--osd-muted") ? "muted" : args.Contains("--osd") ? "volume" : null),
                 "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
                 "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
@@ -38,7 +39,8 @@ public static class Program
         }
     }
 
-    private static int RunGui(bool startHidden, bool openMixer, bool openFlyout)
+    /// <param name="testOsd">Hidden test switch <c>--osd</c> / <c>--osd-muted</c>: show the volume-key OSD once running.</param>
+    private static int RunGui(bool startHidden, bool openMixer, bool openFlyout, string? testOsd)
     {
         Log.ToConsole = false;
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
@@ -66,7 +68,7 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd));
         if (UI.LanguageMenu.RestartRequested)
         {
             Log.Info("restarting to apply the UI language");

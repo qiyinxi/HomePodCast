@@ -24,7 +24,8 @@ internal sealed partial class TrayApp : ApplicationContext
     public Audio.MixSources MixSources { get; } = new();
 
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false)
+    /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -96,6 +97,11 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             void OpenFlyout(object? s, EventArgs e) { Application.Idle -= OpenFlyout; ShowFlyout(); }
             Application.Idle += OpenFlyout;
+        }
+        if (testOsd != null)
+        {
+            void OpenOsd(object? s, EventArgs e) { Application.Idle -= OpenOsd; ShowTestOsd(testOsd == "muted"); }
+            Application.Idle += OpenOsd;
         }
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
@@ -369,11 +375,12 @@ internal sealed partial class TrayApp : ApplicationContext
             old?.Dispose();
             _lastIconState = c.State;
         }
-        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v)
+        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v && _pendingVolume is null)
         {
             Config.Volume = v;
             Config.Save();
         }
+        UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();
         RaiseStateChanged();
     }
