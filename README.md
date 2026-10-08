@@ -67,6 +67,28 @@ CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做
 - 提交者与审核者：仓库维护者（[@qiyinxi](https://github.com/qiyinxi)）。
 - 隐私：HomePodCast 只和你局域网里的 AirPlay 音箱通信，不收集、不上传任何数据；本机状态接口只监听 127.0.0.1。
 
+## English
+
+HomePodCast streams Windows system audio to Apple HomePod speakers over AirPlay 2 with low latency
+(about 141 ms behind the picture at a 105 ms setting, measured), as a replacement for TuneBlade, which
+no longer produces sound on HomePod software 27. It is a native .NET 10 tray application with a
+per-app mixer, an audio/video sync test and automatic reconnection.
+
+### Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+
+- Only binaries built by GitHub Actions from the source code in this public repository are signed.
+- Committers and reviewers: [@qiyinxi](https://github.com/qiyinxi)
+- Approvers: [@qiyinxi](https://github.com/qiyinxi)
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically
+requested by the user or the person installing or operating it. It talks only to the AirPlay speakers
+on the local network that the user selects, and its status endpoint listens on 127.0.0.1 only.
+
 ## 致谢
 
 - [pyatv](https://github.com/postlund/pyatv)（MIT）：协议流程参考，配对算法以其依赖 srptools 为对照。
