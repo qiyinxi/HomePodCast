@@ -42,7 +42,7 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
    防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
 3. 程式會自動找到 HomePod 並連線。把電腦的預設輸出裝置設為靜音也沒關係：擷取發生在系統音量之前，HomePod 照樣有聲音。
 
-介面語言跟隨 Windows 顯示語言（Windows 不是中文或日文時顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為 `"zh-TW"`、`"zh-CN"`、`"en"`、`"ja"` 或 `"auto"`。
+介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
 
 命令列（排查問題用）：
 
@@ -84,7 +84,7 @@ MSI 安裝程式由 `installer\build.ps1` 以 WiX Toolset v5（本機 dotnet 工
 
 `tools\measure_av.py` 可以從手機錄影算出影音差距；`tests\vectors\gen_vectors.py` 以 pyatv 所用的 srptools 產生配對演算法的對照資料。
 
-介面文字以簡體中文寫在 `L.T("…")` / `L.F("…{0}", x)` 中，譯文放在 `src/i18n/{en,zh-TW,ja}.json`，缺少任何一條單元測試就會失敗。瀏覽器擴充功能的文字在 `extension/_locales`。
+介面文字以簡體中文寫在 `L.T("…")` / `L.F("…{0}", x)` 中，譯文放在 `src/i18n/<語言>.json`（每個檔案就是一種介面語言，以 `en.json` 為準），缺少任何一條或與 `en.json` 不一致時，單元測試就會失敗。瀏覽器擴充功能的文字在 `extension/_locales`。
 
 ## 分支與發佈
 
