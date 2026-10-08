@@ -67,31 +67,49 @@ public sealed partial class StreamController : IDisposable
 
     public void Start(string deviceId, string? host, int latencyMs, double? volume)
     {
-        Stop();
-        var cts = new CancellationTokenSource();
-        lock (_lock)
+        lock (_lifecycle)
         {
-            _run = cts;
-            _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, cts.Token));
+            Stop();
+            var cts = new CancellationTokenSource();
+            lock (_lock)
+            {
+                _run = cts;
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, cts.Token));
+            }
         }
     }
 
+    /// <summary>
+    /// Serializes Start/StartGroup/Stop: Disconnect stops on the thread pool, and a Connect right after it must
+    /// not have its new capture or state torn down by that Stop finishing late.
+    /// </summary>
+    private readonly object _lifecycle = new();
+
     public void Stop()
     {
-        Task? loop;
-        lock (_lock)
+        lock (_lifecycle)
         {
-            _run?.Cancel();
-            loop = _loop;
-            _run = null;
-            _loop = null;
+            Task? loop;
+            lock (_lock)
+            {
+                _run?.Cancel();
+                loop = _loop;
+                _run = null;
+                _loop = null;
+            }
+            try { loop?.Wait(3000); } catch { }
+            TearDown();
+            TearDownGroup();
+            DisposeCapture();
+            Set(StreamState.Idle, L.T("未连接"));
         }
-        try { loop?.Wait(3000); } catch { }
-        TearDown();
-        TearDownGroup();
-        _capture?.Dispose();
-        _capture = null;
-        Set(StreamState.Idle, L.T("未连接"));
+    }
+
+    private void DisposeCapture()
+    {
+        ICaptureSource? capture;
+        lock (_lock) (capture, _capture) = (_capture, null);
+        capture?.Dispose(); // RoutedCapture: makes silenced apps audible here again
     }
 
     public void SetVolume(double percent)
@@ -109,6 +127,7 @@ public sealed partial class StreamController : IDisposable
         {
             var started = Stopwatch.StartNew();
             string? lostReason = null;
+            AirPlayClient? mine = null;
             try
             {
                 Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
@@ -116,7 +135,7 @@ public sealed partial class StreamController : IDisposable
                 host = address.ToString();
                 HostResolved?.Invoke(host);
 
-                EnsureCapture();
+                EnsureCapture(ct);
 
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                 EffectiveLatencyMs = SafeLatency(latencyMs);
@@ -125,7 +144,20 @@ public sealed partial class StreamController : IDisposable
                 var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
                 var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
-                _client = client;
+                // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
+                // by now: publish only while still current, and never touch another loop's client.
+                lock (_lock)
+                {
+                    if (!ct.IsCancellationRequested) _client = mine = client;
+                }
+                if (mine == null)
+                {
+                    client.Dispose();
+                    break;
+                }
+                client.VolumeCapPercent = VolumeCapPercent;
+                if (options.VolumeCapPercent != VolumeCapPercent || options.VolumePercent != (Muted ? 0 : Volume))
+                    PushVolume(); // cap or volume changed while connecting (PushVolume had no client then)
                 if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
                 {
                     ArrivalToRenderMs = a2r;
@@ -147,11 +179,12 @@ public sealed partial class StreamController : IDisposable
             {
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
                 Log.Warn($"stream: {lostReason}");
-                if (ex is FirewallBlockedException) FirewallBlocked?.Invoke();
+                if (ex is FirewallBlockedException && !ct.IsCancellationRequested) FirewallBlocked?.Invoke();
             }
             finally
             {
-                TearDown();
+                // Only this loop's own session (Stop may already have taken and disposed it).
+                if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }
 
             if (ct.IsCancellationRequested) break;
@@ -160,8 +193,7 @@ public sealed partial class StreamController : IDisposable
                 lostReason == EventChannel.ClosedBySpeaker)
             {
                 // The speaker ended a healthy session: most likely someone AirPlayed to it. Don't fight back.
-                _capture?.Dispose();
-                _capture = null;
+                DisposeCapture();
                 Set(StreamState.Idle, L.T(TakenOverText));
                 return;
             }
@@ -174,13 +206,20 @@ public sealed partial class StreamController : IDisposable
         }
     }
 
-    /// <summary>Capture runs across reconnects; shared by the single-speaker and the group loop.</summary>
-    private void EnsureCapture()
+    /// <summary>
+    /// Capture runs across reconnects; shared by the single-speaker and the group loop. A loop that Stop has
+    /// already cancelled (it gave up waiting for it) must not start one nobody would dispose.
+    /// </summary>
+    private void EnsureCapture(CancellationToken ct)
     {
-        if (_capture != null) return;
-        _capture = CaptureFactory(_fifo);
-        _capture.DeviceChanged += _ => Changed?.Invoke();
-        _capture.Start();
+        lock (_lock)
+        {
+            if (_capture != null) return;
+            ct.ThrowIfCancellationRequested();
+            _capture = CaptureFactory(_fifo);
+            _capture.DeviceChanged += _ => Changed?.Invoke();
+            _capture.Start();
+        }
     }
 
     /// <summary>Raised when the speaker's address was (re)discovered, so it can be remembered.</summary>

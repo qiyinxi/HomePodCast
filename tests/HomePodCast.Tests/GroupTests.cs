@@ -262,6 +262,39 @@ public class SpeakerGroupTests : IDisposable
         Assert.Equal(100, SpeakerGroup.MemberVolume(95, 10));
         Assert.Equal(0, SpeakerGroup.MemberVolume(5, -10));
         Assert.Equal(0, SpeakerGroup.MemberVolume(0, 10)); // muted stays muted
+        Assert.Equal(50, SpeakerGroup.MemberVolume(45, 10, cap: 50)); // the offset never lifts a member over the cap
+        Assert.Equal(35, SpeakerGroup.MemberVolume(45, -10, cap: 50));
+        Assert.Equal(0, SpeakerGroup.MemberVolume(double.NaN, 10, cap: 50));
+    }
+
+    [Fact]
+    public async Task Lowering_the_cap_while_streaming_caps_members_with_a_positive_offset()
+    {
+        var a = Member("A");
+        var b = Member("B");
+        double cap = 100;
+        using var group = await SpeakerGroup.ConnectAsync([a.Setup(), b.Setup(volumeOffset: 20)], Fifo(), 60, default,
+            volumeCap: () => cap);
+        Assert.Equal([60.0], a.Volumes);
+        Assert.Equal([80.0], b.Volumes);
+
+        cap = 50;                      // Settings: the master (60) is lowered to the cap and pushed again
+        group.SetVolumePercent(50);
+        Assert.Equal(50, a.Volumes[^1]);
+        Assert.Equal(50, b.Volumes[^1]); // was 70: 50 + 20 with the cap only applied to the master
+        group.SetVolumePercent(30);    // below the cap, the offset still applies up to it
+        Assert.Equal(30, a.Volumes[^1]);
+        Assert.Equal(50, b.Volumes[^1]);
+        Assert.All(a.Volumes.Skip(1).Concat(b.Volumes.Skip(1)), v => Assert.True(v <= cap));
+    }
+
+    [Fact]
+    public async Task The_speakers_own_initial_volume_is_capped_too()
+    {
+        var a = Member("A"); // initial volume -15 dB = 50 %
+        using var group = await SpeakerGroup.ConnectAsync([a.Setup(volumeOffset: 10)], Fifo(), null, default, volumeCap: () => 40);
+        Assert.Equal(40, group.MasterVolume);
+        Assert.Equal([40.0], a.Volumes);
     }
 }
 

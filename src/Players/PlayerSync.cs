@@ -30,6 +30,7 @@ internal sealed class PlayerSync : IDisposable
     private readonly Func<DateTime> _now;
     private readonly Dictionary<string, Tracked> _tracked = [];
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly CancellationTokenSource _stopping = new(); // Shutdown cuts a running step short
     private Func<PlayerSyncInput>? _input;
     private System.Threading.Timer? _timer;
     private DateTime _lastStreaming = DateTime.MinValue;
@@ -87,7 +88,10 @@ internal sealed class PlayerSync : IDisposable
             if (!await _gate.WaitAsync(0).ConfigureAwait(false)) return;
             try
             {
-                if (!_disposed) await StepAsync(input(), CancellationToken.None).ConfigureAwait(false);
+                if (!_disposed) await StepAsync(input(), _stopping.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_disposed)
+            {
             }
             catch (Exception ex)
             {
@@ -101,21 +105,34 @@ internal sealed class PlayerSync : IDisposable
     }
 
     /// <summary>Stop polling and put every player back (app exit); waits at most <paramref name="timeout"/>.</summary>
+    /// <remarks>
+    /// A step still running (a slow VLC, or the first apply whose player is not tracked yet) is cancelled and
+    /// waited for before deciding what to restore: checking first could find nothing tracked and return while
+    /// that step goes on to set a delay nobody puts back.
+    /// </remarks>
     public void Shutdown(TimeSpan timeout)
     {
+        if (_disposed) return;
         _disposed = true;
         AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
         _timer?.Dispose();
         _timer = null;
-        if (TrackedCount == 0) return;
+        _stopping.Cancel();
         try
         {
             Task.Run(async () =>
             {
                 using var cts = new CancellationTokenSource(timeout);
-                if (!await _gate.WaitAsync(timeout, cts.Token).ConfigureAwait(false)) return;
-                try { await RestoreAllAsync(cts.Token).ConfigureAwait(false); }
-                finally { _gate.Release(); }
+                bool gate = await _gate.WaitAsync(timeout).ConfigureAwait(false);
+                try
+                {
+                    // Without the gate (a step that ignores cancellation) restore anyway: it is the app exit.
+                    if (TrackedCount > 0) await RestoreAllAsync(cts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (gate) _gate.Release();
+                }
             }).Wait(timeout + TimeSpan.FromMilliseconds(500));
         }
         catch (Exception ex)
@@ -200,8 +217,9 @@ internal sealed class PlayerSync : IDisposable
             if (t == null)
             {
                 if (reading.DelayMs is not { } original) return Status(PlayerState.Waiting);
-                if (!PlayerDelay.Same(original, target)) await endpoint.WriteAsync(target, ct).ConfigureAwait(false);
+                // Tracked before writing: a write cut short (Shutdown) may still have reached the player.
                 lock (_tracked) _tracked[endpoint.Key] = new Tracked(endpoint, original, target, reading.Item);
+                if (!PlayerDelay.Same(original, target)) await endpoint.WriteAsync(target, ct).ConfigureAwait(false);
                 Log.Info($"players: {endpoint.Name} ({endpoint.Key}) audio delay {original} -> {target} ms");
                 return Status(PlayerState.Applied, target);
             }

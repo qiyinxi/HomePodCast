@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 
 namespace HomePodCast.Audio;
@@ -178,4 +179,47 @@ public static class SessionAttenuation
     /// <summary>Gain for one captured packet of a target whose sessions are silenced locally.</summary>
     public static float CompensationGain(bool compensate, bool confirmed, float rawPeak) =>
         compensate && confirmed && rawPeak <= UnattenuatedPeak ? Gain : 1f;
+}
+
+/// <summary>
+/// When the captured audio of a "HomePod only" target may get the 1/Epsilon gain. Open only once its sessions
+/// have been silenced for <c>confirmDelay</c> (so the capture, ~35-50 ms behind, carries attenuated audio) AND
+/// while the router keeps re-reading their volumes (a check within <c>verifyWindow</c>). A volume raised
+/// elsewhere (<see cref="Silenced"/> again), a default-device switch (<see cref="CloseAll"/>) or a router that
+/// stops checking all close it, so audio nobody has verified as attenuated is never amplified 100 dB.
+/// The router writes, the capture thread reads.
+/// </summary>
+internal sealed class CompensationGate(long confirmDelay, long verifyWindow)
+{
+    private readonly ConcurrentDictionary<uint, long> _openAt = new();
+    private readonly ConcurrentDictionary<uint, long> _verifiedAt = new();
+
+    /// <summary>The root's sessions were just silenced (or found raised and silenced again): closed for the delay.</summary>
+    public void Silenced(uint root, long now) => _openAt[root] = now + confirmDelay;
+
+    /// <summary>The root's sessions are silenced and unchanged: opens after the delay unless already pending/open.</summary>
+    public void Keep(uint root, long now) => _openAt.TryAdd(root, now + confirmDelay);
+
+    /// <summary>Every tracked session of the root was just read back attenuated.</summary>
+    public void Verified(uint root, long now) => _verifiedAt[root] = now;
+
+    public void Close(uint root)
+    {
+        _openAt.TryRemove(root, out _);
+        _verifiedAt.TryRemove(root, out _);
+    }
+
+    public void CloseAll()
+    {
+        _openAt.Clear();
+        _verifiedAt.Clear();
+    }
+
+    public bool Contains(uint root) => _openAt.ContainsKey(root);
+
+    public IReadOnlyList<uint> Roots => [.. _openAt.Keys];
+
+    public bool IsOpen(uint root, long now) =>
+        _openAt.TryGetValue(root, out var at) && now >= at &&
+        _verifiedAt.TryGetValue(root, out var checkedAt) && now - checkedAt <= verifyWindow;
 }

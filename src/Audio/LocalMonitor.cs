@@ -84,6 +84,10 @@ public sealed class LocalMonitor : IDisposable
                 Log.Warn($"monitor: {ex.Message}; retrying");
                 for (int i = 0; i < 20 && !_stop; i++) Thread.Sleep(100);
             }
+            catch (Exception)
+            {
+                break; // failed while being stopped: an unhandled one would end the app
+            }
         }
         Running = false;
         StatusChanged?.Invoke();

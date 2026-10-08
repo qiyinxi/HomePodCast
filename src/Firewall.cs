@@ -49,8 +49,10 @@ public static class Firewall
                 UseShellExecute = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
             });
-            p?.WaitForExit(20000);
-            return p?.ExitCode == 0;
+            // Still running after 20 s (slow PowerShell start): ExitCode would throw, from the TrayApp constructor.
+            if (p == null) return false;
+            if (!p.WaitForExit(20000)) return HasInboundAllowRule();
+            return p.ExitCode == 0;
         }
         catch (System.ComponentModel.Win32Exception)
         {
