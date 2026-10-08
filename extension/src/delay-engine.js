@@ -23,6 +23,11 @@
  *   presentAheadMs     canvas 从 rAF 绘制到上屏的时间，默认 DEFAULT_PRESENT_AHEAD_MS（至少一个刷新周期）
  *   presentAheadFrames 改用刷新周期数表示上面这个时间（给了就优先于 presentAheadMs）
  *
+ * 画布型播放器（bilibili 的 <bwp-video> 等：画面画在元素内部的 <canvas> 上，没有 <video>）：
+ *   HPCDelay.attach(bwpVideo, opts) 同样可用，见 CanvasSourceController。额外参数：
+ *   sourceCanvas       直接指定画面所在的 canvas（默认自动查找，包括封闭的 shadow root）
+ *   sourceShowMs       捕获时间戳到原画面上屏的时间，默认 DEFAULT_SOURCE_SHOW_MS
+ *
  * 注意：同一个 <video> 重复 attach 会返回已有的控制器（忽略新的 opts）；先 detach() 再 attach。
  */
 (() => {
@@ -31,7 +36,7 @@
   const root = globalThis;
   if (root.HPCDelay && typeof root.HPCDelay.attach === 'function') return;
 
-  const VERSION = '0.1.0';
+  const VERSION = '0.2.0';
   const FRAME_MS = 16.7;
   const MAX_FRAMES = 40;
   // 从 <video> 创建的 VideoFrame 直接引用解码器的输出缓冲（零拷贝）。实测 Chrome 154 + D3D11
@@ -45,6 +50,11 @@
   // 时实际 154.2 ms，2 个 150.0，4 个 141.7——每个周期正好 4.2 ms，即上屏约需 17 ms，
   // 和刷新率无关地接近一个 60 Hz 帧。60 Hz 屏上这仍是 1 个周期（原先的假设）。
   const DEFAULT_PRESENT_AHEAD_MS = 16.7;
+  // 画布型播放器：captureStream 帧的捕获时间（换算到 performance.now）之后多久，这一帧出现在原画面上。
+  // 实测 Chrome 154 + 240 Hz 屏，worker 里画 OffscreenCanvas 的模拟 <bwp-video>（tools/avsync
+  // testpage.html?mode=bwp）：取 16.7 时目标 141 ms 实际 141.4（2D）/ 140.0（WebGL），目标 250 实际 249.6。
+  const DEFAULT_SOURCE_SHOW_MS = 16.7;
+  const SOURCE_TAGS = new Set(['BWP-VIDEO']); // 已知的画布型播放器元素
   const MAX_DELAY_MS = 5000;
   const CANVAS_MODE_MAX_W = 1920;
   const MAX_BACKING_PX = 4096;
@@ -58,6 +68,9 @@
   const HAS_RVFC = typeof HTMLVideoElement !== 'undefined' &&
     typeof HTMLVideoElement.prototype.requestVideoFrameCallback === 'function';
   const HAS_VIDEOFRAME = typeof root.VideoFrame === 'function';
+  const HAS_CANVAS_CAPTURE = typeof HTMLCanvasElement !== 'undefined' &&
+    typeof HTMLCanvasElement.prototype.captureStream === 'function' &&
+    typeof root.MediaStreamTrackProcessor === 'function';
 
   const registry = new WeakMap(); // video -> Controller
   const ctxCache = new WeakMap(); // 池中 canvas -> 2d context
@@ -67,7 +80,7 @@
     return Number.isFinite(n) ? n : 0;
   };
   const round1 = (v) => Math.round(v * 10) / 10;
-  const capacityFor = (delayMs) => Math.min(MAX_FRAMES, Math.ceil(delayMs / FRAME_MS) + 4);
+  const capacityFor = (delayMs, frameMs = FRAME_MS) => Math.min(MAX_FRAMES, Math.ceil(delayMs / frameMs) + 4);
   const clampDelay = (ms) => {
     const n = Number(ms);
     if (!Number.isFinite(n) || n < 0) return 0;
@@ -221,7 +234,10 @@
         detach: () => this.detach(),
         stats: () => this.stats(),
       });
+    }
 
+    // 构造之后由 attach() 调用（子类的字段那时才已初始化）
+    start() {
       this.fsBlocked = this.isVideoFullscreen();
       this.update();
     }
@@ -232,7 +248,7 @@
       const d = clampDelay(ms);
       if (d === this.delay) return;
       this.delay = d;
-      const cap = capacityFor(d);
+      const cap = this.capacity();
       while (this.buf.length > cap) {
         this.release(this.buf.shift());
         this.dropped++;
@@ -284,7 +300,7 @@
         enabled: this.enabled,
         reason: this.reason || null,
         fallback: this.fallbackReason,
-        capacity: capacityFor(this.delay),
+        capacity: this.capacity(),
         capturedFrames: this.captured,
         shownFrames: this.shown,
         missedFrames: this.missed,
@@ -300,8 +316,9 @@
 
     update() {
       let reason = '';
+      const unsupported = this.detached ? '' : this.unsupportedReason();
       if (this.detached) reason = 'detached';
-      else if (!HAS_RVFC) reason = 'unsupported';
+      else if (unsupported) reason = unsupported;
       else if (this.drm) reason = 'drm';
       else if (!this.enabled) reason = 'disabled';
       else if (this.delay <= 0 && !this.activeAtZero) reason = 'zero-delay';
@@ -323,18 +340,13 @@
       this.place();
       if (!this.active) return;
       this.drawLive();
-      this.rvfcId = this.video.requestVideoFrameCallback(this.onFrame);
+      this.startCapture();
       this.kick();
     }
 
     deactivate() {
       this.active = false;
-      if (this.rvfcId) {
-        try {
-          this.video.cancelVideoFrameCallback(this.rvfcId);
-        } catch (_) { /* ignore */ }
-        this.rvfcId = 0;
-      }
+      this.stopCapture();
       if (this.rafId) {
         cancelAnimationFrame(this.rafId);
         this.rafId = 0;
@@ -356,6 +368,37 @@
         this.lastRafT = 0;
         this.rafId = requestAnimationFrame(this.onRaf);
       }
+    }
+
+    // ---------- 画面来源（CanvasSourceController 覆盖这些） ----------
+
+    unsupportedReason() {
+      return HAS_RVFC ? '' : 'unsupported';
+    }
+
+    startCapture() {
+      this.rvfcId = this.video.requestVideoFrameCallback(this.onFrame);
+    }
+
+    stopCapture() {
+      if (this.rvfcId) {
+        try {
+          this.video.cancelVideoFrameCallback(this.rvfcId);
+        } catch (_) { /* ignore */ }
+        this.rvfcId = 0;
+      }
+    }
+
+    isPaused() {
+      return this.video.paused;
+    }
+
+    capacity() {
+      return capacityFor(this.delay);
+    }
+
+    fitStyle(cs) {
+      return cs; // object-fit / object-position 从哪里读
     }
 
     // ---------- 帧捕获 ----------
@@ -399,19 +442,23 @@
         }
       }
       if (!e) e = this.captureCanvas(t, iw, ih);
-      if (!e) return;
+      if (e) this.store(e);
+    }
+
+    store(e) {
+      const t = e.time;
       this.captured++;
       const b = this.buf;
       while (b.length && b[b.length - 1].time >= t) this.release(b.pop()); // 时间倒退：丢弃旧时间线
       b.push(e);
-      const cap = capacityFor(this.delay);
+      const cap = this.capacity();
       while (b.length > cap) {
         this.release(b.shift());
         this.dropped++;
       }
     }
 
-    captureCanvas(t, iw, ih) {
+    captureCanvas(t, iw, ih, src = this.video) {
       let w = iw;
       let h = ih;
       if (w > CANVAS_MODE_MAX_W) {
@@ -427,7 +474,7 @@
         ctxCache.set(c, cx);
       }
       try {
-        cx.drawImage(this.video, 0, 0, w, h);
+        cx.drawImage(src, 0, 0, w, h);
       } catch (_) {
         this.pool.push(c);
         return null;
@@ -478,9 +525,8 @@
     onRaf(t) {
       this.rafId = 0;
       if (!this.active) return;
-      const v = this.video;
       const b = this.buf;
-      if (v.paused && !b.length) return; // 暂停时停下循环，play 事件会重新启动
+      if (this.isPaused() && !b.length) return; // 暂停时停下循环，play 事件会重新启动
       this.rafId = requestAnimationFrame(this.onRaf);
       this.trackVsync(t);
       if (this.needPlace || t - this.lastCheck >= CHECK_MS) {
@@ -689,9 +735,10 @@
         c.height = bh;
         redraw = true;
       }
-      if (cs.objectFit !== this.fit || cs.objectPosition !== this.objPos) {
-        this.fit = cs.objectFit;
-        this.objPos = cs.objectPosition;
+      const fs = this.fitStyle(cs);
+      if (fs.objectFit !== this.fit || fs.objectPosition !== this.objPos) {
+        this.fit = fs.objectFit;
+        this.objPos = fs.objectPosition;
         redraw = true;
       }
       this.cssW = w;
@@ -768,12 +815,306 @@
     }
   }
 
+  // 画布型播放器里显示画面的 canvas。页面脚本里可用播放器自己的 getRenderCanvas()（bilibili 的
+  // <bwp-video> 有）；扩展的隔离环境看不到页面 JS 属性，改用 chrome.dom 打开封闭的 shadow root。
+  function findSourceCanvas(host, given) {
+    if (given && given.tagName === 'CANVAS') return given;
+    try {
+      if (typeof host.getRenderCanvas === 'function') {
+        const c = host.getRenderCanvas();
+        if (c && c.tagName === 'CANVAS') return c;
+      }
+    } catch (_) { /* ignore */ }
+    let sr = host.shadowRoot;
+    if (!sr) {
+      try {
+        const d = root.chrome && root.chrome.dom;
+        if (d && typeof d.openOrClosedShadowRoot === 'function') sr = d.openOrClosedShadowRoot(host);
+      } catch (_) { /* ignore */ }
+    }
+    let best = null;
+    let area = 0;
+    for (const scope of sr ? [sr, host] : [host]) {
+      const known = scope.querySelector('canvas.-bwp-internal-render-canvas');
+      if (known) return known;
+      for (const c of scope.querySelectorAll('canvas')) {
+        if (c.hasAttribute(CANVAS_ATTR)) continue; // 自己的覆盖层
+        const r = c.getBoundingClientRect();
+        if (r.width * r.height > area) {
+          area = r.width * r.height;
+          best = c;
+        }
+      }
+    }
+    return best;
+  }
+
+  /*
+   * 画布型播放器（bilibili 的 <bwp-video>：WASM 解码，在 worker 里画到 transferControlToOffscreen
+   * 的 canvas 上，canvas 在封闭的 shadow root 里）。canvas.captureStream() 在画布内容变化时出一帧，
+   * MediaStreamTrackProcessor 把它交给我们：立即拷进 canvas 池（VideoFrame 随即 close），按捕获时间戳
+   * 排队；显示、布局、清空与 <video> 相同。覆盖层放在播放器元素之后，按元素的位置和大小摆放。
+   * 跨域污染的画布 captureStream 会抛 SecurityError：不接管，reason 为 'source-unsupported'。
+   * 隔离环境里读不到 paused 等属性：靠元素上派发的 play/pause/seeking… 事件，以及有没有新画面。
+   */
+  class CanvasSourceController extends Controller {
+    constructor(host, opts) {
+      super(host, opts);
+      this.captureMode = 'canvas';
+      this.fallbackReason = null;
+      this.givenCanvas = opts.sourceCanvas || null;
+      this.showMs = Number.isFinite(opts.sourceShowMs) ? opts.sourceShowMs : DEFAULT_SOURCE_SHOW_MS;
+      this.src = null; // 画面所在的 canvas
+      this.badSrc = null; // 无法捕获的 canvas
+      this.srcIssue = ''; // 'no-capture-api' | 'no-canvas' | 'tainted' | 'capture-failed'
+      this.srcPaused = false;
+      this.srcSeeking = false;
+      this.liveNext = false;
+      this.liveAt = 0;
+      this.track = null;
+      this.reader = null;
+      this.gen = 0;
+      this.tsOff = Infinity; // performance.now() − 帧时间戳 的下界（≈ 捕获时刻的换算）
+      this.lastTs = -1;
+      this.lastSrcAt = 0;
+      this.ivs = [];
+      this.frameMs = FRAME_MS;
+      this.runAt = 0;
+      this.run = 0;
+      this.retryTimer = 0;
+    }
+
+    resolveSource() {
+      if (this.src && this.src.isConnected) return this.src;
+      let c = findSourceCanvas(this.video, this.givenCanvas);
+      if (c && !c.isConnected) c = null;
+      if (c !== this.src) {
+        this.src = c;
+        if (c !== this.badSrc) this.srcIssue = '';
+      }
+      return c;
+    }
+
+    unsupportedReason() {
+      if (!HAS_CANVAS_CAPTURE) {
+        this.srcIssue = 'no-capture-api';
+      } else if (!this.resolveSource()) {
+        this.srcIssue = 'no-canvas';
+        this.scheduleRetry(); // 播放器可能稍后才建好画布
+      }
+      return this.srcIssue ? 'source-unsupported' : '';
+    }
+
+    scheduleRetry() {
+      if (this.retryTimer || this.detached) return;
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = 0;
+        if (!this.detached) this.update();
+      }, 1000);
+    }
+
+    startCapture() {
+      this.stopCapture();
+      const c = this.src;
+      if (!c) return;
+      const gen = this.gen;
+      this.tsOff = Infinity;
+      this.lastTs = -1;
+      this.ivs.length = 0;
+      let reader;
+      try {
+        const track = c.captureStream().getVideoTracks()[0]; // 不给帧率：画布每变化一次出一帧
+        if (!track) throw new Error('no video track');
+        this.track = track;
+        reader = new root.MediaStreamTrackProcessor({ track }).readable.getReader();
+      } catch (err) {
+        this.stopCapture();
+        this.badSrc = c;
+        this.srcIssue = err && err.name === 'SecurityError' ? 'tainted' : 'capture-failed';
+        try {
+          console.info('[HomePodCast] 无法捕获播放器画面：', this.srcIssue, (err && err.message) || '');
+        } catch (_) { /* ignore */ }
+        this.update(); // → deactivate()
+        return;
+      }
+      this.reader = reader;
+      const pump = () => {
+        reader.read().then(({ value, done }) => {
+          if (gen !== this.gen) {
+            if (value) value.close();
+            return;
+          }
+          if (done) return; // 轨道结束（画布被移除等）：place() 会重新查找
+          this.onSourceFrame(value);
+          pump();
+        }, () => { /* 已取消 */ });
+      };
+      pump();
+    }
+
+    stopCapture() {
+      this.gen++;
+      if (this.reader) {
+        this.reader.cancel().catch(() => { /* ignore */ });
+        this.reader = null;
+      }
+      if (this.track) {
+        try {
+          this.track.stop();
+        } catch (_) { /* ignore */ }
+        this.track = null;
+      }
+    }
+
+    onSourceFrame(f) {
+      try {
+        if (!this.active) return;
+        const now = performance.now();
+        const ts = f.timestamp / 1000;
+        if (ts <= this.lastTs) {
+          this.tsOff = Infinity; // 时间戳倒退：重新对时
+          this.ivs.length = 0;
+        } else if (this.lastTs >= 0) {
+          this.trackInterval(ts - this.lastTs);
+        }
+        this.lastTs = ts;
+        // 读取有排队延迟，取 (now − ts) 的下界作为两个时钟的差；缓慢上浮以跟上时钟漂移
+        this.tsOff = Math.min(this.tsOff + 0.002, now - ts);
+        this.lastSrcAt = now;
+        if (this.srcPaused) {
+          // 持续出新画面却以为暂停了（漏掉了 play 事件）：按正在播放处理
+          if (now - this.runAt > 400) {
+            this.runAt = now;
+            this.run = 0;
+          }
+          if (++this.run >= 12) this.srcPaused = false;
+        }
+        if (this.srcPaused || this.srcSeeking) {
+          this.drawLive(f); // 暂停/拖动时直接显示当前画面
+          return;
+        }
+        if (this.liveNext) {
+          // 拖动结束：画布比 seeked 事件晚一点才换成新画面。之前捕获的是旧画面，丢掉；
+          // 之后的第一帧直接显示（相当于 <video> 在 seeked 时显示的那一帧）
+          if (ts + this.tsOff < this.liveAt) return;
+          this.liveNext = false;
+          this.drawLive(f);
+          return;
+        }
+        const e = this.captureCanvas(ts + this.tsOff + this.showMs, f.displayWidth, f.displayHeight, f);
+        if (e) this.store(e);
+        this.kick();
+      } finally {
+        f.close();
+      }
+    }
+
+    trackInterval(dt) {
+      if (!(dt > 2 && dt < 100)) return;
+      const d = this.ivs;
+      d.push(dt);
+      if (d.length > 15) d.shift();
+      if (d.length >= 5) {
+        const s = d.slice().sort((a, b) => a - b);
+        this.frameMs = Math.min(50, Math.max(4, s[s.length >> 1]));
+      }
+    }
+
+    capacity() {
+      return capacityFor(this.delay, this.frameMs);
+    }
+
+    isPaused() {
+      return this.srcPaused || performance.now() - this.lastSrcAt > 500;
+    }
+
+    fitStyle(cs) {
+      const c = this.src;
+      if (!c || !c.isConnected) return cs;
+      try {
+        return getComputedStyle(c);
+      } catch (_) {
+        return cs;
+      }
+    }
+
+    drawLive(frame) {
+      if (!this.active) return;
+      this.releaseCur();
+      const c = this.src;
+      if (frame) {
+        this.cur = LIVE;
+        this.draw(frame, frame.displayWidth, frame.displayHeight);
+      } else if (c && c.width && c.height) {
+        this.cur = LIVE;
+        this.draw(c, c.width, c.height);
+      } else {
+        this.clear();
+      }
+      this.lastLag = 0;
+    }
+
+    redraw() {
+      if (this.cur === LIVE) this.drawLive();
+      else super.redraw();
+    }
+
+    place() {
+      if (this.active && this.src && !this.src.isConnected) {
+        // 播放器换了画布：停用后重新查找、重新捕获
+        this.deactivate();
+        this.update();
+        return;
+      }
+      super.place();
+    }
+
+    onMediaEvent(ev) {
+      const t = ev.type;
+      if (t === 'pause' || t === 'emptied') this.srcPaused = true;
+      if (t === 'seeking') this.srcSeeking = true;
+      else if (t === 'seeked' || t === 'emptied' || t === 'loadeddata') this.srcSeeking = false;
+      if (t === 'seeked' || t === 'loadeddata') {
+        this.liveNext = true;
+        this.liveAt = performance.now();
+      }
+      super.onMediaEvent(ev);
+    }
+
+    onPlay() {
+      if (this.srcPaused) this.liveNext = false; // 暂停期间的新画面已经直接显示过
+      this.srcPaused = false;
+      super.onPlay();
+    }
+
+    detach() {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = 0;
+      super.detach();
+      this.src = null;
+    }
+
+    stats() {
+      const s = super.stats();
+      s.source = 'canvas';
+      s.sourceIssue = this.srcIssue || null;
+      s.sourceFrameMs = round1(this.frameMs);
+      s.sourceShowMs = this.showMs;
+      return s;
+    }
+  }
+
   function attach(video, opts) {
-    if (!video || video.tagName !== 'VIDEO') throw new TypeError('HPCDelay.attach：需要 <video> 元素');
+    const o = opts || {};
+    const isVideo = !!video && video.tagName === 'VIDEO';
+    if (!video || video.nodeType !== 1 || (!isVideo && !SOURCE_TAGS.has(video.tagName) && !o.sourceCanvas)) {
+      throw new TypeError('HPCDelay.attach：需要 <video> 或画布型播放器元素（如 <bwp-video>）');
+    }
     const existing = registry.get(video);
     if (existing && !existing.detached) return existing.api;
-    const c = new Controller(video, opts || {});
+    const c = isVideo ? new Controller(video, o) : new CanvasSourceController(video, o);
     registry.set(video, c);
+    c.start();
     return c.api;
   }
 
@@ -789,5 +1130,6 @@
     isAttachedElsewhere,
     supported: HAS_RVFC,
     webcodecs: HAS_VIDEOFRAME,
+    canvasCapture: HAS_CANVAS_CAPTURE,
   });
 })();

@@ -37,5 +37,6 @@
   },
   "videosDrm": { "message": "受版權保護（DRM），無法延遲" },
   "videosFullscreen": { "message": "影片元素單獨全螢幕時無法延遲" },
+  "videosPlayerUnsupported": { "message": "此頁面的播放器不支援畫面延遲" },
   "videosNotDelayed": { "message": "未延遲" }
 }

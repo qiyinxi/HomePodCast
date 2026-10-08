@@ -118,6 +118,9 @@
   "videosFullscreen": {
     "message": "can't be delayed while the video element itself is full screen"
   },
+  "videosPlayerUnsupported": {
+    "message": "this page's player doesn't support picture delay"
+  },
   "videosNotDelayed": {
     "message": "not delayed"
   }

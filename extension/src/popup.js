@@ -211,6 +211,8 @@ function renderVideos() {
     parts.push(t('videosDrm'));
   } else if (vids.some((v) => v.reason === 'video-fullscreen')) {
     parts.push(t('videosFullscreen'));
+  } else if (vids.some((v) => v.reason === 'source-unsupported')) {
+    parts.push(t('videosPlayerUnsupported'));
   } else {
     parts.push(t('videosNotDelayed'));
   }

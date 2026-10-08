@@ -21,8 +21,16 @@
   ddagrab : Desktop Duplication of monitor -Output (same caveat as desktop)
   auto    : gfx, then title. Never falls back to the screen-region methods.
 
+.PARAMETER Mode
+  video : the original is a plain <video> (default)
+  bwp   : bilibili <bwp-video>-like canvas player (testpage.html?mode=bwp); output capture_bwp_<ms>.*
+
+.PARAMETER Query
+  extra query string for testpage.html, e.g. 'render=webgl' or 'srcshow=12.5'
+
 .EXAMPLE
   .\capture.ps1 -Delay 141
+  .\capture.ps1 -Delay 141 -Mode bwp
   .\capture.ps1 -Delay 0 -Method desktop
 #>
 param(
@@ -37,12 +45,16 @@ param(
     [string]$Title = 'HPC AVSYNC TEST',
     [int]$PresentAhead = -1,             # -1 = engine default; otherwise passed as ?present=N
     [int]$CaptureFps = 240,              # gfx: max captures/s; above the video rate for transition timing
+    [ValidateSet('video', 'bwp')][string]$Mode = 'video',
+    [string]$Query = '',                 # extra testpage.html query, e.g. 'render=webgl'
+    [string]$Name = '',                  # output base name (default capture_<ms> / capture_bwp_<ms>)
     [switch]$KeepProfile
 )
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $root = (Resolve-Path (Join-Path $here '..\..')).Path
-$base = Join-Path $here "capture_$Delay"
+if (-not $Name) { $Name = if ($Mode -eq 'bwp') { "bwp_$Delay" } else { "$Delay" } }
+$base = Join-Path $here "capture_$Name"
 $out = "$base.mp4"
 
 Add-Type @'
@@ -143,6 +155,8 @@ $profileDir = Join-Path $work 'profile'
 New-Item -ItemType Directory -Force $profileDir | Out-Null
 $url = "http://127.0.0.1:$Port/tools/avsync/testpage.html?delay=$Delay"
 if ($PresentAhead -ge 0) { $url += "&present=$PresentAhead" }
+if ($Mode -eq 'bwp') { $url += '&mode=bwp' }
+if ($Query) { $url += '&' + $Query.TrimStart('&', '?') }
 $server = $null; $browser = $null; $rc = 1
 try {
     $server = Start-Process -FilePath $Python -PassThru -WindowStyle Hidden `

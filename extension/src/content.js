@@ -1,7 +1,7 @@
 /*
  * HomePodCast 视频同步 — content script
  *
- * 在每个 frame 里找到可见的 <video>（≥ 200×112），用 HPCDelay 接管；
+ * 在每个 frame 里找到可见的 <video> 和画布型播放器 <bwp-video>（≥ 200×112），用 HPCDelay 接管；
  * 每秒向后台询问一次 HomePodCast 状态，设置延迟 = 推流中 ? videoDelayMs + 网站偏移 : 0。
  */
 (() => {
@@ -21,6 +21,7 @@
   const OFFSET_LIMIT = 500;
   const MAX_DELAY_MS = 2000;
   const STATUS_FAILS_BEFORE_OFF = 3;
+  const PLAYER_TAGS = ['video', 'bwp-video']; // bwp-video：bilibili 的 WASM 播放器，画面在内部 canvas 上
 
   const host = topHostname();
   const controllers = new Map(); // video -> controller
@@ -109,8 +110,10 @@
 
   function scan() {
     if (dead) return;
-    const vids = document.getElementsByTagName('video');
-    for (let i = 0; i < vids.length; i++) consider(vids[i]);
+    for (const tag of PLAYER_TAGS) {
+      const vids = document.getElementsByTagName(tag);
+      for (let i = 0; i < vids.length; i++) consider(vids[i]);
+    }
     for (const [v, c] of controllers) {
       if (!v.isConnected) {
         c.detach();
@@ -198,7 +201,7 @@
 
   function onPlayCapture(ev) {
     const t = ev.target;
-    if (t && t.tagName === 'VIDEO') consider(t);
+    if (t && (t.tagName === 'VIDEO' || t.tagName === 'BWP-VIDEO')) consider(t);
   }
 
   // ---------- 启动 ----------

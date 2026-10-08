@@ -37,5 +37,6 @@
   },
   "videosDrm": { "message": "著作権保護（DRM）のため遅延できません" },
   "videosFullscreen": { "message": "動画要素だけを全画面表示しているときは遅延できません" },
+  "videosPlayerUnsupported": { "message": "このページのプレーヤーは映像の遅延に対応していません" },
   "videosNotDelayed": { "message": "遅延なし" }
 }
