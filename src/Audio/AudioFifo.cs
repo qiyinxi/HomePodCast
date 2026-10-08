@@ -28,6 +28,7 @@ public sealed class AudioFifo
     private bool _dryPending;       // ran dry; classified at the next write
     private long _dryAt;
     private long _cleanReads;
+    private int _floorFrames;       // relaxing never goes below a level that already dropped out (+2 ms)
 
     public int TargetFrames { get; set; }
     public int CapFrames { get; set; }
@@ -135,10 +136,11 @@ public sealed class AudioFifo
                 _cleanReads = 0;
                 return false;
             }
-            if (MaxTargetFrames > 0 && TargetFrames > BaseTargetFrames && ++_cleanReads >= RelaxAfterReads)
+            int floor = Math.Max(BaseTargetFrames, _floorFrames);
+            if (MaxTargetFrames > 0 && TargetFrames > floor && ++_cleanReads >= RelaxAfterReads)
             {
                 _cleanReads = 0;
-                SetTarget(Math.Max(TargetFrames - _msFrames, BaseTargetFrames));
+                SetTarget(Math.Max(TargetFrames - _msFrames, floor));
             }
             return true;
         }
@@ -154,6 +156,10 @@ public sealed class AudioFifo
             return;
         }
         Underruns++;
+        if (MaxTargetFrames <= 0) return;
+        // Measured 2026-10-08: relaxing from 16 back to 15 ms dropped out again 10 minutes later. Remember the
+        // level that failed and stay at least 2 ms above it for the rest of the session.
+        _floorFrames = Math.Min(Math.Max(_floorFrames, TargetFrames + 2 * _msFrames), MaxTargetFrames);
         if (MaxTargetFrames > TargetFrames) SetTarget(Math.Min(TargetFrames + GrowMs * _msFrames, MaxTargetFrames));
     }
 

@@ -151,14 +151,35 @@ public class AudioFifoTests
         Assert.Equal(fifo.TargetFrames + (fifo.CapFrames - fifo.TargetFrames), fifo.CapFrames);
 
         var dest = new float[352 * 2];
-        int before = fifo.TargetFrames;
         for (int i = 0; i < 10; i++)
         {
             fifo.Write(new float[352 * 2]);
             Assert.True(fifo.Read(dest));
         }
-        Assert.Equal(before - 44, fifo.TargetFrames);             // one ms back after 10 clean reads
+        // The last dropout happened just below the cap, so the floor (+2 ms) is the cap: no relaxing.
+        Assert.Equal(fifo.MaxTargetFrames, fifo.TargetFrames);
         Assert.True(fifo.TargetFrames > baseTarget);
+    }
+
+    [Fact]
+    public void Relaxing_stops_two_ms_above_a_level_that_dropped_out()
+    {
+        var (fifo, advance) = Clocked();                          // 12 ms base
+        fifo.MaxTargetFrames = 44100 * 30 / 1000;
+        fifo.RelaxAfterReads = 1;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(20);
+        fifo.Write(new float[352 * 2]);                           // dropout at 12 ms -> 16 ms, floor 14 ms
+        Assert.Equal(529 + 176, fifo.TargetFrames);
+
+        var dest = new float[352 * 2];
+        for (int i = 0; i < 20; i++)
+        {
+            fifo.Write(new float[352 * 2]);
+            fifo.Read(dest);
+        }
+        Assert.Equal(529 + 88, fifo.TargetFrames);                // relaxed to 14 ms, not back to 12
     }
 
     [Fact]

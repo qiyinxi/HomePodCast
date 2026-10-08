@@ -37,6 +37,23 @@ public sealed class RoutedCapture : ICaptureSource
     public double DriftPpm { get; private set; }
 
     private long _maxGapTicks;
+    private long _seenUnderruns, _seenOverflows;
+    private int _fifoEventsLogged;
+
+    /// <summary>
+    /// Log each dropout or overflow as it happens (capture thread, first 50 per capture): field logs need to
+    /// show when and how deep, not only the minute totals.
+    /// </summary>
+    private void NoteFifoEvents(int framesWritten)
+    {
+        long u = _fifo.Underruns, o = _fifo.Overflows;
+        if (u == _seenUnderruns && o == _seenOverflows) return;
+        if (_fifoEventsLogged++ < 50)
+            Log.Info($"fifo {(u != _seenUnderruns ? "dropout" : "overflow")}: wrote {framesWritten * 1000.0 / _outRate:F1} ms, " +
+                     $"depth now {_fifo.Depth * 1000.0 / _outRate:F1} ms, target {_fifo.TargetMs:F0} ms");
+        _seenUnderruns = u;
+        _seenOverflows = o;
+    }
 
     public double TakeMaxGapMs() => Interlocked.Exchange(ref _maxGapTicks, 0) * 1000.0 / Stopwatch.Frequency;
     public float Peak { get; private set; }
@@ -197,6 +214,7 @@ public sealed class RoutedCapture : ICaptureSource
                     var output = CollectionsMarshal.AsSpan(resampled);
                     StreamMixer.AddSources(output, sources, ref scratch);
                     _fifo.Write(output);
+                    NoteFifoEvents(output.Length / 2);
                     TrackPeak(output);
                     SteerDrift(resampler);
                     lastOutput = now;
