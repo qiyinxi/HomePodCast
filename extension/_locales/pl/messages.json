@@ -87,6 +87,9 @@
   "hintNotRunning": {
     "message": "HomePodCast nie działa; obraz nie jest opóźniany."
   },
+  "hintLongDelay": {
+    "message": "Duże opóźnienie: do wideo wybierz scenę „Filmy” lub „Zalecane”."
+  },
   "videosNone": {
     "message": "Nie znaleziono filmów na tej stronie (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."

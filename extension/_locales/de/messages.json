@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "Auf dieser Website ausgeschaltet; das Bild wird nicht verzögert." },
   "hintNotStreaming": { "message": "HomePodCast streamt nicht; das Bild wird nicht verzögert." },
   "hintNotRunning": { "message": "HomePodCast läuft nicht; das Bild wird nicht verzögert." },
+  "hintLongDelay": { "message": "Lange Verzögerung: Für Videos besser die Szene „Filme“ oder „Empfohlen“ verwenden." },
   "videosNone": { "message": "Keine Videos auf dieser Seite gefunden (≥ 200×112)." },
   "videosCount": {
     "message": "Videos auf dieser Seite: $COUNT$",

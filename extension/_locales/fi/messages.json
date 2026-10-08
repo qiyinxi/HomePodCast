@@ -87,6 +87,9 @@
   "hintNotRunning": {
     "message": "HomePodCast ei ole käynnissä; kuvaa ei viivästetä."
   },
+  "hintLongDelay": {
+    "message": "Pitkä viive: valitse videoille profiili ”Elokuvat” tai ”Suositeltu”."
+  },
   "videosNone": {
     "message": "Tältä sivulta ei löytynyt videoita (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."
