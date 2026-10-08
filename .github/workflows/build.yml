@@ -107,7 +107,7 @@ jobs:
         shell: pwsh
         run: |
           $v = '${{ steps.ver.outputs.version }}'
-          Copy-Item LICENSE, README.md publish/HomePodCast/
+          Copy-Item LICENSE, README*.md publish/HomePodCast/
           Compress-Archive -Path publish/HomePodCast/* -DestinationPath "publish/HomePodCast-$v-win-x64.zip"
           if (Test-Path extension/manifest.json) {
             Compress-Archive -Path extension/* -DestinationPath "publish/HomePodCast-extension-$v.zip"

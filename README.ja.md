@@ -1,0 +1,90 @@
+# HomePodCast
+
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
+
+Windows PC の音声を AirPlay 2 で HomePod にリアルタイム送信します。ゲームや動画視聴のための低遅延ツールです。
+
+HomePod ソフトウェア 27 では TuneBlade から音が出なくなりました。HomePodCast は C# でゼロから実装したネイティブ版で、約 350 KB の exe ひとつで動き、仮想サウンドカードも要りません。
+
+## 実測値
+
+| 条件 | 値 |
+| --- | --- |
+| 映像に対する音の遅れ（遅延 120 ms 設定、スマホの 60 fps 動画で実測） | 156 ms |
+| 映像に対する音の遅れ（遅延 105 ms 設定、推定） | 約 141 ms |
+| 送信統計（音切れ／送信遅れ／再送） | 0 / 0 / 0 |
+| メモリ（プライベート） | 約 28 MB |
+
+テスト機器：HomePod（第2世代）、HomePod ソフトウェア 27.0（24J361）。
+
+## 機能
+
+- AirPlay 2 リアルタイム音声：一時ペアリング、全区間暗号化。遅延は 100〜500 ms の範囲で 1 ms 単位に調整可能
+- タスクトレイ常駐：スピーカーを自動で見つけて自動再接続し、スリープから復帰すると再開。他のデバイスにスピーカーを使われたときは取り返さない
+- ミキサー：アプリごとの音量・ミュート・レベルメーター
+- 音ズレ測定：画面のフラッシュと「カチッ」という音で、音が映像よりどれだけ遅れているかがすぐわかる
+- ブラウザー拡張機能（開発中）：YouTube や bilibili の映像を遅らせて HomePod の音に合わせる
+- 英語・簡体字中国語・繁体字中国語・日本語の UI
+
+## 使い方
+
+1. [.NET 10 デスクトップ ランタイム](https://dotnet.microsoft.com/download/dotnet/10.0)をインストールします。
+2. `HomePodCast.exe` を起動します。初回はファイアウォール規則の追加を求められます（ローカル ネットワークのみ、プライベート ネットワークでのみ有効）。HomePod が時刻同期と再送要求のために PC へ接続してくるためです。
+3. HomePod が自動で見つかり、接続されます。PC の既定の出力デバイスをミュートしてもかまいません。音声はシステム音量より前の段階で取り込むので、HomePod からは普通に音が出ます。
+
+表示言語は Windows の表示言語に従います（中国語・日本語以外の場合は英語）。変更するには、トレイアイコンを右クリックして「言語 / Language」を選ぶか、`%APPDATA%\HomePodCast\config.json` の `"Language"` を `"ja"`、`"en"`、`"zh-CN"`、`"zh-TW"`、`"auto"` のいずれかにします。
+
+コマンドライン（トラブルシューティング用）：
+
+```
+HomePodCast.exe scan                         ローカル ネットワーク上の AirPlay スピーカーを一覧表示
+HomePodCast.exe stream --host <IP> --latency 120 --seconds 30
+HomePodCast.exe mutetest                     ミュート中も音声を取り込めるか確認
+```
+
+## ビルド
+
+.NET 10 SDK が必要です。
+
+```
+dotnet build src -c Release          # app\ に出力
+dotnet test tests\HomePodCast.Tests  # プロトコル・音声・翻訳の単体テスト
+```
+
+`tools\measure_av.py` はスマホで撮った動画から音と映像のずれを計算します。`tests\vectors\gen_vectors.py` は pyatv が使っている srptools でペアリング アルゴリズムの照合用データを生成します。
+
+UI の文字列は簡体字中国語で `L.T("…")` / `L.F("…{0}", x)` の中に書き、訳文は `src/i18n/{en,zh-TW,ja}.json` に置きます。訳が抜けていると単体テストが失敗します。ブラウザー拡張機能の文字列は `extension/_locales` にあります。
+
+## ブランチとリリース
+
+| ブランチ／タグ | 用途 | ルール |
+| --- | --- | --- |
+| `dev` | 日々の開発 | プッシュのたびに CI が走り、プレビュー パッケージを作成 |
+| `main` | 実機の HomePod で検証済みのコード | `dev` からの PR のみ受け付け、CI の成功が必須 |
+| `vX.Y.Z` タグ | 正式リリース | `main` に付け、自動でビルドして GitHub Release を公開 |
+| `release/x.y` | 旧バージョンの修正 | 必要なときだけ該当タグから作成 |
+
+CI からは HomePod に接続できないため、`dev` を `main` にマージする前に実機で音ズレ測定を行います。
+
+## コード署名ポリシー
+
+配布する Windows プログラムには、[SignPath.io](https://about.signpath.io/) が提供する無償のオープンソース向けコード署名を使う予定です。証明書は [SignPath Foundation](https://signpath.org/) が発行します。
+
+- 署名するのは、このリポジトリの公開ソースコードから GitHub Actions で自動ビルドしたファイルだけです。
+- コミッター・レビュアー・承認者：リポジトリのメンテナー（[@qiyinxi](https://github.com/qiyinxi)）。
+
+正式な内容は英語版をご覧ください：[Code signing policy](README.md#code-signing-policy)。
+
+## プライバシー ポリシー
+
+利用者が明示的に求めない限り、HomePodCast がほかのネットワーク上のシステムに情報を送ることはありません。通信するのは、利用者がローカル ネットワーク上で選んだ AirPlay スピーカーだけです。データの収集やアップロードは一切行わず、状態確認用のエンドポイントは 127.0.0.1 でのみ待ち受けます。正式な内容は英語版をご覧ください：[Privacy policy](README.md#privacy-policy)。
+
+## 謝辞
+
+- [pyatv](https://github.com/postlund/pyatv)（MIT）：プロトコルの流れの参考。ペアリング アルゴリズムは、その依存ライブラリ srptools と照合しています。
+- [NAudio](https://github.com/naudio/NAudio)（MIT）：Windows Core Audio のインターフェイス定義の確認。
+- [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低遅延な送信とバッファリングの考え方。
+
+## ライセンス
+
+[GPL-3.0-or-later](LICENSE)。自由に使用・改変・再配布できます。改変版を再配布する場合は、同じく GPL でソースコードを公開する必要があります。
