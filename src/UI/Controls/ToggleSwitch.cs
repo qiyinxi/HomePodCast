@@ -33,7 +33,8 @@ internal sealed class ToggleSwitch : FluentControl
         }
     }
 
-    private void Flip()
+    /// <summary>Flip as the user would (click, Space, accessibility action).</summary>
+    internal void Flip()
     {
         if (!Enabled) return;
         Checked = !Checked;
