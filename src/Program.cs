@@ -17,7 +17,7 @@ public static class Program
             return cmd switch
             {
                 "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer")),
-                "scan" => Scan().GetAwaiter().GetResult(),
+                "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
@@ -60,7 +60,7 @@ public static class Program
     {
         Console.WriteLine("""
             HomePodCast
-              scan                                   list AirPlay speakers
+              scan [--txt]                           list AirPlay speakers (and stereo pairs)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
             """);
         return 0;
@@ -152,12 +152,17 @@ public static class Program
         return 0;
     }
 
-    private static async Task<int> Scan()
+    private static async Task<int> Scan(bool txt)
     {
         var sw = Stopwatch.StartNew();
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
         Console.WriteLine($"found {devices.Count} device(s) in {sw.ElapsedMilliseconds} ms");
-        foreach (var d in devices) Console.WriteLine("  " + d);
+        foreach (var d in devices)
+        {
+            Console.WriteLine("  " + d);
+            if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
+        }
+        foreach (var line in StereoPairs.Describe(devices)) Console.WriteLine(line); // experimental stereo pairs
         return 0;
     }
 
