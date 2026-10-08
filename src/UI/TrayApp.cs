@@ -131,7 +131,9 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         Routing = new Audio.AppRouting(Config);
         Controller.CaptureFactory = fifo => new Audio.RoutedCapture(fifo, RtpSender.SampleRate, Routing, MixSources);
-        Task.Run(Audio.SessionRouter.RestoreLeftovers); // apps left silent by a run that did not exit cleanly
+        // Apps left silent by a run that did not exit cleanly. Not from a test profile: the real instance may be
+        // running next to it, and its silenced apps look exactly like leftovers.
+        if (AppConfig.Profile == null) Task.Run(Audio.SessionRouter.RestoreLeftovers);
     }
 
     // ---------------------------------------------------------------- actions
