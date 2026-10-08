@@ -197,9 +197,22 @@ public static class Program
         capture?.Start();
         toneGen?.Start();
 
+        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys; integers, true/false or text.
+        var overrides = new Dictionary<string, object?>();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] != "--setup" || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+            overrides[key] = long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+        }
+        var options = new StreamOptions(latency, volume)
+        {
+            VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
+            StreamSetupOverrides = overrides.Count > 0 ? overrides : null,
+        };
+
         var sw = Stopwatch.StartNew();
-        using var client = await AirPlayClient.ConnectAsync(host, 7000, new StreamOptions(latency, volume), fifo,
-            CancellationToken.None);
+        using var client = await AirPlayClient.ConnectAsync(host, 7000, options, fifo, CancellationToken.None);
+        Log.Info($"arrivalToRenderLatencyMs={client.ArrivalToRenderMs?.ToString() ?? "?"} latency={latency} ms");
         Log.Info($"streaming after {sw.ElapsedMilliseconds} ms setup");
         var lost = new TaskCompletionSource<string>();
         client.Lost += reason => lost.TrySetResult(reason);

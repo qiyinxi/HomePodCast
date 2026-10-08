@@ -14,6 +14,9 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>In-place processing of every packet on the sender thread (EQ, night mode).</summary>
     public IAudioEffect? Effects { get; init; }
+
+    /// <summary>Experiments only (`stream --setup key=value`): keys added to or replaced in the stream SETUP.</summary>
+    public IReadOnlyDictionary<string, object?>? StreamSetupOverrides { get; init; }
 }
 
 /// <summary>
@@ -165,27 +168,30 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         // --- stream SETUP
         int latencyFrames = Math.Max(RtpSender.FramesPerPacket * 4, options.LatencyMs * RtpSender.SampleRate / 1000);
         var streamKey = RandomNumberGenerator.GetBytes(32);
+        var streamDesc = new Dictionary<string, object?>
+        {
+            ["audioFormat"] = 0x800,          // PCM 44100/16/2
+            ["audioMode"] = "default",
+            ["controlPort"] = ((IPEndPoint)_control.Client.LocalEndPoint!).Port,
+            ["ct"] = 1,                        // raw PCM (TODO(ALAC): pairs may need ct=2, see RtpSender.EncodePayloads)
+            ["isMedia"] = true,
+            ["latencyMax"] = Math.Max(latencyFrames, 88200),
+            ["latencyMin"] = latencyFrames,
+            ["shk"] = streamKey,
+            ["spf"] = RtpSender.FramesPerPacket,
+            ["sr"] = RtpSender.SampleRate,
+            ["type"] = 96,                     // realtime audio
+            ["supportsDynamicStreamID"] = false,
+            ["streamConnectionID"] = (long)_rtsp.SessionId,
+        };
+        if (options.StreamSetupOverrides is { } overrides)
+        {
+            foreach (var (key, value) in overrides) streamDesc[key] = value;
+            Log.Info($"stream SETUP overrides: {string.Join(", ", overrides.Select(o => $"{o.Key}={o.Value}"))}");
+        }
         var setup2 = Expect(SetupStream(new Dictionary<string, object?>
         {
-            ["streams"] = new List<object?>
-            {
-                new Dictionary<string, object?>
-                {
-                    ["audioFormat"] = 0x800,          // PCM 44100/16/2
-                    ["audioMode"] = "default",
-                    ["controlPort"] = ((IPEndPoint)_control.Client.LocalEndPoint!).Port,
-                    ["ct"] = 1,                        // raw PCM (TODO(ALAC): pairs may need ct=2, see RtpSender.EncodePayloads)
-                    ["isMedia"] = true,
-                    ["latencyMax"] = Math.Max(latencyFrames, 88200),
-                    ["latencyMin"] = latencyFrames,
-                    ["shk"] = streamKey,
-                    ["spf"] = RtpSender.FramesPerPacket,
-                    ["sr"] = RtpSender.SampleRate,
-                    ["type"] = 96,                     // realtime audio
-                    ["supportsDynamicStreamID"] = false,
-                    ["streamConnectionID"] = (long)_rtsp.SessionId,
-                },
-            },
+            ["streams"] = new List<object?> { streamDesc },
         }), "SETUP stream");
         var stream = (BPlist.ReadDict(setup2.Body)["streams"] as List<object?>)?[0] as Dictionary<string, object?>
                      ?? throw new InvalidDataException("SETUP stream: no streams in reply");

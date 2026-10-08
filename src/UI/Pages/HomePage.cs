@@ -28,7 +28,7 @@ internal sealed class HomePage : ScrollPage
     // scene / latency
     private readonly Segmented _scenes = new(Scenes.All.Select(Scenes.Name).ToArray()) { EqualWidths = false }; // "Recommended" is long
     private readonly TextBlock _latencyValue = new("", TextStyle.Display);
-    private readonly TextBlock _latencyHint = new("", TextStyle.Caption, TextRole.Secondary);
+    private readonly TextBlock _latencyHint = new("", TextStyle.Caption, TextRole.Secondary, wrap: true); // "极限：…" is long
     private readonly TextBlock _lag = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
     private readonly FluentSlider _latency = Ui.Slider(0, LatencyTuner.MaxMs, LatencyTuner.SmallStep, LatencyTuner.LargeStep);
     private readonly TextBlock _movieHint = Ui.Note();

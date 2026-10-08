@@ -100,7 +100,7 @@ public class VolumeKeyForwardingTests
         {
             // What audiosrv does: QueryInterface for the callback IID, then call OnNotify through the vtable.
             var iid = new Guid("657804FA-D6AD-4496-8A60-352752AF4F89");
-            Assert.Equal(0, Marshal.QueryInterface(unknown, ref iid, out IntPtr itf));
+            Assert.Equal(0, Marshal.QueryInterface(unknown, in iid, out IntPtr itf));
             try
             {
                 var context = Guid.NewGuid();
