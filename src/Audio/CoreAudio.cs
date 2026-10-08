@@ -175,3 +175,56 @@ internal readonly record struct WaveFormat(int SampleRate, int Channels, int Bit
         return new WaveFormat(rate, channels, bits, blockAlign, isFloat);
     }
 }
+
+// ---- Low-latency shared mode and endpoint lists (mic capture, local monitor) -------------------------
+// GUIDs and vtable order checked against the Windows SDK 10.0.26100 headers (Audioclient.idl/.h,
+// mmdeviceapi.idl/.h). COM interop does not inherit vtables, so IAudioClient3 repeats every member of
+// IAudioClient and IAudioClient2 in order.
+
+[ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMMDeviceCollection
+{
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int Item(uint index, out IMMDevice device);
+}
+
+[ComImport, Guid("7ED4EE07-8E67-4CD4-8C1A-2B7A5987AD42"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioClient3
+{
+    // IAudioClient
+    [PreserveSig] int Initialize(int shareMode, uint streamFlags, long bufferDuration, long periodicity, IntPtr format, IntPtr sessionGuid);
+    [PreserveSig] int GetBufferSize(out uint frames);
+    [PreserveSig] int GetStreamLatency(out long latency);
+    [PreserveSig] int GetCurrentPadding(out uint padding);
+    [PreserveSig] int IsFormatSupported(int shareMode, IntPtr format, out IntPtr closest);
+    [PreserveSig] int GetMixFormat(out IntPtr format);
+    [PreserveSig] int GetDevicePeriod(out long defaultPeriod, out long minimumPeriod);
+    [PreserveSig] int Start();
+    [PreserveSig] int Stop();
+    [PreserveSig] int Reset();
+    [PreserveSig] int SetEventHandle(IntPtr handle);
+    [PreserveSig] int GetService(ref Guid iid, [MarshalAs(UnmanagedType.IUnknown)] out object service);
+    // IAudioClient2
+    [PreserveSig] int IsOffloadCapable(int category, out int offloadCapable);
+    [PreserveSig] int SetClientProperties(IntPtr properties);
+    [PreserveSig] int GetBufferSizeLimits(IntPtr format, int eventDriven, out long minDuration, out long maxDuration);
+    // IAudioClient3
+    [PreserveSig] int GetSharedModeEnginePeriod(IntPtr format, out uint defaultPeriodFrames, out uint fundamentalPeriodFrames,
+        out uint minPeriodFrames, out uint maxPeriodFrames);
+    [PreserveSig] int GetCurrentSharedModeEnginePeriod(out IntPtr format, out uint currentPeriodFrames);
+    [PreserveSig] int InitializeSharedAudioStream(uint streamFlags, uint periodFrames, IntPtr format, IntPtr sessionGuid);
+}
+
+internal static class CoreAudio3
+{
+    public static Guid IidAudioClient3 = new("7ED4EE07-8E67-4CD4-8C1A-2B7A5987AD42");
+    public const int DeviceStateActive = 0x1;
+    public const int EnginePeriodicityLocked = unchecked((int)0x88890028); // AUDCLNT_E_ENGINE_PERIODICITY_LOCKED
+
+    /// <summary>PKEY_AudioEndpoint_FormFactor (VT_UI4, EndpointFormFactor).</summary>
+    public static PropertyKey FormFactorKey = new()
+    {
+        FormatId = new Guid("1da5d803-d492-4edd-8c23-e0c0ffee7f0e"),
+        PropertyId = 0,
+    };
+}
