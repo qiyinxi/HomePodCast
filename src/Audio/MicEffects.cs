@@ -53,6 +53,8 @@ public sealed class MicEffects : IDisposable
     private LocalMonitor? _monitor;
     private bool _micOn;
     private string? _outputPresetOverride;
+    private volatile string? _capturedEndpoint;
+    private string? _defaultOutput;
 
     public EffectsSettings Settings { get; }
     public Equalizer MicEq { get; } = new(MicCapture.OutputRate);
@@ -70,6 +72,29 @@ public sealed class MicEffects : IDisposable
 
     public MicCapture? Mic => _mic;
     public LocalMonitor? Monitor => _monitor;
+
+    /// <summary>
+    /// 本机监听 is wanted but paused: its output device is the one the stream captures, so the voice would reach the
+    /// speaker through the capture as well (twice, or although only 本机监听 was chosen). See <see cref="SetCaptured"/>.
+    /// </summary>
+    public bool MonitorBlocked { get; private set; }
+
+    /// <summary>
+    /// The render endpoint the stream captures now (null = nothing is captured) and the current default output (for
+    /// a monitor that follows it). Called again whenever either changes; the monitor stops or starts accordingly.
+    /// </summary>
+    public void SetCaptured(string? capturedEndpointId, string? defaultOutputId)
+    {
+        lock (_lock)
+        {
+            if (CaptureEndpoint.SameChoice(_capturedEndpoint, capturedEndpointId) &&
+                CaptureEndpoint.SameChoice(_defaultOutput, defaultOutputId))
+                return;
+            _capturedEndpoint = capturedEndpointId;
+            _defaultOutput = defaultOutputId;
+        }
+        Apply();
+    }
 
     /// <summary>Raised from audio threads when the mic or the monitor opens, fails or closes.</summary>
     public event Action? Changed;
@@ -124,6 +149,7 @@ public sealed class MicEffects : IDisposable
 
             if (!_micOn)
             {
+                SetBlocked(false);
                 StopMonitor();
                 StopMic();
                 return;
@@ -144,12 +170,15 @@ public sealed class MicEffects : IDisposable
             if (s.Destination != MicDestination.Monitor) _mic.Attach(HomePodSource);
             else _mic.Detach(HomePodSource);
 
-            if (s.Destination != MicDestination.HomePod)
+            bool wanted = s.Destination != MicDestination.HomePod;
+            bool blocked = wanted && CaptureEndpoint.MonitorCollides(s.MonitorDeviceId, _capturedEndpoint, _defaultOutput);
+            SetBlocked(blocked);
+            if (wanted && !blocked)
             {
                 if (_monitor == null || _monitor.DeviceId != Id(s.MonitorDeviceId))
                 {
                     StopMonitor();
-                    _monitor = new LocalMonitor(_mic, s.MonitorDeviceId);
+                    _monitor = new LocalMonitor(_mic, s.MonitorDeviceId) { Refuse = id => CaptureEndpoint.Same(id, _capturedEndpoint) };
                     _monitor.StatusChanged += RaiseChanged;
                     _monitor.Start();
                 }
@@ -159,6 +188,15 @@ public sealed class MicEffects : IDisposable
                 StopMonitor();
             }
         }
+    }
+
+    private void SetBlocked(bool blocked)
+    {
+        if (MonitorBlocked == blocked) return;
+        MonitorBlocked = blocked;
+        if (blocked) Log.Info("monitor paused: its output device is the one being captured for the speaker");
+        else Log.Info("monitor device is not captured (any more)");
+        RaiseChanged();
     }
 
     private static string? Id(string? id) => string.IsNullOrEmpty(id) ? null : id;

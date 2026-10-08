@@ -258,5 +258,16 @@
   "显示密码": "Pokaż hasło",
   "隐藏密码": "Ukryj hasło",
   "保存密码失败：{0}": "Nie udało się zapisać hasła: {0}",
-  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows nie ma żadnego urządzenia wyjściowego, więc aplikacje nie mają gdzie odtwarzać dźwięku i nie ma czego przechwytywać. Podłącz słuchawki lub głośniki, wyłącz wykrywanie gniazd w ustawieniach karty dźwiękowej, użyj dźwięku HDMI monitora lub zainstaluj wirtualną kartę dźwiękową (np. VB-CABLE); przesyłanie wznowi się samo."
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows nie ma żadnego urządzenia wyjściowego, więc aplikacje nie mają gdzie odtwarzać dźwięku i nie ma czego przechwytywać. Podłącz słuchawki lub głośniki, wyłącz wykrywanie gniazd w ustawieniach karty dźwiękowej, użyj dźwięku HDMI monitora lub zainstaluj wirtualną kartę dźwiękową (np. VB-CABLE); przesyłanie wznowi się samo.",
+  "采集设备": "Przechwytywane urządzenie",
+  "跟随 Windows 默认输出（推荐）": "Zgodnie z domyślnym wyjściem Windows (zalecane)",
+  "{0}（不可用）": "{0} (niedostępne)",
+  "打开 Windows 应用音量设置": "Otwórz ustawienia głośności aplikacji w Windows",
+  "按声卡分流（没有额外延迟）": "Kierowanie według karty dźwiękowej (bez dodatkowego opóźnienia)",
+  "在 Windows 的应用音量设置（或程序自己的设置）里，把要推送的程序的输出设为一个你不用来听的设备，再在上面的「采集设备」里选它；语音聊天等其他程序照常在耳机里播放。整个设备一次抓取，不像按程序分流那样多约 {0} ms。需要一个空闲的或虚拟的声卡，比如 VB-CABLE、网易 UU 加速器的虚拟声卡、Steam Streaming Speakers，或不带喇叭的 HDMI 显示器；HomePodCast 没法自己装虚拟声卡（那是要微软签名的内核驱动）。有些游戏只在启动时选择输出设备，改完要重启游戏。": "W ustawieniach głośności aplikacji w Windows (lub w ustawieniach samej aplikacji) ustaw wyjście aplikacji, które mają grać na HomePod, na urządzenie, którego nie słuchasz, a potem wybierz je powyżej jako przechwytywane urządzenie; czat głosowy i inne aplikacje dalej grają w słuchawkach. Całe urządzenie jest przechwytywane naraz, bez ok. {0} ms, które dodaje kierowanie według aplikacji. Potrzebna jest wolna lub wirtualna karta dźwiękowa, np. VB-CABLE, wirtualna karta dźwiękowa NetEase UU, Steam Streaming Speakers albo monitor HDMI bez głośników; HomePodCast nie może sam zainstalować wirtualnej karty dźwiękowej (to sterownik jądra, który musi podpisać Microsoft). Niektóre gry wybierają urządzenie wyjściowe tylko przy uruchomieniu, więc po zmianie uruchom grę ponownie.",
+  "推送 Windows 默认输出上的所有声音；默认输出改变时自动跟随。": "Przesyła wszystko z domyślnego wyjścia Windows i podąża za nim, gdy się zmieni.",
+  "只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。": "Przesyłany jest tylko dźwięk z \"{0}\"; aplikacje na innych urządzeniach (np. czat głosowy w słuchawkach) nie.",
+  "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" jest niedostępne (odłączone, wyłączone lub odinstalowane). Domyślne wyjście nie jest używane zamiast niego; przechwytywanie wznowi się samo, gdy urządzenie wróci.",
+  "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Wybrane przechwytywane urządzenie \"{0}\" jest niedostępne (odłączone, wyłączone lub odinstalowane). Aby żaden inny dźwięk nie trafił do HomePod, domyślne wyjście nie jest używane zamiast niego; przesyłanie wznowi się samo, gdy urządzenie wróci. Możesz też wrócić do domyślnego wyjścia Windows na stronie Mikser.",
+  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Urządzenie odsłuchu jest właśnie przechwytywane, więc twój głos trafiałby też do HomePod. Odsłuch na komputerze jest wstrzymany; użyj słuchawek lub innego urządzenia."
 }

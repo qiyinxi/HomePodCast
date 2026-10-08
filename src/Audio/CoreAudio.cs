@@ -115,6 +115,26 @@ public interface IAudioEndpointVolumeCallback
     [PreserveSig] int OnNotify(IntPtr notifyData);
 }
 
+// IID and method order from mmdeviceapi.h (SDK 10.0.26100), same as NAudio. Implemented by us (Windows calls it on
+// its own threads), so COM-visible rather than [ComImport]; a unit test calls it through the vtable.
+[Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown), ComVisible(true)]
+public interface IMMNotificationClient
+{
+    [PreserveSig] int OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string? deviceId, int newState);
+    [PreserveSig] int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string? deviceId);
+    [PreserveSig] int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string? deviceId);
+    [PreserveSig] int OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string? defaultDeviceId);
+    [PreserveSig] int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string? deviceId, PropertyKeyValue key);
+}
+
+/// <summary>PROPERTYKEY as passed by value to <see cref="IMMNotificationClient.OnPropertyValueChanged"/>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct PropertyKeyValue
+{
+    public Guid FormatId;
+    public int PropertyId;
+}
+
 /// <summary>AUDIO_VOLUME_NOTIFICATION_DATA without the trailing afChannelVolumes[nChannels].</summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct AudioVolumeNotificationData

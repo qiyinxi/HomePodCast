@@ -4,15 +4,23 @@ using HomePodCast.UI.Controls;
 namespace HomePodCast.UI.Pages;
 
 /// <summary>
-/// 混音器: the speaker's volume, where apps without their own rule go (HomePod / 本机 / 两者) and what
-/// routing does now, and one bordered row per app with a live level meter, its destination, volume and
-/// mute. App rows are created while the page is visible; everything is sized for the page's DPI.
+/// 混音器: the speaker's volume, which output device is captured (采集设备: the Windows default output, or a
+/// device of the user's choice for routing by sound card), where apps without their own rule go (HomePod /
+/// 本机 / 两者) and what routing does now, and one bordered row per app on the captured device with a live
+/// level meter, its destination, volume and mute. App rows are created while the page is visible; everything
+/// is sized for the page's DPI.
 /// </summary>
 internal sealed class MixerPage : ScrollPage
 {
     private static readonly AudioRoute[] Routes = [AudioRoute.HomePod, AudioRoute.Local, AudioRoute.Both];
 
+    /// <summary>Windows Settings → 应用音量和设备首选项, where each app's output device is chosen.</summary>
+    private const string AppVolumeSettings = "ms-settings:apps-volume";
+
     private readonly TrayApp _app;
+    private readonly FluentComboBox _captureDevice = new() { MinWidth = 220 };
+    private readonly SettingRow _captureRow;
+    private List<AudioEndpoint> _captureOutputs = [];
     private readonly ToolTip _tips = new();
     private readonly System.Windows.Forms.Timer _meterTimer = new() { Interval = 50 };
     private readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 1500 };
@@ -39,10 +47,15 @@ internal sealed class MixerPage : ScrollPage
         var masterCard = Ui.Card(masterHead, _master);
         masterCard.Gap = 6;
 
+        _captureDevice.AccessibleName = L.T("采集设备");
+        _captureRow = new SettingRow(Glyph.Speaker, L.T("采集设备"), "", _captureDevice);
+        _captureRow.DescriptionText.Wrap = true;
+
         _routeDefault.Enabled = AppRouting.Supported;
         _routeRow = new SettingRow(Glyph.Devices, L.T("没单独设置的程序送到"), "", _routeDefault);
         _routeRow.DescriptionText.Wrap = true;
 
+        var appVolume = new FluentButton(L.T("打开 Windows 应用音量设置"), ButtonKind.Link, Glyph.OpenInNew);
         var modes = Ui.Card(
             Ui.Header(L.T("全部推送与按程序分流")),
             Ui.Stack(4,
@@ -50,11 +63,15 @@ internal sealed class MixerPage : ScrollPage
                 Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。"))),
             Ui.Stack(4,
                 new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
-                Ui.Note(L.F("只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))));
+                Ui.Note(L.F("只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),
+            Ui.Stack(4,
+                new TextBlock(L.T("按声卡分流（没有额外延迟）"), TextStyle.BodyStrong),
+                Ui.Note(L.F("在 Windows 的应用音量设置（或程序自己的设置）里，把要推送的程序的输出设为一个你不用来听的设备，再在上面的「采集设备」里选它；语音聊天等其他程序照常在耳机里播放。整个设备一次抓取，不像按程序分流那样多约 {0} ms。需要一个空闲的或虚拟的声卡，比如 VB-CABLE、网易 UU 加速器的虚拟声卡、Steam Streaming Speakers，或不带喇叭的 HDMI 显示器；HomePodCast 没法自己装虚拟声卡（那是要微软签名的内核驱动）。有些游戏只在启动时选择输出设备，改完要重启游戏。", RoutedCapture.RoutedExtraLatencyMs)),
+                Ui.Row(0, null, appVolume)));
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
         var note = Ui.Note(L.T("和 Windows 音量合成器是同一套设置，系统会记住每个程序的音量。"));
-        Content.Controls.AddRange([masterCard, _routeRow, modes, appsHeader, _rows, _empty, note]);
+        Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
         _empty.Collapsed = true;
@@ -83,6 +100,8 @@ internal sealed class MixerPage : ScrollPage
             _app.Routing.Default = route;
             SyncRoutes();
         };
+        _captureDevice.SelectionChangeCommitted += (_, _) => OnCaptureDeviceChosen();
+        appVolume.Click += (_, _) => OpenAppVolumeSettings();
         _meterTimer.Tick += (_, _) => UpdateMeters();
         _refreshTimer.Tick += (_, _) =>
         {
@@ -90,6 +109,79 @@ internal sealed class MixerPage : ScrollPage
             SyncRoutes();
         };
         ShowMaster();
+    }
+
+    // ---------------------------------------------------------------- capture device
+
+    /// <summary>
+    /// 跟随 Windows 默认输出, then every active output; a chosen device that is gone stays listed as unavailable
+    /// (it is still what gets captured once it is back; nothing falls back silently).
+    /// </summary>
+    private void LoadCaptureDevices()
+    {
+        if (_captureDevice.DroppedDown) return; // the next device change or page visit refreshes it
+        _captureOutputs = AudioEndpoints.Outputs();
+        var chosen = _app.Routing.CaptureDeviceId;
+        _captureDevice.Items.Clear();
+        _captureDevice.Items.Add(L.T("跟随 Windows 默认输出（推荐）"));
+        foreach (var d in _captureOutputs) _captureDevice.Items.Add(d.Name);
+        int index = _captureOutputs.FindIndex(d => CaptureEndpoint.Same(d.Id, chosen));
+        if (index < 0 && chosen != null)
+        {
+            _captureDevice.Items.Add(L.F("{0}（不可用）", ChosenName()));
+            _captureDevice.SelectedIndex = _captureDevice.Items.Count - 1;
+        }
+        else
+        {
+            _captureDevice.SelectedIndex = index + 1;
+        }
+        ShowCaptureStatus();
+    }
+
+    private string ChosenName()
+    {
+        var chosen = _app.Routing.CaptureDeviceId;
+        return _captureOutputs.FirstOrDefault(d => CaptureEndpoint.Same(d.Id, chosen))?.Name
+               ?? _app.Config.CaptureDeviceName ?? chosen ?? "";
+    }
+
+    private void OnCaptureDeviceChosen()
+    {
+        int i = _captureDevice.SelectedIndex;
+        if (i <= 0) _app.SetCaptureDevice(null, null);
+        else if (i - 1 < _captureOutputs.Count) _app.SetCaptureDevice(_captureOutputs[i - 1].Id, _captureOutputs[i - 1].Name);
+        else return; // the unavailable entry: already chosen
+        LoadCaptureDevices();
+        if (!_active) return;
+        ClearRows(); // the rows belong to the previous device's sessions, even for the same programs
+        RefreshApps();
+        SyncRoutes();
+    }
+
+    /// <summary>What the chosen device means now; a caution while a chosen device is unavailable.</summary>
+    private void ShowCaptureStatus()
+    {
+        var chosen = _app.Routing.CaptureDeviceId;
+        var desc = _captureRow.DescriptionText;
+        bool missing = chosen != null && !_captureOutputs.Any(d => CaptureEndpoint.Same(d.Id, chosen));
+        desc.Text = chosen == null ? L.T("推送 Windows 默认输出上的所有声音；默认输出改变时自动跟随。")
+            : missing ? L.F("「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。", ChosenName())
+            : L.F("只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。", ChosenName());
+        desc.Role = missing ? TextRole.Caution : TextRole.Secondary;
+    }
+
+    /// <summary>An output device came, went, or changed state (TrayApp, from the device notifications).</summary>
+    public void AudioDevicesChanged()
+    {
+        if (!_active) return; // PageShown lists them afresh
+        LoadCaptureDevices();
+        RefreshApps();
+    }
+
+    private void OpenAppVolumeSettings()
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppVolumeSettings) { UseShellExecute = true }); }
+        catch (Exception ex) { Log.Warn($"open {AppVolumeSettings}: {ex.Message}"); }
     }
 
     /// <summary>The volume was changed here (首页 follows).</summary>
@@ -142,6 +234,7 @@ internal sealed class MixerPage : ScrollPage
     {
         _active = true;
         ShowMaster();
+        LoadCaptureDevices();
         RefreshApps();
         SyncRoutes();
         _meterTimer.Start();
@@ -171,7 +264,7 @@ internal sealed class MixerPage : ScrollPage
 
     private void RefreshApps()
     {
-        var fresh = AppAudio.Enumerate();
+        var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
         if (fresh.Select(a => a.Key).SequenceEqual(_apps.Select(a => a.Key)))
         {
             foreach (var a in fresh) a.Dispose();

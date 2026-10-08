@@ -26,4 +26,13 @@ public interface ICaptureSource : IDisposable
     /// apps have nowhere to play, so there is nothing to capture until one appears.
     /// </summary>
     bool NoOutputDevice => false;
+
+    /// <summary>
+    /// The output device chosen for capture (AppConfig.CaptureDeviceId) is unplugged, disabled or uninstalled.
+    /// Nothing is captured until it is back: never the default output instead (see <see cref="CaptureEndpoint"/>).
+    /// </summary>
+    bool CaptureDeviceMissing => false;
+
+    /// <summary>Id of the render endpoint being captured right now; null while there is none.</summary>
+    string? EndpointId => null;
 }
