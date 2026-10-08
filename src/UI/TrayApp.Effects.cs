@@ -8,7 +8,9 @@ internal sealed partial class TrayApp
 {
     private readonly ToolStripMenuItem _effectsItem = new(L.T("麦克风与音效…"));
     private MicEffects? _fx;
-    private EffectsForm? _effectsForm;
+
+    /// <summary>The microphone and effects engine shared by the send path and the 麦克风与音效 page.</summary>
+    public MicEffects Fx => _fx!;
 
     /// <summary>Called once from the constructor, after InitSound.</summary>
     private void InitEffects(ContextMenuStrip menu)
@@ -28,21 +30,7 @@ internal sealed partial class TrayApp
         if (_fx != null) _fx.OutputPresetOverride = Config.NightMode ? EqPresets.Id(EqPreset.ReduceBass) : null;
     }
 
-    public void ShowEffects()
-    {
-        if (_fx == null) return;
-        if (_effectsForm is { IsDisposed: false })
-        {
-            _effectsForm.Activate();
-            return;
-        }
-        _effectsForm = new EffectsForm(Config, _fx);
-        _effectsForm.Show();
-    }
+    public void ShowEffects() => ShowMain(AppPage.Effects);
 
-    private void DisposeEffects()
-    {
-        _effectsForm?.Close();
-        _fx?.Dispose();
-    }
+    private void DisposeEffects() => _fx?.Dispose();
 }

@@ -10,7 +10,7 @@ internal sealed partial class TrayApp : ApplicationContext
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem = new() { Enabled = false };
     private readonly ToolStripMenuItem _toggleItem = new(L.T("连接"));
-    private readonly MainForm _form;
+    private readonly MainWindow _form;
     private StreamState _lastIconState = (StreamState)(-1);
     private LocalApi? _api;
     private bool _wantConnected;
@@ -34,8 +34,9 @@ internal sealed partial class TrayApp : ApplicationContext
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_toggleItem);
-        menu.Items.Add(L.T("打开主界面"), null, (_, _) => ShowMain());
+        menu.Items.Add(L.T("打开主界面"), null, (_, _) => ShowMain(AppPage.Home));
         menu.Items.Add(L.T("混音器"), null, (_, _) => ShowMixer());
+        menu.Items.Add(L.T("设置"), null, (_, _) => ShowMain(AppPage.Settings));
         menu.Items.Add(LanguageMenu.Create(Config, Quit));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(L.T("退出"), null, (_, _) => Quit());
@@ -43,10 +44,11 @@ internal sealed partial class TrayApp : ApplicationContext
         InitSound(menu);
         InitEffects(menu);
 
+        StyleMenu(menu);
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = L.T("HomePod 音响") };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
 
-        _form = new MainForm(this);
+        _form = new MainWindow(this);
         _ = _form.Handle; // create handle so BeginInvoke works before first show
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
@@ -67,7 +69,7 @@ internal sealed partial class TrayApp : ApplicationContext
                     streaming,
                     device = Config.DeviceName,
                     latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = streaming ? Controller.EffectiveLatencyMs + Config.VideoDelayExtraMs + (Controller.Capture?.ExtraLatencyMs ?? 0) : 0,
+                    videoDelayMs = streaming ? LatencyTuner.SoundLagMs(Controller.EffectiveLatencyMs, Config, Controller.Capture?.ExtraLatencyMs ?? 0) : 0,
                     videoDelaySource = "estimate",
                 };
             });
@@ -103,6 +105,14 @@ internal sealed partial class TrayApp : ApplicationContext
             if (Config.AutoConnect) Connect();
         }
         RefreshDevices();
+    }
+
+    /// <summary>The tray menu and its submenus in the theme's colours.</summary>
+    private static void StyleMenu(ToolStripDropDown menu)
+    {
+        menu.Renderer = new Controls.FluentMenuRenderer();
+        menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
+        foreach (var item in menu.Items.OfType<ToolStripMenuItem>().Where(i => i.HasDropDownItems)) StyleMenu(item.DropDown);
     }
 
     /// <summary>Per-app routing: the capture follows the mixer's HomePod / 本机 / 两者 rules.</summary>
@@ -244,21 +254,12 @@ internal sealed partial class TrayApp : ApplicationContext
         }
     }
 
-    private MixerForm? _mixer;
+    public void ShowMixer() => ShowMain(AppPage.Mixer);
 
-    public void ShowMixer()
+    /// <summary>Bring the window forward, on <paramref name="page"/> if given (else the page it was on).</summary>
+    public void ShowMain(AppPage? page = null)
     {
-        if (_mixer == null || _mixer.IsDisposed)
-        {
-            _mixer = new MixerForm(this);
-            _mixer.FormClosed += (_, _) => _mixer = null;
-            _mixer.Show();
-        }
-        _mixer.Activate();
-    }
-
-    public void ShowMain()
-    {
+        if (page is { } p) _form.ShowPage(p);
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
         _form.Activate();
@@ -328,8 +329,9 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.UpdateState();
     }
 
-    private void Quit()
+    internal void Quit()
     {
+        _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeSound();

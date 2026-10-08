@@ -56,9 +56,11 @@ public static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
-        L.Use(AppConfig.Load().Language);
-        Log.Info($"UI language {L.Language}");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.EffectsForm.Standalone() : new UI.TrayApp(startHidden, show, openMixer));
+        var config = AppConfig.Load();
+        L.Use(config.Language);
+        UI.Theme.Mode = config.Theme;
+        Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer));
         if (UI.LanguageMenu.RestartRequested)
         {
             Log.Info("restarting to apply the UI language");

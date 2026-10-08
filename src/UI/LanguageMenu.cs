@@ -1,15 +1,16 @@
 namespace HomePodCast.UI;
 
 /// <summary>
-/// Tray submenu for the UI language (config "Language"). The forms are built once with their texts, so a
-/// change is applied by restarting the app (Program.RunGui starts the new copy once this one has exited).
+/// The UI language (config "Language"): a tray submenu, and the choice on the 设置 page. The window is built
+/// once with its texts, so a change is applied by restarting the app (Program.RunGui starts the new copy once
+/// this one has exited).
 /// </summary>
 internal static class LanguageMenu
 {
     public static bool RestartRequested { get; private set; }
 
     // Language names are shown in their own language, never translated.
-    private static readonly (string Value, string Name)[] Choices =
+    internal static readonly (string Value, string Name)[] Choices =
     [
         ("zh-CN", "简体中文"),
         ("zh-TW", "繁體中文"),
@@ -38,10 +39,10 @@ internal static class LanguageMenu
         return root;
     }
 
-    private static string Normalize(string? configured) =>
+    internal static string Normalize(string? configured) =>
         Choices.FirstOrDefault(c => string.Equals(c.Value, configured, StringComparison.OrdinalIgnoreCase)).Value ?? L.Auto;
 
-    private static void Choose(AppConfig config, string value, Action quit)
+    internal static void Choose(AppConfig config, string value, Action quit)
     {
         if (Normalize(config.Language) == value) return;
         config.Language = value;

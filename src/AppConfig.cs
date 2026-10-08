@@ -48,6 +48,9 @@ public sealed class AppConfig
     /// <summary>"auto" follows the Windows display language; or "zh-CN", "zh-TW", "en", "ja". Applied at startup.</summary>
     public string Language { get; set; } = L.Auto;
 
+    /// <summary>"auto" follows the Windows light/dark setting; "light" or "dark" fix it (UI.Theme). Applied at once.</summary>
+    public string Theme { get; set; } = "auto";
+
     // ---- Scenes, volume cap, night mode, hotkeys, volume-key forwarding
 
     /// <summary>Usage preset; a preset pins LatencyMs to its own value (Scenes.LatencyMs).</summary>
@@ -68,7 +71,7 @@ public sealed class AppConfig
     /// <summary>Global hotkeys such as "Ctrl+Alt+PageUp"; a missing entry means the default, "" means off.</summary>
     public Dictionary<HotkeyAction, string> Hotkeys { get; set; } = new();
 
-    // ---- 麦克风与音效 (UI.EffectsForm, Audio.MicEffects) --------------------------------------------------
+    // ---- 麦克风与音效 (UI.Pages.EffectsPage, Audio.MicEffects) --------------------------------------------------
     // Mic device, gain and noise gate; where the voice goes (HomePod / local monitor / both) and the monitor
     // device; reverb; the mic EQ and the EQ on the whole HomePod output. The mic's on/off is not saved.
     public Audio.EffectsSettings Effects { get; set; } = new();
