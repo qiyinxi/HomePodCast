@@ -30,7 +30,7 @@ public sealed class StreamController : IDisposable
     private Task? _loop;
 
     public StreamState State { get; private set; } = StreamState.Idle;
-    public string StatusText { get; private set; } = "未连接";
+    public string StatusText { get; private set; } = L.T("未连接");
     public AirPlayClient? Client => _client;
     public AudioFifo Fifo => _fifo;
     public LoopbackCapture? Capture => _capture;
@@ -50,6 +50,9 @@ public sealed class StreamController : IDisposable
     public int SafeLatency(int requestedMs) => Math.Max(requestedMs, (ArrivalToRenderMs ?? 85) + SafetyMarginMs);
 
     public event Action? Changed;
+
+    /// <summary>Status text (translated with L.T) after another sender took the speaker over; TrayApp checks for it.</summary>
+    public const string TakenOverText = "已断开（音箱可能被其他设备占用）";
 
     public void Start(string deviceId, string? host, int latencyMs, double? volume)
     {
@@ -76,7 +79,7 @@ public sealed class StreamController : IDisposable
         TearDown();
         _capture?.Dispose();
         _capture = null;
-        Set(StreamState.Idle, "未连接");
+        Set(StreamState.Idle, L.T("未连接"));
     }
 
     public void SetVolume(double percent)
@@ -101,7 +104,7 @@ public sealed class StreamController : IDisposable
             string? lostReason = null;
             try
             {
-                Set(StreamState.Connecting, attempt == 0 ? "正在连接…" : $"正在重连（第 {attempt} 次）…");
+                Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
                 var address = await ResolveAsync(deviceId, host, ct);
                 host = address.ToString();
                 HostResolved?.Invoke(host);
@@ -127,7 +130,7 @@ public sealed class StreamController : IDisposable
                 }
                 Volume ??= client.InitialVolumeDb is { } db ? AirPlayClient.DbToPercent(db) : null;
                 attempt = 0;
-                Set(StreamState.Streaming, $"已连接 · {client.Info.GetValueOrDefault("name")}");
+                Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
 
                 using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
                     lostReason = await lost.Task.WaitAsync(ct);
@@ -156,13 +159,14 @@ public sealed class StreamController : IDisposable
                 // The speaker ended a healthy session: most likely someone AirPlayed to it. Don't fight back.
                 _capture?.Dispose();
                 _capture = null;
-                Set(StreamState.Idle, "已断开（音箱可能被其他设备占用）");
+                Set(StreamState.Idle, L.T(TakenOverText));
                 return;
             }
 
             attempt++;
             var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(attempt, 5))));
-            Set(StreamState.Retrying, $"{lostReason}，{delay.TotalSeconds:F0} 秒后重试");
+            var shown = lostReason == EventChannel.ClosedBySpeaker ? L.T(EventChannel.ClosedBySpeaker) : lostReason;
+            Set(StreamState.Retrying, L.F("{0}，{1:F0} 秒后重试", shown, delay.TotalSeconds));
             try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
         }
     }
@@ -180,7 +184,7 @@ public sealed class StreamController : IDisposable
             return known;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var match = devices.FirstOrDefault(d => string.Equals(Normalize(d.DeviceId), Normalize(deviceId), StringComparison.OrdinalIgnoreCase));
-        return match?.Address ?? throw new AirPlayException("找不到音箱（是否通电、和电脑在同一网络？）");
+        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
     }
 
     public static string Normalize(string id) => id.Replace(":", "").Replace("-", "");

@@ -217,7 +217,7 @@ public sealed class AirPlayClient : IDisposable
             _feedbackFailures++;
             Log.Debug($"feedback failed: {ex.Message}");
         }
-        if (_feedbackFailures >= 3) SignalLost("音箱没有响应（网络中断？）");
+        if (_feedbackFailures >= 3) SignalLost(L.T("音箱没有响应（网络中断？）"));
     }
 
     private void SignalLost(string reason)
@@ -257,4 +257,4 @@ public sealed class AirPlayClient : IDisposable
 public class AirPlayException(string message) : Exception(message);
 
 public sealed class FirewallBlockedException() : AirPlayException(
-    "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
+    L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接"));

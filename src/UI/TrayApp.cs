@@ -9,7 +9,7 @@ internal sealed class TrayApp : ApplicationContext
     private readonly SynchronizationContext _ui;
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _toggleItem = new("连接");
+    private readonly ToolStripMenuItem _toggleItem = new(L.T("连接"));
     private readonly MainForm _form;
     private StreamState _lastIconState = (StreamState)(-1);
     private LocalApi? _api;
@@ -29,13 +29,14 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_toggleItem);
-        menu.Items.Add("打开主界面", null, (_, _) => ShowMain());
-        menu.Items.Add("混音器", null, (_, _) => ShowMixer());
+        menu.Items.Add(L.T("打开主界面"), null, (_, _) => ShowMain());
+        menu.Items.Add(L.T("混音器"), null, (_, _) => ShowMixer());
+        menu.Items.Add(LanguageMenu.Create(Config, Quit));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => Quit());
+        menu.Items.Add(L.T("退出"), null, (_, _) => Quit());
         _toggleItem.Click += (_, _) => ToggleConnection();
 
-        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = "HomePod 音响" };
+        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = L.T("HomePod 音响") };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
 
         _form = new MainForm(this);
@@ -153,7 +154,7 @@ internal sealed class TrayApp : ApplicationContext
                     StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(Config.DeviceId), StringComparison.OrdinalIgnoreCase)))
             {
                 found.Add(new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId, System.Net.IPAddress.None, 7000,
-                    "未发现", new Dictionary<string, string>()));
+                    L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
             if (Config.DeviceId == null && found.FirstOrDefault(d => d.Model.StartsWith("AudioAccessory")) is { } homepod)
@@ -177,7 +178,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         if (Controller.State != StreamState.Streaming)
         {
-            MessageBox.Show(owner, "请先连接音箱，再做同步测试。", "音画同步测试");
+            MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
             return;
         }
         using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
@@ -238,15 +239,15 @@ internal sealed class TrayApp : ApplicationContext
     {
         if (_hintShown) return;
         _hintShown = true;
-        _tray.ShowBalloonTip(3000, "HomePod 音响", "已最小化到托盘，声音会继续推送。右键托盘图标可以退出。", ToolTipIcon.Info);
+        _tray.ShowBalloonTip(3000, L.T("HomePod 音响"), L.T("已最小化到托盘，声音会继续推送。右键托盘图标可以退出。"), ToolTipIcon.Info);
     }
 
     private void OfferFirewallRule()
     {
         var answer = MessageBox.Show(
-            "HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n" +
-            "点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。",
-            "需要防火墙放行", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            L.T("HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n" +
+                "点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。"),
+            L.T("需要防火墙放行"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (answer != DialogResult.Yes) return;
         if (Firewall.RequestRule())
         {
@@ -255,7 +256,7 @@ internal sealed class TrayApp : ApplicationContext
         }
         else
         {
-            MessageBox.Show("没有添加成功（可能取消了授权）。", "需要防火墙放行");
+            MessageBox.Show(L.T("没有添加成功（可能取消了授权）。"), L.T("需要防火墙放行"));
         }
     }
 
@@ -277,11 +278,11 @@ internal sealed class TrayApp : ApplicationContext
     private void OnControllerChanged()
     {
         var c = Controller;
-        if (c.State == StreamState.Idle && _wantConnected && c.StatusText.Contains("占用")) _wantConnected = false;
+        if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
 
         _statusItem.Text = c.StatusText;
-        _toggleItem.Text = c.State == StreamState.Idle ? "连接" : "断开";
-        var tip = $"HomePod 音响 · {c.StatusText}";
+        _toggleItem.Text = c.State == StreamState.Idle ? L.T("连接") : L.T("断开");
+        var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
         if (c.State != _lastIconState)
         {

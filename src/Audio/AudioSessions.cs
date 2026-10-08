@@ -160,7 +160,7 @@ public sealed class AppAudio : IDisposable
 
     private static (string, Icon?) Describe(uint pid, bool system, string? display)
     {
-        if (system) return ("系统声音", null);
+        if (system) return (L.T("系统声音"), null);
         try
         {
             using var p = Process.GetProcessById((int)pid);
@@ -176,7 +176,7 @@ public sealed class AppAudio : IDisposable
         }
         catch
         {
-            return (string.IsNullOrWhiteSpace(display) ? $"进程 {pid}" : display, null);
+            return (string.IsNullOrWhiteSpace(display) ? L.F("进程 {0}", pid) : display, null);
         }
     }
 }

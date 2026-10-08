@@ -19,6 +19,15 @@ public static class Log
         }
     }
 
+    public static void CloseFile()
+    {
+        lock (Lock)
+        {
+            _file?.Dispose();
+            _file = null;
+        }
+    }
+
     public static void Info(string msg) => Write("INFO", msg);
     public static void Warn(string msg) => Write("WARN", msg);
     public static void Error(string msg) => Write("ERROR", msg);
