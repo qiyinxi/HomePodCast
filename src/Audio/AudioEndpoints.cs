@@ -141,21 +141,32 @@ internal sealed class SharedStream : IDisposable
     public IAudioClient Client { get; }
     public WaveFormat Format { get; }
     public int PeriodFrames { get; }
+
+    /// <summary>The engine's default period (frames): what a classic shared stream would get.</summary>
+    public int DefaultPeriodFrames { get; }
+
     public uint BufferFrames { get; }
-    public bool LowLatency { get; }
+
+    /// <summary>Opened with IAudioClient3.InitializeSharedAudioStream.</summary>
+    public bool AudioClient3 { get; }
+
+    /// <summary>The period is below the engine default (the driver supports small shared-mode periods).</summary>
+    public bool LowLatency => PeriodFrames < DefaultPeriodFrames;
+
     public double StreamLatencyMs { get; }
     public double PeriodMs => PeriodFrames * 1000.0 / Format.SampleRate;
-    public string Mode => LowLatency ? "IAudioClient3" : "IAudioClient";
+    public string Mode => AudioClient3 ? "IAudioClient3" : "IAudioClient";
 
     private IntPtr _mix;
 
-    private SharedStream(IAudioClient client, IntPtr mix, int periodFrames, bool lowLatency)
+    private SharedStream(IAudioClient client, IntPtr mix, int periodFrames, int defaultPeriodFrames, bool audioClient3)
     {
         Client = client;
         _mix = mix;
         Format = WaveFormat.FromPointer(mix);
         PeriodFrames = periodFrames;
-        LowLatency = lowLatency;
+        DefaultPeriodFrames = defaultPeriodFrames;
+        AudioClient3 = audioClient3;
         CoreAudio.Check(client.GetBufferSize(out uint buffer), "buffer size");
         BufferFrames = buffer;
         StreamLatencyMs = client.GetStreamLatency(out long latency) >= 0 ? latency / 10_000.0 : 0;
@@ -185,7 +196,7 @@ internal sealed class SharedStream : IDisposable
             if (device.Activate(ref CoreAudio3.IidAudioClient3, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj) < 0) return null;
             c3 = (IAudioClient3)obj;
             if (c3.GetMixFormat(out mix) < 0) return null;
-            if (c3.GetSharedModeEnginePeriod(mix, out _, out _, out uint minPeriod, out _) < 0) return null;
+            if (c3.GetSharedModeEnginePeriod(mix, out uint defaultPeriod, out _, out uint minPeriod, out _) < 0) return null;
             uint period = minPeriod;
             int hr = c3.InitializeSharedAudioStream(CoreAudio.StreamFlagsEventCallback, period, mix, IntPtr.Zero);
             if (hr == CoreAudio3.EnginePeriodicityLocked && c3.GetCurrentSharedModeEnginePeriod(out var current, out uint currentPeriod) >= 0)
@@ -200,7 +211,7 @@ internal sealed class SharedStream : IDisposable
                 Log.Info($"IAudioClient3 init failed 0x{hr:X8}, using the classic shared stream");
                 return null;
             }
-            var stream = new SharedStream((IAudioClient)c3, mix, (int)period, lowLatency: true);
+            var stream = new SharedStream((IAudioClient)c3, mix, (int)period, (int)defaultPeriod, audioClient3: true);
             mix = IntPtr.Zero;
             c3 = null;
             return stream;
@@ -229,7 +240,8 @@ internal sealed class SharedStream : IDisposable
             CoreAudio.Check(client.Initialize(0, CoreAudio.StreamFlagsEventCallback | CoreAudio.StreamFlagsNoPersist,
                 defaultPeriod, 0, mix, IntPtr.Zero), "initialize");
             int rate = WaveFormat.FromPointer(mix).SampleRate;
-            var stream = new SharedStream(client, mix, (int)Math.Round(defaultPeriod * rate / 10_000_000.0), lowLatency: false);
+            int period = (int)Math.Round(defaultPeriod * rate / 10_000_000.0);
+            var stream = new SharedStream(client, mix, period, period, audioClient3: false);
             mix = IntPtr.Zero;
             return stream;
         }
