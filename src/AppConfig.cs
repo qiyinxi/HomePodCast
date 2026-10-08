@@ -77,8 +77,15 @@ public sealed class AppConfig
     /// <summary>Night mode: dynamic-range compression of the audio before it is sent.</summary>
     public bool NightMode { get; set; }
 
-    /// <summary>While streaming with Windows muted or at 0 %, the keyboard volume keys drive the HomePod.</summary>
-    public bool ForwardVolumeKeys { get; set; } = true;
+    /// <summary>What the keyboard volume keys (and the Windows volume) do to the HomePod; see <see cref="VolumeKeyMode"/>.</summary>
+    public VolumeKeyMode VolumeKeys { get; set; } = VolumeKeyMode.FollowWindows;
+
+    /// <summary>
+    /// The on/off switch of versions before <see cref="VolumeKeys"/> (on = forward while Windows is muted). Only read:
+    /// Load turns it into VolumeKeys (VolumeKeyRules.Migrate) and clears it, so it is never written again.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ForwardVolumeKeys { get; set; }
 
     /// <summary>
     /// 「影视场景自动调整播放器」: while the 影视 scene streams, mpv and VLC get an audio delay of −videoDelayMs
@@ -154,6 +161,8 @@ public sealed class AppConfig
             {
                 var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
                 if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
+                cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
+                cfg.ForwardVolumeKeys = null;
                 return cfg;
             }
         }

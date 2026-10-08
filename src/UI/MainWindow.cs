@@ -232,6 +232,9 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.ShowVolume(percent);
     }
 
+    /// <summary>What the volume keys do changed (mode, stream, output device): 设置 says so.</summary>
+    public void ShowVolumeKeys() => _settings.ShowVolumeKeys();
+
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
     public void Flush() => _effects.Flush();
 }

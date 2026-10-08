@@ -12,6 +12,10 @@ internal sealed class SettingsPage : ScrollPage
 
     private static readonly string[] ThemeModes = [Theme.Auto, Theme.Light, Theme.Dark];
 
+    /// <summary>The choices of 「键盘音量键」, in the order shown.</summary>
+    private static readonly VolumeKeyMode[] VolumeKeyModes =
+        [VolumeKeyMode.WhileStreaming, VolumeKeyMode.FollowWindows, VolumeKeyMode.WhenWindowsMuted, VolumeKeyMode.Off];
+
     private readonly TrayApp _app;
     private readonly FluentComboBox _language = new();
     private readonly FluentComboBox _theme = new();
@@ -20,7 +24,8 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
-    private readonly ToggleSwitch _forward = new();
+    private readonly FluentComboBox _volumeKeys = new();
+    private readonly SettingRow _volumeKeysRow;
     private readonly ToggleSwitch _playerSync = new();
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
@@ -35,6 +40,7 @@ internal sealed class SettingsPage : ScrollPage
 
         foreach (var (_, name) in LanguageMenu.Choices.Prepend((L.Auto, LanguageMenu.AutoName))) _language.Items.Add(name);
         _theme.Items.AddRange([L.T("跟随 Windows"), L.T("浅色"), L.T("深色")]);
+        _volumeKeys.Items.AddRange(VolumeKeyModes.Select(VolumeKeyModeName));
 
         var general = Ui.Section(L.T("常规"));
         var language = new SettingRow(Glyph.Globe, L.Language == "en" ? L.T("语言") : L.T("语言") + " / Language",
@@ -49,8 +55,7 @@ internal sealed class SettingsPage : ScrollPage
         capRow.FixedWidths[_capValue] = 44;
         var cap = new SettingRow(Glyph.Volume, L.T("音量上限"),
             L.T("HomePod 音量不会超过这个值（连接、重连、快捷键都一样）。100 = 不限制"), capRow);
-        var forward = new SettingRow(Glyph.Keyboard, L.T("Windows 静音或音量为 0 时，键盘音量键调节 HomePod 音量"),
-            L.T("建议把 Windows 设为静音（而不是 0%）：这样音量 +、− 和静音键都会转给 HomePod，Windows 保持静音。"), _forward);
+        _volumeKeysRow = new SettingRow(Glyph.Keyboard, L.T("键盘音量键"), "", _volumeKeys);
         _hotkeysRow = new SettingRow(Glyph.Keyboard, L.T("全局快捷键"), "", _hotkeys);
 
         var players = Ui.Section(L.T("本地播放器"));
@@ -81,10 +86,10 @@ internal sealed class SettingsPage : ScrollPage
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, forward, _hotkeysRow,
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
             players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, forward, _hotkeysRow,
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
                      playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
@@ -124,7 +129,12 @@ internal sealed class SettingsPage : ScrollPage
             _app.SetVolumeCap(_cap.Value);
             CapChanged?.Invoke();
         };
-        _forward.Toggled += (_, _) => _app.SetForwardVolumeKeys(_forward.Checked);
+        _volumeKeys.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_volumeKeys.SelectedIndex < 0) return;
+            _app.SetVolumeKeyMode(VolumeKeyModes[_volumeKeys.SelectedIndex]);
+            ShowVolumeKeys();
+        };
         _playerSync.Toggled += (_, _) => _app.SetMoviePlayerSync(_playerSync.Checked);
         copyMpv.Click += (_, _) =>
         {
@@ -159,8 +169,8 @@ internal sealed class SettingsPage : ScrollPage
         _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(cfg.Theme));
         _autostart.Checked = SafeAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
-        _forward.Checked = cfg.ForwardVolumeKeys;
         _playerSync.Checked = cfg.MoviePlayerSync;
+        ShowVolumeKeys();
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
@@ -223,6 +233,34 @@ internal sealed class SettingsPage : ScrollPage
         if (_cap.IsDragging || _capWait.Enabled) return;
         _cap.Value = _app.Config.VolumeCapPercent;
         _capValue.Text = $"{_cap.Value}%";
+    }
+
+    private static string VolumeKeyModeName(VolumeKeyMode mode) => mode switch
+    {
+        VolumeKeyMode.WhileStreaming => L.T("推流时控制 HomePod"),
+        VolumeKeyMode.FollowWindows => L.T("HomePod 跟随 Windows 音量"),
+        VolumeKeyMode.WhenWindowsMuted => L.T("仅在 Windows 静音时"),
+        _ => L.T("关"),
+    };
+
+    private static string VolumeKeyModeDescription(VolumeKeyMode mode) => mode switch
+    {
+        VolumeKeyMode.WhileStreaming => L.T("推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。"),
+        VolumeKeyMode.FollowWindows => L.T("Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；" +
+                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。"),
+        VolumeKeyMode.WhenWindowsMuted => L.T("只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。"),
+        _ => L.T("音量键只调 Windows，不影响 HomePod。"),
+    };
+
+    /// <summary>The selected mode and what it does; without a Windows output device, that the keys go to the HomePod.</summary>
+    public void ShowVolumeKeys()
+    {
+        var mode = _app.Config.VolumeKeys;
+        if (!_volumeKeys.DroppedDown) _volumeKeys.SelectedIndex = Array.IndexOf(VolumeKeyModes, mode);
+        var desc = _volumeKeysRow.DescriptionText;
+        bool fallback = mode is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
+        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。") : VolumeKeyModeDescription(mode);
+        desc.Role = fallback ? TextRole.Caution : TextRole.Secondary;
     }
 
     /// <summary>Lists the hotkeys; turns red when one could not be registered (the dialog says which).</summary>

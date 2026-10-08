@@ -38,7 +38,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - 托盘程序：自动发现音箱、自动重连、睡眠唤醒恢复、被其他设备抢占时不抢回
 - 右键托盘图标打开快捷面板：音量和静音、场景、夜间模式、麦克风、连接或断开
 - 混音器：每个程序单独的音量、静音和电平表，可选按程序分流（HomePod / 本机 / 两者），见下文
-- 音量上限、夜间模式（压缩动态范围 + 减弱低音）、全局快捷键；Windows 静音时键盘音量键直接调 HomePod
+- 音量上限、夜间模式（压缩动态范围 + 减弱低音）、全局快捷键；键盘音量键也能调 HomePod（跟随 Windows 音量，或推流时只调 HomePod），见下文
 - 麦克风送到 HomePod，带混响和均衡，可用耳机低延迟监听；推到音箱的所有声音可选均衡预设
 - 立体声对和多房间同步（实验性，尚未在真实设备上验证）
 - 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
@@ -53,7 +53,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
    - **便携版 `HomePodCast-<版本>-win-x64.zip`**：解压到任意位置，运行 `HomePodCast.exe`，第一次会请求添加防火墙规则。
 
    防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。两种包的设置都保存在 `%APPDATA%\HomePodCast`。
-3. 程序会自动找到 HomePod 并连接。把电脑的默认输出设备静音也没关系：采集发生在系统音量之前，HomePod 照样有声。
+3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
 
 界面语言跟随 Windows 显示语言（没有对应译文的语言显示英文）。想换成别的语言：在「设置」页选择「语言 / Language」，或者把 `%APPDATA%\HomePodCast\config.json` 里的 `"Language"` 设为语言代码（`"zh-CN"`，或 `src/i18n` 里的文件名，比如 `"en"`、`"de"`）或 `"auto"`。
 
@@ -67,7 +67,7 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 
 ## 全部推送与按程序分流
 
-默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定：把 Windows 设为静音，就只在 HomePod 播放。
+默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定。想只在 HomePod 播放：在「设置 → 键盘音量键」选「推流时控制 HomePod」（或「仅在 Windows 静音时」），再把 Windows 设为静音；默认的「HomePod 跟随 Windows 音量」下，Windows 静音会让 HomePod 也静音。
 
 按程序分流可以让每个程序分别送到 HomePod、本机或两者（在「混音器」页设置），比如游戏声音进 HomePod、语音聊天留在耳机里。代价是延迟：
 
@@ -83,6 +83,17 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 | 系统要求 | Windows 10/11 | Windows 10 2004 或更高版本 |
 
 第一次开启分流时程序会弹窗确认。把所有程序改回「默认」并把默认设为 HomePod，就回到全部推送。如果分流时 HomePodCast 被强制结束，设为「HomePod」的程序会保持 0%，直到再次运行 HomePodCast。
+
+## 键盘音量键
+
+在「设置 → 键盘音量键」里选择音量 +、− 和静音键对 HomePod 起什么作用：
+
+- **HomePod 跟随 Windows 音量**（默认）：推流时 Windows 音量就是 HomePod 音量。Windows 的 0–100% 对应 HomePod 的 0 到音量上限；按键和 Windows 音量滑块会改 HomePod，在程序里调 HomePod 也会改 Windows。连接时和改音量上限时，两边对齐到较小的那个，哪边都不会自己变大。Windows 静音时 HomePod 也静音。
+- **推流时控制 HomePod**：推流时这三个键只调 HomePod（每次 2%），Windows 音量不变，屏幕下方会显示 HomePod 音量（独占全屏的游戏里不显示）；不推流时照常调 Windows。适合默认输出是电脑扬声器、又只想听 HomePod 的情况：把 Windows 静音，再用按键调 HomePod。
+- **仅在 Windows 静音时**：旧版的做法。只有 Windows 静音或音量为 0 时按键才转给 HomePod，Windows 保持静音。
+- **关**：按键只调 Windows。
+
+电脑没有可用的输出设备时（没装声卡驱动，或设备被禁用、拔掉），「HomePod 跟随 Windows 音量」和「仅在 Windows 静音时」也会在推流时直接用按键控制 HomePod，直到设备恢复。以管理员身份运行的程序在前台时，以及遥控器、鼠标的驱动软件只发送媒体命令而不是按键时，按键仍然调 Windows；这种情况下「HomePod 跟随 Windows 音量」会跟着变。
 
 ## 构建
 
