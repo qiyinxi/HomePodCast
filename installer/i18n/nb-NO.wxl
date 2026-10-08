@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="nb-NO" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="Start HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast krever .NET 10 Desktop Runtime (x64). Last den ned fra https://dotnet.microsoft.com/download/dotnet/10.0, installer den, og kjør deretter installasjonsprogrammet på nytt." />
+  <String Id="DowngradeError" Value="En nyere versjon av HomePodCast er allerede installert. Hvis du vil installere denne eldre versjonen, må du først avinstallere HomePodCast (innstillingene dine beholdes)." />
+  <String Id="ShortcutDescription" Value="Strøm lyden fra denne PC-en til en HomePod" />
+  <String Id="FirewallRuleDescription" Value="Lar AirPlay-høyttalere på det lokale nettverket koble tilbake til HomePodCast (klokkesynkronisering, forespørsler om å sende pakker på nytt). Fjernes når HomePodCast avinstalleres." />
+
+  <!-- WixToolset.Firewall.wixext 5.0.2 has these progress and error strings only for en-US, es-ES, ja-JP and pl-PL. -->
+  <String Id="msierrFirewallCannotConnect" Value="Kan ikke koble til Windows-brannmuren.  ([2]   [3]   [4]   [5])" />
+  <String Id="WixSchedFirewallExceptionsInstall" Value="Konfigurerer Windows-brannmuren" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="Konfigurerer Windows-brannmuren" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="Tilbakestiller endringer i Windows-brannmuren" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="Legger til regler i Windows-brannmuren" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="Tilbakestiller endringer i Windows-brannmuren" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="Fjerner regler fra Windows-brannmuren" />
+</WixLocalization>

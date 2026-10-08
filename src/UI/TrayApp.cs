@@ -4,42 +4,50 @@ using Microsoft.Win32;
 
 namespace HomePodCast.UI;
 
-internal sealed class TrayApp : ApplicationContext
+internal sealed partial class TrayApp : ApplicationContext
 {
     private readonly SynchronizationContext _ui;
     private readonly NotifyIcon _tray;
-    private readonly ToolStripMenuItem _statusItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _toggleItem = new("连接");
-    private readonly MainForm _form;
+    private readonly MainWindow _form;
     private StreamState _lastIconState = (StreamState)(-1);
     private LocalApi? _api;
     private bool _wantConnected;
     private bool _hintShown;
+    private TrayFlyout? _flyout;
+    private long _flyoutClosedAt;
 
     public AppConfig Config { get; }
     public StreamController Controller { get; }
+    public Audio.AppRouting Routing { get; private set; } = null!;
 
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false)
+    /// <summary>Extra inputs (e.g. a microphone) mixed into the stream; see <see cref="Audio.IMixSource"/>.</summary>
+    public Audio.MixSources MixSources { get; } = new();
+
+    /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
+    /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
+        SetUpRouting();
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(_statusItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(_toggleItem);
-        menu.Items.Add("打开主界面", null, (_, _) => ShowMain());
-        menu.Items.Add("混音器", null, (_, _) => ShowMixer());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => Quit());
-        _toggleItem.Click += (_, _) => ToggleConnection();
+        InitSound();
+        InitEffects();
 
-        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = "HomePod 音响" };
-        _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
+        // Left click: the main window. Right click: the flyout (volume, scene, night mode, mic, connect, quit).
+        _tray = new NotifyIcon { Visible = true, Text = L.T("HomePod 音响") };
+        _tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left) ShowMain();
+            else if (e.Button == MouseButtons.Right) ShowFlyout();
+        };
 
-        _form = new MainForm(this);
+        _form = new MainWindow(this);
         _ = _form.Handle; // create handle so BeginInvoke works before first show
+        _form.LatencyChanged += RaiseStateChanged;
+        InitPlayers();
+        InitCapture();
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
         Controller.HostResolved += host => _ui.Post(_ =>
@@ -59,7 +67,7 @@ internal sealed class TrayApp : ApplicationContext
                     streaming,
                     device = Config.DeviceName,
                     latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = streaming ? Controller.EffectiveLatencyMs + Config.VideoDelayExtraMs : 0,
+                    videoDelayMs = VideoDelayMs,
                     videoDelaySource = "estimate",
                 };
             });
@@ -79,7 +87,23 @@ internal sealed class TrayApp : ApplicationContext
 
         OnControllerChanged();
         if (!startHidden) ShowMain();
-        if (openMixer) _ui.Post(_ => ShowMixer(), null);
+        if (openMixer)
+        {
+            // Wait for Application.Run's loop: a Post would also be dispatched by the COM wait inside the
+            // firewall check below, and a form shown in there never gets its Shown/timer messages.
+            void OpenMixer(object? s, EventArgs e) { Application.Idle -= OpenMixer; ShowMixer(); }
+            Application.Idle += OpenMixer;
+        }
+        if (openFlyout)
+        {
+            void OpenFlyout(object? s, EventArgs e) { Application.Idle -= OpenFlyout; ShowFlyout(); }
+            Application.Idle += OpenFlyout;
+        }
+        if (testOsd != null)
+        {
+            void OpenOsd(object? s, EventArgs e) { Application.Idle -= OpenOsd; ShowTestOsd(testOsd == "muted"); }
+            Application.Idle += OpenOsd;
+        }
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
         if (Config.DeviceId != null)
@@ -91,7 +115,34 @@ internal sealed class TrayApp : ApplicationContext
         RefreshDevices();
     }
 
+    /// <summary>
+    /// Something the tray flyout shows changed: connection, volume, mute, scene or latency, night mode, mic, cap.
+    /// Raised on the UI thread.
+    /// </summary>
+    public event Action? StateChanged;
+
+    private void RaiseStateChanged() => StateChanged?.Invoke();
+
+    /// <summary>The latency the scene or the slider asks for now (what 首页 shows), in ms.</summary>
+    public int LatencyMs => _form.LatencyMs;
+
+    /// <summary>Per-app routing: the capture follows the mixer's HomePod / 本机 / 两者 rules.</summary>
+    private void SetUpRouting()
+    {
+        Routing = new Audio.AppRouting(Config);
+        Controller.CaptureFactory = fifo => new Audio.RoutedCapture(fifo, RtpSender.SampleRate, Routing, MixSources);
+        // Apps left silent by a run that did not exit cleanly. Not from a test profile: the real instance may be
+        // running next to it, and its silenced apps look exactly like leftovers.
+        if (AppConfig.Profile == null) Task.Run(Audio.SessionRouter.RestoreLeftovers);
+    }
+
     // ---------------------------------------------------------------- actions
+
+    /// <summary>
+    /// Connect and Disconnect run here, never on the UI thread: Start first stops the previous loop (up to 3 s, plus
+    /// the speaker's TEARDOWN and the capture's shutdown). One at a time, and the last one asked for wins.
+    /// </summary>
+    private readonly LatestRequestQueue _connection = new("connection");
 
     public void Connect()
     {
@@ -101,13 +152,24 @@ internal sealed class TrayApp : ApplicationContext
             return;
         }
         _wantConnected = true;
-        Controller.Start(Config.DeviceId, Config.Host, Config.LatencyMs, Config.Volume);
+        // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
+        string id = Config.DeviceId;
+        string? host = Config.Host;
+        int latency = Config.LatencyMs;
+        double? volume = Config.Volume;
+        int asOf = Controller.VolumeChanges;
+        if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
+        {
+            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf));
+            return;
+        }
+        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf));
     }
 
     public void Disconnect()
     {
         _wantConnected = false;
-        Task.Run(Controller.Stop);
+        _connection.Post(Controller.Stop);
     }
 
     public void ToggleConnection()
@@ -129,17 +191,40 @@ internal sealed class TrayApp : ApplicationContext
 
     public void SetLatency(int ms)
     {
+        if (Config.Scene == Scene.Custom) Config.CustomLatencyMs = ms;
         if (Config.LatencyMs == ms) return;
         Config.LatencyMs = ms;
         Config.Save();
         if (_wantConnected) Connect(); // latency is negotiated at SETUP, so reconnect
     }
 
+    /// <summary>A volume chosen in the app (a page slider's debounce, the tray flyout): saved, sent, and Windows follows (跟随 Windows).</summary>
     public void SetVolume(double percent)
     {
+        percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Config.Volume = percent;
         Config.Save();
-        Controller.SetVolume(percent);
+        if (Controller.Volume != percent || Controller.Muted) Controller.SetVolume(percent); // PreviewVolume may have sent it
+        _followLink?.HomePodChanged();
+    }
+
+    /// <summary>
+    /// A volume slider is moving: send it right away (the controller coalesces — latest value wins, one request
+    /// in flight), so the speaker follows the drag. The slider's debounce then saves it via SetVolume/ApplyVolume.
+    /// </summary>
+    public void PreviewVolume(double percent)
+    {
+        Controller.SetVolume(VolumeLimit.Clamp(percent, Config.VolumeCapPercent));
+        _followLink?.HomePodChanged();
+    }
+
+    /// <summary>A volume chosen in the tray flyout (after its debounce): applied like the pages do, and they follow.</summary>
+    public void ApplyVolume(double percent)
+    {
+        SetVolume(percent);
+        _form.ShowVolume(Controller.Volume ?? percent);
+        _form.ShowSoundOptions(); // a new volume also ends a mute
+        RaiseStateChanged();
     }
 
     public async void RefreshDevices()
@@ -148,12 +233,13 @@ internal sealed class TrayApp : ApplicationContext
         try
         {
             var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            found = StereoPairs.Merge(found); // a stereo pair shows as one entry (experimental)
             // Keep the configured speaker in the list even if it didn't answer this time.
             if (Config.DeviceId != null && !found.Any(d =>
                     StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(Config.DeviceId), StringComparison.OrdinalIgnoreCase)))
             {
                 found.Add(new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId, System.Net.IPAddress.None, 7000,
-                    "未发现", new Dictionary<string, string>()));
+                    L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
             if (Config.DeviceId == null && found.FirstOrDefault(d => d.Model.StartsWith("AudioAccessory")) is { } homepod)
@@ -177,13 +263,13 @@ internal sealed class TrayApp : ApplicationContext
     {
         if (Controller.State != StreamState.Streaming)
         {
-            MessageBox.Show(owner, "请先连接音箱，再做同步测试。", "音画同步测试");
+            MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
             return;
         }
         using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
-        var sender = Controller.Client?.Sender;
+        var sender = Controller.ActiveSender;
         var scheduled = new System.Collections.Concurrent.ConcurrentQueue<long>();
         var local = new List<double>();
         test.ClickScheduled += when => scheduled.Enqueue(when);
@@ -214,39 +300,61 @@ internal sealed class TrayApp : ApplicationContext
         }
     }
 
-    private MixerForm? _mixer;
+    public void ShowMixer() => ShowMain(AppPage.Mixer);
 
-    public void ShowMixer()
+    /// <summary>Bring the window forward, on <paramref name="page"/> if given (else the page it was on).</summary>
+    public void ShowMain(AppPage? page = null)
     {
-        if (_mixer == null || _mixer.IsDisposed)
-        {
-            _mixer = new MixerForm(this);
-            _mixer.FormClosed += (_, _) => _mixer = null;
-            _mixer.Show();
-        }
-        _mixer.Activate();
-    }
-
-    public void ShowMain()
-    {
+        if (page is { } p) _form.ShowPage(p);
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
         _form.Activate();
+    }
+
+    /// <summary>Open the flyout next to the tray icon; a second right-click closes it.</summary>
+    public void ShowFlyout()
+    {
+        if (_flyout is { IsDisposed: false } open)
+        {
+            open.Close();
+            return;
+        }
+        // Clicking the icon while the flyout is open first takes the focus away, which already closed it.
+        if (Environment.TickCount64 - _flyoutClosedAt < 400) return;
+        try
+        {
+            var anchor = FlyoutPlacement.IconRect(_tray) ?? new Rectangle(Cursor.Position, new Size(1, 1));
+            var flyout = new TrayFlyout(this);
+            flyout.FormClosed += (_, _) =>
+            {
+                _flyout = null;
+                _flyoutClosedAt = Environment.TickCount64;
+            };
+            _flyout = flyout;
+            flyout.ShowAt(anchor);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"tray flyout: {ex}");
+            _flyout?.Dispose();
+            _flyout = null;
+            ShowMain(); // everything in the flyout is in the main window too
+        }
     }
 
     public void ShowHiddenHint()
     {
         if (_hintShown) return;
         _hintShown = true;
-        _tray.ShowBalloonTip(3000, "HomePod 音响", "已最小化到托盘，声音会继续推送。右键托盘图标可以退出。", ToolTipIcon.Info);
+        _tray.ShowBalloonTip(3000, L.T("HomePod 音响"), L.T("已最小化到托盘，声音会继续推送。右键托盘图标可以退出。"), ToolTipIcon.Info);
     }
 
     private void OfferFirewallRule()
     {
         var answer = MessageBox.Show(
-            "HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n" +
-            "点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。",
-            "需要防火墙放行", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            L.T("HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n" +
+                "点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。"),
+            L.T("需要防火墙放行"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (answer != DialogResult.Yes) return;
         if (Firewall.RequestRule())
         {
@@ -255,7 +363,7 @@ internal sealed class TrayApp : ApplicationContext
         }
         else
         {
-            MessageBox.Show("没有添加成功（可能取消了授权）。", "需要防火墙放行");
+            MessageBox.Show(L.T("没有添加成功（可能取消了授权）。"), L.T("需要防火墙放行"));
         }
     }
 
@@ -276,33 +384,57 @@ internal sealed class TrayApp : ApplicationContext
 
     private void OnControllerChanged()
     {
+        // Quit stops the controller (which posts one last change) and then disposes the tray icon; seen on a real
+        // machine as a NullReferenceException in NotifyIcon.UpdateIcon on every quit.
+        if (_quitting) return;
         var c = Controller;
-        if (c.State == StreamState.Idle && _wantConnected && c.StatusText.Contains("占用")) _wantConnected = false;
+        if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
 
-        _statusItem.Text = c.StatusText;
-        _toggleItem.Text = c.State == StreamState.Idle ? "连接" : "断开";
-        var tip = $"HomePod 音响 · {c.StatusText}";
+        var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
         if (c.State != _lastIconState)
         {
             var old = _tray.Icon;
-            _tray.Icon = Icons.Speaker(Icons.For(c.State));
+            _tray.Icon = Icons.Tray(c.State);
             old?.Dispose();
             _lastIconState = c.State;
         }
-        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v)
+        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v && _pendingVolume is null)
         {
             Config.Volume = v;
             Config.Save();
         }
+        UpdateMonitorGuard();
+        UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();
+        RaiseStateChanged();
     }
 
-    private void Quit()
+    private bool _quitting;
+
+    /// <summary>Windows is closing us (shutdown, logoff, an installer's Restart Manager, Task Manager).</summary>
+    internal void QuitForSystem()
     {
+        Log.Info("closed by Windows (shutdown, installer or Task Manager): quitting");
+        Quit();
+    }
+
+    internal void Quit()
+    {
+        if (_quitting) return; // the main window's FormClosing can call back in while we dispose it
+        _quitting = true;
+        var connecting = _connection.Close(); // nothing queued starts any more
+        _flyout?.Close();
+        _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        DisposeCaptureWatch();
+        DisposeSound();
+        DisposeEffects();
+        DisposePlayers();
         _api?.Dispose();
+        // A Start still running would otherwise begin a stream after the Stop below (it never faults).
+        connecting.Wait(TimeSpan.FromSeconds(10));
         Controller.Dispose();
         _tray.Dispose();
         ExitThread();

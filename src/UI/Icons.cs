@@ -18,26 +18,46 @@ internal static partial class Icons
         _ => Idle,
     };
 
-    /// <summary>A little speaker: dark rounded body with a coloured "mesh" dot showing the state.</summary>
-    public static Icon Speaker(Color state, int size = 32)
+    private static Icon? _app;
+
+    /// <summary>
+    /// The app icon in every size (src/app.ico, drawn by tools/make_icon.py). Shared: forms use it as is, so
+    /// never dispose it.
+    /// </summary>
+    public static Icon App => _app ??= LoadApp();
+
+    private static Icon LoadApp()
     {
+        using var stream = typeof(Icons).Assembly.GetManifestResourceStream("app.ico")
+                           ?? throw new InvalidOperationException("app.ico is not embedded");
+        return new Icon(stream);
+    }
+
+    /// <summary>
+    /// The tray icon: the app icon at the tray's size, with a status dot in the corner while connecting (amber),
+    /// streaming (green) or retrying (red). A new icon each call; the caller disposes it.
+    /// </summary>
+    public static Icon Tray(StreamState state)
+    {
+        int size = Math.Max(16, SystemInformation.SmallIconSize.Width);
         using var bmp = new Bitmap(size, size);
         using (var g = Graphics.FromImage(bmp))
         {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
-            float s = size / 32f;
-            using var body = new GraphicsPath();
-            var r = new RectangleF(7 * s, 2 * s, 18 * s, 28 * s);
-            float rad = 7 * s;
-            body.AddArc(r.X, r.Y, rad * 2, rad * 2, 180, 90);
-            body.AddArc(r.Right - rad * 2, r.Y, rad * 2, rad * 2, 270, 90);
-            body.AddArc(r.Right - rad * 2, r.Bottom - rad * 2, rad * 2, rad * 2, 0, 90);
-            body.AddArc(r.X, r.Bottom - rad * 2, rad * 2, rad * 2, 90, 90);
-            body.CloseFigure();
-            using (var b = new SolidBrush(Color.FromArgb(43, 43, 43))) g.FillPath(b, body);
-            using (var b = new SolidBrush(state)) g.FillEllipse(b, 10 * s, 11 * s, 12 * s, 12 * s);
-            using (var b = new SolidBrush(Color.FromArgb(140, 140, 140))) g.FillEllipse(b, 13.5f * s, 4 * s, 5 * s, 5 * s);
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var source = new Icon(App, size, size))
+            using (var image = source.ToBitmap())
+                g.DrawImage(image, new Rectangle(0, 0, size, size));
+            if (state != StreamState.Idle)
+            {
+                float r = size * 0.21f, ring = Math.Max(1f, size / 16f);
+                float cx = size - r - ring, cy = size - r - ring;
+                using (var b = new SolidBrush(Color.White))
+                    g.FillEllipse(b, cx - r - ring, cy - r - ring, 2 * (r + ring), 2 * (r + ring));
+                using (var b = new SolidBrush(For(state)))
+                    g.FillEllipse(b, cx - r, cy - r, 2 * r, 2 * r);
+            }
         }
         var h = bmp.GetHicon();
         var icon = (Icon)Icon.FromHandle(h).Clone();

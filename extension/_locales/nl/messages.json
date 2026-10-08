@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast Videosynchronisatie" },
+  "extDescription": { "message": "Vertraagt webvideo een paar milliseconden, zodat die past bij het geluid dat via AirPlay later op een HomePod aankomt." },
+  "htmlLang": { "message": "nl" },
+  "statusConnecting": { "message": "Verbinden…" },
+  "statusNotRunning": { "message": "Niet actief" },
+  "statusIdle": { "message": "Niet aan het streamen" },
+  "statusStreaming": { "message": "Streamt" },
+  "siteLabel": { "message": "Deze site" },
+  "localFile": { "message": "(lokaal bestand)" },
+  "minusLabel": { "message": "1 ms minder" },
+  "minusTitle": { "message": "1 ms minder (ingedrukt houden om door te gaan)" },
+  "plusLabel": { "message": "1 ms meer" },
+  "plusTitle": { "message": "1 ms meer (ingedrukt houden om door te gaan)" },
+  "delayCaption": { "message": "Beeldvertraging" },
+  "siteOffset": { "message": "Sitecorrectie" },
+  "reset": { "message": "Herstellen" },
+  "siteToggle": { "message": "Inschakelen op deze site" },
+  "globalToggle": { "message": "Inschakelen op alle sites" },
+  "hintUnavailable": { "message": "Niet beschikbaar op deze pagina, of de pagina is geopend voordat de extensie werd geïnstalleerd. Laad de pagina opnieuw en probeer het nog eens." },
+  "hintGlobalOff": { "message": "Uitgeschakeld op alle sites; het beeld wordt niet vertraagd." },
+  "hintSiteOff": { "message": "Uitgeschakeld op deze site; het beeld wordt niet vertraagd." },
+  "hintNotStreaming": { "message": "HomePodCast streamt niet; het beeld wordt niet vertraagd." },
+  "hintNotRunning": { "message": "HomePodCast is niet actief; het beeld wordt niet vertraagd." },
+  "videosNone": { "message": "Geen video's gevonden op deze pagina (≥ 200×112)." },
+  "videosCount": {
+    "message": "Video's op deze pagina: $COUNT$",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ vertraagd",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "gemeten $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "kopieerbeveiligd (DRM), kan niet worden vertraagd" },
+  "videosFullscreen": { "message": "kan niet worden vertraagd zolang het video-element zelf schermvullend is" },
+  "videosPlayerUnsupported": { "message": "de speler op deze pagina ondersteunt geen beeldvertraging" },
+  "videosNotDelayed": { "message": "niet vertraagd" }
+}

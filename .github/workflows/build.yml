@@ -34,17 +34,18 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Version
         id: ver
         shell: pwsh
         run: |
-          # tag v1.2.3 -> 1.2.3; PR -> 0.1.0-pr.<n>.<run>; branch -> 0.1.0-<branch>.<run>
+          # tag v1.2.3 -> 1.2.3; PR -> 0.2.0-pr.<n>.<run>; branch -> 0.2.0-<branch>.<run>
+          # (the MSI gets a numeric version from this: 1.2.3, or 0.2.0.<run> for anything with a suffix; see installer/build.ps1)
           $v = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') }
-               elseif ('${{ github.event_name }}' -eq 'pull_request') { '0.1.0-pr.${{ github.event.number }}.${{ github.run_number }}' }
-               else { '0.1.0-' + ('${{ github.ref_name }}' -replace '[^A-Za-z0-9]', '-') + '.${{ github.run_number }}' }
+               elseif ('${{ github.event_name }}' -eq 'pull_request') { '0.2.0-pr.${{ github.event.number }}.${{ github.run_number }}' }
+               else { '0.2.0-' + ('${{ github.ref_name }}' -replace '[^A-Za-z0-9]', '-') + '.${{ github.run_number }}' }
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "version $v"
 
@@ -56,7 +57,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results
@@ -88,7 +89,7 @@ jobs:
       # and the SIGNPATH_API_TOKEN secret plus the organization/project/policy ids are known.
       # - name: Upload unsigned exe
       #   id: unsigned
-      #   uses: actions/upload-artifact@v4
+      #   uses: actions/upload-artifact@v7
       #   with:
       #     name: unsigned
       #     path: publish/HomePodCast/HomePodCast.exe
@@ -102,21 +103,38 @@ jobs:
       #     github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
       #     wait-for-completion: true
       #     output-artifact-directory: publish/HomePodCast
+      # The MSI below packs the exe from publish/HomePodCast, so it picks up the signed one. The MSI itself
+      # needs a second signing request after "Build MSI" (upload publish/*.msi as an artifact, submit it the
+      # same way with output-artifact-directory: publish) before the "Upload packages" step. Sign it only
+      # after build.ps1 has finished: the script embeds the language transforms into the file at the end.
+
+      - name: Restore .NET tools (WiX)
+        run: dotnet tool restore
+
+      # One MSI for all wizard languages: build.ps1 builds a package per culture (installer/i18n/*.wxl) and
+      # embeds each one as a language transform in the en-US package. -Validate runs the ICE checks on every
+      # package and checks that each embedded transform reproduces its culture's package exactly.
+      - name: Build MSI
+        shell: pwsh
+        run: ./installer/build.ps1 -Version '${{ steps.ver.outputs.version }}' -Build ${{ github.run_number }} -Validate
 
       - name: Package
         shell: pwsh
         run: |
           $v = '${{ steps.ver.outputs.version }}'
-          Copy-Item LICENSE, README.md publish/HomePodCast/
+          Copy-Item LICENSE, README*.md publish/HomePodCast/
           Compress-Archive -Path publish/HomePodCast/* -DestinationPath "publish/HomePodCast-$v-win-x64.zip"
           if (Test-Path extension/manifest.json) {
-            Compress-Archive -Path extension/* -DestinationPath "publish/HomePodCast-extension-$v.zip"
+            Compress-Archive -Path (Get-Item extension/manifest.json, extension/src, extension/_locales, extension/icons -ErrorAction SilentlyContinue) -DestinationPath "publish/HomePodCast-extension-$v.zip"
           }
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
         with:
           name: packages
-          path: publish/*.zip
+          path: |
+            publish/*.zip
+            publish/*.msi
           if-no-files-found: error
 
   release:
@@ -134,6 +152,8 @@ jobs:
       - uses: softprops/action-gh-release@v3
         with:
           name: HomePodCast ${{ needs.build.outputs.version }}
-          files: packages/*.zip
+          files: |
+            packages/*.zip
+            packages/*.msi
           generate_release_notes: true
           prerelease: ${{ contains(needs.build.outputs.version, '-') }}

@@ -1,0 +1,127 @@
+{
+  "extName": {
+    "message": "HomePodCast-videosynkronointi",
+    "description": "Extension name, also the popup heading."
+  },
+  "extDescription": {
+    "message": "Viivästää verkkovideota muutamalla millisekunnilla, jotta kuva vastaa ääntä, joka saapuu HomePodiin AirPlayn kautta myöhemmin.",
+    "description": "Store/extension description, at most 132 characters."
+  },
+  "htmlLang": {
+    "message": "fi",
+    "description": "BCP 47 tag of this translation, used as the popup's lang attribute."
+  },
+  "statusConnecting": {
+    "message": "Yhdistetään…",
+    "description": "Status while the popup asks the HomePodCast app for its state."
+  },
+  "statusNotRunning": {
+    "message": "Ei käynnissä",
+    "description": "Status: the HomePodCast app is not running."
+  },
+  "statusIdle": {
+    "message": "Ei suoratoistoa",
+    "description": "Status: the app runs but sends no audio to the speaker."
+  },
+  "statusStreaming": {
+    "message": "Suoratoistetaan",
+    "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
+  },
+  "siteLabel": {
+    "message": "Tämä sivusto",
+    "description": "Label in front of the current site's host name."
+  },
+  "localFile": {
+    "message": "(paikallinen tiedosto)",
+    "description": "Shown instead of a host name for file:// pages."
+  },
+  "minusLabel": {
+    "message": "1 ms vähemmän",
+    "description": "Accessible name of the − button."
+  },
+  "minusTitle": {
+    "message": "1 ms vähemmän (jatka säätöä pitämällä painettuna)",
+    "description": "Tooltip of the − button."
+  },
+  "plusLabel": {
+    "message": "1 ms enemmän",
+    "description": "Accessible name of the + button."
+  },
+  "plusTitle": {
+    "message": "1 ms enemmän (jatka säätöä pitämällä painettuna)",
+    "description": "Tooltip of the + button."
+  },
+  "delayCaption": {
+    "message": "Kuvan viive",
+    "description": "Caption under the big delay number."
+  },
+  "siteOffset": {
+    "message": "Sivuston korjaus",
+    "description": "Label of the per-site correction added to the delay, followed by e.g. +5 ms."
+  },
+  "reset": {
+    "message": "Palauta",
+    "description": "Button that sets the site offset back to 0."
+  },
+  "siteToggle": {
+    "message": "Ota käyttöön tällä sivustolla",
+    "description": "Switch for the current site."
+  },
+  "globalToggle": {
+    "message": "Ota käyttöön kaikilla sivustoilla",
+    "description": "Master switch."
+  },
+  "hintUnavailable": {
+    "message": "Ei käytettävissä tällä sivulla, tai sivu avattiin ennen laajennuksen asentamista. Päivitä sivu ja yritä uudelleen.",
+    "description": "The page has no content script."
+  },
+  "hintGlobalOff": {
+    "message": "Poistettu käytöstä kaikilla sivustoilla; kuvaa ei viivästetä."
+  },
+  "hintSiteOff": {
+    "message": "Poistettu käytöstä tällä sivustolla; kuvaa ei viivästetä."
+  },
+  "hintNotStreaming": {
+    "message": "HomePodCast ei suoratoista; kuvaa ei viivästetä."
+  },
+  "hintNotRunning": {
+    "message": "HomePodCast ei ole käynnissä; kuvaa ei viivästetä."
+  },
+  "videosNone": {
+    "message": "Tältä sivulta ei löytynyt videoita (≥ 200×112).",
+    "description": "Only videos at least 200×112 pixels are handled."
+  },
+  "videosCount": {
+    "message": "Videoita sivulla: $COUNT$",
+    "description": "First part of the video summary line; parts are joined with ' · '.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "2" }
+    }
+  },
+  "videosDelaying": {
+    "message": "viivästettyjä: $COUNT$",
+    "description": "How many of the videos are being delayed.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "videosMeasured": {
+    "message": "mitattu $MS$ ms",
+    "description": "Average delay actually shown, in milliseconds.",
+    "placeholders": {
+      "ms": { "content": "$1", "example": "141" }
+    }
+  },
+  "videosDrm": {
+    "message": "kopiosuojattu (DRM), ei voi viivästää"
+  },
+  "videosFullscreen": {
+    "message": "ei voi viivästää, kun itse videoelementti on koko näytön tilassa"
+  },
+  "videosPlayerUnsupported": {
+    "message": "tämän sivun soitin ei tue kuvan viivästämistä"
+  },
+  "videosNotDelayed": {
+    "message": "ei viivettä"
+  }
+}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title data-i18n="extName">HomePodCast</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Texts come from _locales/*/messages.json: data-i18n sets the text, data-i18n-title / -aria-label the attribute. -->
+  <main>
+    <h1 data-i18n="extName"></h1>
+
+    <section class="card status" id="statusCard" data-state="unknown">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="statusText" data-i18n="statusConnecting"></span>
+    </section>
+
+    <section class="card site" id="siteCard">
+      <div class="row">
+        <span class="label" data-i18n="siteLabel"></span>
+        <span id="host" class="host">—</span>
+      </div>
+      <div class="delay">
+        <button type="button" id="minus" class="step" data-i18n-aria-label="minusLabel" data-i18n-title="minusTitle">−</button>
+        <div class="value" aria-live="polite">
+          <span id="effDelay">—</span><span class="unit">ms</span>
+          <div class="caption" data-i18n="delayCaption"></div>
+        </div>
+        <button type="button" id="plus" class="step" data-i18n-aria-label="plusLabel" data-i18n-title="plusTitle">+</button>
+      </div>
+      <div class="row sub">
+        <span><span data-i18n="siteOffset"></span> <b id="offset">+0 ms</b></span>
+        <button type="button" id="reset" class="link" data-i18n="reset"></button>
+      </div>
+      <p class="hint" id="hint" hidden></p>
+      <label class="row toggle">
+        <span data-i18n="siteToggle"></span>
+        <input type="checkbox" id="siteToggle" role="switch">
+      </label>
+    </section>
+
+    <section class="card">
+      <label class="row toggle">
+        <span data-i18n="globalToggle"></span>
+        <input type="checkbox" id="globalToggle" role="switch">
+      </label>
+    </section>
+
+    <footer id="videos" class="foot">—</footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

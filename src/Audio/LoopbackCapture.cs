@@ -8,7 +8,7 @@ namespace HomePodCast.Audio;
 /// and written into the FIFO. Follows default-device changes and steers the resampler ratio from the
 /// FIFO depth so the sound-card clock never drifts against the network timeline.
 /// </summary>
-public sealed class LoopbackCapture : IDisposable
+public sealed class LoopbackCapture : ICaptureSource
 {
     private const long BufferDuration = 200_000; // 20 ms in 100 ns units
     private static readonly long DeviceCheckInterval = Stopwatch.Frequency; // 1 s
@@ -25,6 +25,7 @@ public sealed class LoopbackCapture : IDisposable
     public double DriftPpm { get; private set; }
     public float Peak { get; private set; }
     public double ProportionalGain { get; set; } = 0.02;
+    public int ExtraLatencyMs => 0;
 
     public event Action<string>? DeviceChanged;
 
@@ -51,6 +52,10 @@ public sealed class LoopbackCapture : IDisposable
             {
                 Log.Warn($"capture: {ex.Message}; retrying");
                 Thread.Sleep(1000);
+            }
+            catch (Exception)
+            {
+                break; // failed while being stopped: an unhandled one would end the app
             }
         }
     }
@@ -112,6 +117,7 @@ public sealed class LoopbackCapture : IDisposable
 
                     long now = Stopwatch.GetTimestamp();
                     if (now - lastData > Stopwatch.Frequency / 5) resampler.Reset(); // resume after silence
+                    else NoteGap(now - lastData);
                     lastData = now;
 
                     if (stereo.Length < frames * 2) stereo = new float[frames * 2];
@@ -154,6 +160,17 @@ public sealed class LoopbackCapture : IDisposable
         }
     }
 
+    private long _maxGapTicks;
+
+    /// <summary>Longest wait between two packets while audio was flowing (quiet spells excluded).</summary>
+    private void NoteGap(long ticks)
+    {
+        if (ticks > Volatile.Read(ref _maxGapTicks)) Volatile.Write(ref _maxGapTicks, ticks);
+    }
+
+    /// <summary>The longest gap between capture packets since the last call, in ms (for the minute stats).</summary>
+    public double TakeMaxGapMs() => Interlocked.Exchange(ref _maxGapTicks, 0) * 1000.0 / Stopwatch.Frequency;
+
     private void SteerDrift(Resampler resampler)
     {
         _avgDepth += 0.02 * (_fifo.Depth - _avgDepth);
@@ -169,7 +186,7 @@ public sealed class LoopbackCapture : IDisposable
         Peak = peak;
     }
 
-    private static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
+    internal static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
     {
         int ch = fmt.Channels;
         byte* p = (byte*)data;

@@ -10,11 +10,13 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HomePodCast</RootNamespace>
     <AssemblyName>HomePodCast</AssemblyName>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <ServerGarbageCollector>false</ServerGarbageCollector>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The custom controls (UI/Controls) are built in code, never in the designer: no serialization attributes. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
     <!-- Fixed output location so the firewall rule for the exe survives rebuilds. -->
     <OutputPath>..\app\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -23,6 +25,13 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HomePodCast.Tests" />
+  </ItemGroup>
+
+  <!-- UI translations (source string → text), read by L.cs as i18n.<language>.json -->
+  <ItemGroup>
+    <None Remove="i18n\**" />
+    <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
+    <EmbeddedResource Include="i18n\*.json" LogicalName="i18n.%(Filename)%(Extension)" WithCulture="false" />
   </ItemGroup>
 
 </Project>

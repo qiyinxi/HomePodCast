@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast 影片同步" },
+  "extDescription": { "message": "把網頁影片的畫面延後幾毫秒，對齊經 AirPlay 串流到 HomePod、較晚響起的聲音。" },
+  "htmlLang": { "message": "zh-TW" },
+  "statusConnecting": { "message": "正在連線…" },
+  "statusNotRunning": { "message": "未執行" },
+  "statusIdle": { "message": "未串流" },
+  "statusStreaming": { "message": "串流中" },
+  "siteLabel": { "message": "目前網站" },
+  "localFile": { "message": "(本機檔案)" },
+  "minusLabel": { "message": "減少 1 毫秒" },
+  "minusTitle": { "message": "減少 1 毫秒（按住可連續調整）" },
+  "plusLabel": { "message": "增加 1 毫秒" },
+  "plusTitle": { "message": "增加 1 毫秒（按住可連續調整）" },
+  "delayCaption": { "message": "畫面延遲" },
+  "siteOffset": { "message": "網站偏移" },
+  "reset": { "message": "重設" },
+  "siteToggle": { "message": "在此網站啟用" },
+  "globalToggle": { "message": "全域啟用" },
+  "hintUnavailable": { "message": "此頁面不支援，或頁面在安裝擴充功能之前就已開啟，請重新整理頁面後再試。" },
+  "hintGlobalOff": { "message": "已全域關閉，畫面不延遲。" },
+  "hintSiteOff": { "message": "已在此網站關閉，畫面不延遲。" },
+  "hintNotStreaming": { "message": "HomePodCast 未串流，畫面不延遲。" },
+  "hintNotRunning": { "message": "HomePodCast 未執行，畫面不延遲。" },
+  "videosNone": { "message": "本頁未偵測到影片（≥ 200×112）。" },
+  "videosCount": {
+    "message": "本頁 $COUNT$ 部影片",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ 部正在延遲",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "實測 $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "受版權保護（DRM），無法延遲" },
+  "videosFullscreen": { "message": "影片元素單獨全螢幕時無法延遲" },
+  "videosPlayerUnsupported": { "message": "此頁面的播放器不支援畫面延遲" },
+  "videosNotDelayed": { "message": "未延遲" }
+}

@@ -1,0 +1,215 @@
+:root {
+  --bg: #f4f4f6;
+  --card: #ffffff;
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --line: #e2e2e7;
+  --accent: #0a84ff;
+  --ok: #30a46c;
+  --warn: #e5a000;
+  --off: #9a9aa0;
+  --btn: #ececf0;
+  --btn-hover: #e0e0e6;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e;
+    --card: #2c2c2e;
+    --text: #f2f2f7;
+    --muted: #98989f;
+    --line: #3a3a3c;
+    --accent: #409cff;
+    --ok: #3dd68c;
+    --warn: #ffc53d;
+    --off: #6e6e73;
+    --btn: #3a3a3c;
+    --btn-hover: #48484a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+}
+
+/* CJK glyph shapes follow the popup language (html lang comes from messages.json "htmlLang") */
+body:lang(zh-TW) {
+  font-family: -apple-system, "Segoe UI", "Microsoft JhengHei UI", "PingFang TC", system-ui, sans-serif;
+}
+body:lang(ja) {
+  font-family: -apple-system, "Segoe UI", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", system-ui, sans-serif;
+}
+
+main {
+  width: 300px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+h1 {
+  margin: 0 2px 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--off);
+  flex: none;
+}
+.status[data-state="streaming"] .dot { background: var(--ok); }
+.status[data-state="idle"] .dot { background: var(--warn); }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.label { color: var(--muted); }
+
+.host {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.delay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0 6px;
+}
+
+.value {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#effDelay {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+}
+.unit {
+  margin-left: 3px;
+  color: var(--muted);
+}
+.caption {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.step {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--btn);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+.step:hover:not(:disabled) { background: var(--btn-hover); }
+.step:focus-visible, .link:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sub { color: var(--muted); }
+.sub b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  padding: 2px 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toggle {
+  cursor: pointer;
+  padding-top: 8px;
+}
+.card > .toggle:first-child { padding-top: 0; }
+.site .toggle {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+input[type="checkbox"][role="switch"] {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  width: 36px;
+  height: 21px;
+  border-radius: 11px;
+  background: var(--off);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex: none;
+}
+input[type="checkbox"][role="switch"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+input[type="checkbox"][role="switch"]:checked { background: var(--ok); }
+input[type="checkbox"][role="switch"]:checked::after { transform: translateX(15px); }
+
+button:disabled, input:disabled { opacity: 0.45; cursor: default; }
+.site.unavailable .delay,
+.site.unavailable .sub,
+.site.unavailable .toggle { opacity: 0.45; }
+
+.foot {
+  color: var(--muted);
+  font-size: 12px;
+  padding: 0 2px;
+}

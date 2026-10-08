@@ -85,7 +85,8 @@ internal interface IAudioRenderClient
     [PreserveSig] int ReleaseBuffer(uint frames, uint flags);
 }
 
-// Order checked against NAudio's IAudioEndpointVolume; members after GetMute are omitted.
+// Order checked against NAudio's IAudioEndpointVolume and endpointvolume.h (SDK 10.0.26100);
+// members after GetVolumeStepInfo are omitted.
 [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IAudioEndpointVolume
 {
@@ -102,6 +103,46 @@ internal interface IAudioEndpointVolume
     [PreserveSig] int GetChannelVolumeLevelScalar(uint channel, out float level);
     [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid context);
     [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+    [PreserveSig] int GetVolumeStepInfo(out uint step, out uint stepCount);
+}
+
+// IID and layout from endpointvolume.h (SDK 10.0.26100), same as NAudio: one method after IUnknown.
+// A wrong IID registers without error and is then simply never called, so a unit test pins it.
+// We implement this one (Windows calls us), so it is a COM-visible interface, not [ComImport].
+[Guid("657804FA-D6AD-4496-8A60-352752AF4F89"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown), ComVisible(true)]
+public interface IAudioEndpointVolumeCallback
+{
+    [PreserveSig] int OnNotify(IntPtr notifyData);
+}
+
+// IID and method order from mmdeviceapi.h (SDK 10.0.26100), same as NAudio. Implemented by us (Windows calls it on
+// its own threads), so COM-visible rather than [ComImport]; a unit test calls it through the vtable.
+[Guid("7991EEC9-7E89-4D85-8390-6C703CEC60C0"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown), ComVisible(true)]
+public interface IMMNotificationClient
+{
+    [PreserveSig] int OnDeviceStateChanged([MarshalAs(UnmanagedType.LPWStr)] string? deviceId, int newState);
+    [PreserveSig] int OnDeviceAdded([MarshalAs(UnmanagedType.LPWStr)] string? deviceId);
+    [PreserveSig] int OnDeviceRemoved([MarshalAs(UnmanagedType.LPWStr)] string? deviceId);
+    [PreserveSig] int OnDefaultDeviceChanged(int flow, int role, [MarshalAs(UnmanagedType.LPWStr)] string? defaultDeviceId);
+    [PreserveSig] int OnPropertyValueChanged([MarshalAs(UnmanagedType.LPWStr)] string? deviceId, PropertyKeyValue key);
+}
+
+/// <summary>PROPERTYKEY as passed by value to <see cref="IMMNotificationClient.OnPropertyValueChanged"/>.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct PropertyKeyValue
+{
+    public Guid FormatId;
+    public int PropertyId;
+}
+
+/// <summary>AUDIO_VOLUME_NOTIFICATION_DATA without the trailing afChannelVolumes[nChannels].</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct AudioVolumeNotificationData
+{
+    public Guid EventContext;
+    public int Muted;           // BOOL
+    public float MasterVolume;  // scalar 0..1
+    public uint Channels;
 }
 
 internal static class CoreAudio
@@ -111,6 +152,8 @@ internal static class CoreAudio
     public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;
     public const uint StreamFlagsNoPersist = 0x00080000;
+    public const uint StreamFlagsSrcDefaultQuality = 0x08000000;
+    public const uint StreamFlagsAutoConvertPcm = 0x80000000;
     public const uint BufferFlagsSilent = 0x2;
     public const int ClsCtxAll = 0x17;
     public const int DeviceInvalidated = unchecked((int)0x88890004);
@@ -128,6 +171,9 @@ internal static class CoreAudio
 
     [DllImport("ole32.dll")]
     private static extern int PropVariantClear(ref PropVariant pv);
+
+    /// <summary>E_NOTFOUND (HRESULT_FROM_WIN32(ERROR_NOT_FOUND)): e.g. GetDefaultAudioEndpoint with no output device at all.</summary>
+    public const int NotFound = unchecked((int)0x80070490);
 
     public static void Check(int hr, string what)
     {
@@ -174,4 +220,57 @@ internal readonly record struct WaveFormat(int SampleRate, int Channels, int Bit
         }
         return new WaveFormat(rate, channels, bits, blockAlign, isFloat);
     }
+}
+
+// ---- Low-latency shared mode and endpoint lists (mic capture, local monitor) -------------------------
+// GUIDs and vtable order checked against the Windows SDK 10.0.26100 headers (Audioclient.idl/.h,
+// mmdeviceapi.idl/.h). COM interop does not inherit vtables, so IAudioClient3 repeats every member of
+// IAudioClient and IAudioClient2 in order.
+
+[ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMMDeviceCollection
+{
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int Item(uint index, out IMMDevice device);
+}
+
+[ComImport, Guid("7ED4EE07-8E67-4CD4-8C1A-2B7A5987AD42"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioClient3
+{
+    // IAudioClient
+    [PreserveSig] int Initialize(int shareMode, uint streamFlags, long bufferDuration, long periodicity, IntPtr format, IntPtr sessionGuid);
+    [PreserveSig] int GetBufferSize(out uint frames);
+    [PreserveSig] int GetStreamLatency(out long latency);
+    [PreserveSig] int GetCurrentPadding(out uint padding);
+    [PreserveSig] int IsFormatSupported(int shareMode, IntPtr format, out IntPtr closest);
+    [PreserveSig] int GetMixFormat(out IntPtr format);
+    [PreserveSig] int GetDevicePeriod(out long defaultPeriod, out long minimumPeriod);
+    [PreserveSig] int Start();
+    [PreserveSig] int Stop();
+    [PreserveSig] int Reset();
+    [PreserveSig] int SetEventHandle(IntPtr handle);
+    [PreserveSig] int GetService(ref Guid iid, [MarshalAs(UnmanagedType.IUnknown)] out object service);
+    // IAudioClient2
+    [PreserveSig] int IsOffloadCapable(int category, out int offloadCapable);
+    [PreserveSig] int SetClientProperties(IntPtr properties);
+    [PreserveSig] int GetBufferSizeLimits(IntPtr format, int eventDriven, out long minDuration, out long maxDuration);
+    // IAudioClient3
+    [PreserveSig] int GetSharedModeEnginePeriod(IntPtr format, out uint defaultPeriodFrames, out uint fundamentalPeriodFrames,
+        out uint minPeriodFrames, out uint maxPeriodFrames);
+    [PreserveSig] int GetCurrentSharedModeEnginePeriod(out IntPtr format, out uint currentPeriodFrames);
+    [PreserveSig] int InitializeSharedAudioStream(uint streamFlags, uint periodFrames, IntPtr format, IntPtr sessionGuid);
+}
+
+internal static class CoreAudio3
+{
+    public static Guid IidAudioClient3 = new("7ED4EE07-8E67-4CD4-8C1A-2B7A5987AD42");
+    public const int DeviceStateActive = 0x1;
+    public const int EnginePeriodicityLocked = unchecked((int)0x88890028); // AUDCLNT_E_ENGINE_PERIODICITY_LOCKED
+
+    /// <summary>PKEY_AudioEndpoint_FormFactor (VT_UI4, EndpointFormFactor).</summary>
+    public static PropertyKey FormFactorKey = new()
+    {
+        FormatId = new Guid("1da5d803-d492-4edd-8c23-e0c0ffee7f0e"),
+        PropertyId = 0,
+    };
 }

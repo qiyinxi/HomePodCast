@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast 映像同期" },
+  "extDescription": { "message": "ウェブ動画の映像を数ミリ秒遅らせて、AirPlay で HomePod に送られ遅れて鳴る音声に合わせます。" },
+  "htmlLang": { "message": "ja" },
+  "statusConnecting": { "message": "接続中…" },
+  "statusNotRunning": { "message": "起動していません" },
+  "statusIdle": { "message": "送信していません" },
+  "statusStreaming": { "message": "送信中" },
+  "siteLabel": { "message": "このサイト" },
+  "localFile": { "message": "(ローカル ファイル)" },
+  "minusLabel": { "message": "1 ミリ秒減らす" },
+  "minusTitle": { "message": "1 ミリ秒減らす（長押しで連続調整）" },
+  "plusLabel": { "message": "1 ミリ秒増やす" },
+  "plusTitle": { "message": "1 ミリ秒増やす（長押しで連続調整）" },
+  "delayCaption": { "message": "映像の遅延" },
+  "siteOffset": { "message": "サイト別補正" },
+  "reset": { "message": "リセット" },
+  "siteToggle": { "message": "このサイトで有効にする" },
+  "globalToggle": { "message": "すべてのサイトで有効にする" },
+  "hintUnavailable": { "message": "このページでは使えないか、拡張機能のインストール前に開かれたページです。ページを再読み込みしてからもう一度お試しください。" },
+  "hintGlobalOff": { "message": "すべてのサイトで無効です。映像は遅延しません。" },
+  "hintSiteOff": { "message": "このサイトでは無効です。映像は遅延しません。" },
+  "hintNotStreaming": { "message": "HomePodCast が送信していないため、映像は遅延しません。" },
+  "hintNotRunning": { "message": "HomePodCast が起動していないため、映像は遅延しません。" },
+  "videosNone": { "message": "このページに動画が見つかりません（200×112 以上が対象）。" },
+  "videosCount": {
+    "message": "このページの動画 $COUNT$ 本",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ 本を遅延中",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "実測 $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "著作権保護（DRM）のため遅延できません" },
+  "videosFullscreen": { "message": "動画要素だけを全画面表示しているときは遅延できません" },
+  "videosPlayerUnsupported": { "message": "このページのプレーヤーは映像の遅延に対応していません" },
+  "videosNotDelayed": { "message": "遅延なし" }
+}

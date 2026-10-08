@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画面延迟引擎演示</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #fff; --text: #1d1d1f; --muted: #6e6e73; --line: #dcdce1; --accent: #0a84ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161618; --panel: #232326; --text: #f2f2f7; --muted: #9a9aa0; --line: #3a3a3e; --accent: #409cff; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { margin: 0 0 12px; color: var(--muted); }
+  /* 故意不设 position，验证父元素非定位时的坐标换算 */
+  .stage { padding: 8px 0 12px; min-height: 360px; }
+  .stage video { width: 640px; height: 360px; background: #000; display: block; }
+  .labels { display: flex; width: 1280px; color: var(--muted); font-size: 12px; }
+  .labels span { width: 640px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+           display: grid; gap: 10px; max-width: 1252px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  input[type=range] { width: 360px; }
+  input[type=number] { width: 72px; }
+  button { padding: 4px 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  pre { margin: 0; padding: 10px; background: var(--bg); border-radius: 8px; font: 12px/1.45 ui-monospace, Consolas, monospace;
+        white-space: pre-wrap; min-height: 140px; }
+  .big { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>画面延迟引擎演示</h1>
+<p class="note">左边是原始视频，右边（“旁边”模式）是延迟后的画面。比较两边左上角的帧号即可直观看出延迟：60 fps 下每帧约 16.7 ms。
+  视频用 tools/avsync/gen_testvideo.py 生成；从仓库根目录起 http 服务后打开本页。</p>
+
+<div class="labels"><span>原始画面</span><span>延迟画面</span></div>
+<div class="stage">
+  <video id="v" src="../../tools/avsync/testvideo.mp4" loop muted playsinline preload="auto"></video>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label>延迟 <input type="range" id="delay" min="0" max="500" step="1" value="141"></label>
+    <button type="button" id="dec">−1</button>
+    <input type="number" id="delayNum" min="0" max="500" step="1" value="141"> ms
+    <button type="button" id="inc">+1</button>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="enabled" checked> 启用</label>
+    <label>放置方式
+      <select id="placement">
+        <option value="beside">旁边（测量用）</option>
+        <option value="overlay">覆盖</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="forceCanvas"> 强制 Canvas 模式</label>
+    <label><input type="checkbox" id="atZero"> 0 ms 时保持运行</label>
+    <label>VideoFrame 上限 <input type="number" id="budget" min="0" max="40" step="1" value="3"></label>
+    <button type="button" id="play">播放</button>
+    <button type="button" id="mute">取消静音</button>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="muted">stats()</div>
+      <pre id="stats">—</pre>
+    </div>
+    <div>
+      <div class="muted">最近 3 秒内每次换帧时的 lastShownLagMs</div>
+      <div class="big" id="lagSummary">—</div>
+      <pre id="lagDetail">—</pre>
+    </div>
+  </div>
+</div>
+
+<script src="../src/delay-engine.js"></script>
+<script>
+'use strict';
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const video = $('v');
+  const q = new URLSearchParams(location.search);
+  if (q.has('delay')) $('delay').value = $('delayNum').value = q.get('delay');
+  if (q.has('placement')) $('placement').value = q.get('placement');
+  if (q.get('canvas') === '1') $('forceCanvas').checked = true;
+  if (q.get('zero') === '1') $('atZero').checked = true;
+  if (q.has('budget')) $('budget').value = q.get('budget');
+
+  let ctrl = null;
+  const samples = []; // 最近 3 秒 {t, lag}
+  let collector = null; // hpcDemo.sample() 使用
+  let lastShown = -1;
+
+  function attach() {
+    if (ctrl) ctrl.detach();
+    ctrl = HPCDelay.attach(video, {
+      placement: $('placement').value,
+      delayMs: Number($('delayNum').value),
+      enabled: $('enabled').checked,
+      forceCanvas: $('forceCanvas').checked,
+      activeAtZero: $('atZero').checked,
+      videoFrameBudget: Number($('budget').value),
+    });
+    samples.length = 0;
+    lastShown = -1;
+  }
+
+  function setDelay(v) {
+    v = Math.max(0, Math.min(500, Math.round(Number(v) || 0)));
+    $('delay').value = $('delayNum').value = v;
+    ctrl.setDelay(v);
+    samples.length = 0;
+  }
+
+  $('delay').addEventListener('input', (e) => setDelay(e.target.value));
+  $('delayNum').addEventListener('change', (e) => setDelay(e.target.value));
+  $('dec').addEventListener('click', () => setDelay(Number($('delayNum').value) - 1));
+  $('inc').addEventListener('click', () => setDelay(Number($('delayNum').value) + 1));
+  $('enabled').addEventListener('change', (e) => ctrl.setEnabled(e.target.checked));
+  for (const id of ['placement', 'forceCanvas', 'atZero', 'budget']) $(id).addEventListener('change', attach);
+  $('play').addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+  $('mute').addEventListener('click', () => { video.muted = !video.muted; });
+  video.addEventListener('play', () => { $('play').textContent = '暂停'; });
+  video.addEventListener('pause', () => { $('play').textContent = '播放'; });
+  video.addEventListener('volumechange', () => { $('mute').textContent = video.muted ? '取消静音' : '静音'; });
+
+  // 每帧检查是否换了帧，记录换帧时的 lastShownLagMs
+  function poll(t) {
+    requestAnimationFrame(poll);
+    if (!ctrl) return;
+    const s = ctrl.stats();
+    if (s.shownFrames !== lastShown) {
+      if (lastShown >= 0 && s.shownFrames > lastShown && s.lastShownLagMs > 0) {
+        samples.push({ t, lag: s.lastShownLagMs });
+        if (collector) collector.push({ t, lag: s.lastShownLagMs });
+      }
+      lastShown = s.shownFrames;
+    }
+    while (samples.length && t - samples[0].t > 3000) samples.shift();
+  }
+  requestAnimationFrame(poll);
+
+  function summarize(list) {
+    if (!list.length) return null;
+    const lags = list.map((x) => x.lag);
+    const n = lags.length;
+    const mean = lags.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(lags.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+    return { n, mean: +mean.toFixed(1), min: Math.min(...lags), max: Math.max(...lags), sd: +sd.toFixed(1) };
+  }
+
+  setInterval(() => {
+    if (!ctrl) return;
+    $('stats').textContent = JSON.stringify(ctrl.stats(), null, 2);
+    const sm = summarize(samples);
+    $('lagSummary').textContent = sm ? `平均 ${sm.mean} ms（目标 ${ctrl.stats().delayMs} ms）` : '—';
+    $('lagDetail').textContent = sm
+      ? `样本 ${sm.n} 个\n最小 ${sm.min} ms\n最大 ${sm.max} ms\n标准差 ${sm.sd} ms`
+      : '视频播放后开始统计';
+  }, 100);
+
+  attach();
+  video.play().catch(() => { /* 需要用户点击“播放” */ });
+
+  // 供自动化测试调用
+  window.hpcDemo = {
+    video,
+    get ctrl() { return ctrl; },
+    attach,
+    setDelay,
+    summary: () => summarize(samples),
+    // 清空样本后等待 ms 毫秒，返回这段时间的统计
+    sample(ms = 3000) {
+      const mine = (collector = []);
+      return new Promise((r) => setTimeout(() => {
+        if (collector === mine) collector = null;
+        r({ lag: summarize(mine), stats: ctrl.stats() });
+      }, ms));
+    },
+  };
+})();
+</script>
+</body>
+</html>

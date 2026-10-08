@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="zh-TW" Codepage="950" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="啟動 HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast 需要 .NET 10 桌面執行階段（x64）。請從 https://dotnet.microsoft.com/download/dotnet/10.0 下載並安裝，然後重新執行此安裝程式。" />
+  <String Id="DowngradeError" Value="已經安裝了較新版本的 HomePodCast。若要安裝這個舊版本，請先解除安裝 HomePodCast（設定會保留）。" />
+  <String Id="ShortcutDescription" Value="將這台電腦的聲音串流到 HomePod" />
+  <String Id="FirewallRuleDescription" Value="允許區域網路中的 AirPlay 揚聲器連回 HomePodCast（對時、重傳遺失的封包）。解除安裝 HomePodCast 時會移除這條規則。" />
+
+  <!-- WixToolset.Firewall.wixext 5.0.2 has these progress and error strings only for en-US, es-ES, ja-JP and pl-PL. -->
+  <String Id="msierrFirewallCannotConnect" Value="無法連線到 Windows 防火牆。  ([2]   [3]   [4]   [5])" />
+  <String Id="WixSchedFirewallExceptionsInstall" Value="正在設定 Windows 防火牆" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="正在設定 Windows 防火牆" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="正在復原對 Windows 防火牆的變更" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="正在新增 Windows 防火牆規則" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="正在復原對 Windows 防火牆的變更" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="正在移除 Windows 防火牆規則" />
+</WixLocalization>

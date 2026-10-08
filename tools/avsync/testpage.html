@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HPC AVSYNC TEST</title>
+<!--
+  Screen-capture delay test. Serve the repo root over http and open
+  /tools/avsync/testpage.html?delay=141   (delay in ms, default 141)
+  Left: the original <video>. Right: the engine's delayed copy (placement 'beside').
+  Do not change document.title: capture.ps1 finds the window by it.
+
+  &mode=bwp: bilibili <bwp-video>-like source instead of a plain <video>. A custom element with a
+  closed shadow root holds a canvas whose control is transferred to an OffscreenCanvas in a Worker;
+  the test video (hidden underneath) feeds it frame by frame (rVFC -> VideoFrame -> postMessage).
+  The left picture is that worker-drawn canvas, the right one the engine's delayed copy of it.
+    &render=webgl  the worker draws with WebGL instead of 2D
+    &shadow=open   open shadow root and no getRenderCanvas(): the engine has to find the canvas itself
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; cursor: none; }
+  #stage { position: fixed; left: 20px; top: 20px; width: 1280px; height: 360px;
+           display: flex; align-items: flex-start; }
+  #stage > video { flex: none; display: block; width: 640px; height: 360px; background: #000; }
+  #stage > bwp-video { flex: none; display: block; width: 640px; height: 360px; background: #000; }
+  #stage > video.under { position: absolute; left: 0; top: 0; z-index: -1; }
+  #stage > canvas { flex: none; display: block; }
+  #info { position: fixed; left: 20px; top: 392px; width: 1280px; max-height: 110px; overflow: hidden;
+          color: #8a9399; font: 11px/1.35 Consolas, monospace; white-space: pre-wrap;
+          overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div id="stage"><video id="v" src="testvideo.mp4" muted loop autoplay playsinline preload="auto"></video></div>
+<div id="info">loading...</div>
+<script src="../../extension/src/delay-engine.js"></script>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const parsed = Number(params.get('delay'));
+  const delayMs = params.has('delay') && Number.isFinite(parsed) ? parsed : 141;
+  const video = document.getElementById('v');
+  const info = document.getElementById('info');
+  const real = !!(globalThis.HPCDelay && typeof globalThis.HPCDelay.attach === 'function');
+  const bwp = params.get('mode') === 'bwp' ? makeBwpVideo(video) : null;
+  const target = bwp || video;
+
+  // Stand-in for bilibili's WasmPlayer <bwp-video>: HTMLMediaElement-like JS API, media events
+  // re-dispatched on the element, picture drawn by a worker into a transferred canvas that lives in
+  // a closed shadow root (div.-bwp-internal-container > canvas.-bwp-internal-render-canvas).
+  function makeBwpVideo(src) {
+    const webgl = params.get('render') === 'webgl';
+    const openShadow = params.get('shadow') === 'open';
+    const workerSrc = `
+      let canvas = null, ctx = null, gl = null;
+      function initGL() {
+        gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: false });
+        const sh = (type, s) => { const o = gl.createShader(type); gl.shaderSource(o, s); gl.compileShader(o); return o; };
+        const p = gl.createProgram();
+        gl.attachShader(p, sh(gl.VERTEX_SHADER, 'attribute vec2 a; varying vec2 v; void main() {' +
+          ' v = vec2(a.x + 1.0, 1.0 - a.y) * 0.5; gl_Position = vec4(a, 0.0, 1.0); }'));
+        gl.attachShader(p, sh(gl.FRAGMENT_SHADER, 'precision mediump float; varying vec2 v; uniform sampler2D t;' +
+          ' void main() { gl_FragColor = texture2D(t, v); }'));
+        gl.linkProgram(p);
+        gl.useProgram(p);
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+        for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+          [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+      }
+      onmessage = (e) => {
+        const d = e.data;
+        if (d.canvas) {
+          canvas = d.canvas;
+          if (d.webgl) initGL(); else ctx = canvas.getContext('2d', { alpha: false });
+          return;
+        }
+        const f = d.frame;
+        if (!f) return;
+        try {
+          const w = f.displayWidth, h = f.displayHeight;
+          if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; if (gl) gl.viewport(0, 0, w, h); }
+          if (gl) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, f);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+          } else {
+            ctx.drawImage(f, 0, 0, w, h);
+          }
+        } finally {
+          f.close();
+        }
+      };`;
+    if (!customElements.get('bwp-video')) {
+      customElements.define('bwp-video', class extends HTMLElement {
+        constructor() {
+          super();
+          const root = this.attachShadow({ mode: openShadow ? 'open' : 'closed' });
+          root.innerHTML = '<style>.-bwp-internal-container { width: 100%; height: 100%; display: flex;' +
+            ' flex-direction: column; position: relative; object-fit: inherit; }' +
+            ' .-bwp-internal-render-canvas { width: 100%; height: 100%; display: block; position: relative;' +
+            ' object-fit: inherit; }</style><div class="-bwp-internal-container">' +
+            '<canvas class="-bwp-internal-render-canvas"></canvas></div>';
+          this._canvas = root.querySelector('canvas');
+          if (!openShadow) this.getRenderCanvas = () => this._canvas;
+        }
+        get paused() { return src.paused; }
+        get seeking() { return src.seeking; }
+        get currentTime() { return src.currentTime; }
+        set currentTime(t) { src.currentTime = t; }
+        get videoWidth() { return this._canvas.width; }
+        get videoHeight() { return this._canvas.height; }
+        play() { return src.play(); }
+        pause() { src.pause(); }
+      });
+    }
+    const el = document.createElement('bwp-video');
+    el.style.objectFit = 'contain'; // bilibili adds "bwp-video { object-fit: contain; }"
+    src.before(el);
+    src.classList.add('under');
+    const off = el._canvas.transferControlToOffscreen();
+    const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })));
+    worker.postMessage({ canvas: off, webgl }, [off]);
+    for (const t of ['play', 'playing', 'pause', 'seeking', 'seeked', 'waiting', 'emptied', 'loadeddata',
+      'loadedmetadata', 'ended', 'resize', 'timeupdate']) {
+      src.addEventListener(t, () => el.dispatchEvent(new Event(t)));
+    }
+    const feed = (now, meta) => {
+      try {
+        const f = new VideoFrame(src, { timestamp: Math.round((meta.mediaTime || 0) * 1e6) });
+        worker.postMessage({ frame: f }, [f]);
+      } catch (_) { /* no frame yet */ }
+      src.requestVideoFrameCallback(feed);
+    };
+    src.requestVideoFrameCallback(feed);
+    el.hpcInfo = `bwp-like source: worker ${webgl ? 'WebGL' : '2D'} OffscreenCanvas, ${openShadow ? 'open shadow root, no getRenderCanvas()' : 'closed shadow root + getRenderCanvas()'}`;
+    return el;
+  }
+
+  // Fallback when delay-engine.js is missing: copy the current frame beside the video, no delay.
+  const stub = {
+    attach(v) {
+      const c = document.createElement('canvas');
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.round(640 * dpr);
+      c.height = Math.round(360 * dpr);
+      c.style.cssText = 'width:640px;height:360px';
+      v.after(c);
+      const g = c.getContext('2d');
+      let enabled = true, delay = 0, drawn = 0, raf = 0;
+      const tick = () => {
+        if (enabled && video.readyState >= 2) { g.drawImage(bwp ? bwp._canvas : v, 0, 0, c.width, c.height); drawn++; }
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return {
+        setDelay(ms) { delay = ms; },
+        setEnabled(on) { enabled = !!on; },
+        detach() { cancelAnimationFrame(raf); c.remove(); },
+        stats() { return { stub: true, note: 'draws the current frame, no delay', requestedDelayMs: delay, framesDrawn: drawn }; },
+      };
+    },
+  };
+  const engine = real ? globalThis.HPCDelay : stub;
+
+  let ctl = null, attachError = '';
+  const start = () => {
+    if (ctl || attachError) return;
+    try {
+      // ?present=N overrides the engine's presentAheadFrames (calibration runs)
+      const opts = { placement: 'beside' };
+      if (params.has('present')) opts.presentAheadFrames = Number(params.get('present'));
+      // ?srcshow=MS overrides the engine's sourceShowMs (bwp mode calibration runs)
+      if (params.has('srcshow')) opts.sourceShowMs = Number(params.get('srcshow'));
+      ctl = engine.attach(target, opts);
+      ctl.setDelay(delayMs);
+      ctl.setEnabled(true);
+    } catch (e) {
+      attachError = String(e && e.stack || e);
+      console.error(e);
+    }
+  };
+  if (video.readyState >= 2) start(); else video.addEventListener('loadeddata', start, { once: true });
+  video.play().catch(e => { attachError = attachError || ('play() failed: ' + e); });
+
+  const show = () => {
+    let s;
+    try { s = ctl ? JSON.stringify(ctl.stats()) : '(not attached yet)'; } catch (e) { s = 'stats() threw: ' + e; }
+    const q = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+    info.textContent =
+      `engine: ${real ? 'HPCDelay (extension/src/delay-engine.js)' : 'BUILT-IN STUB - delay-engine.js not loaded, no delay'}` +
+      `   requested delay ${delayMs} ms   dpr ${window.devicePixelRatio}` +
+      (bwp ? `   ${bwp.hpcInfo}` : '') + '\n' +
+      `video: t ${video.currentTime.toFixed(3)} s  ${video.paused ? 'PAUSED' : 'playing'}` +
+      `  dropped ${q ? q.droppedVideoFrames : '?'} / ${q ? q.totalVideoFrames : '?'}\n` +
+      `stats(): ${s}` + (attachError ? `\nERROR: ${attachError}` : '');
+  };
+  show();
+  setInterval(show, 250);
+})();
+</script>
+</body>
+</html>

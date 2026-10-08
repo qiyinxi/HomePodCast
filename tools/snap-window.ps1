@@ -2,7 +2,8 @@
 #   snap-window.ps1                 -> main window
 #   snap-window.ps1 -Title 混音器   -> window whose title contains the text
 #   snap-window.ps1 -List           -> list the process's visible windows
-param([string]$Out = "$env:TEMP\hpc_snap.png", [string]$Process = 'HomePodCast', [string]$Title = '', [switch]$List)
+#   snap-window.ps1 -Id 1234        -> that process (when several copies run, e.g. HOMEPODCAST_PROFILE test copies)
+param([string]$Out = "$env:TEMP\hpc_snap.png", [string]$Process = 'HomePodCast', [string]$Title = '', [switch]$List, [int]$Id = 0)
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
@@ -37,7 +38,7 @@ public static class Snap {
 '@
 
 [void][Snap]::SetThreadDpiAwarenessContext([IntPtr]-4) # per-monitor v2: physical pixels
-$proc = Get-Process $Process -ErrorAction Stop | Select-Object -First 1
+$proc = if ($Id) { Get-Process -Id $Id -ErrorAction Stop } else { Get-Process $Process -ErrorAction Stop | Select-Object -First 1 }
 $wins = [Snap]::Windows([uint32]$proc.Id)
 if ($List) { $wins | ForEach-Object { "{0}  {1}" -f $_.Key, $_.Value }; exit 0 }
 $h = if ($Title) { ($wins | Where-Object { $_.Value -like "*$Title*" } | Select-Object -First 1).Key } else { $proc.MainWindowHandle }

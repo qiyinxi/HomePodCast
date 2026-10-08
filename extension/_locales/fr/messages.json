@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast Synchro vidéo" },
+  "extDescription": { "message": "Retarde les vidéos web de quelques millisecondes pour suivre le son, qui arrive plus tard sur un HomePod via AirPlay." },
+  "htmlLang": { "message": "fr" },
+  "statusConnecting": { "message": "Connexion…" },
+  "statusNotRunning": { "message": "Non lancé" },
+  "statusIdle": { "message": "Pas de diffusion" },
+  "statusStreaming": { "message": "Diffusion en cours" },
+  "siteLabel": { "message": "Ce site" },
+  "localFile": { "message": "(fichier local)" },
+  "minusLabel": { "message": "1 ms de moins" },
+  "minusTitle": { "message": "1 ms de moins (maintenir pour continuer)" },
+  "plusLabel": { "message": "1 ms de plus" },
+  "plusTitle": { "message": "1 ms de plus (maintenir pour continuer)" },
+  "delayCaption": { "message": "Retard de l'image" },
+  "siteOffset": { "message": "Correction du site" },
+  "reset": { "message": "Réinitialiser" },
+  "siteToggle": { "message": "Activer sur ce site" },
+  "globalToggle": { "message": "Activer sur tous les sites" },
+  "hintUnavailable": { "message": "Indisponible sur cette page, ou la page a été ouverte avant l'installation de l'extension. Rechargez la page et réessayez." },
+  "hintGlobalOff": { "message": "Désactivé sur tous les sites ; l'image n'est pas retardée." },
+  "hintSiteOff": { "message": "Désactivé sur ce site ; l'image n'est pas retardée." },
+  "hintNotStreaming": { "message": "HomePodCast ne diffuse pas ; l'image n'est pas retardée." },
+  "hintNotRunning": { "message": "HomePodCast n'est pas lancé ; l'image n'est pas retardée." },
+  "videosNone": { "message": "Aucune vidéo trouvée sur cette page (≥ 200×112)." },
+  "videosCount": {
+    "message": "Vidéos sur cette page : $COUNT$",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ retardée(s)",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "mesuré $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "protégée contre la copie (DRM), impossible à retarder" },
+  "videosFullscreen": { "message": "impossible à retarder quand l'élément vidéo lui-même est en plein écran" },
+  "videosPlayerUnsupported": { "message": "le lecteur de cette page ne prend pas en charge le retard de l'image" },
+  "videosNotDelayed": { "message": "non retardée" }
+}

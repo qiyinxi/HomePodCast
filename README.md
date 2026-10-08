@@ -1,100 +1,173 @@
 # HomePodCast
 
-把 Windows 电脑的声音实时推送到 HomePod（AirPlay 2），为打游戏和看视频做的低延迟方案。
+**English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实现的原生 C# 版本，单个 exe 约 350 KB，不需要虚拟声卡。
+Streams your Windows PC's sound to a HomePod over AirPlay 2 in real time: a low-latency setup made for gaming and watching videos.
 
-## 实测
+TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a native C# implementation written from scratch: a single exe of about 350 KB, no virtual sound card needed.
 
-| 场景 | 数值 |
+## Measurements
+
+| Scenario | Value |
 | --- | --- |
-| 声音比画面晚（延迟设 120 ms，手机 60 帧录像实测） | 156 ms |
-| 声音比画面晚（延迟设 105 ms，推算） | 约 141 ms |
-| 推流统计（断音 / 迟发 / 重传） | 0 / 0 / 0 |
-| 内存（私有） | 约 28 MB |
+| Sound behind the picture (latency set to 120 ms, measured from a 60 fps phone video) | 156 ms |
+| Sound behind the picture (latency set to 105 ms, estimated) | about 141 ms |
+| Streaming stats (dropouts / late sends / retransmits) | 0 / 0 / 0 |
+| Memory (private) | about 28 MB |
 
-测试设备：HomePod 第二代，HomePod 软件 27.0（24J361）。
+## Tested hardware
 
-## 功能
+HomePodCast is a one-person project and has been tested on exactly one setup:
 
-- AirPlay 2 实时音频：瞬时配对、全程加密，延迟 100–500 ms 可调（1 ms 粒度）
-- 托盘程序：自动发现音箱、自动重连、睡眠唤醒恢复、被其他设备抢占时不抢回
-- 混音器：每个程序单独的音量、静音和电平表
-- 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
-- 浏览器插件（开发中）：把 YouTube、bilibili 的画面延后，和 HomePod 的声音对齐
+- Speaker: one HomePod (2nd generation), HomePod software 27.0 (24J361), on Wi-Fi
+- PC: one Windows 11 PC whose default output is a virtual sound card
 
-## 使用
+Not tested on real hardware:
 
-1. 安装 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
-2. 运行 `HomePodCast.exe`，第一次会请求添加防火墙规则（只放行局域网、只在专用网络下生效）：HomePod 需要连回电脑对时和请求重传。
-3. 程序会自动找到 HomePod 并连接。把电脑的默认输出设备静音也没关系：采集发生在系统音量之前，HomePod 照样有声。
+- HomePod mini, HomePod (1st generation), Apple TV, and AirPlay speakers from other brands
+- **Stereo pairs and multi-room**: built from protocol research and tested only against simulated speakers
+- Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
 
-命令行（排查问题用）：
+If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`%APPDATA%\HomePodCast\homepodcast.log`).
+
+## Features
+
+- AirPlay 2 realtime audio: transient pairing, encrypted throughout, latency adjustable from 100 to 500 ms in 1 ms steps
+- One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
+- Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
+- Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
+- Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
+- Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
+- Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
+- Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
+- Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
+- A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
+- Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound
+- Interface in English, Simplified Chinese, Traditional Chinese and Japanese
+
+## Usage
+
+1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
+2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
+   - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.
+   - **Portable: `HomePodCast-<version>-win-x64.zip`.** Unzip it anywhere and run `HomePodCast.exe`. The first time, it asks to add the firewall rule.
+
+   The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. Both packages keep your settings in `%APPDATA%\HomePodCast`.
+3. The app finds the HomePod and connects by itself. Audio is captured before the Windows volume is applied, so the Windows volume never changes the sound that is sent; the HomePod has its own volume. By default the Windows volume is the HomePod volume: the two stay in step (on connecting, both go to the lower of the two), and muting Windows mutes the HomePod too. If your default output is the PC speakers and you want to hear only the HomePod, set Settings → Keyboard volume keys to "Control the HomePod while streaming" and mute Windows (see [Keyboard volume keys](#keyboard-volume-keys)).
+
+The interface follows the Windows display language (English when HomePodCast has no translation for it). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to a language code such as `"en"`, `"de"` or `"zh-TW"` (the names of the files in `src/i18n`, plus `"zh-CN"`), or to `"auto"`.
+
+Command line (for troubleshooting):
 
 ```
-HomePodCast.exe scan                         列出局域网里的 AirPlay 音箱
+HomePodCast.exe scan                         list the AirPlay speakers on the local network
 HomePodCast.exe stream --host <IP> --latency 120 --seconds 30
-HomePodCast.exe mutetest                     确认静音后仍能采集
+HomePodCast.exe mutetest                     check that capture still works while muted
 ```
 
-## 构建
+## Stream everything vs. per-app routing
 
-需要 .NET 10 SDK。
+By default HomePodCast captures the PC's whole sound output and sends all of it to the HomePod. That path adds no latency of its own, so it is the one to use for gaming. Whether the PC's own speakers also play is up to the Windows volume. To hear everything on the HomePod only, set Settings → Keyboard volume keys to "Control the HomePod while streaming" (or "Only while Windows is muted") and mute Windows; with the default, "HomePod follows the Windows volume", muting Windows mutes the HomePod too.
 
-```
-dotnet build src -c Release          # 输出到 app\
-dotnet test tests\HomePodCast.Tests  # 协议与音频单元测试
-```
+Per-app routing sends each app to the HomePod, this PC, or both (set on the Mixer page), for example game audio to the HomePod and voice chat on your headset. It costs latency:
 
-`tools\measure_av.py` 可以从手机录像里算出音画差；`tests\vectors\gen_vectors.py` 用 pyatv 所用的 srptools 生成配对算法的对照数据。
-
-## 分支与发布
-
-| 分支 / 标签 | 用途 | 规则 |
+| | Stream everything (default) | Per-app routing |
 | --- | --- | --- |
-| `dev` | 日常开发 | 每次推送都会跑 CI 并产出预览包 |
-| `main` | 在真实 HomePod 上验证过的代码 | 只接受来自 `dev` 的 PR，CI 必须通过 |
-| `vX.Y.Z` 标签 | 正式版本 | 打在 `main` 上，自动构建并发布 GitHub Release |
-| `release/x.y` | 给旧版本打补丁 | 需要时才从对应标签拉出 |
+| When it's on | Whenever routing isn't | As soon as any app has its own destination, or the default is "This PC" |
+| How sound is captured | The whole output in one piece | Each app separately (Windows process loopback) |
+| Extra latency to the HomePod | None | About 35 ms (measured from playback to send: 21 ms vs 55 ms) |
+| Web video lip-sync (browser extension) | Compensated | Compensated, extra 35 ms included |
+| Games | Lowest latency | 35 ms later, can't be compensated |
+| Apps set to "HomePod" | — | Silent on this PC; shown at 0% in the Windows volume mixer |
+| System sounds | Follow the Windows volume | Play on this PC only |
+| Requires | Windows 10/11 | Windows 10 version 2004 or later |
 
-CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做一次音画同步测试。
+The app asks for confirmation the first time routing turns on. Set every app back to "Default" with HomePod as the default to return to streaming everything. If HomePodCast is killed while routing, apps set to "HomePod" stay at 0% until it runs again.
 
-## 代码签名政策
+### Routing by sound card (capture device)
 
-发布的 Windows 程序计划使用 [SignPath.io](https://about.signpath.io/) 提供的免费开源代码签名，证书由 [SignPath Foundation](https://signpath.org/) 签发。
+Mixer → Capture device decides which output device's sound is sent; by default it follows the Windows default output. Choose a device you don't listen to, then set the apps you want on the HomePod (a game, say) to play on it, in the Windows app volume settings (the Mixer page has a button for them) or in the app's own settings; voice chat and everything else keep playing on your headphones. The whole device is captured in one piece, so like streaming everything it adds no latency, unlike the roughly 35 ms of per-app routing.
 
-- 只签署由本仓库公开源码、经 GitHub Actions 自动构建出来的文件。
-- 提交者与审核者：仓库维护者（[@qiyinxi](https://github.com/qiyinxi)）。
-- 隐私：HomePodCast 只和你局域网里的 AirPlay 音箱通信，不收集、不上传任何数据；本机状态接口只监听 127.0.0.1。
+- It needs a spare or virtual sound card, such as VB-CABLE, NetEase UU's virtual sound card, Steam Streaming Speakers, or an HDMI monitor without speakers. HomePodCast can't install a virtual sound card itself: that is a kernel driver that must be signed by Microsoft.
+- Some games only pick their output device at launch; restart the game after changing it.
+- If the chosen device is unplugged, disabled or uninstalled, the default output is not used instead (that could send your voice chat to the speaker): capture pauses, the Home page says so, and it resumes when the device is back.
+- Per-app routing still works on top; its rules apply to the apps on that device.
+- With a capture device chosen, "HomePod follows the Windows volume" follows that device's volume, while the volume keys only change the Windows default output. To control the HomePod with the volume keys, make that device the default output.
+- While streaming, the mic's "Monitor on this PC" pauses if it uses the device being captured (for example both follow the default output); otherwise your voice would reach the HomePod twice.
 
-## English
+## Keyboard volume keys
 
-HomePodCast streams Windows system audio to Apple HomePod speakers over AirPlay 2 with low latency
-(about 141 ms behind the picture at a 105 ms setting, measured), as a replacement for TuneBlade, which
-no longer produces sound on HomePod software 27. It is a native .NET 10 tray application with a
-per-app mixer, an audio/video sync test and automatic reconnection.
+Settings → Keyboard volume keys decides what volume up, volume down and mute do to the HomePod:
 
-### Code signing policy
+- **HomePod follows the Windows volume** (default): while streaming, the Windows volume is the HomePod volume. Windows 0–100% maps to 0 up to the volume limit; the keys and the Windows volume slider move the HomePod, and changing the HomePod in this app moves Windows. On connecting, and when the limit changes, both sides go to the lower of the two, so neither gets louder by itself. Muting Windows mutes the HomePod.
+- **Control the HomePod while streaming**: while streaming, the three keys change only the HomePod (2% per step) and leave the Windows volume alone; a small indicator at the bottom of the screen shows the HomePod volume (not over exclusive full-screen games). When not streaming, the keys change Windows as usual. Use this when the PC speakers are the default output and you want to hear only the HomePod: mute Windows, then use the keys for the HomePod.
+- **Only while Windows is muted**: the earlier behaviour. Key presses go to the HomePod only while Windows is muted or at 0%, and Windows stays muted.
+- **Off**: the keys change only Windows.
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
-[SignPath Foundation](https://signpath.org/).
+If the PC has no usable output device (no sound driver, or the device is disabled or unplugged), "HomePod follows the Windows volume" and "Only while Windows is muted" also take the keys over while streaming, until a device is back. The keys still change Windows while a program running as administrator is in front, and with remotes or mice whose software sends media commands instead of key presses; "HomePod follows the Windows volume" picks those changes up.
 
-- Only binaries built by GitHub Actions from the source code in this public repository are signed.
-- Committers and reviewers: [@qiyinxi](https://github.com/qiyinxi)
-- Approvers: [@qiyinxi](https://github.com/qiyinxi)
+## FAQ
 
-### Privacy policy
+### The sound stutters now and then
+
+**Why it happens**: the sound crosses two wireless hops, PC → router → HomePod. The HomePod (2nd generation) only has Wi-Fi 4 (802.11n), and people walking by, a raised arm, walls and cabinet doors all block the signal, so once in a while a packet arrives late or gets lost. At 120 ms (Recommended) the HomePod itself takes about 85 ms, which leaves only about 35 ms for network jitter and resent packets; one hiccup longer than that is one stutter.
+
+**What helps, in this order**:
+
+1. Connect the PC with a network cable if you can: two wireless hops become one.
+2. Windows' power saving for the wireless adapter: Control Panel → Power Options → Change plan settings → Change advanced power settings → Wireless Adapter Settings → Power Saving Mode: Maximum Performance, both on battery and plugged in.
+3. Device Manager → Network adapters → your wireless adapter → Properties → Advanced: set Roaming Aggressiveness to the lowest value; if they are there, also set MIMO Power Save Mode to No SMPS and turn Packet Coalescing off. The names vary by adapter.
+4. Where the HomePod stands: in line of sight of the router, not inside a cabinet.
+5. Raise the latency by 10–15 ms: choose Custom under Scene, or press Apply when the Home page suggests it. Below Stream status, the Home page shows how many network hiccups the last 10 minutes had; when they really eat into the margin, a hint says which Wi-Fi hop is to blame and which latency to try. The app never changes the latency by itself.
+
+**Reading the log** (`%APPDATA%\HomePodCast\homepodcast.log`): while streaming, the HomePod and the router are pinged every 100 ms, and a round trip over 30 ms or a missing answer is logged as `network: ping to the speaker took 48 ms` (`the router` for the router, `lost` for no answer). The `stats:` line every minute has `rtx=resent/requested`, `rtxMiss=` (packets asked for too late to resend) and `ping=median/p99/max lost=lost/sent router=…`.
+
+- Only the speaker's ping spikes while the router's stays normal: it's the router → HomePod hop; see step 4.
+- Both spike at the same time: it's the PC's own Wi-Fi; see steps 1–3.
+- Only the router is slow: routers often answer pings to themselves last; the sound is not affected.
+
+## Building
+
+Requires the .NET 10 SDK.
+
+```
+dotnet build src -c Release          # output goes to app\
+dotnet test tests\HomePodCast.Tests  # protocol, audio and translation unit tests
+```
+
+The MSI installer is built with WiX Toolset v5, a local dotnet tool, by `installer\build.ps1`; see [installer/README.md](installer/README.md).
+
+`tools\measure_av.py` computes the audio/video offset from a phone video; `tests\vectors\gen_vectors.py` generates reference data for the pairing algorithm with srptools, the library pyatv uses.
+
+Interface texts are written in Simplified Chinese inside `L.T("…")` / `L.F("…{0}", x)`; their translations live in `src/i18n/<language>.json` (every file there is a UI language; `en.json` is the reference), and a unit test fails when one is missing or a table does not match `en.json`. The browser extension's texts are in `extension/_locales`.
+
+## Branches and releases
+
+| Branch / tag | Purpose | Rules |
+| --- | --- | --- |
+| `dev` | Day-to-day development | Every push runs CI and produces a preview package |
+| `main` | Code verified on a real HomePod | Accepts PRs from `dev` only; CI must pass |
+| `vX.Y.Z` tags | Releases | Tagged on `main`; built and published as a GitHub Release automatically |
+| `release/x.y` | Patches for older versions | Branched from the matching tag only when needed |
+
+CI can't reach a HomePod, so an A/V sync test on real hardware is done before `dev` is merged into `main`.
+
+## Code signing
+
+Releases are not code-signed yet, so Windows SmartScreen may warn the first time you run the installer or the exe ("More info" → "Run anyway"). Every release is built by GitHub Actions from the public source code in this repository; download it only from the [Releases](https://github.com/qiyinxi/HomePodCast/releases) page.
+
+## Privacy policy
 
 This program will not transfer any information to other networked systems unless specifically
 requested by the user or the person installing or operating it. It talks only to the AirPlay speakers
 on the local network that the user selects, and its status endpoint listens on 127.0.0.1 only.
 
-## 致谢
+## Acknowledgements
 
-- [pyatv](https://github.com/postlund/pyatv)（MIT）：协议流程参考，配对算法以其依赖 srptools 为对照。
-- [NAudio](https://github.com/naudio/NAudio)（MIT）：核对 Windows Core Audio 接口定义。
-- [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低延迟发包与缓冲的思路。
+- [pyatv](https://github.com/postlund/pyatv) (MIT): reference for the protocol flow; its dependency srptools serves as the reference for the pairing algorithm.
+- [NAudio](https://github.com/naudio/NAudio) (MIT): cross-checking the Windows Core Audio interface definitions.
+- [AirFlash](https://github.com/Ding-Kyoma/AirFlash) (GPL-3.0): ideas for low-latency packet sending and buffering.
 
-## 许可证
+## License
 
-[GPL-3.0-or-later](LICENSE)。可以自由使用、修改和再发布；再发布修改版时必须同样以 GPL 开源。
+[GPL-3.0-or-later](LICENSE). You are free to use, modify and redistribute it; if you redistribute a modified version, it must be released under the GPL as well.

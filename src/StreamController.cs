@@ -12,28 +12,39 @@ public enum StreamState { Idle, Connecting, Streaming, Retrying }
 /// speaker if its address changed, and backs off (instead of fighting) when another sender takes over.
 /// All events are raised on the thread pool; the UI marshals them.
 /// </summary>
-public sealed class StreamController : IDisposable
+public sealed partial class StreamController : IDisposable
 {
     private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
 
     private readonly AudioFifo _fifo;
 
-    public StreamController(int fifoTargetMs = 12)
+    public StreamController(int fifoTargetMs = AppConfig.DefaultFifoTargetMs)
     {
         fifoTargetMs = Math.Clamp(fifoTargetMs, 5, 100);
-        _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10);
+        _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10)
+        {
+            // Adaptive: each dropout adds 4 ms (up to 30), 10 clean minutes take 1 ms back. Measured 2026-10-08 on a
+            // virtual sound card: a fixed 12 ms ran dry about once a minute while the network side was perfect.
+            MaxTargetFrames = Math.Max(fifoTargetMs, MaxFifoTargetMs) * RtpSender.SampleRate / 1000,
+            RelaxAfterReads = 600L * RtpSender.SampleRate / RtpSender.FramesPerPacket,
+        };
     }
+
+    private const int MaxFifoTargetMs = 30;
     private readonly object _lock = new();
-    private LoopbackCapture? _capture;
+    private ICaptureSource? _capture;
     private AirPlayClient? _client;
     private CancellationTokenSource? _run;
     private Task? _loop;
 
     public StreamState State { get; private set; } = StreamState.Idle;
-    public string StatusText { get; private set; } = "未连接";
+    public string StatusText { get; private set; } = L.T("未连接");
     public AirPlayClient? Client => _client;
     public AudioFifo Fifo => _fifo;
-    public LoopbackCapture? Capture => _capture;
+    public ICaptureSource? Capture => _capture;
+
+    /// <summary>Creates the capture that feeds the FIFO (the UI swaps in per-app routing).</summary>
+    public Func<AudioFifo, ICaptureSource> CaptureFactory { get; set; } = fifo => new LoopbackCapture(fifo, RtpSender.SampleRate);
 
     /// <summary>Last volume confirmed on the speaker (percent).</summary>
     public double? Volume { get; private set; }
@@ -51,87 +62,149 @@ public sealed class StreamController : IDisposable
 
     public event Action? Changed;
 
-    public void Start(string deviceId, string? host, int latencyMs, double? volume)
+    /// <summary>Status text (translated with L.T) after another sender took the speaker over; TrayApp checks for it.</summary>
+    public const string TakenOverText = "已断开（音箱可能被其他设备占用）";
+
+    /// <param name="volumeAsOf">
+    /// <see cref="VolumeChanges"/> when the start was requested: a volume set after that (the request waited in a
+    /// queue behind a slow Stop) is kept instead of <paramref name="volume"/>. Null: always use <paramref name="volume"/>.
+    /// </param>
+    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null)
     {
-        Stop();
-        var cts = new CancellationTokenSource();
-        lock (_lock)
+        lock (_lifecycle)
         {
-            _run = cts;
-            _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, cts.Token));
+            Stop();
+            var cts = new CancellationTokenSource();
+            lock (_lock)
+            {
+                _run = cts;
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, cts.Token));
+            }
         }
     }
+
+    /// <summary>
+    /// Serializes Start/StartGroup/Stop: Disconnect stops on the thread pool, and a Connect right after it must
+    /// not have its new capture or state torn down by that Stop finishing late.
+    /// </summary>
+    private readonly object _lifecycle = new();
 
     public void Stop()
     {
-        Task? loop;
-        lock (_lock)
+        lock (_lifecycle)
         {
-            _run?.Cancel();
-            loop = _loop;
-            _run = null;
-            _loop = null;
+            Task? loop;
+            lock (_lock)
+            {
+                _run?.Cancel();
+                loop = _loop;
+                _run = null;
+                _loop = null;
+            }
+            try { loop?.Wait(3000); } catch { }
+            TearDown();
+            TearDownGroup();
+            DisposeCapture();
+            Set(StreamState.Idle, L.T("未连接"));
         }
-        try { loop?.Wait(3000); } catch { }
-        TearDown();
-        _capture?.Dispose();
-        _capture = null;
-        Set(StreamState.Idle, "未连接");
     }
 
-    public void SetVolume(double percent)
+    private void DisposeCapture()
     {
-        Volume = percent;
-        var client = _client;
-        if (client == null) return;
-        Task.Run(() =>
-        {
-            try { client.SetVolumePercent(percent); }
-            catch (Exception ex) { Log.Warn($"set volume: {ex.Message}"); }
-        });
+        ICaptureSource? capture;
+        lock (_lock) (capture, _capture) = (_capture, null);
+        capture?.Dispose(); // RoutedCapture: makes silenced apps audible here again
     }
 
-    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, CancellationToken ct)
+    public void SetVolume(double percent) => SetVolume(percent, unmute: true);
+
+    /// <param name="unmute">False: a muted speaker stays muted and keeps the new volume for when it is unmuted.</param>
+    public void SetVolume(double percent, bool unmute)
+    {
+        lock (_volumeLock)
+        {
+            _volumeChanges++;
+            Volume = VolumeLimit.Clamp(percent, VolumeCapPercent);
+        }
+        if (unmute) Muted = false;
+        PushVolume();
+    }
+
+    private readonly object _volumeLock = new();
+    private int _volumeChanges;
+
+    /// <summary>How many volumes were set so far (SetVolume); see Start's volumeAsOf.</summary>
+    public int VolumeChanges
+    {
+        get { lock (_volumeLock) return _volumeChanges; }
+    }
+
+    /// <summary>The volume a connection starts with, unless one was set since the start was requested.</summary>
+    private void TakeStartVolume(double? volume, int? volumeAsOf)
+    {
+        lock (_volumeLock)
+        {
+            if (volumeAsOf is { } asOf && asOf != _volumeChanges) return;
+            Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
+        }
+    }
+
+    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, CancellationToken ct)
     {
         int attempt = 0;
-        Volume = volume;
+        TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();
             string? lostReason = null;
+            AirPlayClient? mine = null;
             try
             {
-                Set(StreamState.Connecting, attempt == 0 ? "正在连接…" : $"正在重连（第 {attempt} 次）…");
+                Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
                 var address = await ResolveAsync(deviceId, host, ct);
                 host = address.ToString();
                 HostResolved?.Invoke(host);
 
-                if (_capture == null)
-                {
-                    _capture = new LoopbackCapture(_fifo, RtpSender.SampleRate);
-                    _capture.DeviceChanged += _ => Changed?.Invoke();
-                    _capture.Start();
-                }
+                EnsureCapture(ct);
 
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                 EffectiveLatencyMs = SafeLatency(latencyMs);
                 if (EffectiveLatencyMs != latencyMs)
                     Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
-                var client = await AirPlayClient.ConnectAsync(address, 7000, new StreamOptions(EffectiveLatencyMs, Volume), _fifo, ct);
+                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
+                var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
-                _client = client;
+                // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
+                // by now: publish only while still current, and never touch another loop's client.
+                lock (_lock)
+                {
+                    if (!ct.IsCancellationRequested) _client = mine = client;
+                }
+                if (mine == null)
+                {
+                    client.Dispose();
+                    break;
+                }
+                client.VolumeCapPercent = VolumeCapPercent;
+                if (options.VolumeCapPercent != VolumeCapPercent || options.VolumePercent != (Muted ? 0 : Volume))
+                    PushVolume(); // cap or volume changed while connecting (PushVolume had no client then)
                 if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
                 {
                     ArrivalToRenderMs = a2r;
                     ArrivalToRenderChanged?.Invoke(a2r);
                 }
-                Volume ??= client.InitialVolumeDb is { } db ? AirPlayClient.DbToPercent(db) : null;
+                Volume ??= client.InitialVolumeDb is { } db ? VolumeLimit.Clamp(AirPlayClient.DbToPercent(db), VolumeCapPercent) : null;
                 attempt = 0;
-                Set(StreamState.Streaming, $"已连接 · {client.Info.GetValueOrDefault("name")}");
+                Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
 
-                using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
-                    lostReason = await lost.Task.WaitAsync(ct);
-                LogStats();
+                using (var net = new NetworkWatch(address))
+                {
+                    _net = net;
+                    using var health = FeedHealth(net, () => client.Sender); // 首页's network status
+                    using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
+                        lostReason = await lost.Task.WaitAsync(ct);
+                    LogStats();
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -141,11 +214,12 @@ public sealed class StreamController : IDisposable
             {
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
                 Log.Warn($"stream: {lostReason}");
-                if (ex is FirewallBlockedException) FirewallBlocked?.Invoke();
+                if (ex is FirewallBlockedException && !ct.IsCancellationRequested) FirewallBlocked?.Invoke();
             }
             finally
             {
-                TearDown();
+                // Only this loop's own session (Stop may already have taken and disposed it).
+                if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }
 
             if (ct.IsCancellationRequested) break;
@@ -154,16 +228,33 @@ public sealed class StreamController : IDisposable
                 lostReason == EventChannel.ClosedBySpeaker)
             {
                 // The speaker ended a healthy session: most likely someone AirPlayed to it. Don't fight back.
-                _capture?.Dispose();
-                _capture = null;
-                Set(StreamState.Idle, "已断开（音箱可能被其他设备占用）");
+                DisposeCapture();
+                Set(StreamState.Idle, L.T(TakenOverText));
                 return;
             }
 
             attempt++;
             var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(attempt, 5))));
-            Set(StreamState.Retrying, $"{lostReason}，{delay.TotalSeconds:F0} 秒后重试");
+            var shown = lostReason == EventChannel.ClosedBySpeaker ? L.T(EventChannel.ClosedBySpeaker) : lostReason;
+            Set(StreamState.Retrying, L.F("{0}，{1:F0} 秒后重试", shown, delay.TotalSeconds));
             try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
+        }
+    }
+
+    /// <summary>
+    /// Capture runs across reconnects; shared by the single-speaker and the group loop. A loop that Stop has
+    /// already cancelled (it gave up waiting for it) must not start one nobody would dispose.
+    /// </summary>
+    private void EnsureCapture(CancellationToken ct)
+    {
+        _fifo.BeginSession(); // every connect attempt: the wait and the new sender's start are not dropouts
+        lock (_lock)
+        {
+            if (_capture != null) return;
+            ct.ThrowIfCancellationRequested();
+            _capture = CaptureFactory(_fifo);
+            _capture.DeviceChanged += _ => Changed?.Invoke();
+            _capture.Start();
         }
     }
 
@@ -180,7 +271,7 @@ public sealed class StreamController : IDisposable
             return known;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var match = devices.FirstOrDefault(d => string.Equals(Normalize(d.DeviceId), Normalize(deviceId), StringComparison.OrdinalIgnoreCase));
-        return match?.Address ?? throw new AirPlayException("找不到音箱（是否通电、和电脑在同一网络？）");
+        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
     }
 
     public static string Normalize(string id) => id.Replace(":", "").Replace("-", "");
@@ -205,11 +296,15 @@ public sealed class StreamController : IDisposable
     {
         var s = _client?.Sender;
         if (s == null) return;
-        Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms drift={_capture?.DriftPpm ?? 0:F0}ppm " +
-                 $"underruns={_fifo.Underruns} overflows={_fifo.Overflows} sent={s.PacketsSent} late={s.LateWakeups} " +
+        Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +
+                 $"drift={_capture?.DriftPpm ?? 0:F0}ppm underruns={_fifo.Underruns} idle={_fifo.IdleGaps} " +
+                 $"maxGap={_capture?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
+                 $"sent={s.PacketsSent} late={s.LateWakeups} " +
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
-                 $"rtxMiss={s.RetransmitMisses}");
+                 $"rtxMiss={s.RetransmitMisses} {_net?.TakeSummary()}");
     }
+
+    private NetworkWatch? _net; // the current session's; a disposed one just reports nothing new
 
     private void TearDown()
     {

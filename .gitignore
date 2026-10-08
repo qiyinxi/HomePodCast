@@ -2,6 +2,10 @@ bin/
 app/
 obj/
 publish/
+.wix/
 *.user
 .vs/
 test-results/
+extension/test/*.mp4
+.claude/worktrees/
+.claude/settings.local.json

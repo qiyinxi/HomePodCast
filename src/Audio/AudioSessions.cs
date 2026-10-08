@@ -11,6 +11,15 @@ internal interface IAudioSessionManager2
     [PreserveSig] int GetAudioSessionControl(IntPtr sessionGuid, uint flags, out IntPtr control);
     [PreserveSig] int GetSimpleAudioVolume(IntPtr sessionGuid, uint flags, out IntPtr volume);
     [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator enumerator);
+    [PreserveSig] int RegisterSessionNotification(IAudioSessionNotification notification);
+    [PreserveSig] int UnregisterSessionNotification(IAudioSessionNotification notification);
+}
+
+// audiopolicy.h (SDK 10.0.26100.0): IAudioSessionNotification 641DD20B-4D41-49CC-ABA3-174B9477BB08.
+[ComImport, Guid("641DD20B-4D41-49CC-ABA3-174B9477BB08"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionNotification
+{
+    [PreserveSig] int OnSessionCreated(IntPtr newSession);
 }
 
 [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -41,6 +50,20 @@ internal interface IAudioSessionControl2
     [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
 }
 
+// audiopolicy.h (SDK 10.0.19041.0): IAudioSessionEvents 24918ACC-64B3-37C1-8CA9-74A66E9957A8, methods in vtable
+// order. Implemented by us and handed to IAudioSessionControl::RegisterAudioSessionNotification as a COM pointer.
+[ComImport, Guid("24918ACC-64B3-37C1-8CA9-74A66E9957A8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionEvents
+{
+    [PreserveSig] int OnDisplayNameChanged(IntPtr newDisplayName, IntPtr eventContext);
+    [PreserveSig] int OnIconPathChanged(IntPtr newIconPath, IntPtr eventContext);
+    [PreserveSig] int OnSimpleVolumeChanged(float newVolume, int newMute, IntPtr eventContext);
+    [PreserveSig] int OnChannelVolumeChanged(uint channelCount, IntPtr newChannelVolumes, uint changedChannel, IntPtr eventContext);
+    [PreserveSig] int OnGroupingParamChanged(IntPtr newGroupingParam, IntPtr eventContext);
+    [PreserveSig] int OnStateChanged(int newState);
+    [PreserveSig] int OnSessionDisconnected(int disconnectReason);
+}
+
 [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface ISimpleAudioVolume
 {
@@ -56,7 +79,7 @@ internal interface IAudioMeterInformation
     [PreserveSig] int GetPeakValue(out float peak);
 }
 
-/// <summary>All audio sessions of one process on the default output device (what goes to the speaker).</summary>
+/// <summary>All audio sessions of one process on the captured output device (what goes to the speaker).</summary>
 public sealed class AppAudio : IDisposable
 {
     private readonly List<(ISimpleAudioVolume Volume, IAudioMeterInformation Meter, IAudioSessionControl2 Control)> _sessions = [];
@@ -78,10 +101,41 @@ public sealed class AppAudio : IDisposable
 
     internal void Add(ISimpleAudioVolume v, IAudioMeterInformation m, IAudioSessionControl2 c) => _sessions.Add((v, m, c));
 
+    /// <summary>Rule key for per-app routing (lower-case executable name without ".exe"); empty for system sounds.</summary>
+    public string ExeKey { get; init; } = "";
+
+    /// <summary>
+    /// The app's volume as the user sees it. While per-app routing keeps the app silent here (session
+    /// volume scaled by <see cref="SessionAttenuation.Epsilon"/>), this is the level sent to the speaker.
+    /// </summary>
     public float Volume
     {
+        get => _sessions.Count > 0 && _sessions[0].Volume.GetMasterVolume(out var v) >= 0 ? SessionAttenuation.ToLogical(v) : 1f;
+        set
+        {
+            float logical = Math.Clamp(value, 0f, 1f);
+            bool routed = SessionAttenuation.SilencedPids.Contains(ProcessId);
+            foreach (var s in _sessions)
+            {
+                bool silenced = routed || s.Volume.GetMasterVolume(out var raw) >= 0 && SessionAttenuation.IsAttenuated(raw);
+                s.Volume.SetMasterVolume(silenced && logical > 0 ? logical * SessionAttenuation.Epsilon : logical, ref _context);
+            }
+        }
+    }
+
+    /// <summary>The session volume exactly as Windows has it (tests).</summary>
+    internal float RawVolume
+    {
         get => _sessions.Count > 0 && _sessions[0].Volume.GetMasterVolume(out var v) >= 0 ? v : 1f;
-        set { foreach (var s in _sessions) s.Volume.SetMasterVolume(Math.Clamp(value, 0f, 1f), ref _context); }
+        set { foreach (var s in _sessions) s.Volume.SetMasterVolume(value, ref _context); }
+    }
+
+    /// <summary>Make sessions silenced by per-app routing audible again (left over from an unclean exit).</summary>
+    internal void RestoreIfSilenced()
+    {
+        foreach (var s in _sessions)
+            if (s.Volume.GetMasterVolume(out var raw) >= 0 && SessionAttenuation.IsAttenuated(raw))
+                s.Volume.SetMasterVolume(SessionAttenuation.Restored(raw), ref _context);
     }
 
     public bool Muted
@@ -112,15 +166,19 @@ public sealed class AppAudio : IDisposable
         Icon?.Dispose();
     }
 
-    /// <summary>Snapshot of the non-expired sessions on the default render device, merged per process.</summary>
-    public static List<AppAudio> Enumerate()
+    /// <summary>
+    /// Snapshot of the non-expired sessions on a render device, merged per process: <paramref name="deviceId"/>
+    /// (the chosen capture device; empty when it is missing) or, when null, the default output.
+    /// </summary>
+    public static List<AppAudio> Enumerate(string? deviceId = null)
     {
         var result = new Dictionary<string, AppAudio>();
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
         IMMDevice? device = null;
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device) < 0) return [];
+            device = AudioEndpoints.Open(enumerator, EDataFlow.Render, deviceId);
+            if (device == null) return [];
             var iid = typeof(IAudioSessionManager2).GUID;
             if (device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj) < 0) return [];
             var manager = (IAudioSessionManager2)obj;
@@ -139,7 +197,7 @@ public sealed class AppAudio : IDisposable
                 {
                     control.GetDisplayName(out var display);
                     var (name, icon) = Describe(pid, system, display);
-                    app = result[key] = new AppAudio(pid, system, name, icon);
+                    app = result[key] = new AppAudio(pid, system, name, icon) { ExeKey = system ? "" : ExeKeyOf(pid) };
                 }
                 app.Add((ISimpleAudioVolume)raw, (IAudioMeterInformation)raw, control);
             }
@@ -158,9 +216,22 @@ public sealed class AppAudio : IDisposable
         return result.Values.OrderBy(a => a.IsSystemSounds ? 1 : 0).ThenBy(a => a.Name).ToList();
     }
 
+    private static string ExeKeyOf(uint pid)
+    {
+        try
+        {
+            using var p = Process.GetProcessById((int)pid);
+            return RouteRules.KeyFor(p.ProcessName);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     private static (string, Icon?) Describe(uint pid, bool system, string? display)
     {
-        if (system) return ("系统声音", null);
+        if (system) return (L.T("系统声音"), null);
         try
         {
             using var p = Process.GetProcessById((int)pid);
@@ -176,7 +247,7 @@ public sealed class AppAudio : IDisposable
         }
         catch
         {
-            return (string.IsNullOrWhiteSpace(display) ? $"进程 {pid}" : display, null);
+            return (string.IsNullOrWhiteSpace(display) ? L.F("进程 {0}", pid) : display, null);
         }
     }
 }

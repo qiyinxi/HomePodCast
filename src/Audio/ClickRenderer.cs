@@ -91,6 +91,10 @@ public sealed class ClickRenderer : IDisposable
         {
             Log.Warn($"click renderer: {ex}");
         }
+        catch (Exception)
+        {
+            // Stopping (e.g. ClickScheduled's queue already completed): an unhandled one would end the app.
+        }
         finally
         {
             if (mix != IntPtr.Zero) Marshal.FreeCoTaskMem(mix);

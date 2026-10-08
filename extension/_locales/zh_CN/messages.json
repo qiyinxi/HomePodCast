@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast 视频同步" },
+  "extDescription": { "message": "把网页视频的画面延迟若干毫秒，与经 AirPlay 推送到 HomePod、较晚响起的声音对齐。" },
+  "htmlLang": { "message": "zh-CN" },
+  "statusConnecting": { "message": "正在连接…" },
+  "statusNotRunning": { "message": "未运行" },
+  "statusIdle": { "message": "未推流" },
+  "statusStreaming": { "message": "推流中" },
+  "siteLabel": { "message": "当前网站" },
+  "localFile": { "message": "(本地文件)" },
+  "minusLabel": { "message": "减少 1 毫秒" },
+  "minusTitle": { "message": "减少 1 毫秒（按住连续调整）" },
+  "plusLabel": { "message": "增加 1 毫秒" },
+  "plusTitle": { "message": "增加 1 毫秒（按住连续调整）" },
+  "delayCaption": { "message": "画面延迟" },
+  "siteOffset": { "message": "网站偏移" },
+  "reset": { "message": "重置" },
+  "siteToggle": { "message": "在此网站启用" },
+  "globalToggle": { "message": "全局启用" },
+  "hintUnavailable": { "message": "此页面不支持，或页面在安装扩展之前打开，请刷新页面后再试。" },
+  "hintGlobalOff": { "message": "已全局关闭，画面不延迟。" },
+  "hintSiteOff": { "message": "已在此网站关闭，画面不延迟。" },
+  "hintNotStreaming": { "message": "HomePodCast 未推流，画面不延迟。" },
+  "hintNotRunning": { "message": "HomePodCast 未运行，画面不延迟。" },
+  "videosNone": { "message": "本页未检测到视频（≥ 200×112）。" },
+  "videosCount": {
+    "message": "本页 $COUNT$ 个视频",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ 个正在延迟",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "实测 $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "受版权保护（DRM），无法延迟" },
+  "videosFullscreen": { "message": "视频元素单独全屏时无法延迟" },
+  "videosPlayerUnsupported": { "message": "此页面的播放器不支持画面延迟" },
+  "videosNotDelayed": { "message": "未延迟" }
+}

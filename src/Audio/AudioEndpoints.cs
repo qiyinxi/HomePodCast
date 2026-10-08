@@ -1,0 +1,401 @@
+using System.Runtime.InteropServices;
+
+namespace HomePodCast.Audio;
+
+/// <summary>EndpointFormFactor from mmdeviceapi.h.</summary>
+public enum EndpointFormFactor
+{
+    RemoteNetworkDevice, Speakers, LineLevel, Headphones, Microphone, Headset, Handset,
+    UnknownDigitalPassthrough, Spdif, DigitalAudioDisplayDevice, Unknown,
+}
+
+public sealed record AudioEndpoint(string Id, string Name, EndpointFormFactor FormFactor)
+{
+    /// <summary>Headphones or a headset: safe to monitor a microphone on without feedback.</summary>
+    public bool IsHeadphones => FormFactor is EndpointFormFactor.Headphones or EndpointFormFactor.Headset;
+}
+
+/// <summary>Active input/output endpoints, and opening one by id (null = the default device).</summary>
+public static class AudioEndpoints
+{
+    public static List<AudioEndpoint> Inputs() => List(EDataFlow.Capture);
+    public static List<AudioEndpoint> Outputs() => List(EDataFlow.Render);
+
+    public static AudioEndpoint? DefaultInput() => Default(EDataFlow.Capture);
+    public static AudioEndpoint? DefaultOutput() => Default(EDataFlow.Render);
+
+    private static List<AudioEndpoint> List(EDataFlow flow)
+    {
+        var result = new List<AudioEndpoint>();
+        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        IMMDeviceCollection? collection = null;
+        try
+        {
+            if (enumerator.EnumAudioEndpoints(flow, CoreAudio3.DeviceStateActive, out var raw) < 0 || raw == IntPtr.Zero) return result;
+            try { collection = (IMMDeviceCollection)Marshal.GetObjectForIUnknown(raw); }
+            finally { Marshal.Release(raw); }
+            collection.GetCount(out uint count);
+            for (uint i = 0; i < count; i++)
+            {
+                if (collection.Item(i, out var device) < 0) continue;
+                try { if (Describe(device) is { } e) result.Add(e); }
+                finally { Marshal.ReleaseComObject(device); }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"endpoints: {ex.Message}");
+        }
+        finally
+        {
+            if (collection != null) Marshal.ReleaseComObject(collection);
+            Marshal.ReleaseComObject(enumerator);
+        }
+        return result.OrderBy(e => e.Name, StringComparer.CurrentCulture).ToList();
+    }
+
+    private static AudioEndpoint? Default(EDataFlow flow)
+    {
+        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        try
+        {
+            if (enumerator.GetDefaultAudioEndpoint(flow, ERole.Console, out var device) < 0) return null;
+            try { return Describe(device); }
+            finally { Marshal.ReleaseComObject(device); }
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(enumerator);
+        }
+    }
+
+    private static AudioEndpoint? Describe(IMMDevice device)
+    {
+        if (device.GetId(out var id) < 0 || id == null) return null;
+        return new AudioEndpoint(id, CoreAudio.FriendlyName(device), FormFactor(device));
+    }
+
+    [DllImport("ole32.dll")]
+    private static extern int PropVariantClear(ref PropVariant pv);
+
+    private static EndpointFormFactor FormFactor(IMMDevice device)
+    {
+        if (device.OpenPropertyStore(0, out var store) < 0) return EndpointFormFactor.Unknown;
+        try
+        {
+            if (store.GetValue(ref CoreAudio3.FormFactorKey, out var pv) < 0) return EndpointFormFactor.Unknown;
+            try
+            {
+                const ushort vtUi4 = 19;
+                if (pv.VarType != vtUi4) return EndpointFormFactor.Unknown;
+                uint v = (uint)(pv.Pointer.ToInt64() & 0xFFFFFFFF);
+                return v <= (uint)EndpointFormFactor.Unknown ? (EndpointFormFactor)v : EndpointFormFactor.Unknown;
+            }
+            finally
+            {
+                PropVariantClear(ref pv);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(store);
+        }
+    }
+
+    /// <summary>The device with this id (null/empty = default for the flow); null if it is gone.</summary>
+    internal static IMMDevice? Open(IMMDeviceEnumerator enumerator, EDataFlow flow, string? id)
+    {
+        IMMDevice? device;
+        int hr = string.IsNullOrEmpty(id)
+            ? enumerator.GetDefaultAudioEndpoint(flow, ERole.Console, out device)
+            : enumerator.GetDevice(id, out device);
+        if (hr < 0 || device == null) return null;
+        if (device.GetState(out int state) < 0 || state != CoreAudio3.DeviceStateActive)
+        {
+            Marshal.ReleaseComObject(device);
+            return null;
+        }
+        return device;
+    }
+
+    /// <summary>Id of the current default device for the flow, or null.</summary>
+    internal static string? DefaultId(IMMDeviceEnumerator enumerator, EDataFlow flow)
+    {
+        if (enumerator.GetDefaultAudioEndpoint(flow, ERole.Console, out var device) < 0) return null;
+        try { return device.GetId(out var id) >= 0 ? id : null; }
+        finally { Marshal.ReleaseComObject(device); }
+    }
+
+    /// <summary>Id of the current default output, or null (none, or Core Audio unavailable).</summary>
+    public static string? DefaultOutputId()
+    {
+        try
+        {
+            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+            try { return DefaultId(enumerator, EDataFlow.Render); }
+            finally { Marshal.ReleaseComObject(enumerator); }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether the device is still active (not unplugged, disabled or uninstalled).</summary>
+    internal static bool IsActive(IMMDevice device) =>
+        device.GetState(out int state) >= 0 && state == CoreAudio3.DeviceStateActive;
+}
+
+/// <summary>
+/// Endpoint notifications (IMMNotificationClient): an output or input device was added, removed, enabled, disabled,
+/// plugged or unplugged, or the default changed. <see cref="Changed"/> is raised on a Windows notification thread
+/// and must only set flags or post: no Core Audio calls that could wait on that thread.
+/// </summary>
+public static class AudioDeviceWatcher
+{
+    private static readonly object Lock = new();
+    private static IMMDeviceEnumerator? _enumerator;
+    private static IntPtr _client;
+    private static Action? _changed;
+
+    /// <summary>Something about the audio devices changed. Subscribing starts the watch; it runs until the app exits.</summary>
+    public static event Action? Changed
+    {
+        add
+        {
+            lock (Lock)
+            {
+                _changed += value;
+                if (_client == IntPtr.Zero) Start();
+            }
+        }
+        remove
+        {
+            lock (Lock) _changed -= value;
+        }
+    }
+
+    private static void Start()
+    {
+        try
+        {
+            // An MTA thread-pool thread: the enumerator must not belong to the UI thread's apartment.
+            Task.Run(() =>
+            {
+                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+                var client = Marshal.GetComInterfaceForObject<Notifier, IMMNotificationClient>(new Notifier());
+                int hr = enumerator.RegisterEndpointNotificationCallback(client);
+                if (hr < 0)
+                {
+                    Marshal.Release(client);
+                    Marshal.ReleaseComObject(enumerator);
+                    Log.Warn($"device notifications unavailable (0x{hr:X8})");
+                    return;
+                }
+                _enumerator = enumerator;
+                _client = client;
+            }).Wait();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"device notifications unavailable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Unregister (app exit).</summary>
+    public static void Stop()
+    {
+        lock (Lock)
+        {
+            _changed = null;
+            if (_client == IntPtr.Zero || _enumerator == null) return;
+            var (enumerator, client) = (_enumerator, _client);
+            _client = IntPtr.Zero;
+            _enumerator = null;
+            // On an MTA thread like the registration (the enumerator lives there).
+            Task.Run(() =>
+            {
+                try { enumerator.UnregisterEndpointNotificationCallback(client); } catch { }
+                Marshal.Release(client);
+                Marshal.ReleaseComObject(enumerator);
+            }).Wait(2000);
+        }
+    }
+
+    private static void Raise()
+    {
+        try { _changed?.Invoke(); }
+        catch (Exception ex) { Log.Warn($"device notification: {ex.Message}"); }
+    }
+
+    /// <summary>Our IMMNotificationClient (a COM-callable wrapper).</summary>
+    internal sealed class Notifier(Action? raised = null) : IMMNotificationClient
+    {
+        private void Fire()
+        {
+            if (raised != null) raised();
+            else Raise();
+        }
+
+        public int OnDeviceStateChanged(string? deviceId, int newState)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDeviceAdded(string? deviceId)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDeviceRemoved(string? deviceId)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDefaultDeviceChanged(int flow, int role, string? defaultDeviceId)
+        {
+            if (flow == (int)EDataFlow.Render && role == (int)ERole.Console) Fire();
+            return 0;
+        }
+
+        public int OnPropertyValueChanged(string? deviceId, PropertyKeyValue key) => 0; // names, formats: not needed
+    }
+}
+
+/// <summary>
+/// A shared-mode, event-driven WASAPI stream at the engine's mix format with the smallest period on
+/// offer: IAudioClient3.InitializeSharedAudioStream at the minimum period when the driver supports it,
+/// otherwise the classic IAudioClient.Initialize (one engine period, usually 10 ms).
+/// </summary>
+internal sealed class SharedStream : IDisposable
+{
+    public IAudioClient Client { get; }
+    public WaveFormat Format { get; }
+    public int PeriodFrames { get; }
+
+    /// <summary>The engine's default period (frames): what a classic shared stream would get.</summary>
+    public int DefaultPeriodFrames { get; }
+
+    public uint BufferFrames { get; }
+
+    /// <summary>Opened with IAudioClient3.InitializeSharedAudioStream.</summary>
+    public bool AudioClient3 { get; }
+
+    /// <summary>The period is below the engine default (the driver supports small shared-mode periods).</summary>
+    public bool LowLatency => PeriodFrames < DefaultPeriodFrames;
+
+    public double StreamLatencyMs { get; }
+    public double PeriodMs => PeriodFrames * 1000.0 / Format.SampleRate;
+    public string Mode => AudioClient3 ? "IAudioClient3" : "IAudioClient";
+
+    private IntPtr _mix;
+
+    private SharedStream(IAudioClient client, IntPtr mix, int periodFrames, int defaultPeriodFrames, bool audioClient3)
+    {
+        Client = client;
+        _mix = mix;
+        Format = WaveFormat.FromPointer(mix);
+        PeriodFrames = periodFrames;
+        DefaultPeriodFrames = defaultPeriodFrames;
+        AudioClient3 = audioClient3;
+        CoreAudio.Check(client.GetBufferSize(out uint buffer), "buffer size");
+        BufferFrames = buffer;
+        StreamLatencyMs = client.GetStreamLatency(out long latency) >= 0 ? latency / 10_000.0 : 0;
+    }
+
+    public static SharedStream Open(IMMDevice device, IntPtr eventHandle)
+    {
+        var stream = TryLowLatency(device) ?? OpenClassic(device);
+        try
+        {
+            CoreAudio.Check(stream.Client.SetEventHandle(eventHandle), "event");
+            return stream;
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
+    private static SharedStream? TryLowLatency(IMMDevice device)
+    {
+        IAudioClient3? c3 = null;
+        IntPtr mix = IntPtr.Zero;
+        try
+        {
+            if (device.Activate(ref CoreAudio3.IidAudioClient3, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj) < 0) return null;
+            c3 = (IAudioClient3)obj;
+            if (c3.GetMixFormat(out mix) < 0) return null;
+            if (c3.GetSharedModeEnginePeriod(mix, out uint defaultPeriod, out _, out uint minPeriod, out _) < 0) return null;
+            uint period = minPeriod;
+            int hr = c3.InitializeSharedAudioStream(CoreAudio.StreamFlagsEventCallback, period, mix, IntPtr.Zero);
+            if (hr == CoreAudio3.EnginePeriodicityLocked && c3.GetCurrentSharedModeEnginePeriod(out var current, out uint currentPeriod) >= 0)
+            {
+                // Another app already runs the engine at a fixed small period: join it.
+                Marshal.FreeCoTaskMem(current);
+                period = currentPeriod;
+                hr = c3.InitializeSharedAudioStream(CoreAudio.StreamFlagsEventCallback, period, mix, IntPtr.Zero);
+            }
+            if (hr < 0)
+            {
+                Log.Info($"IAudioClient3 init failed 0x{hr:X8}, using the classic shared stream");
+                return null;
+            }
+            var stream = new SharedStream((IAudioClient)c3, mix, (int)period, (int)defaultPeriod, audioClient3: true);
+            mix = IntPtr.Zero;
+            c3 = null;
+            return stream;
+        }
+        catch (Exception ex)
+        {
+            Log.Info($"IAudioClient3 unavailable ({ex.Message}), using the classic shared stream");
+            return null;
+        }
+        finally
+        {
+            if (mix != IntPtr.Zero) Marshal.FreeCoTaskMem(mix);
+            if (c3 != null) Marshal.ReleaseComObject(c3);
+        }
+    }
+
+    private static SharedStream OpenClassic(IMMDevice device)
+    {
+        CoreAudio.Check(device.Activate(ref CoreAudio.IidAudioClient, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj), "activate");
+        var client = (IAudioClient)obj;
+        IntPtr mix = IntPtr.Zero;
+        try
+        {
+            CoreAudio.Check(client.GetMixFormat(out mix), "mix format");
+            CoreAudio.Check(client.GetDevicePeriod(out long defaultPeriod, out _), "device period");
+            CoreAudio.Check(client.Initialize(0, CoreAudio.StreamFlagsEventCallback | CoreAudio.StreamFlagsNoPersist,
+                defaultPeriod, 0, mix, IntPtr.Zero), "initialize");
+            int rate = WaveFormat.FromPointer(mix).SampleRate;
+            int period = (int)Math.Round(defaultPeriod * rate / 10_000_000.0);
+            var stream = new SharedStream(client, mix, period, period, audioClient3: false);
+            mix = IntPtr.Zero;
+            return stream;
+        }
+        catch
+        {
+            if (mix != IntPtr.Zero) Marshal.FreeCoTaskMem(mix);
+            Marshal.ReleaseComObject(client);
+            throw;
+        }
+    }
+
+    public void Dispose()
+    {
+        try { Client.Stop(); } catch { }
+        if (_mix != IntPtr.Zero) Marshal.FreeCoTaskMem(_mix);
+        _mix = IntPtr.Zero;
+        Marshal.ReleaseComObject(Client);
+    }
+}

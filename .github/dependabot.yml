@@ -17,3 +17,9 @@ updates:
     groups:
       test-tools:
         patterns: ['xunit*', 'Microsoft.NET.Test.Sdk', 'coverlet*']
+    ignore:
+      # WiX 6+ requires accepting the Open Source Maintenance Fee EULA (WIX7015); 5.x builds the MSI fine.
+      - dependency-name: 'wix'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'WixToolset.*'
+        update-types: ['version-update:semver-major']

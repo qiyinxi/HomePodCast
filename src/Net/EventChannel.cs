@@ -16,7 +16,10 @@ public sealed class EventChannel : IDisposable
     private readonly Thread _thread;
     private volatile bool _closed;
 
-    /// <summary>Reason given when the speaker itself ends the session (e.g. another sender took over).</summary>
+    /// <summary>
+    /// Reason given when the speaker itself ends the session (e.g. another sender took over). Compared as is;
+    /// translate (L.T) only for display.
+    /// </summary>
     public const string ClosedBySpeaker = "音箱结束了会话";
 
     public event Action<string>? Closed;
@@ -83,7 +86,7 @@ public sealed class EventChannel : IDisposable
         }
         catch (Exception ex) when (!_closed)
         {
-            reason = $"事件通道异常：{ex.Message}";
+            reason = L.F("事件通道异常：{0}", ex.Message);
         }
         catch
         {

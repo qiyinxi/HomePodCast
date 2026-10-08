@@ -16,12 +16,19 @@ public static class Program
         {
             return cmd switch
             {
-                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer")),
-                "scan" => Scan().GetAwaiter().GetResult(),
+                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer"), openFlyout: args.Contains("--flyout"),
+                    testOsd: args.Contains("--osd-muted") ? "muted" : args.Contains("--osd") ? "volume" : null),
+                "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
+                "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
+                "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
+                "proctest" => ProcTest.Run(args),
+                "tone" => ProcTest.Tone(args),
+                "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
+                "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
                 _ => Help(),
             };
         }
@@ -32,13 +39,15 @@ public static class Program
         }
     }
 
-    private static int RunGui(bool startHidden, bool openMixer)
+    /// <param name="testOsd">Hidden test switch <c>--osd</c> / <c>--osd-muted</c>: show the volume-key OSD once running.</param>
+    private static int RunGui(bool startHidden, bool openMixer, bool openFlyout, string? testOsd)
     {
         Log.ToConsole = false;
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
 
-        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show");
-        using var single = new Mutex(true, @"Local\HomePodCast.Single", out bool first);
+        var suffix = AppConfig.Profile is { } p ? "." + p : "";
+        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
+        using var single = new Mutex(true, @"Local\HomePodCast.Single" + suffix, out bool first);
         if (!first)
         {
             show.Set(); // ask the running instance to show its window
@@ -46,12 +55,28 @@ public static class Program
         }
 
         Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
+        Autostart.Repair();
+        // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
+        // tray). Not after crashes, hangs or reboots, and never for test copies.
+        if (AppConfig.Profile == null) Native.RegisterApplicationRestart("--tray", Native.RestartNoCrash | Native.RestartNoHang | Native.RestartNoReboot);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
-        Application.Run(new UI.TrayApp(startHidden, show, openMixer));
+        var config = AppConfig.Load();
+        L.Use(config.Language);
+        UI.Theme.Mode = config.Theme;
+        Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd));
+        if (UI.LanguageMenu.RestartRequested)
+        {
+            Log.Info("restarting to apply the UI language");
+            Log.CloseFile(); // the new copy opens the same log file
+            single.ReleaseMutex();
+            single.Dispose(); // ...and must be able to create the single-instance mutex
+            Process.Start(Environment.ProcessPath!);
+        }
         return 0;
     }
 
@@ -59,9 +84,12 @@ public static class Program
     {
         Console.WriteLine("""
             HomePodCast
-              scan                                   list AirPlay speakers
+              scan [--txt]                           list AirPlay speakers (and stereo pairs)
+              info --host IP                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
+              players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
             """);
+        Console.WriteLine(GroupCli.Usage + "   (experimental)");
         return 0;
     }
 
@@ -151,12 +179,29 @@ public static class Program
         return 0;
     }
 
-    private static async Task<int> Scan()
+    private static async Task<int> Scan(bool txt)
     {
         var sw = Stopwatch.StartNew();
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
         Console.WriteLine($"found {devices.Count} device(s) in {sw.ElapsedMilliseconds} ms");
-        foreach (var d in devices) Console.WriteLine("  " + d);
+        foreach (var d in devices)
+        {
+            Console.WriteLine("  " + d);
+            if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
+        }
+        foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
+        return 0;
+    }
+
+    /// <summary>`info --host IP`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
+    private static async Task<int> Info(string[] args)
+    {
+        var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
+        using var rtsp = await RtspConnection.ConnectAsync(host, 7000, CancellationToken.None);
+        var reply = rtsp.Rtsp("GET", "/info");
+        Console.WriteLine($"{host}: {reply.StartLine}");
+        if (reply.IsSuccess && reply.Body.Length > 0)
+            foreach (var line in InfoDump.Lines(Protocol.BPlist.ReadDict(reply.Body))) Console.WriteLine("  " + line);
         return 0;
     }
 
@@ -174,9 +219,22 @@ public static class Program
         capture?.Start();
         toneGen?.Start();
 
+        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys; integers, true/false or text.
+        var overrides = new Dictionary<string, object?>();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] != "--setup" || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+            overrides[key] = long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+        }
+        var options = new StreamOptions(latency, volume)
+        {
+            VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
+            StreamSetupOverrides = overrides.Count > 0 ? overrides : null,
+        };
+
         var sw = Stopwatch.StartNew();
-        using var client = await AirPlayClient.ConnectAsync(host, 7000, new StreamOptions(latency, volume), fifo,
-            CancellationToken.None);
+        using var client = await AirPlayClient.ConnectAsync(host, 7000, options, fifo, CancellationToken.None);
+        Log.Info($"arrivalToRenderLatencyMs={client.ArrivalToRenderMs?.ToString() ?? "?"} latency={latency} ms");
         Log.Info($"streaming after {sw.ElapsedMilliseconds} ms setup");
         var lost = new TaskCompletionSource<string>();
         client.Lost += reason => lost.TrySetResult(reason);

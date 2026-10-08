@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HomePodCast MSI, WiX Toolset v5. Build it with installer\build.ps1 (see installer\README.md);
+  the script passes the preprocessor variables below.
+
+    ProductVersion  numeric MSI version, e.g. 1.2.3 or 0.2.0.57
+    DisplayVersion  the full CI version, e.g. 1.2.3 or 0.2.0-dev.57
+    ProductCode     product code GUID, generated once per build.ps1 run and shared by all cultures
+    ProductLanguage LCID of the culture being built (1033 for the en-US base package)
+    PublishDir      folder holding the single-file HomePodCast.exe (dotnet publish output)
+    RepoDir         repository root (LICENSE, README*.md, src\app.ico)
+    LicenseRtf      LICENSE converted to RTF for the license dialog
+
+  The script builds this once per culture (-culture, -loc i18n\<culture>.wxl) and turns every culture
+  except en-US into a language transform embedded in the en-US package. Our own strings are !(loc.*)
+  references into i18n\*.wxl; the stock wizard strings come from WixToolset.UI.wixext.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <!--
+    UpgradeCode identifies HomePodCast across all versions: never change it.
+    ProductCode is the same for every culture of one build, so a language transform does not turn the
+    package into another product.
+  -->
+  <Package Name="HomePodCast"
+           Manufacturer="HomePodCast"
+           Version="$(ProductVersion)"
+           ProductCode="$(ProductCode)"
+           UpgradeCode="D9D4B1B3-FBF5-48A0-9B6D-2037DF5764DE"
+           Scope="perMachine"
+           Language="$(ProductLanguage)"
+           Compressed="yes">
+
+    <SummaryInformation Description="HomePodCast $(DisplayVersion) (x64)" />
+
+    <!--
+      MSI compares only the first three version fields, so builds that differ only in the fourth
+      (prereleases and CI builds, see build.ps1) must be allowed to replace each other.
+      The old version is removed before the new one is installed (the default schedule).
+      IgnoreLanguage: the wizard language follows the Windows UI language, so an upgrade must find the
+      installed version whatever language it was installed in (including the English-only MSIs).
+    -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" IgnoreLanguage="yes"
+                  DowngradeErrorMessage="!(loc.DowngradeError)" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- Show the install folder in Settings → Apps (InstallLocation). -->
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="execute" />
+
+    <!--
+      The app is framework-dependent: it needs the .NET 10 Desktop Runtime (x64). Look for
+      System.Windows.Forms.dll 10.x under shared\Microsoft.WindowsDesktop.App\<version>\ in the
+      x64 install location the app host itself uses: the registry (32-bit view), else Program Files.
+      The FileSearch elements have no Id on purpose: they then share the DirectorySearch's locator row,
+      so Depth="1" applies to the file (with an Id of their own, only the folder itself is searched).
+    -->
+    <Property Id="DOTNETDESKTOP10">
+      <RegistrySearch Id="DotNetX64InstallLocation" Root="HKLM" Key="SOFTWARE\dotnet\Setup\InstalledVersions\x64"
+                      Name="InstallLocation" Type="directory" Bitness="always32">
+        <DirectorySearch Id="DotNetDesktopApp" Path="shared\Microsoft.WindowsDesktop.App" Depth="1">
+          <FileSearch Name="System.Windows.Forms.dll" MinVersion="10.0.0.0" MaxVersion="10.65535.65535.65535" />
+        </DirectorySearch>
+      </RegistrySearch>
+    </Property>
+    <Property Id="DOTNETDESKTOP10DEFAULT">
+      <DirectorySearch Id="DotNetDesktopAppDefault" Path="[ProgramFiles64Folder]dotnet\shared\Microsoft.WindowsDesktop.App" Depth="1">
+        <FileSearch Name="System.Windows.Forms.dll" MinVersion="10.0.0.0" MaxVersion="10.65535.65535.65535" />
+      </DirectorySearch>
+    </Property>
+    <Launch Condition="Installed OR DOTNETDESKTOP10 OR DOTNETDESKTOP10DEFAULT" Message="!(loc.DotNetMissing)" />
+
+    <!-- Add/Remove Programs -->
+    <Icon Id="HomePodCast.ico" SourceFile="$(RepoDir)\src\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="HomePodCast.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/qiyinxi/HomePodCast" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/qiyinxi/HomePodCast/issues" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="HomePodCast" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- Settings live in %APPDATA%\HomePodCast; the installer never touches them. -->
+    <Feature Id="Main" Title="HomePodCast" AllowAbsent="no">
+      <Component Directory="INSTALLFOLDER">
+        <File Id="HomePodCastExe" Source="$(PublishDir)\HomePodCast.exe" KeyPath="yes">
+          <!--
+            Same rule the app adds itself (Firewall.RequestRule): inbound, allow, any protocol, Private
+            profile, local subnet only. Firewall.HasInboundAllowRule matches rules by program path, so the
+            app recognizes this one too. The name differs on purpose: the firewall custom action updates an
+            existing rule with the same name and removes every rule with that name on uninstall, and must not
+            touch a rule the app created for a portable copy. IgnoreFailure: if the firewall service is off,
+            setup still succeeds and the app asks for the rule on first start as before.
+          -->
+          <fw:FirewallException Id="InboundRule" Name="HomePodCast (installer)" Description="!(loc.FirewallRuleDescription)"
+                                Action="allow" Enabled="yes" Profile="private" Scope="localSubnet" IgnoreFailure="yes" />
+        </File>
+      </Component>
+      <!-- Start menu shortcut for all users. Windows Installer treats shortcut folders as per-user data
+           (ICE43/ICE57), so the component's key path is a marker value under HKCU, as the WiX docs show. -->
+      <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder">
+        <Shortcut Id="StartMenuShortcut" Name="HomePodCast" Description="!(loc.ShortcutDescription)"
+                  Target="[INSTALLFOLDER]HomePodCast.exe" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\HomePodCast\Installer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+      <Component Directory="INSTALLFOLDER">
+        <File Id="License" Source="$(RepoDir)\LICENSE" KeyPath="yes" />
+      </Component>
+      <Files Directory="INSTALLFOLDER" Include="$(RepoDir)\README*.md" />
+    </Feature>
+
+    <!-- UI: welcome, GPL-3.0 license, install folder (default C:\Program Files\HomePodCast), progress, finish. -->
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+
+    <!-- "Launch HomePodCast" checkbox on the finish dialog; runs as the user who started setup. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#HomePodCastExe]" />
+    <CustomAction Id="LaunchHomePodCast" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Impersonate="yes" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchHomePodCast"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+  </Package>
+</Wix>
