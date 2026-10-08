@@ -72,7 +72,7 @@ internal sealed class MixerForm : Form
             ForeColor = Color.DimGray,
             Margin = new Padding(3, 8, 3, 4),
         };
-        _rows = new TableLayoutPanel { AutoSize = true, ColumnCount = 6 };
+        _rows = new TableLayoutPanel { AutoSize = true, ColumnCount = 7 };
         _empty = new Label { Text = L.T("现在没有程序在发声。"), AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 3, 6) };
         var note = new Label
         {
@@ -82,19 +82,20 @@ internal sealed class MixerForm : Form
             Margin = new Padding(3, 10, 3, 0),
         };
 
-        outer.Controls.AddRange([head, caption, _rows, _empty, note]);
+        outer.Controls.AddRange([head, BuildRoutingPanel(), caption, _rows, _empty, note]);
         Controls.Add(outer);
         ResumeLayout(false);
         PerformLayout();
 
         _meterTimer.Tick += (_, _) => UpdateMeters();
-        _refreshTimer.Tick += (_, _) => RefreshApps();
+        _refreshTimer.Tick += (_, _) => { RefreshApps(); SyncRoutes(); };
     }
 
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
         RefreshApps();
+        SyncRoutes();
         _meterTimer.Start();
         _refreshTimer.Start();
     }
@@ -117,6 +118,7 @@ internal sealed class MixerForm : Form
         _rows.Controls.Clear();
         _rows.RowStyles.Clear();
         _byKey.Clear();
+        _routeCells.Clear();
         _apps = fresh;
         for (int i = 0; i < fresh.Count; i++) AddRow(fresh[i], i);
         _empty.Visible = fresh.Count == 0;
@@ -174,7 +176,7 @@ internal sealed class MixerForm : Form
         };
         mute.ForeColor = mute.Checked ? Icons.Error : SystemColors.ControlText;
 
-        Control[] cells = [icon, name, meter, slider, value, mute];
+        Control[] cells = [icon, name, meter, slider, value, mute, RouteCell(app)];
         for (int c = 0; c < cells.Length; c++) _rows.Controls.Add(cells[c], c, index);
         _rows.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _byKey[app.Key] = new Row(app, cells, meter, slider, value, mute);
@@ -214,6 +216,150 @@ internal sealed class MixerForm : Form
         foreach (var a in _apps) a.Dispose();
         _apps = [];
         base.OnFormClosed(e);
+    }
+
+    // ---------------------------------------------------------------- per-app routing
+
+    private static readonly AudioRoute[] Routes = [AudioRoute.HomePod, AudioRoute.Local, AudioRoute.Both];
+    private const int RouteWidth = 104;
+
+    private readonly Dictionary<string, Control> _routeCells = new(); // by AppAudio.Key
+    private readonly ToolTip _routeTips = new();
+    private ComboBox? _routeDefault;
+    private Label? _routeStatus;
+    private bool _syncingRoutes;
+
+    private static string RouteName(AudioRoute route) => route switch
+    {
+        AudioRoute.Local => L.T("本机"),
+        AudioRoute.Both => L.T("两者"),
+        _ => "HomePod",
+    };
+
+    /// <summary>Default destination for apps without their own choice, plus what routing currently does.</summary>
+    private Control BuildRoutingPanel()
+    {
+        var panel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 0) };
+        var line = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        line.Controls.Add(new Label { Text = L.T("没单独设置的程序送到"), AutoSize = true, Margin = new Padding(3, 7, 6, 3) });
+        _routeDefault = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = RouteWidth, Enabled = AppRouting.Supported };
+        foreach (var r in Routes) _routeDefault.Items.Add(RouteName(r));
+        _routeDefault.SelectedIndex = Array.IndexOf(Routes, _app.Routing.Default);
+        _routeDefault.SelectedIndexChanged += (_, _) =>
+        {
+            if (_syncingRoutes || _routeDefault.SelectedIndex < 0) return;
+            _app.Routing.Default = Routes[_routeDefault.SelectedIndex];
+            SyncRoutes();
+        };
+        line.Controls.Add(_routeDefault);
+        _routeStatus = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(NameWidth + MeterWidth + SliderWidth + 200, 0),
+            ForeColor = Color.DimGray,
+            Margin = new Padding(3, 2, 3, 0),
+        };
+        panel.Controls.Add(line);
+        panel.Controls.Add(_routeStatus);
+        return panel;
+    }
+
+    /// <summary>Destination dropdown for one app row: follow the default, HomePod, this PC or both.</summary>
+    private Control RouteCell(AppAudio app)
+    {
+        Control cell;
+        if (app.IsSystemSounds || app.ExeKey.Length == 0)
+        {
+            cell = new Label
+            {
+                AutoSize = false,
+                Size = new Size(RouteWidth, 24),
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.DimGray,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(8, 2, 3, 2),
+            };
+            _routeTips.SetToolTip(cell, app.IsSystemSounds
+                ? L.T("系统声音不属于某一个程序，不能单独设置：按程序分流时只在本机播放。")
+                : L.T("读不到这个程序的文件名，不能单独设置。"));
+        }
+        else
+        {
+            var box = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = RouteWidth,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(8, 2, 3, 2),
+                Enabled = AppRouting.Supported,
+            };
+            box.Items.Add(DefaultRouteText());
+            foreach (var r in Routes) box.Items.Add(RouteName(r));
+            box.SelectedIndex = _app.Routing.Get(app.ExeKey) is { } own ? Array.IndexOf(Routes, own) + 1 : 0;
+            box.SelectedIndexChanged += (_, _) =>
+            {
+                if (_syncingRoutes || box.SelectedIndex < 0) return;
+                _app.Routing.Set(app.ExeKey, box.SelectedIndex == 0 ? null : Routes[box.SelectedIndex - 1]);
+                SyncRoutes();
+            };
+            _routeTips.SetToolTip(box, L.T("HomePod：只在音箱播放，本机静音\n本机：只在这台电脑播放，不推送\n两者：音箱和本机都播放"));
+            cell = box;
+        }
+        _routeCells[app.Key] = cell;
+        return cell;
+    }
+
+    private string DefaultRouteText() => L.F("默认（{0}）", RouteName(_app.Routing.Default));
+
+    /// <summary>Show the current rules (also for other rows of the same program) and the routing status.</summary>
+    private void SyncRoutes()
+    {
+        if (_routeDefault == null || _routeStatus == null) return;
+        var routing = _app.Routing;
+        _syncingRoutes = true;
+        try
+        {
+            int d = Array.IndexOf(Routes, routing.Default);
+            if (_routeDefault.SelectedIndex != d) _routeDefault.SelectedIndex = d;
+            string defaultText = DefaultRouteText();
+            foreach (var row in _byKey.Values)
+            {
+                if (!_routeCells.TryGetValue(row.App.Key, out var cell)) continue;
+                if (cell is ComboBox box)
+                {
+                    if (box.Items[0] as string != defaultText) box.Items[0] = defaultText;
+                    int index = routing.Get(row.App.ExeKey) is { } own ? Array.IndexOf(Routes, own) + 1 : 0;
+                    if (box.SelectedIndex != index) box.SelectedIndex = index;
+                }
+                else
+                {
+                    cell.Text = row.App.IsSystemSounds && routing.Active ? L.T("本机") : "—";
+                }
+            }
+        }
+        finally
+        {
+            _syncingRoutes = false;
+        }
+        _routeStatus.Text = RouteStatus();
+    }
+
+    private string RouteStatus()
+    {
+        var routing = _app.Routing;
+        if (!AppRouting.Supported)
+            return L.T("按程序分流需要 Windows 10 2004 或更高版本，现在所有声音都推送到音箱。");
+        if (!routing.Active)
+            return L.T("所有程序都推送到音箱，延迟最低；本机出不出声由 Windows 音量决定。");
+        var lines = new List<string>
+        {
+            L.F("已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。", RoutedCapture.RoutedExtraLatencyMs),
+        };
+        if (_app.Controller.State == StreamState.Idle) lines.Add(L.T("连接音箱后生效。"));
+        bool localWanted = routing.Default != AudioRoute.HomePod || routing.Rules.Apps.Values.Any(r => r != AudioRoute.HomePod);
+        if (localWanted && AppRouting.LocalOutputSilent())
+            lines.Add(L.T("Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。"));
+        return string.Join("\n", lines);
     }
 
     private sealed class Meter : Control

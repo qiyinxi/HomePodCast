@@ -73,6 +73,14 @@ public sealed class AppConfig
     // device; reverb; the mic EQ and the EQ on the whole HomePod output. The mic's on/off is not saved.
     public Audio.EffectsSettings Effects { get; set; } = new();
 
+    // ---- Per-app routing (process loopback, Windows 10 2004+) ----
+
+    /// <summary>Destination of apps without their own rule. HomePod = capture the whole output (lowest latency).</summary>
+    public Audio.AudioRoute RouteDefault { get; set; } = Audio.AudioRoute.HomePod;
+
+    /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
+    public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

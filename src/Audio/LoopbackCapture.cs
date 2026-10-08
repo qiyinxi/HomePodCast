@@ -8,7 +8,7 @@ namespace HomePodCast.Audio;
 /// and written into the FIFO. Follows default-device changes and steers the resampler ratio from the
 /// FIFO depth so the sound-card clock never drifts against the network timeline.
 /// </summary>
-public sealed class LoopbackCapture : IDisposable
+public sealed class LoopbackCapture : ICaptureSource
 {
     private const long BufferDuration = 200_000; // 20 ms in 100 ns units
     private static readonly long DeviceCheckInterval = Stopwatch.Frequency; // 1 s
@@ -25,6 +25,7 @@ public sealed class LoopbackCapture : IDisposable
     public double DriftPpm { get; private set; }
     public float Peak { get; private set; }
     public double ProportionalGain { get; set; } = 0.02;
+    public int ExtraLatencyMs => 0;
 
     public event Action<string>? DeviceChanged;
 
@@ -169,7 +170,7 @@ public sealed class LoopbackCapture : IDisposable
         Peak = peak;
     }
 
-    private static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
+    internal static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
     {
         int ch = fmt.Channels;
         byte* p = (byte*)data;

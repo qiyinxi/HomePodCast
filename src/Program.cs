@@ -22,6 +22,9 @@ public static class Program
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
+                "proctest" => ProcTest.Run(args),
+                "tone" => ProcTest.Tone(args),
+                "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 _ => Help(),
             };

@@ -132,6 +132,8 @@ internal static class CoreAudio
     public const uint StreamFlagsLoopback = 0x00020000;
     public const uint StreamFlagsEventCallback = 0x00040000;
     public const uint StreamFlagsNoPersist = 0x00080000;
+    public const uint StreamFlagsSrcDefaultQuality = 0x08000000;
+    public const uint StreamFlagsAutoConvertPcm = 0x80000000;
     public const uint BufferFlagsSilent = 0x2;
     public const int ClsCtxAll = 0x17;
     public const int DeviceInvalidated = unchecked((int)0x88890004);

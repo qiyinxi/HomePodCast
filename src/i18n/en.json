@@ -170,5 +170,18 @@
   " · 断音 {0} 次": " · {0} dropouts",
   "预设": "Preset",
 
-  "麦克风与音效…": "Microphone and effects…"
+  "麦克风与音效…": "Microphone and effects…",
+
+  "{0}（按程序分流）": "{0} (per-app routing)",
+  "本机": "This PC",
+  "没单独设置的程序送到": "Apps without their own setting go to",
+  "系统声音不属于某一个程序，不能单独设置：按程序分流时只在本机播放。": "System sounds don't belong to one app, so they can't be set separately: while routing per app they play on this PC only.",
+  "读不到这个程序的文件名，不能单独设置。": "Can't read this app's file name, so it can't be set separately.",
+  "HomePod：只在音箱播放，本机静音\n本机：只在这台电脑播放，不推送\n两者：音箱和本机都播放": "HomePod: plays on the speaker only, silent on this PC\nThis PC: plays here only, not streamed\nBoth: plays on the speaker and on this PC",
+  "默认（{0}）": "Default ({0})",
+  "按程序分流需要 Windows 10 2004 或更高版本，现在所有声音都推送到音箱。": "Per-app routing needs Windows 10 2004 or later; all sound is streamed to the speaker for now.",
+  "所有程序都推送到音箱，延迟最低；本机出不出声由 Windows 音量决定。": "All apps are streamed to the speaker with the lowest latency; whether this PC also plays depends on the Windows volume.",
+  "已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。": "Routing per app: sound sent to the speaker has about {0} ms more latency, and apps set to \"HomePod\" are silent on this PC.",
+  "连接音箱后生效。": "Takes effect once a speaker is connected.",
+  "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Windows output is muted: apps set to \"This PC\" or \"Both\" can't be heard on this PC either."
 }

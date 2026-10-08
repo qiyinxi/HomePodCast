@@ -24,7 +24,7 @@ public sealed partial class StreamController : IDisposable
         _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10);
     }
     private readonly object _lock = new();
-    private LoopbackCapture? _capture;
+    private ICaptureSource? _capture;
     private AirPlayClient? _client;
     private CancellationTokenSource? _run;
     private Task? _loop;
@@ -33,7 +33,10 @@ public sealed partial class StreamController : IDisposable
     public string StatusText { get; private set; } = L.T("未连接");
     public AirPlayClient? Client => _client;
     public AudioFifo Fifo => _fifo;
-    public LoopbackCapture? Capture => _capture;
+    public ICaptureSource? Capture => _capture;
+
+    /// <summary>Creates the capture that feeds the FIFO (the UI swaps in per-app routing).</summary>
+    public Func<AudioFifo, ICaptureSource> CaptureFactory { get; set; } = fifo => new LoopbackCapture(fifo, RtpSender.SampleRate);
 
     /// <summary>Last volume confirmed on the speaker (percent).</summary>
     public double? Volume { get; private set; }
@@ -167,7 +170,7 @@ public sealed partial class StreamController : IDisposable
     private void EnsureCapture()
     {
         if (_capture != null) return;
-        _capture = new LoopbackCapture(_fifo, RtpSender.SampleRate);
+        _capture = CaptureFactory(_fifo);
         _capture.DeviceChanged += _ => Changed?.Invoke();
         _capture.Start();
     }
