@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HPC AVSYNC TEST</title>
+<!--
+  Screen-capture delay test. Serve the repo root over http and open
+  /tools/avsync/testpage.html?delay=141   (delay in ms, default 141)
+  Left: the original <video>. Right: the engine's delayed copy (placement 'beside').
+  Do not change document.title: capture.ps1 finds the window by it.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; cursor: none; }
+  #stage { position: fixed; left: 20px; top: 20px; width: 1280px; height: 360px;
+           display: flex; align-items: flex-start; }
+  #stage > video { flex: none; display: block; width: 640px; height: 360px; background: #000; }
+  #stage > canvas { flex: none; display: block; }
+  #info { position: fixed; left: 20px; top: 392px; width: 1280px; max-height: 110px; overflow: hidden;
+          color: #8a9399; font: 11px/1.35 Consolas, monospace; white-space: pre-wrap;
+          overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div id="stage"><video id="v" src="testvideo.mp4" muted loop autoplay playsinline preload="auto"></video></div>
+<div id="info">loading...</div>
+<script src="../../extension/src/delay-engine.js"></script>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const parsed = Number(params.get('delay'));
+  const delayMs = params.has('delay') && Number.isFinite(parsed) ? parsed : 141;
+  const video = document.getElementById('v');
+  const info = document.getElementById('info');
+  const real = !!(globalThis.HPCDelay && typeof globalThis.HPCDelay.attach === 'function');
+
+  // Fallback when delay-engine.js is missing: copy the current frame beside the video, no delay.
+  const stub = {
+    attach(v) {
+      const c = document.createElement('canvas');
+      const dpr = window.devicePixelRatio || 1;
+      c.width = Math.round(640 * dpr);
+      c.height = Math.round(360 * dpr);
+      c.style.cssText = 'width:640px;height:360px';
+      v.after(c);
+      const g = c.getContext('2d');
+      let enabled = true, delay = 0, drawn = 0, raf = 0;
+      const tick = () => {
+        if (enabled && v.readyState >= 2) { g.drawImage(v, 0, 0, c.width, c.height); drawn++; }
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+      return {
+        setDelay(ms) { delay = ms; },
+        setEnabled(on) { enabled = !!on; },
+        detach() { cancelAnimationFrame(raf); c.remove(); },
+        stats() { return { stub: true, note: 'draws the current frame, no delay', requestedDelayMs: delay, framesDrawn: drawn }; },
+      };
+    },
+  };
+  const engine = real ? globalThis.HPCDelay : stub;
+
+  let ctl = null, attachError = '';
+  const start = () => {
+    if (ctl || attachError) return;
+    try {
+      ctl = engine.attach(video, { placement: 'beside' });
+      ctl.setDelay(delayMs);
+      ctl.setEnabled(true);
+    } catch (e) {
+      attachError = String(e && e.stack || e);
+      console.error(e);
+    }
+  };
+  if (video.readyState >= 2) start(); else video.addEventListener('loadeddata', start, { once: true });
+  video.play().catch(e => { attachError = attachError || ('play() failed: ' + e); });
+
+  const show = () => {
+    let s;
+    try { s = ctl ? JSON.stringify(ctl.stats()) : '(not attached yet)'; } catch (e) { s = 'stats() threw: ' + e; }
+    const q = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+    info.textContent =
+      `engine: ${real ? 'HPCDelay (extension/src/delay-engine.js)' : 'BUILT-IN STUB - delay-engine.js not loaded, no delay'}` +
+      `   requested delay ${delayMs} ms   dpr ${window.devicePixelRatio}\n` +
+      `video: t ${video.currentTime.toFixed(3)} s  ${video.paused ? 'PAUSED' : 'playing'}` +
+      `  dropped ${q ? q.droppedVideoFrames : '?'} / ${q ? q.totalVideoFrames : '?'}\n` +
+      `stats(): ${s}` + (attachError ? `\nERROR: ${attachError}` : '');
+  };
+  show();
+  setInterval(show, 250);
+})();
+</script>
+</body>
+</html>
