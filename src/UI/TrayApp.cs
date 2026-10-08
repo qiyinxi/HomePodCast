@@ -87,7 +87,13 @@ internal sealed partial class TrayApp : ApplicationContext
 
         OnControllerChanged();
         if (!startHidden) ShowMain();
-        if (openMixer) _ui.Post(_ => ShowMixer(), null);
+        if (openMixer)
+        {
+            // Wait for Application.Run's loop: a Post would also be dispatched by the COM wait inside the
+            // firewall check below, and a form shown in there never gets its Shown/timer messages.
+            void OpenMixer(object? s, EventArgs e) { Application.Idle -= OpenMixer; ShowMixer(); }
+            Application.Idle += OpenMixer;
+        }
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
         if (Config.DeviceId != null)
