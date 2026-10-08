@@ -34,8 +34,12 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 
 ## Usage
 
-1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0).
-2. Run `HomePodCast.exe`. The first time, it asks to add a firewall rule (local network only, active on private networks only): the HomePod has to connect back to the PC for clock sync and to request lost packets again.
+1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
+2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
+   - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.
+   - **Portable: `HomePodCast-<version>-win-x64.zip`.** Unzip it anywhere and run `HomePodCast.exe`. The first time, it asks to add the firewall rule.
+
+   The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. Both packages keep your settings in `%APPDATA%\HomePodCast`.
 3. The app finds the HomePod and connects by itself. Muting the PC's default output device is fine: audio is captured before the system volume is applied, so the HomePod keeps playing.
 
 The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
@@ -75,6 +79,8 @@ Requires the .NET 10 SDK.
 dotnet build src -c Release          # output goes to app\
 dotnet test tests\HomePodCast.Tests  # protocol, audio and translation unit tests
 ```
+
+The MSI installer is built with WiX Toolset v5, a local dotnet tool, by `installer\build.ps1`; see [installer/README.md](installer/README.md).
 
 `tools\measure_av.py` computes the audio/video offset from a phone video; `tests\vectors\gen_vectors.py` generates reference data for the pairing algorithm with srptools, the library pyatv uses.
 

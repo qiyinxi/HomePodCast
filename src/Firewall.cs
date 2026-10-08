@@ -5,7 +5,8 @@ namespace HomePodCast;
 /// <summary>
 /// The speaker opens connections back to us (NTP timing, retransmit requests), so the exe needs an
 /// inbound allow rule. We only check for it here; adding it is done by an elevated PowerShell the user
-/// explicitly approves via UAC.
+/// explicitly approves via UAC. The MSI adds the same rule as "HomePodCast (installer)" (installer\HomePodCast.wxs);
+/// rules are matched by program path, not by name, so either one counts.
 /// </summary>
 public static class Firewall
 {

@@ -34,8 +34,12 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
 
 ## 使用方式
 
-1. 安裝 [.NET 10 桌面執行階段](https://dotnet.microsoft.com/download/dotnet/10.0)。
-2. 執行 `HomePodCast.exe`。第一次會要求新增防火牆規則（只允許區域網路、只在私人網路下生效）：HomePod 需要連回電腦進行對時和要求重傳。
+1. 安裝 [.NET 10 桌面執行階段](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）。
+2. 從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下載 HomePodCast，有兩種套件：
+   - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。
+   - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
+
+   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
 3. 程式會自動找到 HomePod 並連線。把電腦的預設輸出裝置設為靜音也沒關係：擷取發生在系統音量之前，HomePod 照樣有聲音。
 
 介面語言跟隨 Windows 顯示語言（Windows 不是中文或日文時顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為 `"zh-TW"`、`"zh-CN"`、`"en"`、`"ja"` 或 `"auto"`。
@@ -75,6 +79,8 @@ HomePodCast.exe mutetest                     確認靜音後仍能擷取
 dotnet build src -c Release          # 輸出到 app\
 dotnet test tests\HomePodCast.Tests  # 通訊協定、音訊與翻譯單元測試
 ```
+
+MSI 安裝程式由 `installer\build.ps1` 以 WiX Toolset v5（本機 dotnet 工具）建置，詳見 [installer/README.md](installer/README.md)。
 
 `tools\measure_av.py` 可以從手機錄影算出影音差距；`tests\vectors\gen_vectors.py` 以 pyatv 所用的 srptools 產生配對演算法的對照資料。
 
