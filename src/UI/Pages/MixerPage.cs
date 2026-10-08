@@ -273,6 +273,9 @@ internal sealed class MixerPage : ScrollPage
     private void RefreshApps()
     {
         var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
+        // Not our own row (sync-test click, mic monitoring): muting or routing it would only break the sync test.
+        foreach (var own in fresh.Where(IsOwn)) own.Dispose();
+        fresh.RemoveAll(IsOwn);
         _empty.Collapsed = fresh.Count > 0; // also when nothing changed: the first refresh may find no apps at all
         if (fresh.Select(a => a.Key).SequenceEqual(_apps.Select(a => a.Key)))
         {
@@ -292,6 +295,8 @@ internal sealed class MixerPage : ScrollPage
         ResumeLayout(false);
         LayoutPanel.Relayout(_rows);
     }
+
+    private static bool IsOwn(AppAudio app) => !app.IsSystemSounds && app.ProcessId == (uint)Environment.ProcessId;
 
     /// <summary>Pick up changes made elsewhere (e.g. in the Windows mixer) without fighting the user.</summary>
     private void SyncValues()
