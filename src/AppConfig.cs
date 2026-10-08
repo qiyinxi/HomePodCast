@@ -26,6 +26,23 @@ public sealed class AppConfig
 
     public int LocalApiPort { get; set; } = Net.LocalApi.DefaultPort;
 
+    // ---- Stereo pair / multi-speaker (experimental, see GroupPlan.cs) -------------------------------
+    // DeviceId "pair:<tsid>" selects a stereo pair; MultiRoom* adds a second speaker to a single one.
+
+    /// <summary>Split channels on the PC: the left speaker gets (L,L), the right one (R,R).</summary>
+    public bool GroupSplitChannels { get; set; }
+
+    /// <summary>Swap which speaker counts as left (pair members are ordered by device id).</summary>
+    public bool GroupSwapChannels { get; set; }
+
+    /// <summary>Per-speaker volume offset in percentage points, keyed by GroupPlan.Key(deviceId).</summary>
+    public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
+
+    /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
+    public string? MultiRoomDeviceId { get; set; }
+    public string? MultiRoomDeviceName { get; set; }
+    public string? MultiRoomHost { get; set; }
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

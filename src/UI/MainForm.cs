@@ -292,7 +292,7 @@ internal sealed class MainForm : Form
     {
         var c = _app.Controller;
         var cap = c.Capture;
-        var s = c.Client?.Sender;
+        var s = c.ActiveSender;
         var source = cap?.DeviceName is { } name ? $"音源：{name}" : "音源：默认输出设备";
         if (s == null || c.State != StreamState.Streaming)
         {
