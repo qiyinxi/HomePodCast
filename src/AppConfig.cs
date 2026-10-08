@@ -45,7 +45,7 @@ public sealed class AppConfig
 
     // ---- UI language (L.cs)
 
-    /// <summary>"auto" follows the Windows display language; or "zh-CN", "zh-TW", "en", "ja". Applied at startup.</summary>
+    /// <summary>"auto" follows the Windows display language; or one of L.Languages ("zh-CN", "en", "de", …). Applied at startup.</summary>
     public string Language { get; set; } = L.Auto;
 
     /// <summary>"auto" follows the Windows light/dark setting; "light" or "dark" fix it (UI.Theme). Applied at once.</summary>

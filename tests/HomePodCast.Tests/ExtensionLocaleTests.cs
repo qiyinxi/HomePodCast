@@ -3,15 +3,44 @@ using System.Text.RegularExpressions;
 
 namespace HomePodCast.Tests;
 
-/// <summary>The browser extension's chrome.i18n tables (extension/_locales/*/messages.json).</summary>
+/// <summary>The browser extension's chrome.i18n tables (every extension/_locales/*/messages.json).</summary>
 public class ExtensionLocaleTests
 {
     private static readonly string Ext = Path.Combine(Repo.Root, "extension");
-    private static readonly string[] Locales = ["en", "zh_CN", "zh_TW", "ja"];
+
+    private static readonly string[] Locales = Directory.GetDirectories(Path.Combine(Ext, "_locales"))
+        .Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
+
+    /// <summary>Locale folder names Chrome accepts (developer.chrome.com, "Locales supported").</summary>
+    private static readonly HashSet<string> ChromeLocales =
+    [
+        "ar", "am", "bg", "bn", "ca", "cs", "da", "de", "el", "en", "en_AU", "en_GB", "en_US", "es", "es_419", "et",
+        "fa", "fi", "fil", "fr", "gu", "he", "hi", "hr", "hu", "id", "it", "ja", "kn", "ko", "lt", "lv", "ml", "mr",
+        "ms", "nl", "no", "pl", "pt_BR", "pt_PT", "ro", "ru", "sk", "sl", "sr", "sv", "sw", "ta", "te", "th", "tr",
+        "uk", "vi", "zh_CN", "zh_TW",
+    ];
 
     private static Dictionary<string, JsonElement> Messages(string locale) =>
         JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(
             File.ReadAllText(Path.Combine(Ext, "_locales", locale, "messages.json")))!;
+
+    [Fact]
+    public void Every_locale_folder_is_one_chrome_knows_and_names_its_language()
+    {
+        Assert.Contains("en", Locales);
+        Assert.True(Locales.Length >= 4, string.Join(", ", Locales));
+        var bad = new List<string>();
+        foreach (var locale in Locales)
+        {
+            if (!ChromeLocales.Contains(locale)) bad.Add($"{locale}: not a locale Chrome supports (Norwegian is \"no\", Portuguese \"pt_PT\"/\"pt_BR\")");
+            if (!File.Exists(Path.Combine(Ext, "_locales", locale, "messages.json"))) { bad.Add($"{locale}: no messages.json"); continue; }
+            // htmlLang is the BCP 47 tag of the translation; its language must be the folder's (no ≈ nb).
+            var tag = Messages(locale).TryGetValue("htmlLang", out var m) ? Text(m) : "";
+            string Base(string s) => s.Split('-', '_')[0].ToLowerInvariant() is "nb" or "nn" ? "no" : s.Split('-', '_')[0].ToLowerInvariant();
+            if (Base(tag) != Base(locale)) bad.Add($"{locale}: htmlLang \"{tag}\" is not this folder's language");
+        }
+        Assert.True(bad.Count == 0, string.Join("\n", bad));
+    }
 
     private static string Text(JsonElement m) => m.GetProperty("message").GetString()!;
 
