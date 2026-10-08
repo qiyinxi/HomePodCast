@@ -116,8 +116,10 @@ internal static class TestAudio
     /// <summary>The big-endian 16-bit PCM the sender should produce for one packet of this signal.</summary>
     public static byte[] ExpectedPayload(float[] signal, int packet, ChannelMode channels)
     {
-        var src = signal.AsSpan(packet * 352 * 2, 352 * 2);
         var dst = new byte[352 * 4];
+        // A slow machine (CI) can collect packets past the end of the test signal: the drained FIFO sends silence.
+        if ((packet + 1) * 352 * 2 > signal.Length) return dst;
+        var src = signal.AsSpan(packet * 352 * 2, 352 * 2);
         for (int i = 0; i < 352; i++)
         {
             float l = src[i * 2], r = src[i * 2 + 1];
