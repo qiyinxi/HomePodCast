@@ -30,8 +30,8 @@ internal sealed class SyncTestForm : Form
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F); // coordinates below are 96-DPI units
         AutoScaleMode = AutoScaleMode.Dpi;
-        Text = "音画同步测试";
-        Font = new Font("Microsoft YaHei UI", 10f);
+        Text = L.T("音画同步测试");
+        Font = new Font(L.FontName, 10f);
         BackColor = Color.FromArgb(24, 24, 24);
         ForeColor = Color.Gainsboro;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -42,12 +42,12 @@ internal sealed class SyncTestForm : Form
 
         var help = new Label
         {
-            Text = "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n" +
-                   "如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n" +
-                   "最后的数值 = 打游戏时声音比画面晚多少。",
+            Text = L.T("HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n" +
+                       "如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n" +
+                       "最后的数值 = 打游戏时声音比画面晚多少。"),
             AutoSize = false,
             Location = new Point(20, 16),
-            Size = new Size(480, 72),
+            Size = new Size(480, 84), // four lines: English wraps its middle sentence
         };
         _circle = new DoubleBufferedPanel { Location = new Point(160, 100), Size = new Size(200, 200) };
         _circle.Paint += (_, e) =>
@@ -70,7 +70,7 @@ internal sealed class SyncTestForm : Form
         _value = new Label { Location = new Point(20, 372), Size = new Size(480, 28), Font = new Font(Font.FontFamily, 12f, FontStyle.Bold) };
         var done = new Button
         {
-            Text = "完成",
+            Text = L.T("完成"),
             Location = new Point(400, 412),
             Size = new Size(100, 36),
             DialogResult = DialogResult.OK,
@@ -94,7 +94,7 @@ internal sealed class SyncTestForm : Form
     private void UpdateValue()
     {
         _offsetMs = _offset.Value;
-        _value.Text = $"声音比画面晚约 {_offset.Value} ms";
+        _value.Text = L.F("声音比画面晚约 {0} ms", _offset.Value);
     }
 
     protected override void OnShown(EventArgs e)

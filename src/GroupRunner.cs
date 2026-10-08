@@ -67,7 +67,7 @@ internal sealed class GroupRunner(
             if (streamed && started.Elapsed > _takeoverGrace && lostReason == EventChannel.ClosedBySpeaker)
             {
                 // A speaker ended a healthy session: most likely someone AirPlayed to it. Don't fight back.
-                status(StreamState.Idle, L.T("已断开（音箱可能被其他设备占用）"));
+                status(StreamState.Idle, L.T(StreamController.TakenOverText));
                 return true;
             }
 

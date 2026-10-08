@@ -12,6 +12,21 @@ const MAX_DELAY_MS = 2000;
 const SAVE_DEBOUNCE_MS = 250;
 
 const $ = (id) => document.getElementById(id);
+
+// 界面文字来自 _locales/<语言>/messages.json（浏览器界面语言，缺省英文）
+const t = (key, ...subs) => chrome.i18n.getMessage(key, subs.map(String)) || key;
+
+function localize() {
+  document.documentElement.lang = t('htmlLang');
+  for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = t(n.dataset.i18n);
+  for (const n of document.querySelectorAll('[data-i18n-title]')) n.title = t(n.dataset.i18nTitle);
+  for (const n of document.querySelectorAll('[data-i18n-aria-label]')) n.setAttribute('aria-label', t(n.dataset.i18nAriaLabel));
+}
+
+// content script 用 '(本地文件)' 代替 file:// 页面的主机名（也是设置的存储键），显示时再翻译
+const LOCAL_FILE_HOST = '(本地文件)';
+const hostLabel = (host) => (host === LOCAL_FILE_HOST ? t('localFile') : host);
+
 const el = {
   statusCard: $('statusCard'),
   statusText: $('statusText'),
@@ -115,16 +130,16 @@ function renderStatus() {
   let text;
   let st;
   if (!s) {
-    text = '正在连接…';
+    text = t('statusConnecting');
     st = 'unknown';
   } else if (s.running === false) {
-    text = '未运行';
+    text = t('statusNotRunning');
     st = 'off';
   } else if (!s.streaming) {
-    text = '未推流';
+    text = t('statusIdle');
     st = 'idle';
   } else {
-    const parts = ['推流中'];
+    const parts = [t('statusStreaming')];
     if (s.device) parts.push(String(s.device));
     if (Number.isFinite(Number(s.videoDelayMs))) parts.push(`${Math.round(Number(s.videoDelayMs))} ms`);
     text = parts.join(' · ');
@@ -137,8 +152,8 @@ function renderStatus() {
 function renderSite() {
   const available = !!state.host;
   el.siteCard.classList.toggle('unavailable', !available);
-  el.host.textContent = available ? state.host : '—';
-  el.host.title = available ? state.host : '';
+  el.host.textContent = available ? hostLabel(state.host) : '—';
+  el.host.title = available ? hostLabel(state.host) : '';
   for (const b of [el.minus, el.plus, el.reset, el.siteToggle]) b.disabled = !available;
   el.siteToggle.checked = state.siteEnabled;
   el.globalToggle.checked = state.globalEnabled;
@@ -151,18 +166,18 @@ function renderSite() {
   const eff = effectiveDelay();
   if (!available) {
     el.effDelay.textContent = '—';
-    hint = '此页面不支持，或页面在安装扩展之前打开，请刷新页面后再试。';
+    hint = t('hintUnavailable');
   } else if (!state.globalEnabled) {
     el.effDelay.textContent = '0';
-    hint = '已全局关闭，画面不延迟。';
+    hint = t('hintGlobalOff');
   } else if (!state.siteEnabled) {
     el.effDelay.textContent = '0';
-    hint = '已在此网站关闭，画面不延迟。';
+    hint = t('hintSiteOff');
   } else if (eff === null) {
     el.effDelay.textContent = '—';
     hint = state.status && state.status.running !== false
-      ? 'HomePodCast 未推流，画面不延迟。'
-      : 'HomePodCast 未运行，画面不延迟。';
+      ? t('hintNotStreaming')
+      : t('hintNotRunning');
   } else {
     el.effDelay.textContent = String(eff);
   }
@@ -181,23 +196,23 @@ function renderVideos() {
     return;
   }
   if (!vids.length) {
-    el.videos.textContent = '本页未检测到视频（≥ 200×112）。';
+    el.videos.textContent = t('videosNone');
     return;
   }
   const active = vids.filter((v) => v.mode !== 'off');
-  const parts = [`本页 ${vids.length} 个视频`];
+  const parts = [t('videosCount', vids.length)];
   if (active.length) {
-    parts.push(`${active.length} 个正在延迟`);
+    parts.push(t('videosDelaying', active.length));
     const modes = new Set(active.map((v) => (v.mode === 'videoframe' ? 'WebCodecs' : 'Canvas')));
     parts.push([...modes].join('/'));
     const lags = active.map((v) => Number(v.lastShownLagMs)).filter((n) => Number.isFinite(n) && n > 0);
-    if (lags.length) parts.push(`实测 ${Math.round(lags.reduce((a, b) => a + b, 0) / lags.length)} ms`);
+    if (lags.length) parts.push(t('videosMeasured', Math.round(lags.reduce((a, b) => a + b, 0) / lags.length)));
   } else if (vids.some((v) => v.reason === 'drm')) {
-    parts.push('受版权保护（DRM），无法延迟');
+    parts.push(t('videosDrm'));
   } else if (vids.some((v) => v.reason === 'video-fullscreen')) {
-    parts.push('视频元素单独全屏时无法延迟');
+    parts.push(t('videosFullscreen'));
   } else {
-    parts.push('未延迟');
+    parts.push(t('videosNotDelayed'));
   }
   el.videos.textContent = parts.join(' · ');
 }
@@ -285,6 +300,7 @@ async function refresh() {
 }
 
 async function init() {
+  localize();
   render();
   let tab = null;
   try {

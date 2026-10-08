@@ -28,8 +28,8 @@ internal sealed class MixerForm : Form
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Microsoft YaHei UI", 9f);
-        Text = "混音器";
+        Font = new Font(L.FontName, 9f);
+        Text = L.T("混音器");
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -49,7 +49,7 @@ internal sealed class MixerForm : Form
         var head = new TableLayoutPanel { AutoSize = true, ColumnCount = 3, Margin = new Padding(0, 0, 0, 6) };
         head.Controls.Add(new Label
         {
-            Text = $"{_app.Config.DeviceName ?? "HomePod"} 音量",
+            Text = L.F("{0} 音量", _app.Config.DeviceName ?? "HomePod"),
             AutoSize = false,
             Size = new Size(NameWidth + 30 + MeterWidth, 24),
             TextAlign = ContentAlignment.MiddleLeft,
@@ -67,16 +67,16 @@ internal sealed class MixerForm : Form
 
         var caption = new Label
         {
-            Text = "应用（推送到音箱的声音）",
+            Text = L.T("应用（推送到音箱的声音）"),
             AutoSize = true,
             ForeColor = Color.DimGray,
             Margin = new Padding(3, 8, 3, 4),
         };
         _rows = new TableLayoutPanel { AutoSize = true, ColumnCount = 6 };
-        _empty = new Label { Text = "现在没有程序在发声。", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 3, 6) };
+        _empty = new Label { Text = L.T("现在没有程序在发声。"), AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(3, 6, 3, 6) };
         var note = new Label
         {
-            Text = "和 Windows 音量合成器是同一套设置，系统会记住每个程序的音量。",
+            Text = L.T("和 Windows 音量合成器是同一套设置，系统会记住每个程序的音量。"),
             AutoSize = true,
             ForeColor = Color.DimGray,
             Margin = new Padding(3, 10, 3, 0),
@@ -157,7 +157,7 @@ internal sealed class MixerForm : Form
         var mute = new CheckBox
         {
             Appearance = Appearance.Button,
-            Text = "静音",
+            Text = L.T("静音"),
             AutoSize = true,
             Checked = app.Muted,
             Margin = new Padding(8, 2, 3, 2),

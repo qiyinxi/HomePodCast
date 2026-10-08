@@ -1,0 +1,124 @@
+{
+  "extName": {
+    "message": "HomePodCast Video Sync",
+    "description": "Extension name, also the popup heading."
+  },
+  "extDescription": {
+    "message": "Delays web video by a few milliseconds to match the sound, which reaches a HomePod later over AirPlay.",
+    "description": "Store/extension description, at most 132 characters."
+  },
+  "htmlLang": {
+    "message": "en",
+    "description": "BCP 47 tag of this translation, used as the popup's lang attribute."
+  },
+  "statusConnecting": {
+    "message": "Connecting…",
+    "description": "Status while the popup asks the HomePodCast app for its state."
+  },
+  "statusNotRunning": {
+    "message": "Not running",
+    "description": "Status: the HomePodCast app is not running."
+  },
+  "statusIdle": {
+    "message": "Not streaming",
+    "description": "Status: the app runs but sends no audio to the speaker."
+  },
+  "statusStreaming": {
+    "message": "Streaming",
+    "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
+  },
+  "siteLabel": {
+    "message": "This site",
+    "description": "Label in front of the current site's host name."
+  },
+  "localFile": {
+    "message": "(local file)",
+    "description": "Shown instead of a host name for file:// pages."
+  },
+  "minusLabel": {
+    "message": "1 ms less",
+    "description": "Accessible name of the − button."
+  },
+  "minusTitle": {
+    "message": "1 ms less (hold to keep adjusting)",
+    "description": "Tooltip of the − button."
+  },
+  "plusLabel": {
+    "message": "1 ms more",
+    "description": "Accessible name of the + button."
+  },
+  "plusTitle": {
+    "message": "1 ms more (hold to keep adjusting)",
+    "description": "Tooltip of the + button."
+  },
+  "delayCaption": {
+    "message": "Picture delay",
+    "description": "Caption under the big delay number."
+  },
+  "siteOffset": {
+    "message": "Site offset",
+    "description": "Label of the per-site correction added to the delay, followed by e.g. +5 ms."
+  },
+  "reset": {
+    "message": "Reset",
+    "description": "Button that sets the site offset back to 0."
+  },
+  "siteToggle": {
+    "message": "Enable on this site",
+    "description": "Switch for the current site."
+  },
+  "globalToggle": {
+    "message": "Enable on all sites",
+    "description": "Master switch."
+  },
+  "hintUnavailable": {
+    "message": "Not available on this page, or the page was opened before the extension was installed. Reload the page and try again.",
+    "description": "The page has no content script."
+  },
+  "hintGlobalOff": {
+    "message": "Turned off on all sites; the picture is not delayed."
+  },
+  "hintSiteOff": {
+    "message": "Turned off on this site; the picture is not delayed."
+  },
+  "hintNotStreaming": {
+    "message": "HomePodCast is not streaming; the picture is not delayed."
+  },
+  "hintNotRunning": {
+    "message": "HomePodCast is not running; the picture is not delayed."
+  },
+  "videosNone": {
+    "message": "No videos found on this page (≥ 200×112).",
+    "description": "Only videos at least 200×112 pixels are handled."
+  },
+  "videosCount": {
+    "message": "Videos on this page: $COUNT$",
+    "description": "First part of the video summary line; parts are joined with ' · '.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "2" }
+    }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ delayed",
+    "description": "How many of the videos are being delayed.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "videosMeasured": {
+    "message": "measured $MS$ ms",
+    "description": "Average delay actually shown, in milliseconds.",
+    "placeholders": {
+      "ms": { "content": "$1", "example": "141" }
+    }
+  },
+  "videosDrm": {
+    "message": "copy-protected (DRM), can't be delayed"
+  },
+  "videosFullscreen": {
+    "message": "can't be delayed while the video element itself is full screen"
+  },
+  "videosNotDelayed": {
+    "message": "not delayed"
+  }
+}

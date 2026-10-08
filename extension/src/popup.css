@@ -38,6 +38,14 @@ html, body {
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
 }
 
+/* CJK glyph shapes follow the popup language (html lang comes from messages.json "htmlLang") */
+body:lang(zh-TW) {
+  font-family: -apple-system, "Segoe UI", "Microsoft JhengHei UI", "PingFang TC", system-ui, sans-serif;
+}
+body:lang(ja) {
+  font-family: -apple-system, "Segoe UI", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", system-ui, sans-serif;
+}
+
 main {
   width: 300px;
   padding: 12px;

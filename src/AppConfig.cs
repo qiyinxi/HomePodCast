@@ -43,6 +43,11 @@ public sealed class AppConfig
     public string? MultiRoomDeviceName { get; set; }
     public string? MultiRoomHost { get; set; }
 
+    // ---- UI language (L.cs)
+
+    /// <summary>"auto" follows the Windows display language; or "zh-CN", "zh-TW", "en", "ja". Applied at startup.</summary>
+    public string Language { get; set; } = L.Auto;
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

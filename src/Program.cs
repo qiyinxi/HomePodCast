@@ -53,7 +53,17 @@ public static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
+        L.Use(AppConfig.Load().Language);
+        Log.Info($"UI language {L.Language}");
         Application.Run(new UI.TrayApp(startHidden, show, openMixer));
+        if (UI.LanguageMenu.RestartRequested)
+        {
+            Log.Info("restarting to apply the UI language");
+            Log.CloseFile(); // the new copy opens the same log file
+            single.ReleaseMutex();
+            single.Dispose(); // ...and must be able to create the single-instance mutex
+            Process.Start(Environment.ProcessPath!);
+        }
         return 0;
     }
 

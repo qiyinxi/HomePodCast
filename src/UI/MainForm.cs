@@ -8,20 +8,20 @@ internal sealed class MainForm : Form
 
     private readonly TrayApp _app;
     private readonly ComboBox _device = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly Button _refresh = new() { Text = "刷新" };
+    private readonly Button _refresh = new() { Text = L.T("刷新") };
     private readonly Panel _dot = new() { Size = new Size(12, 12) };
     private readonly Label _status = new() { AutoSize = false, AutoEllipsis = true };
-    private readonly Button _connect = new() { Text = "连接" };
+    private readonly Button _connect = new() { Text = L.T("连接") };
     private readonly TrackBar _volume = new() { Minimum = 0, Maximum = 100, TickFrequency = 10, SmallChange = 1, LargeChange = 5 };
     private readonly Label _volumeValue = new() { TextAlign = ContentAlignment.MiddleRight };
     private readonly TrackBar _latency = new() { Maximum = LatencyMax / LatencyStep, TickFrequency = 50 / LatencyStep, SmallChange = 1, LargeChange = 10 };
     private readonly Label _latencyValue = new() { TextAlign = ContentAlignment.MiddleRight };
     private readonly Label _latencyHint = new() { AutoSize = true, ForeColor = Color.DimGray };
     private readonly System.Windows.Forms.Timer _latencyDebounce = new() { Interval = 1000 };
-    private readonly CheckBox _autostart = new() { Text = "开机自动启动", AutoSize = true };
-    private readonly CheckBox _autoconnect = new() { Text = "启动后自动连接", AutoSize = true };
-    private readonly Button _syncTest = new() { Text = "音画同步测试…" };
-    private readonly Button _mixer = new() { Text = "混音器…" };
+    private readonly CheckBox _autostart = new() { Text = L.T("开机自动启动"), AutoSize = true };
+    private readonly CheckBox _autoconnect = new() { Text = L.T("启动后自动连接"), AutoSize = true };
+    private readonly Button _syncTest = new() { Text = L.T("音画同步测试…") };
+    private readonly Button _mixer = new() { Text = L.T("混音器…") };
     private readonly Label _stats = new() { AutoSize = false, ForeColor = Color.DimGray };
     private readonly System.Windows.Forms.Timer _statsTimer = new() { Interval = 500 };
     private readonly System.Windows.Forms.Timer _volumeDebounce = new() { Interval = 150 };
@@ -35,8 +35,8 @@ internal sealed class MainForm : Form
         // Everything below is in 96-DPI units; WinForms scales it to the monitor's DPI.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        Font = new Font("Microsoft YaHei UI", 9f);
-        Text = "HomePod 音响";
+        Font = new Font(L.FontName, 9f);
+        Text = L.T("HomePod 音响");
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -62,7 +62,7 @@ internal sealed class MainForm : Form
         _refresh.AutoSize = false;
         _refresh.Size = new Size(64, 27);
         _refresh.Anchor = stretch;
-        layout.Controls.Add(Caption("音箱"), 0, 0);
+        layout.Controls.Add(Caption(L.T("音箱")), 0, 0);
         layout.Controls.Add(_device, 1, 0);
         layout.Controls.Add(_refresh, 2, 0);
 
@@ -94,7 +94,7 @@ internal sealed class MainForm : Form
         _volumeValue.AutoSize = true;
         _volumeValue.MinimumSize = new Size(32, 0);
         _volumeValue.Anchor = AnchorStyles.Left;
-        layout.Controls.Add(Caption("音量"), 0, 3);
+        layout.Controls.Add(Caption(L.T("音量")), 0, 3);
         layout.Controls.Add(_volume, 1, 3);
         layout.Controls.Add(_volumeValue, 2, 3);
 
@@ -107,7 +107,7 @@ internal sealed class MainForm : Form
         var plus = StepButton("+", +1);
         var latencyRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty, Anchor = AnchorStyles.Left };
         latencyRow.Controls.AddRange([minus, _latency, plus]);
-        layout.Controls.Add(Caption("延迟"), 0, 4);
+        layout.Controls.Add(Caption(L.T("延迟")), 0, 4);
         layout.Controls.Add(latencyRow, 1, 4);
         layout.Controls.Add(_latencyValue, 2, 4);
         _latencyHint.Margin = new Padding(10, 0, 3, 0);
@@ -181,7 +181,7 @@ internal sealed class MainForm : Form
         {
             if (_loading) return;
             try { Autostart.Enabled = _autostart.Checked; }
-            catch (Exception ex) { MessageBox.Show(this, $"设置开机启动失败：{ex.Message}", Text); }
+            catch (Exception ex) { MessageBox.Show(this, L.F("设置开机启动失败：{0}", ex.Message), Text); }
         };
         _autoconnect.CheckedChanged += (_, _) =>
         {
@@ -223,10 +223,10 @@ internal sealed class MainForm : Form
         _latencyValue.Text = $"{ms} ms";
         _latencyHint.Text = ms switch
         {
-            < 110 => "极限：Wi-Fi 稍有波动就会断续",
-            < 140 => "推荐：打游戏",
-            < 250 => "更稳：Wi-Fi 一般时",
-            _ => "最稳：听歌、看视频",
+            < 110 => L.T("极限：Wi-Fi 稍有波动就会断续"),
+            < 140 => L.T("推荐：打游戏"),
+            < 250 => L.T("更稳：Wi-Fi 一般时"),
+            _ => L.T("最稳：听歌、看视频"),
         };
         _latencyHint.ForeColor = ms < 110 ? Icons.Error : Color.DimGray;
     }
@@ -259,7 +259,7 @@ internal sealed class MainForm : Form
         _devices = devices;
         _device.Items.Clear();
         foreach (var d in devices)
-            _device.Items.Add(string.IsNullOrEmpty(d.Model) ? d.Name : $"{d.Name}（{FriendlyModel(d.Model)}）");
+            _device.Items.Add(string.IsNullOrEmpty(d.Model) ? d.Name : L.F("{0}（{1}）", d.Name, FriendlyModel(d.Model)));
         var cfgId = _app.Config.DeviceId;
         _device.SelectedIndex = devices.FindIndex(d =>
             cfgId != null && StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(cfgId), StringComparison.OrdinalIgnoreCase));
@@ -269,12 +269,12 @@ internal sealed class MainForm : Form
     public void SetScanning(bool scanning)
     {
         _refresh.Enabled = !scanning;
-        _refresh.Text = scanning ? "…" : "刷新";
+        _refresh.Text = scanning ? "…" : L.T("刷新");
     }
 
     private static string FriendlyModel(string model) => model switch
     {
-        _ when model.StartsWith("AudioAccessory6") => "HomePod 第二代",
+        _ when model.StartsWith("AudioAccessory6") => L.T("HomePod 第二代"),
         _ when model.StartsWith("AudioAccessory5") => "HomePod mini",
         _ when model.StartsWith("AudioAccessory1") => "HomePod",
         _ when model.StartsWith("AppleTV") => "Apple TV",
@@ -286,7 +286,7 @@ internal sealed class MainForm : Form
         var c = _app.Controller;
         _status.Text = c.StatusText;
         _dot.Invalidate();
-        _connect.Text = c.State == StreamState.Idle ? "连接" : "断开";
+        _connect.Text = c.State == StreamState.Idle ? L.T("连接") : L.T("断开");
         if (c.State == StreamState.Streaming && c.Volume is { } v && !_volume.Capture)
         {
             _loading = true;
@@ -302,15 +302,15 @@ internal sealed class MainForm : Form
         var c = _app.Controller;
         var cap = c.Capture;
         var s = c.ActiveSender;
-        var source = cap?.DeviceName is { } name ? $"音源：{name}" : "音源：默认输出设备";
+        var source = cap?.DeviceName is { } name ? L.F("音源：{0}", name) : L.T("音源：默认输出设备");
         if (s == null || c.State != StreamState.Streaming)
         {
             _stats.Text = source;
             return;
         }
         double fifoMs = c.Fifo.Depth * 1000.0 / RtpSender.SampleRate;
-        _stats.Text = $"{source}\n延迟 {c.EffectiveLatencyMs} ms · 缓冲 {fifoMs:F0} ms · 迟发 {s.LateWakeups} · " +
-                      $"断音 {c.Fifo.Underruns} · 重传 {s.Retransmitted}/{s.RetransmitRequests}";
+        _stats.Text = L.F("{0}\n延迟 {1} ms · 缓冲 {2:F0} ms · 迟发 {3} · 断音 {4} · 重传 {5}/{6}", source,
+            c.EffectiveLatencyMs, fifoMs, s.LateWakeups, c.Fifo.Underruns, s.Retransmitted, s.RetransmitRequests);
     }
 
     protected override void OnVisibleChanged(EventArgs e)
