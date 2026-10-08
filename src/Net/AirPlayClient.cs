@@ -7,7 +7,14 @@ using HomePodCast.Protocol;
 
 namespace HomePodCast.Net;
 
-public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool LatencyInSync = false);
+public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool LatencyInSync = false)
+{
+    /// <summary>No volume above this is ever sent, including the speaker's own initial volume (percent).</summary>
+    public double VolumeCapPercent { get; init; } = 100;
+
+    /// <summary>In-place processing of every packet on the sender thread (EQ, night mode).</summary>
+    public IAudioEffect? Effects { get; init; }
+}
 
 /// <summary>
 /// One AirPlay 2 realtime audio session to one speaker:
@@ -43,6 +50,9 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
     /// <summary>Where this session's RTP goes (set by the stream SETUP).</summary>
     internal RtpTarget? StreamTarget { get; private set; }
+
+    /// <summary>Ceiling applied by <see cref="SetVolumeDb"/> to everything sent (percent).</summary>
+    public double VolumeCapPercent { get; set; } = 100;
 
     /// <summary>Raised once when the session dies (speaker closed it, network gone, taken over...).</summary>
     public event Action<string>? Lost;
@@ -101,7 +111,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
         // --- start: anchor the timeline a little in the future so RECORD/FLUSH fit before packet 0
         _sender = new RtpSender(target.Control, target.Remote, target.DataPort, target.ControlPort, target.StreamKey,
-            target.Ssrc, LatencyFrames, fifo) { LatencyInSync = options.LatencyInSync };
+            target.Ssrc, LatencyFrames, fifo) { LatencyInSync = options.LatencyInSync, Effects = options.Effects };
         _sender.Start(MediaClock.Now + MediaClock.FromMs(250));
 
         StartFeedback();
@@ -115,6 +125,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     /// <summary>/info, transient pairing, encrypted session SETUP, event channel and stream SETUP.</summary>
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
+        VolumeCapPercent = options.VolumeCapPercent;
         var info = _rtsp.Rtsp("GET", "/info");
         if (info.IsSuccess && info.Body.Length > 0)
             Info = BPlist.ReadDict(info.Body);
@@ -290,6 +301,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
     public void SetVolumeDb(double db)
     {
+        db = VolumeLimit.ClampDb(db, VolumeCapPercent);
         var body = System.Text.Encoding.UTF8.GetBytes($"volume: {db.ToString("F6", CultureInfo.InvariantCulture)}");
         _rtsp.Rtsp("SET_PARAMETER", contentType: "text/parameters", body: body);
     }

@@ -46,12 +46,12 @@ public sealed partial class StreamController
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         if (EffectiveLatencyMs != latencyMs)
             Log.Warn($"latency {latencyMs} ms is below what the speakers can handle; using {EffectiveLatencyMs} ms");
-        var options = new StreamOptions(EffectiveLatencyMs, null);
+        var options = new StreamOptions(EffectiveLatencyMs, null) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
 
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
             async c => (IGroupMember)await AirPlayClient.PrepareAsync(m.Address, m.Port, options, plan.ChannelsFor(i), c),
             plan.VolumeOffsetFor(m.DeviceId))).ToList();
-        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Volume, ct);
+        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects);
         if (group.ArrivalToRenderMs is { } a2r) _groupArrivalToRenderMs = a2r;
         Volume ??= group.MasterVolume;
         return group;
@@ -88,12 +88,4 @@ public sealed partial class StreamController
 
     /// <summary>Called by Stop() after the loop was asked to end.</summary>
     private void TearDownGroup() => Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
-
-    /// <summary>Linked group volume (each speaker adds its own offset). False when no group is running.</summary>
-    private bool SetGroupVolume(double percent)
-    {
-        if (_groupRunner is not { } runner) return false;
-        if (runner.Current is { } group) Task.Run(() => group.SetVolumePercent(percent));
-        return true;
-    }
 }

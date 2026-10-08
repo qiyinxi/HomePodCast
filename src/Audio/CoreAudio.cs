@@ -85,7 +85,8 @@ internal interface IAudioRenderClient
     [PreserveSig] int ReleaseBuffer(uint frames, uint flags);
 }
 
-// Order checked against NAudio's IAudioEndpointVolume; members after GetMute are omitted.
+// Order checked against NAudio's IAudioEndpointVolume and endpointvolume.h (SDK 10.0.26100);
+// members after GetVolumeStepInfo are omitted.
 [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IAudioEndpointVolume
 {
@@ -102,6 +103,26 @@ internal interface IAudioEndpointVolume
     [PreserveSig] int GetChannelVolumeLevelScalar(uint channel, out float level);
     [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid context);
     [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+    [PreserveSig] int GetVolumeStepInfo(out uint step, out uint stepCount);
+}
+
+// IID and layout from endpointvolume.h (SDK 10.0.26100), same as NAudio: one method after IUnknown.
+// A wrong IID registers without error and is then simply never called, so a unit test pins it.
+// We implement this one (Windows calls us), so it is a COM-visible interface, not [ComImport].
+[Guid("657804FA-D6AD-4496-8A60-352752AF4F89"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown), ComVisible(true)]
+public interface IAudioEndpointVolumeCallback
+{
+    [PreserveSig] int OnNotify(IntPtr notifyData);
+}
+
+/// <summary>AUDIO_VOLUME_NOTIFICATION_DATA without the trailing afChannelVolumes[nChannels].</summary>
+[StructLayout(LayoutKind.Sequential)]
+internal struct AudioVolumeNotificationData
+{
+    public Guid EventContext;
+    public int Muted;           // BOOL
+    public float MasterVolume;  // scalar 0..1
+    public uint Channels;
 }
 
 internal static class CoreAudio

@@ -77,7 +77,7 @@ internal sealed class SpeakerGroup : IDisposable
     /// session to it. If any member fails, whatever did connect is torn down and the failure is thrown.
     /// </summary>
     public static async Task<SpeakerGroup> ConnectAsync(IReadOnlyList<MemberSetup> setups, AudioFifo fifo,
-        double? volumePercent, CancellationToken ct)
+        double? volumePercent, CancellationToken ct, IAudioEffect? effects = null)
     {
         if (setups.Count == 0) throw new ArgumentException("empty group", nameof(setups));
         var group = new SpeakerGroup(setups, fifo);
@@ -90,7 +90,10 @@ internal sealed class SpeakerGroup : IDisposable
             await group.EachAsync((m, _) => m.Record(), ct);
 
             // One timeline: same RTP base and T0 for all; per-session keys, SSRCs and sequence numbers.
-            var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), fifo);
+            var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), fifo)
+            {
+                Effects = effects, // one chain, run once per packet before the per-speaker encode
+            };
             group._sender = sender;
             sender.Start(MediaClock.Now + MediaClock.FromMs(250));
             await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), ct);

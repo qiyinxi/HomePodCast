@@ -4,7 +4,7 @@ using Microsoft.Win32;
 
 namespace HomePodCast.UI;
 
-internal sealed class TrayApp : ApplicationContext
+internal sealed partial class TrayApp : ApplicationContext
 {
     private readonly SynchronizationContext _ui;
     private readonly NotifyIcon _tray;
@@ -35,6 +35,7 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(L.T("退出"), null, (_, _) => Quit());
         _toggleItem.Click += (_, _) => ToggleConnection();
+        InitSound(menu);
 
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = L.T("HomePod 音响") };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
@@ -135,6 +136,7 @@ internal sealed class TrayApp : ApplicationContext
 
     public void SetLatency(int ms)
     {
+        if (Config.Scene == Scene.Custom) Config.CustomLatencyMs = ms;
         if (Config.LatencyMs == ms) return;
         Config.LatencyMs = ms;
         Config.Save();
@@ -143,6 +145,7 @@ internal sealed class TrayApp : ApplicationContext
 
     public void SetVolume(double percent)
     {
+        percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Config.Volume = percent;
         Config.Save();
         Controller.SetVolume(percent);
@@ -309,6 +312,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        DisposeSound();
         _api?.Dispose();
         Controller.Dispose();
         _tray.Dispose();

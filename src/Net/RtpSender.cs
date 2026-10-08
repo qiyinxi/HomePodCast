@@ -49,6 +49,10 @@ public sealed class RtpSender : IDisposable
 
     /// <summary>Legacy (pyatv-style) sync packets that also subtract the latency. Off by default.</summary>
     public bool LatencyInSync { get; set; }
+
+    /// <summary>In-place processing of each packet's PCM before encoding (EffectChain: EQ, night mode).</summary>
+    public IAudioEffect? Effects { get; init; }
+
     public ushort FirstSeq => _streams[0].FirstSeq;
     public uint RtpBase { get; }
     public long T0 { get; private set; }
@@ -164,6 +168,7 @@ public sealed class RtpSender : IDisposable
             }
 
             if (!_fifo.Read(pcm)) SilentPackets++;
+            Effects?.Process(pcm, FramesPerPacket); // ---- effects hook: the one place audio is processed before sending
             if (OnsetSent is { } onset) DetectOnset(pcm, deadline, onset);
             EncodePayloads(pcm);
             uint rtp = unchecked(RtpBase + (uint)(n * FramesPerPacket));
