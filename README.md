@@ -37,7 +37,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
 - Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
-- Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both), see below
+- Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
@@ -83,6 +83,17 @@ Per-app routing sends each app to the HomePod, this PC, or both (set on the Mixe
 | Requires | Windows 10/11 | Windows 10 version 2004 or later |
 
 The app asks for confirmation the first time routing turns on. Set every app back to "Default" with HomePod as the default to return to streaming everything. If HomePodCast is killed while routing, apps set to "HomePod" stay at 0% until it runs again.
+
+### Routing by sound card (capture device)
+
+Mixer → Capture device decides which output device's sound is sent; by default it follows the Windows default output. Choose a device you don't listen to, then set the apps you want on the HomePod (a game, say) to play on it, in the Windows app volume settings (the Mixer page has a button for them) or in the app's own settings; voice chat and everything else keep playing on your headphones. The whole device is captured in one piece, so like streaming everything it adds no latency, unlike the roughly 35 ms of per-app routing.
+
+- It needs a spare or virtual sound card, such as VB-CABLE, NetEase UU's virtual sound card, Steam Streaming Speakers, or an HDMI monitor without speakers. HomePodCast can't install a virtual sound card itself: that is a kernel driver that must be signed by Microsoft.
+- Some games only pick their output device at launch; restart the game after changing it.
+- If the chosen device is unplugged, disabled or uninstalled, the default output is not used instead (that could send your voice chat to the speaker): capture pauses, the Home page says so, and it resumes when the device is back.
+- Per-app routing still works on top; its rules apply to the apps on that device.
+- With a capture device chosen, "HomePod follows the Windows volume" follows that device's volume, while the volume keys only change the Windows default output. To control the HomePod with the volume keys, make that device the default output.
+- While streaming, the mic's "Monitor on this PC" pauses if it uses the device being captured (for example both follow the default output); otherwise your voice would reach the HomePod twice.
 
 ## Keyboard volume keys
 
