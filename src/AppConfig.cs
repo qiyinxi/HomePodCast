@@ -26,9 +26,19 @@ public sealed class AppConfig
 
     public int LocalApiPort { get; set; } = Net.LocalApi.DefaultPort;
 
+    /// <summary>
+    /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
+    /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
+    /// speaker or the real instance's port.
+    /// </summary>
+    [JsonIgnore]
+    public static string? Profile =>
+        Environment.GetEnvironmentVariable("HOMEPODCAST_PROFILE") is { Length: > 0 } p ? p : null;
+
     [JsonIgnore]
     public static string Directory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HomePodCast");
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        Profile is null ? "HomePodCast" : "HomePodCast-" + Profile);
 
     private static string FilePath => Path.Combine(Directory, "config.json");
 
@@ -49,7 +59,7 @@ public sealed class AppConfig
         {
             Log.Warn($"config unreadable, using defaults: {ex.Message}");
         }
-        return new AppConfig();
+        return Profile is null ? new AppConfig() : new AppConfig { AutoConnect = false, LocalApiPort = 0 };
     }
 
     public void Save()

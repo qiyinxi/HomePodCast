@@ -37,8 +37,9 @@ public static class Program
         Log.ToConsole = false;
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
 
-        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show");
-        using var single = new Mutex(true, @"Local\HomePodCast.Single", out bool first);
+        var suffix = AppConfig.Profile is { } p ? "." + p : "";
+        using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
+        using var single = new Mutex(true, @"Local\HomePodCast.Single" + suffix, out bool first);
         if (!first)
         {
             show.Set(); // ask the running instance to show its window
