@@ -277,5 +277,6 @@
   "只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。": "Only sound on \"{0}\" is sent; apps on other devices (such as voice chat on your headphones) are not.",
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" is unavailable (unplugged, disabled or uninstalled). The default output is not used instead; capture resumes by itself when the device is back.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "The chosen capture device \"{0}\" is unavailable (unplugged, disabled or uninstalled). So that no other sound reaches the HomePod, the default output is not used instead; streaming resumes by itself when the device is back. You can also switch back to the Windows default output on the Mixer page.",
-  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Your monitor device is the one being captured, so monitoring would also send your voice to the HomePod. Monitoring on this PC is paused; use headphones or another device instead."
+  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Your monitor device is the one being captured, so monitoring would also send your voice to the HomePod. Monitoring on this PC is paused; use headphones or another device instead.",
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "With a capture device chosen, \"HomePod follows the Windows volume\" follows that device's volume, while the volume keys only change the Windows default output. To control the HomePod with the volume keys, make that device the default output."
 }

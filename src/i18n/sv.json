@@ -277,5 +277,6 @@
   "只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。": "Bara ljud på \"{0}\" strömmas; appar på andra enheter (som röstchatt i hörlurarna) gör det inte.",
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" är inte tillgänglig (urkopplad, inaktiverad eller avinstallerad). Standardutdata används inte i stället; fångsten fortsätter av sig själv när enheten är tillbaka.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Den valda enheten att fånga, \"{0}\", är inte tillgänglig (urkopplad, inaktiverad eller avinstallerad). För att inget annat ljud ska nå HomePod används inte standardutdata i stället; strömningen fortsätter av sig själv när enheten är tillbaka. Du kan också gå tillbaka till Windows standardutdata på sidan Mixer.",
-  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Din medhörningsenhet är den som fångas, så din röst skulle också gå till HomePod. Medhörning på datorn är pausad; använd hörlurar eller en annan enhet."
+  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Din medhörningsenhet är den som fångas, så din röst skulle också gå till HomePod. Medhörning på datorn är pausad; använd hörlurar eller en annan enhet.",
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "När en enhet att fånga är vald följer \"HomePod följer Windows ljudstyrka\" den enhetens ljudstyrka, medan volymtangenterna bara ändrar Windows standardutdata. Gör den enheten till standardutdata om du vill styra HomePod med volymtangenterna."
 }

@@ -187,6 +187,23 @@ public class CaptureDeviceTests
         Assert.False(CaptureEndpoint.MonitorCollides(null, null, null));
     }
 
+    // ---------------------------------------------------------------- volume keys
+
+    [Fact]
+    public void A_missing_capture_device_leaves_the_volume_keys_with_windows()
+    {
+        // Opened: the default output, or the chosen capture device.
+        Assert.True(VolumeKeyForwarder.OutputPresent(opened: true, null, defaultOutputExists: true));
+        Assert.True(VolumeKeyForwarder.OutputPresent(opened: true, Cable, defaultOutputExists: false));
+        // The chosen device is missing: nothing is watched (never the default instead), but the keys are not taken over.
+        Assert.True(VolumeKeyForwarder.OutputPresent(opened: false, Cable, defaultOutputExists: true));
+        // No output device at all: as before, the keys go to the HomePod while streaming.
+        Assert.False(VolumeKeyForwarder.OutputPresent(opened: false, null, defaultOutputExists: false));
+        Assert.False(VolumeKeyForwarder.OutputPresent(opened: false, Cable, defaultOutputExists: false));
+        Assert.Equal(VolumeKeyRoute.Follow, VolumeKeyRules.RouteFor(VolumeKeyMode.FollowWindows, streaming: true,
+            VolumeKeyForwarder.OutputPresent(opened: false, Cable, defaultOutputExists: true)));
+    }
+
     // ---------------------------------------------------------------- device notifications (COM)
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]

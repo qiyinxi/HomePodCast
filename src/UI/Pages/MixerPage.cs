@@ -17,6 +17,13 @@ internal sealed class MixerPage : ScrollPage
     /// <summary>Windows Settings → 应用音量和设备首选项, where each app's output device is chosen.</summary>
     private const string AppVolumeSettings = "ms-settings:apps-volume";
 
+    /// <summary>
+    /// With a chosen capture device, 「HomePod 跟随 Windows 音量」 follows that device's volume (VolumeKeyForwarder watches
+    /// it), while the keyboard keys change the default output. Shown here and under 键盘音量键 in 设置 (L.T).
+    /// </summary>
+    public const string CaptureVolumeNote =
+        "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。";
+
     private readonly TrayApp _app;
     private readonly FluentComboBox _captureDevice = new() { MinWidth = 220 };
     private readonly SettingRow _captureRow;
@@ -166,7 +173,8 @@ internal sealed class MixerPage : ScrollPage
         bool missing = chosen != null && !_captureOutputs.Any(d => CaptureEndpoint.Same(d.Id, chosen));
         desc.Text = chosen == null ? L.T("推送 Windows 默认输出上的所有声音；默认输出改变时自动跟随。")
             : missing ? L.F("「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。", ChosenName())
-            : L.F("只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。", ChosenName());
+            : L.F("只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。", ChosenName()) +
+              (_app.Config.VolumeKeys == VolumeKeyMode.FollowWindows ? "\n" + L.T(CaptureVolumeNote) : "");
         desc.Role = missing ? TextRole.Caution : TextRole.Secondary;
     }
 

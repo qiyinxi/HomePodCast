@@ -218,6 +218,31 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         OutputDeviceChanged?.Invoke(present);
     }
 
+    private string? _missingLogged;
+
+    /// <summary>
+    /// The endpoint asked for (the chosen capture device) is unplugged, disabled or gone, but Windows still has a default
+    /// output: then there is simply nothing to watch. No other endpoint is read or written in its place (its volume
+    /// is not the HomePod's), and it does not count as "no output device", so the keys are not taken over: they keep
+    /// working on the Windows default output while the HomePod gets nothing to play. Watching resumes when it is back.
+    /// </summary>
+    private bool ChosenMissing(IMMDeviceEnumerator enumerator, string? wanted, string? problem)
+    {
+        if (!OutputPresent(opened: false, wanted, wanted != null && AudioEndpoints.DefaultId(enumerator, EDataFlow.Render) != null))
+            return false;
+        if (_missingLogged != wanted) Log.Info($"volume keys: not watching any volume while the chosen output is missing ({problem})");
+        _missingLogged = wanted;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether to report <see cref="OutputDevicePresent"/> after trying to open the endpoint: it opened, or a chosen
+    /// endpoint (<paramref name="wantedId"/>) is missing while Windows still has a default output. Only "no default
+    /// output at all" hands the keys to the HomePod.
+    /// </summary>
+    internal static bool OutputPresent(bool opened, string? wantedId, bool defaultOutputExists) =>
+        opened || wantedId != null && defaultOutputExists;
+
     private string? WantedEndpointId()
     {
         try { return _endpointId() is { Length: > 0 } id ? id : null; }
@@ -255,7 +280,8 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
                             lock (_follower) _follower.Reset(); // another device: its level is not a change to follow
                             endpoint = Endpoint.TryOpen(enumerator, wanted, _callbackPtr, out var problem);
                             _tracking = false; // new device: take a fresh baseline
-                            SetOutputDevice(endpoint != null, problem);
+                            SetOutputDevice(endpoint != null || ChosenMissing(enumerator, wanted, problem), problem);
+                            if (endpoint != null) _missingLogged = null;
                         }
                     }
                     if (endpoint != null)

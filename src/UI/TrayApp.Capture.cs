@@ -27,9 +27,10 @@ internal sealed partial class TrayApp
     /// </summary>
     public void SetCaptureDevice(string? id, string? name)
     {
-        Routing.SetCaptureDevice(id, name);
+        Routing.SetCaptureDevice(id, name); // the capture and the volume-key watcher pick it up from Routing
         UpdateMonitorGuard();
         _form.UpdateState();
+        _form.ShowVolumeKeys();
     }
 
     /// <summary>Windows notification thread: coalesce a burst (plugging a device sends several) into one UI update.</summary>
