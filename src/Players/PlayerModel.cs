@@ -36,6 +36,15 @@ internal enum PlayerKind { Mpv, Vlc, PotPlayer, MpcHc, MpcBe }
 /// </summary>
 internal readonly record struct PlayerReading(int? DelayMs, string? Item = null);
 
+/// <summary>Which password a player accepted (only ever the source, never the password).</summary>
+internal enum PasswordSource
+{
+    /// <summary>The one from the player's own settings or command line (VLC's vlcrc, --http-password).</summary>
+    Player,
+    /// <summary>The one typed in 设置 (stored encrypted, see VlcPassword).</summary>
+    Manual,
+}
+
 /// <summary>One running player HomePodCast can talk to. Only reads and sets the audio delay.</summary>
 internal interface IPlayerEndpoint
 {
@@ -45,6 +54,9 @@ internal interface IPlayerEndpoint
     string Name { get; }
     Task<PlayerReading> ReadAsync(CancellationToken ct);
     Task WriteAsync(int delayMs, CancellationToken ct);
+
+    /// <summary>The password the player accepted on the last request; null when it needs none or refused them.</summary>
+    PasswordSource? PasswordInUse => null;
 }
 
 /// <summary>Why a running player cannot be adjusted (shown on the home page).</summary>
@@ -52,9 +64,9 @@ internal enum PlayerProblem
 {
     /// <summary>mpv without input-ipc-server, VLC without the web interface.</summary>
     NoInterface,
-    /// <summary>VLC's web interface has no password (VLC refuses every request then).</summary>
+    /// <summary>No password to send (none in VLC's settings, none typed in 设置), or VLC has none set (403).</summary>
     NoPassword,
-    /// <summary>VLC rejected the password from its own settings.</summary>
+    /// <summary>VLC rejected every password it was offered (its own settings', then the one typed in 设置).</summary>
     LoginFailed,
     /// <summary>The player has no interface for the audio delay (PotPlayer, MPC-HC, MPC-BE).</summary>
     Manual,
@@ -95,7 +107,8 @@ internal enum PlayerState
     Manual,
 }
 
-internal readonly record struct PlayerStatus(PlayerKind Kind, string Name, PlayerState State, int? DelayMs = null);
+/// <param name="Password">Which password the player accepted (VLC), for the line in 设置; never the password.</param>
+internal readonly record struct PlayerStatus(PlayerKind Kind, string Name, PlayerState State, int? DelayMs = null, PasswordSource? Password = null);
 
 /// <summary>Which executables are which player (keys as ProcessTree gives them: lower case, no ".exe").</summary>
 internal static class PlayerProcesses

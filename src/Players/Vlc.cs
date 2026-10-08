@@ -45,6 +45,10 @@ internal sealed record VlcSettings(string? Password, int Port)
 {
     public static readonly VlcSettings Default = new(null, VlcHttp.DefaultPort);
 
+    /// <summary>Says whether there is a password, never what it is (a record would print it).</summary>
+    public override string ToString() =>
+        $"VlcSettings {{ Password = {(string.IsNullOrEmpty(Password) ? "none" : "set")}, Port = {Port} }}";
+
     /// <summary>http-password / http-port from a vlcrc (lines starting with # are VLC's commented defaults).</summary>
     public static VlcSettings FromVlcrc(string text, VlcSettings? defaults = null)
     {
@@ -107,7 +111,11 @@ internal sealed record VlcSettings(string? Password, int Port)
 
 /// <summary>
 /// One running VLC reached through its web interface on this PC. Before every request the port is checked
-/// to still belong to that VLC process, so the password and the command never reach another program.
+/// to still belong to that VLC process, so a password and the command never reach another program.
+/// <para>Passwords, in this order: the one from VLC's own settings (vlcrc or --http-password); if there is none
+/// or VLC refuses it (401/403), the one typed in 设置 (decrypted only then, and only for that request). Once VLC
+/// has refused its settings' password, this endpoint (one scan) goes straight to the typed one; the next scan
+/// tries VLC's own again first. Requests are never logged; exceptions and statuses carry no password.</para>
 /// </summary>
 internal sealed class VlcEndpoint : IPlayerEndpoint
 {
@@ -121,13 +129,18 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
         Timeout = TimeSpan.FromSeconds(2),
     };
 
-    private readonly string _password;
+    private readonly string? _playerPassword;
+    private readonly Func<string?>? _manualPassword;
+    private bool _playerPasswordRefused;
 
-    public VlcEndpoint(int processId, IPEndPoint address, string password)
+    /// <param name="password">From VLC's settings or command line; null or empty when none was found.</param>
+    /// <param name="manualPassword">The password typed in 设置, decrypted on demand; null = none.</param>
+    public VlcEndpoint(int processId, IPEndPoint address, string? password, Func<string?>? manualPassword = null)
     {
         ProcessId = processId;
         Address = address;
-        _password = password;
+        _playerPassword = string.IsNullOrEmpty(password) ? null : password;
+        _manualPassword = manualPassword;
     }
 
     public int ProcessId { get; }
@@ -135,6 +148,7 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
     public string Key => $"vlc:{ProcessId}:{Address.Port}";
     public PlayerKind Kind => PlayerKind.Vlc;
     public string Name => "VLC";
+    public PasswordSource? PasswordInUse { get; private set; }
 
     /// <summary>Checks that the port is still VLC's (tests replace it).</summary>
     internal Func<int, int, bool> OwnsPort { get; init; } = (pid, port) => PlayerWin32.ListenerOwner(port) == pid;
@@ -147,27 +161,61 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
 
     private async Task<string> GetAsync(string pathAndQuery, CancellationToken ct)
     {
+        PlayerProblem? refused = null;
+        if (_playerPassword != null && !_playerPasswordRefused)
+        {
+            var (body, problem) = await SendAsync(pathAndQuery, _playerPassword, ct).ConfigureAwait(false);
+            if (body != null)
+            {
+                PasswordInUse = PasswordSource.Player;
+                return body;
+            }
+            _playerPasswordRefused = true;
+            refused = problem;
+        }
+        if (_manualPassword?.Invoke() is { Length: > 0 } manual)
+        {
+            var (body, problem) = await SendAsync(pathAndQuery, manual, ct).ConfigureAwait(false);
+            if (body != null)
+            {
+                PasswordInUse = PasswordSource.Manual;
+                return body;
+            }
+            if (refused != PlayerProblem.LoginFailed) refused = problem;
+        }
+        PasswordInUse = null;
+        throw refused == PlayerProblem.LoginFailed
+            ? new PlayerAccessException(PlayerProblem.LoginFailed, "VLC refused the password (401)")
+            : new PlayerAccessException(PlayerProblem.NoPassword, refused == null ? "VLC: no password to send" : "VLC has no web interface password (403)");
+    }
+
+    /// <summary>One request; (null, why) when VLC refuses the password.</summary>
+    private async Task<(string? Body, PlayerProblem Refused)> SendAsync(string pathAndQuery, string password, CancellationToken ct)
+    {
         if (!OwnsPort(ProcessId, Address.Port)) throw new IOException($"port {Address.Port} is no longer VLC's ({ProcessId})");
         var host = Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{Address.Address}]" : Address.Address.ToString();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{host}:{Address.Port}{pathAndQuery}");
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", VlcHttp.BasicAuth(_password));
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", VlcHttp.BasicAuth(password));
         using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
         switch (response.StatusCode)
         {
             case HttpStatusCode.Unauthorized:
-                throw new PlayerAccessException(_password.Length == 0 ? PlayerProblem.NoPassword : PlayerProblem.LoginFailed, "VLC: 401");
+                return (null, PlayerProblem.LoginFailed);
             case HttpStatusCode.Forbidden: // VLC 3: "Password for Web interface has not been set."
-                throw new PlayerAccessException(PlayerProblem.NoPassword, "VLC: 403");
+                return (null, PlayerProblem.NoPassword);
         }
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return (await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false), default);
     }
 }
 
 /// <summary>Finds the web interface of running VLC processes.</summary>
 internal static class VlcFinder
 {
-    public static (List<IPlayerEndpoint> Endpoints, List<PlayerNote> Notes) Find(IReadOnlyCollection<int> processes)
+    /// <param name="manualPassword">The password typed in 设置, decrypted on demand (only asked for when a
+    /// VLC has no password in its settings, or refuses it).</param>
+    public static (List<IPlayerEndpoint> Endpoints, List<PlayerNote> Notes) Find(IReadOnlyCollection<int> processes,
+        Func<string?>? manualPassword = null)
     {
         var endpoints = new List<IPlayerEndpoint>();
         var notes = new List<PlayerNote>();
@@ -196,12 +244,9 @@ internal static class VlcFinder
                 notes.Add(new PlayerNote(PlayerKind.Vlc, "VLC", PlayerProblem.NoInterface));
                 continue;
             }
-            if (string.IsNullOrEmpty(settings.Password))
-            {
-                notes.Add(new PlayerNote(PlayerKind.Vlc, "VLC", PlayerProblem.NoPassword));
-                continue;
-            }
-            endpoints.Add(new VlcEndpoint(pid, Loopback(mine), settings.Password));
+            // Without a password of its own the endpoint still tries the typed one, and reports NoPassword if
+            // there is none either.
+            endpoints.Add(new VlcEndpoint(pid, Loopback(mine), settings.Password, manualPassword));
         }
         return (endpoints, notes);
     }

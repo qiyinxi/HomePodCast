@@ -26,7 +26,7 @@ public static class Program
                 "tone" => ProcTest.Tone(args),
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
-                "players" => PlayersCli(args),
+                "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
                 _ => Help(),
             };
         }
@@ -169,41 +169,6 @@ public static class Program
             videoDelaySource = "fake",
         });
         Thread.Sleep(TimeSpan.FromSeconds(seconds));
-        return 0;
-    }
-
-    /// <summary>
-    /// The players the 影视 scene would adjust, and (--apply MS) a dry run without a speaker: hold their audio
-    /// delay at −MS for --seconds (default 6), polling like the app, then put their own value back.
-    /// </summary>
-    private static int PlayersCli(string[] args)
-    {
-        var scanner = new Players.PlayerScanner();
-        var scan = scanner.ScanAsync(CancellationToken.None).GetAwaiter().GetResult();
-        foreach (var e in scan.Endpoints)
-        {
-            string reading;
-            try { reading = e.ReadAsync(CancellationToken.None).GetAwaiter().GetResult().ToString(); }
-            catch (Exception ex) { reading = ex.Message; }
-            Log.Info($"{e.Name} {e.Key}: {reading}");
-        }
-        foreach (var n in scan.Notes) Log.Info($"{n.Name}: {n.Problem}");
-        if (scan.Endpoints.Count == 0 && scan.Notes.Count == 0) Log.Info("no supported player running");
-        if (Opt(args, "--apply") is not { } apply) return 0;
-
-        int lag = int.Parse(apply);
-        var until = DateTime.UtcNow.AddSeconds(int.Parse(Opt(args, "--seconds") ?? "6"));
-        var sync = new Players.PlayerSync(scanner);
-        var input = new Players.PlayerSyncInput(true, StreamState.Streaming, lag);
-        while (true)
-        {
-            sync.StepAsync(input, CancellationToken.None).GetAwaiter().GetResult();
-            foreach (var s in sync.Statuses) Log.Info(Players.PlayerText.Line(s));
-            if (DateTime.UtcNow >= until) break;
-            Thread.Sleep(Players.PlayerSync.PollInterval);
-        }
-        sync.StepAsync(input with { Enabled = false }, CancellationToken.None).GetAwaiter().GetResult();
-        Log.Info("restored");
         return 0;
     }
 

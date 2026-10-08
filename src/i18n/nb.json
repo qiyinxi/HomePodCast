@@ -240,5 +240,20 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Når en app får sitt eget mål, byttes det til ruting per app: Windows kan bare ta opp apper én om gangen, så lyd til HomePod kommer ca. {0} ms senere enn når alt strømmes (nettleserutvidelsen kompenserer bildet; spill kan ikke).\n\nApper som er satt til \"HomePod\", blir stille på PC-en (0 % i volummikseren i Windows), og systemlyder spilles bare av på PC-en.\n\nHvis forsinkelse betyr mest, for eksempel i spill, bør du fortsette å strømme alt. Slå på ruting per app?",
   "按程序分流会增加延迟": "Ruting per app gir mer forsinkelse",
 
-  "推荐": "Anbefalt"
+  "推荐": "Anbefalt",
+
+  "{0}：没有找到网页接口密码（见「设置」）": "{0}: fant ikke passord for nettgrensesnittet (se Innstillinger)",
+  "{0}：密码错误，请在设置里重新输入": "{0}: feil passord – skriv det inn på nytt i Innstillinger",
+  "VLC 网页接口密码（自动读取失败时填写）": "Passord for VLCs nettgrensesnitt (hvis det ikke kan leses automatisk)",
+  "使用 VLC 设置里的密码": "Bruker passordet fra VLCs innstillinger",
+  "使用手动输入的密码": "Bruker passordet som er skrevet inn her",
+  "密码错误，请在设置里重新输入": "Feil passord – skriv det inn på nytt i Innstillinger",
+  "没有找到密码，请在这里输入": "Fant ikke noe passord – skriv det inn her",
+  "已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。": "Et passord skrevet inn her er lagret (kryptert; bare Windows-kontoen din kan dekryptere det).",
+  "先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。": "VLCs eget passord brukes først; dette brukes hvis det ikke kan leses eller er feil. Lagres kryptert på denne PC-en.",
+  "保存": "Lagre",
+  "清除": "Tøm",
+  "显示密码": "Vis passord",
+  "隐藏密码": "Skjul passord",
+  "保存密码失败：{0}": "Kunne ikke lagre passordet: {0}"
 }

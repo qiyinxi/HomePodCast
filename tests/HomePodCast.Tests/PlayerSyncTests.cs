@@ -466,7 +466,7 @@ public class PlayerSyncTests
         }, _sync.Statuses);
         Assert.Equal(new[]
         {
-            "VLC：网页接口密码不对",
+            "VLC：密码错误，请在设置里重新输入",
             "mpv：调整失败",
             "mpv：未开启 IPC（见「设置」）",
             "PotPlayer：请手动设为 -236 ms",

@@ -5,7 +5,8 @@ namespace HomePodCast.Players;
 /// is on; PotPlayer, MPC-HC and MPC-BE have no interface for the audio delay (MPC's web interface only
 /// steps it by 10 ms and cannot report it) and are listed for a manual setting.
 /// </summary>
-internal sealed class PlayerScanner : IPlayerScanner
+/// <param name="vlcManualPassword">The VLC password typed in 设置, decrypted on demand (VlcPassword.From); null = none.</param>
+internal sealed class PlayerScanner(Func<string?>? vlcManualPassword = null) : IPlayerScanner
 {
     private readonly MpvFinder _mpv = new();
 
@@ -26,7 +27,7 @@ internal sealed class PlayerScanner : IPlayerScanner
         }
 
         var (mpvEndpoints, mpvNotes) = await _mpv.FindAsync(mpv, ct).ConfigureAwait(false);
-        var (vlcEndpoints, vlcNotes) = VlcFinder.Find(vlc);
+        var (vlcEndpoints, vlcNotes) = VlcFinder.Find(vlc, vlcManualPassword);
         var notes = mpvNotes.Concat(vlcNotes).ToList();
         notes.AddRange(manual.Select(m => new PlayerNote(m.Key, m.Value, PlayerProblem.Manual)));
         return new PlayerScan([.. mpvEndpoints, .. vlcEndpoints], notes);

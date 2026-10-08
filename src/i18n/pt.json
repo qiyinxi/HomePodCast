@@ -240,5 +240,20 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Atribuir um destino próprio a uma aplicação muda para o encaminhamento por aplicação: o Windows só consegue capturar as aplicações uma a uma, por isso o som enviado para o HomePod chega cerca de {0} ms mais tarde do que ao transmitir tudo (a extensão do browser compensa a imagem; os jogos não).\n\nAs aplicações definidas como \"HomePod\" ficam sem som neste PC (0% no misturador de volume do Windows) e os sons do sistema só são reproduzidos neste PC.\n\nSe a latência for o mais importante, por exemplo, em jogos, mantenha a transmissão de tudo. Ativar o encaminhamento por aplicação?",
   "按程序分流会增加延迟": "O encaminhamento por aplicação aumenta a latência",
 
-  "推荐": "Recomendado"
+  "推荐": "Recomendado",
+
+  "{0}：没有找到网页接口密码（见「设置」）": "{0}: nenhuma palavra-passe da interface web encontrada (ver Definições)",
+  "{0}：密码错误，请在设置里重新输入": "{0}: palavra-passe errada; introduza-a novamente nas Definições",
+  "VLC 网页接口密码（自动读取失败时填写）": "Palavra-passe da interface web do VLC (se não puder ser lida automaticamente)",
+  "使用 VLC 设置里的密码": "A usar a palavra-passe das definições do VLC",
+  "使用手动输入的密码": "A usar a palavra-passe introduzida aqui",
+  "密码错误，请在设置里重新输入": "Palavra-passe errada; introduza-a novamente nas Definições",
+  "没有找到密码，请在这里输入": "Nenhuma palavra-passe encontrada; introduza-a aqui",
+  "已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。": "Está guardada uma palavra-passe introduzida aqui (encriptada; só a sua conta do Windows a pode desencriptar).",
+  "先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。": "Primeiro é usada a palavra-passe do próprio VLC; esta é usada quando essa não pode ser lida ou está errada. Guardada encriptada neste PC.",
+  "保存": "Guardar",
+  "清除": "Limpar",
+  "显示密码": "Mostrar palavra-passe",
+  "隐藏密码": "Ocultar palavra-passe",
+  "保存密码失败：{0}": "Não foi possível guardar a palavra-passe: {0}"
 }
