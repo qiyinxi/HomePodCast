@@ -65,7 +65,11 @@ public sealed partial class StreamController : IDisposable
     /// <summary>Status text (translated with L.T) after another sender took the speaker over; TrayApp checks for it.</summary>
     public const string TakenOverText = "已断开（音箱可能被其他设备占用）";
 
-    public void Start(string deviceId, string? host, int latencyMs, double? volume)
+    /// <param name="volumeAsOf">
+    /// <see cref="VolumeChanges"/> when the start was requested: a volume set after that (the request waited in a
+    /// queue behind a slow Stop) is kept instead of <paramref name="volume"/>. Null: always use <paramref name="volume"/>.
+    /// </param>
+    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null)
     {
         lock (_lifecycle)
         {
@@ -74,7 +78,7 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, cts.Token));
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, cts.Token));
             }
         }
     }
@@ -117,15 +121,38 @@ public sealed partial class StreamController : IDisposable
     /// <param name="unmute">False: a muted speaker stays muted and keeps the new volume for when it is unmuted.</param>
     public void SetVolume(double percent, bool unmute)
     {
-        Volume = VolumeLimit.Clamp(percent, VolumeCapPercent);
+        lock (_volumeLock)
+        {
+            _volumeChanges++;
+            Volume = VolumeLimit.Clamp(percent, VolumeCapPercent);
+        }
         if (unmute) Muted = false;
         PushVolume();
     }
 
-    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, CancellationToken ct)
+    private readonly object _volumeLock = new();
+    private int _volumeChanges;
+
+    /// <summary>How many volumes were set so far (SetVolume); see Start's volumeAsOf.</summary>
+    public int VolumeChanges
+    {
+        get { lock (_volumeLock) return _volumeChanges; }
+    }
+
+    /// <summary>The volume a connection starts with, unless one was set since the start was requested.</summary>
+    private void TakeStartVolume(double? volume, int? volumeAsOf)
+    {
+        lock (_volumeLock)
+        {
+            if (volumeAsOf is { } asOf && asOf != _volumeChanges) return;
+            Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
+        }
+    }
+
+    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, CancellationToken ct)
     {
         int attempt = 0;
-        Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
+        TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();

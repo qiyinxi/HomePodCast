@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using HomePodCast.Audio;
 
@@ -199,6 +201,83 @@ public class SessionAttenuationTests
         gate.Close(7);
         Assert.False(gate.IsOpen(7, 230));
         Assert.Empty(gate.Roots);
+    }
+
+    [Fact]
+    public void A_later_silencing_never_shortens_a_closed_gate()
+    {
+        var gate = Gate();
+        gate.Silenced(7, 50);     // the session's volume event, at once
+        gate.Silenced(7, 40);     // the router's check, which read its clock a moment earlier
+        gate.Verified(7, 145);
+        Assert.False(gate.IsOpen(7, 149));
+        Assert.True(gate.IsOpen(7, 150));
+    }
+
+    private static long Ms(double ms) => (long)(ms * Stopwatch.Frequency / 1000);
+
+    /// <summary>Call the handler through its COM vtable, as the audio service does (slot 3 + 2 = OnSimpleVolumeChanged).</summary>
+    private static int Report(IntPtr events, float volume, Guid context)
+    {
+        IntPtr ctx = Marshal.AllocHGlobal(16);
+        try
+        {
+            Marshal.StructureToPtr(context, ctx, false);
+            IntPtr fn = Marshal.ReadIntPtr(Marshal.ReadIntPtr(events), 5 * IntPtr.Size);
+            return Marshal.GetDelegateForFunctionPointer<SimpleVolumeChanged>(fn)(events, volume, 0, ctx);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(ctx);
+        }
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SimpleVolumeChanged(IntPtr self, float volume, int mute, IntPtr context);
+
+    [Fact]
+    public void A_volume_raised_elsewhere_stops_compensation_the_moment_the_session_reports_it()
+    {
+        using var router = new SessionRouter(new AppRouting(new AppConfig(), () => { }), _ => true);
+        var handler = new SessionRouter.VolumeEvents(router, () => 7);
+        IntPtr events = Marshal.GetComInterfaceForObject<SessionRouter.VolumeEvents, IAudioSessionEvents>(handler);
+        try
+        {
+            var iid = typeof(IAudioSessionEvents).GUID;
+            Assert.Equal(0, Marshal.QueryInterface(events, in iid, out var same));
+            Marshal.Release(same);
+
+            // Silenced long ago and just read back attenuated: compensated.
+            router.Gate.Silenced(7, Stopwatch.GetTimestamp() - Ms(500));
+            bool Open()
+            {
+                long now = Stopwatch.GetTimestamp();
+                router.Gate.Verified(7, now);
+                return router.IsConfirmed(7, now);
+            }
+            Assert.True(Open());
+
+            // Still inaudible here, or our own change: nothing to stop.
+            Assert.Equal(0, Report(events, SessionAttenuation.Attenuated(0.8f), Guid.NewGuid()));
+            Assert.Equal(0, Report(events, 0f, Guid.NewGuid()));
+            Assert.Equal(0, Report(events, 0.6f, SessionRouter.OwnContext));
+            Assert.True(Open());
+
+            // The Windows mixer raises the app to 60 %: closed now, not at the router's next check, even though the
+            // router still reads the volumes back; and for the whole confirm delay, while that audio is on its way.
+            long before = Stopwatch.GetTimestamp();
+            Assert.Equal(0, Report(events, 0.6f, Guid.NewGuid()));
+            long after = Stopwatch.GetTimestamp();
+            Assert.False(Open());
+            router.Gate.Verified(7, before + SessionRouter.ConfirmDelay - 1);
+            Assert.False(router.IsConfirmed(7, before + SessionRouter.ConfirmDelay - 1));
+            router.Gate.Verified(7, after + SessionRouter.ConfirmDelay);
+            Assert.True(router.IsConfirmed(7, after + SessionRouter.ConfirmDelay));
+        }
+        finally
+        {
+            Marshal.Release(events);
+        }
     }
 
     [Fact]

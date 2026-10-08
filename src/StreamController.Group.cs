@@ -10,13 +10,21 @@ public sealed partial class StreamController
     private GroupRunner? _groupRunner;
     private int? _groupArrivalToRenderMs;
     private (string Key, List<ResolvedMember> Members)? _lastPair;
+    private double _groupConnectCap = 100;
 
-    private sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port);
+    internal sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port);
+
+    /// <summary>Finds every member of a group (tests replace it: no mDNS). Null: <see cref="ResolveGroupAsync"/>.</summary>
+    internal Func<GroupPlan, CancellationToken, Task<List<ResolvedMember>>>? ResolveGroupMembers { get; set; }
+
+    /// <summary>Opens one member's session (tests replace it: no RTSP). Null: AirPlayClient.PrepareAsync.</summary>
+    internal Func<ResolvedMember, StreamOptions, ChannelMode, CancellationToken, Task<IGroupMember>>? PrepareGroupMember { get; set; }
 
     /// <summary>The sender of whatever is streaming (one speaker or a group), for stats and the sync probe.</summary>
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
 
-    public void StartGroup(GroupPlan plan, int latencyMs, double? volume)
+    /// <param name="volumeAsOf">As for <see cref="Start"/>: a volume set after the request was made is kept.</param>
+    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null)
     {
         lock (_lifecycle)
         {
@@ -24,11 +32,12 @@ public sealed partial class StreamController
             var cts = new CancellationTokenSource();
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, ct), Set);
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
+            runner.Connected += OnGroupConnected;
             lock (_lock)
             {
                 _run = cts;
                 _groupRunner = runner;
-                Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
+                TakeStartVolume(volume, volumeAsOf);
                 _loop = Task.Run(async () =>
                 {
                     if (await runner.RunAsync(cts.Token)) DisposeCapture(); // a speaker was taken over by another sender
@@ -39,7 +48,7 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, CancellationToken ct)
     {
-        var members = await ResolveGroupAsync(plan, ct);
+        var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         EnsureCapture(ct);
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
@@ -51,14 +60,33 @@ public sealed partial class StreamController
             VolumeCapPercent = VolumeCapPercent, Effects = Effects, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
         };
 
+        var prepare = PrepareGroupMember ??
+                      (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
-            async c => (IGroupMember)await AirPlayClient.PrepareAsync(m.Address, m.Port, options, plan.ChannelsFor(i), c),
-            plan.VolumeOffsetFor(m.DeviceId))).ToList();
+            c => prepare(m, options, plan.ChannelsFor(i), c), plan.VolumeOffsetFor(m.DeviceId))).ToList();
+        // A volume, mute or cap change from now on finds no group to send to until GroupRunner publishes it:
+        // OnGroupConnected pushes again if anything changed meanwhile.
+        _groupConnectCap = options.VolumeCapPercent;
         // The cap is read live, so lowering it while streaming also caps members with a positive offset.
         var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, () => VolumeCapPercent);
         if (group.ArrivalToRenderMs is { } a2r) _groupArrivalToRenderMs = a2r;
-        Volume ??= group.MasterVolume;
+        if (!ct.IsCancellationRequested) Volume ??= group.MasterVolume;
         return group;
+    }
+
+    /// <summary>
+    /// GroupRunner published the group (PushVolume reaches it from now on). Members get the current cap, and the
+    /// volume goes out again if it, the mute or the cap changed while they were connecting, as the single-speaker
+    /// loop does after connecting.
+    /// </summary>
+    private void OnGroupConnected(SpeakerGroup group)
+    {
+        double cap = VolumeCapPercent;
+        foreach (var m in group.Members)
+            if (m is AirPlayClient member) member.VolumeCapPercent = cap;
+        double? want = Muted ? 0 : Volume;
+        if (cap != _groupConnectCap || want is { } w && VolumeLimit.Clamp(w, cap) != group.MasterVolume)
+            PushVolume();
     }
 
     /// <summary>Addresses of every member; throws unless all of them are online.</summary>

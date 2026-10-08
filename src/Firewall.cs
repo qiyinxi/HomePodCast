@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace HomePodCast;
 
@@ -38,12 +39,9 @@ public static class Firewall
     /// <summary>Ask (via UAC) to add a Private-profile, local-subnet-only inbound rule for this exe.</summary>
     public static bool RequestRule()
     {
-        var exe = Environment.ProcessPath!.Replace("'", "''");
-        var command = "New-NetFirewallRule -DisplayName HomePodCast -Direction Inbound " +
-                      $"-Program '{exe}' -Action Allow -Profile Private -RemoteAddress LocalSubnet";
         try
         {
-            using var p = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -Command \"{command}\"")
+            using var p = Process.Start(new ProcessStartInfo("powershell.exe", RuleArguments(Environment.ProcessPath!))
             {
                 Verb = "runas",
                 UseShellExecute = true,
@@ -58,5 +56,31 @@ public static class Firewall
         {
             return false; // user declined UAC
         }
+    }
+
+    /// <summary>
+    /// powershell.exe arguments that add the rule for <paramref name="exe"/>. The script goes in as -EncodedCommand
+    /// (base64 of UTF-16LE), so no command line ever parses the path; inside the script it is a single-quoted literal.
+    /// </summary>
+    internal static string RuleArguments(string exe) =>
+        "-NoProfile -NonInteractive -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(RuleScript(exe)));
+
+    internal static string RuleScript(string exe) =>
+        "$ErrorActionPreference = 'Stop'; New-NetFirewallRule -DisplayName HomePodCast -Direction Inbound " +
+        $"-Program {PowerShellLiteral(exe)} -Action Allow -Profile Private -RemoteAddress LocalSubnet";
+
+    /// <summary>
+    /// <paramref name="s"/> as a PowerShell single-quoted string: nothing inside is expanded ($, backticks, double
+    /// quotes), and every character PowerShell reads as a single quote (' and the curly ‘ ’ ‚ ‛) is doubled.
+    /// </summary>
+    internal static string PowerShellLiteral(string s)
+    {
+        var sb = new StringBuilder(s.Length + 8).Append('\'');
+        foreach (char c in s)
+        {
+            if (c is '\'' or '\u2018' or '\u2019' or '\u201A' or '\u201B') sb.Append(c);
+            sb.Append(c);
+        }
+        return sb.Append('\'').ToString();
     }
 }

@@ -157,6 +157,9 @@ public static class SessionAttenuation
 
     public static bool IsAttenuated(float raw) => raw > 0 && raw <= Epsilon * 1.01f;
 
+    /// <summary>A session volume at which the app is heard here: neither attenuated nor 0 (e.g. raised in the Windows mixer).</summary>
+    public static bool IsAudible(float raw) => raw > 0 && !IsAttenuated(raw);
+
     /// <summary>The volume the user sees and sets (the session volume before attenuation).</summary>
     public static float ToLogical(float raw) => IsAttenuated(raw) ? Math.Min(1f, raw / Epsilon) : raw;
 
@@ -185,17 +188,22 @@ public static class SessionAttenuation
 /// When the captured audio of a "HomePod only" target may get the 1/Epsilon gain. Open only once its sessions
 /// have been silenced for <c>confirmDelay</c> (so the capture, ~35-50 ms behind, carries attenuated audio) AND
 /// while the router keeps re-reading their volumes (a check within <c>verifyWindow</c>). A volume raised
-/// elsewhere (<see cref="Silenced"/> again), a default-device switch (<see cref="CloseAll"/>) or a router that
-/// stops checking all close it, so audio nobody has verified as attenuated is never amplified 100 dB.
-/// The router writes, the capture thread reads.
+/// elsewhere (<see cref="Silenced"/> again: at once by the session's volume event, or by the router's next check),
+/// a default-device switch (<see cref="CloseAll"/>) or a router that stops checking all close it, so audio nobody
+/// has verified as attenuated is never amplified 100 dB. The router and the volume events write, the capture
+/// thread reads.
 /// </summary>
 internal sealed class CompensationGate(long confirmDelay, long verifyWindow)
 {
     private readonly ConcurrentDictionary<uint, long> _openAt = new();
     private readonly ConcurrentDictionary<uint, long> _verifiedAt = new();
 
-    /// <summary>The root's sessions were just silenced (or found raised and silenced again): closed for the delay.</summary>
-    public void Silenced(uint root, long now) => _openAt[root] = now + confirmDelay;
+    /// <summary>
+    /// The root's sessions were just silenced, found raised (or reported raised by a volume event): closed for the
+    /// delay from now. Never shortens a closing already in place (the router and the event thread both call this).
+    /// </summary>
+    public void Silenced(uint root, long now) =>
+        _openAt.AddOrUpdate(root, now + confirmDelay, (_, at) => Math.Max(at, now + confirmDelay));
 
     /// <summary>The root's sessions are silenced and unchanged: opens after the delay unless already pending/open.</summary>
     public void Keep(uint root, long now) => _openAt.TryAdd(root, now + confirmDelay);

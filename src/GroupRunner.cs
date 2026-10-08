@@ -24,6 +24,12 @@ internal sealed class GroupRunner(
 
     public event Action? FirewallBlocked;
 
+    /// <summary>
+    /// Raised on the loop once a newly connected group is <see cref="Current"/>: from then on volume changes reach it,
+    /// so this is where one made while it was connecting is sent again.
+    /// </summary>
+    public event Action<SpeakerGroup>? Connected;
+
     /// <summary>Runs until cancelled; returns true if it gave up because another sender took a speaker over.</summary>
     public async Task<bool> RunAsync(CancellationToken ct)
     {
@@ -39,6 +45,7 @@ internal sealed class GroupRunner(
                 var group = await connect(ct);
                 Volatile.Write(ref _current, group);
                 ct.ThrowIfCancellationRequested();
+                Connected?.Invoke(group);
                 attempt = 0;
                 streamed = true;
                 status(StreamState.Streaming, L.F("已连接 · {0}（实验性）", name));
