@@ -170,9 +170,13 @@ public sealed partial class StreamController : IDisposable
                 attempt = 0;
                 Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
 
-                using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
-                    lostReason = await lost.Task.WaitAsync(ct);
-                LogStats();
+                using (var net = new NetworkWatch(address))
+                {
+                    _net = net;
+                    using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
+                        lostReason = await lost.Task.WaitAsync(ct);
+                    LogStats();
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -269,8 +273,10 @@ public sealed partial class StreamController : IDisposable
                  $"maxGap={_capture?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
                  $"sent={s.PacketsSent} late={s.LateWakeups} " +
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
-                 $"rtxMiss={s.RetransmitMisses}");
+                 $"rtxMiss={s.RetransmitMisses} {_net?.TakeSummary()}");
     }
+
+    private NetworkWatch? _net; // the current session's; a disposed one just reports nothing new
 
     private void TearDown()
     {
