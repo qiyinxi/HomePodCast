@@ -29,6 +29,8 @@ public sealed class AudioFifo
     private long _dryAt;
     private long _cleanReads;
     private int _floorFrames;       // relaxing never goes below a level that already dropped out (+2 ms)
+    private bool _reader = true;    // a sender has read since BeginSession
+    private long _graceUntil = long.MinValue; // running dry before this is the sender's start, not a dropout
 
     public int TargetFrames { get; set; }
     public int CapFrames { get; set; }
@@ -97,11 +99,31 @@ public sealed class AudioFifo
                 // Too far ahead of the sender: jump back to the target so latency stays bounded.
                 int drop = _count - TargetFrames;
                 Skip(drop);
-                Overflows++;
-                DroppedFrames += drop;
+                if (_reader)
+                {
+                    Overflows++;
+                    DroppedFrames += drop;
+                }
             }
         }
     }
+
+    /// <summary>
+    /// A session is connecting (first connect, reconnect, scene change). Measured 2026-10-08: without this, each
+    /// scene change counted a dropout and grew the target by 4 ms. Until the new sender's first read, trimming is
+    /// just the connect wait (not counted); during its first <see cref="SessionGraceMs"/> running dry is its start-up
+    /// burst (neither a dropout nor an idle gap); a dry spell left over from the old session is forgotten.
+    /// </summary>
+    public void BeginSession()
+    {
+        lock (_lock)
+        {
+            _reader = false;
+            _dryPending = false;
+        }
+    }
+
+    public const int SessionGraceMs = 1000;
 
     /// <summary>Fill dest (frames*2 floats). Returns false if any silence had to be inserted.</summary>
     public bool Read(Span<float> dest)
@@ -109,6 +131,11 @@ public sealed class AudioFifo
         int frames = dest.Length / 2;
         lock (_lock)
         {
+            if (!_reader)
+            {
+                _reader = true;
+                _graceUntil = Clock() + SessionGraceMs * Stopwatch.Frequency / 1000;
+            }
             if (_priming)
             {
                 if (_count < TargetFrames)
@@ -150,6 +177,7 @@ public sealed class AudioFifo
     private void ClassifyDry()
     {
         _dryPending = false;
+        if (_dryAt < _graceUntil) return; // the new sender's start-up burst
         if (Clock() - _dryAt > DropoutWindowMs * Stopwatch.Frequency / 1000)
         {
             IdleGaps++;

@@ -133,6 +133,40 @@ public class AudioFifoTests
     }
 
     [Fact]
+    public void A_new_session_is_not_a_dropout_and_its_connect_wait_is_not_an_overflow()
+    {
+        var (fifo, advance) = Clocked();
+        fifo.MaxTargetFrames = 44100 * 30 / 1000;
+        int target = fifo.TargetFrames;
+
+        // The old session ran dry, then the scene changed: a new session starts while capture keeps writing.
+        fifo.Write(new float[600 * 2]);
+        Drain(fifo);
+        fifo.BeginSession();
+        for (int i = 0; i < 50; i++) fifo.Write(new float[441 * 2]);   // 500 ms of connecting: trimmed, not counted
+        Assert.Equal(0, fifo.Underruns);
+        Assert.Equal(0, fifo.Overflows);
+
+        // The new sender's start-up burst drains it within its first second.
+        Drain(fifo);
+        advance(20);
+        fifo.Write(new float[600 * 2]);
+        Assert.Equal(0, fifo.Underruns);
+        Assert.Equal(0, fifo.IdleGaps);
+        Assert.Equal(target, fifo.TargetFrames);
+
+        // After the grace period dropouts and overflows count again.
+        advance(AudioFifo.SessionGraceMs);
+        Drain(fifo);
+        advance(20);
+        fifo.Write(new float[600 * 2]);
+        Assert.Equal(1, fifo.Underruns);
+        Assert.True(fifo.TargetFrames > target);
+        for (int i = 0; i < 10; i++) fifo.Write(new float[441 * 2]);
+        Assert.True(fifo.Overflows > 0);
+    }
+
+    [Fact]
     public void Adaptive_target_grows_on_dropouts_and_relaxes_after_clean_reads()
     {
         var (fifo, advance) = Clocked();

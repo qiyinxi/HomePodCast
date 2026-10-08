@@ -215,6 +215,7 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     private void EnsureCapture(CancellationToken ct)
     {
+        _fifo.BeginSession(); // every connect attempt: the wait and the new sender's start are not dropouts
         lock (_lock)
         {
             if (_capture != null) return;
