@@ -9,6 +9,8 @@
 const GLOBAL_KEY = '__global__';
 const OFFSET_LIMIT = 500;
 const MAX_DELAY_MS = 2000;
+// 超过这个画面延迟（「音乐」场景是 500 ms）就提示：看视频用「影视」或「推荐」场景
+const LONG_DELAY_MS = 300;
 const SAVE_DEBOUNCE_MS = 250;
 
 const $ = (id) => document.getElementById(id);
@@ -180,6 +182,7 @@ function renderSite() {
       : t('hintNotRunning');
   } else {
     el.effDelay.textContent = String(eff);
+    if (eff > LONG_DELAY_MS) hint = t('hintLongDelay');
   }
   el.hint.textContent = hint;
   el.hint.hidden = !hint;

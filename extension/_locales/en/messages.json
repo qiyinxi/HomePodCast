@@ -87,6 +87,10 @@
   "hintNotRunning": {
     "message": "HomePodCast is not running; the picture is not delayed."
   },
+  "hintLongDelay": {
+    "message": "Long delay: for video, use the Movies or Recommended scene.",
+    "description": "Shown under the delay when it is over 300 ms (the Music scene uses 500 ms). Movies and Recommended are scene names in the HomePodCast app."
+  },
   "videosNone": {
     "message": "No videos found on this page (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."

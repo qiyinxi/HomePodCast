@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "このサイトでは無効です。映像は遅延しません。" },
   "hintNotStreaming": { "message": "HomePodCast が送信していないため、映像は遅延しません。" },
   "hintNotRunning": { "message": "HomePodCast が起動していないため、映像は遅延しません。" },
+  "hintLongDelay": { "message": "遅延が長めです。動画を見るときは「映画・動画」か「おすすめ」シーンをお使いください。" },
   "videosNone": { "message": "このページに動画が見つかりません（200×112 以上が対象）。" },
   "videosCount": {
     "message": "このページの動画 $COUNT$ 本",

@@ -8,6 +8,9 @@
   /tools/avsync/testpage.html?delay=141   (delay in ms, default 141)
   Left: the original <video>. Right: the engine's delayed copy (placement 'beside').
   Do not change document.title: capture.ps1 finds the window by it.
+  &src=<file>: another test video next to this page (default testvideo.mp4), e.g. a WebM made with
+    ffmpeg -i testvideo.mp4 -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -b:v 4M -c:a libopus testvideo.webm
+    (Chrome times WebM frames differently from MP4: check both after changing the engine's timing)
 
   &mode=bwp: bilibili <bwp-video>-like source instead of a plain <video>. A custom element with a
   closed shadow root holds a canvas whose control is transferred to an OffscreenCanvas in a Worker;
@@ -30,7 +33,7 @@
 </style>
 </head>
 <body>
-<div id="stage"><video id="v" src="testvideo.mp4" muted loop autoplay playsinline preload="auto"></video></div>
+<div id="stage"><video id="v" muted loop autoplay playsinline preload="auto"></video></div>
 <div id="info">loading...</div>
 <script src="../../extension/src/delay-engine.js"></script>
 <script>
@@ -39,6 +42,7 @@
   const parsed = Number(params.get('delay'));
   const delayMs = params.has('delay') && Number.isFinite(parsed) ? parsed : 141;
   const video = document.getElementById('v');
+  video.src = params.get('src') || 'testvideo.mp4';
   const info = document.getElementById('info');
   const real = !!(globalThis.HPCDelay && typeof globalThis.HPCDelay.attach === 'function');
   const bwp = params.get('mode') === 'bwp' ? makeBwpVideo(video) : null;

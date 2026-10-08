@@ -273,6 +273,13 @@ internal sealed class MixerPage : ScrollPage
     private void RefreshApps()
     {
         var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
+#if DEBUG
+        if (DemoApps)
+        {
+            foreach (var real in fresh) real.Dispose();
+            fresh = DemoAppList();
+        }
+#endif
         // Not our own row (sync-test click, mic monitoring): muting or routing it would only break the sync test.
         foreach (var own in fresh.Where(IsOwn)) own.Dispose();
         fresh.RemoveAll(IsOwn);
@@ -297,6 +304,65 @@ internal sealed class MixerPage : ScrollPage
     }
 
     private static bool IsOwn(AppAudio app) => !app.IsSystemSounds && app.ProcessId == (uint)Environment.ProcessId;
+
+#if DEBUG
+    private static readonly bool DemoApps = Environment.GetEnvironmentVariable("HOMEPODCAST_DEMO_APPS") is { Length: > 0 };
+
+    /// <summary>
+    /// Debug builds with HOMEPODCAST_DEMO_APPS set (tutorial and promo recordings): made-up apps instead of the PC's own,
+    /// so a recording shows no real program and no real session is ever touched. These rows have no sessions, so their
+    /// volume and mute are no-ops, and routes set on them only go into that profile's config. Release builds have no
+    /// such path.
+    /// </summary>
+    private static List<AppAudio> DemoAppList()
+    {
+        bool zh = L.Language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+        var start = Environment.TickCount64;
+        float Meter(double phase, double level) =>
+            (float)(level * (0.55 + 0.45 * Math.Abs(Math.Sin((Environment.TickCount64 - start) / 180.0 + phase))));
+        return
+        [
+            new(900001, false, zh ? "游戏" : "Game", DemoIcon(Color.FromArgb(214, 69, 69), "G"))
+                { ExeKey = "demo-game.exe", FakePeak = () => Meter(0, 0.8) },
+            new(900002, false, zh ? "语音聊天" : "Voice chat", DemoIcon(Color.FromArgb(88, 101, 242), "V"))
+                { ExeKey = "demo-voice.exe", FakePeak = () => Meter(1.7, 0.45) },
+            new(900003, false, zh ? "浏览器" : "Browser", DemoIcon(Color.FromArgb(0, 120, 212), "B"))
+                { ExeKey = "demo-browser.exe", FakePeak = () => Meter(3.1, 0.3) },
+        ];
+    }
+
+    private static readonly Dictionary<string, Icon> DemoIcons = [];
+
+    /// <summary>A copy the row owns (AppAudio disposes its icon on every refresh); the drawn original is kept.</summary>
+    private static Icon DemoIcon(Color color, string letter)
+    {
+        if (!DemoIcons.TryGetValue(letter, out var icon)) DemoIcons[letter] = icon = DrawDemoIcon(color, letter);
+        return (Icon)icon.Clone();
+    }
+
+    private static Icon DrawDemoIcon(Color color, string letter)
+    {
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            using var fill = new SolidBrush(color);
+            using var path = new System.Drawing.Drawing2D.GraphicsPath();
+            path.AddArc(0, 0, 12, 12, 180, 90);
+            path.AddArc(19, 0, 12, 12, 270, 90);
+            path.AddArc(19, 19, 12, 12, 0, 90);
+            path.AddArc(0, 19, 12, 12, 90, 90);
+            path.CloseFigure();
+            g.FillPath(fill, path);
+            using var font = new Font("Segoe UI", 15, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var white = new SolidBrush(Color.White);
+            var size = g.MeasureString(letter, font);
+            g.DrawString(letter, font, white, (32 - size.Width) / 2, (32 - size.Height) / 2);
+        }
+        return Icon.FromHandle(bmp.GetHicon()); // three per run, kept for the run
+    }
+#endif
 
     /// <summary>Pick up changes made elsewhere (e.g. in the Windows mixer) without fighting the user.</summary>
     private void SyncValues()

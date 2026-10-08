@@ -87,6 +87,9 @@
   "hintNotRunning": {
     "message": "HomePodCast körs inte; bilden fördröjs inte."
   },
+  "hintLongDelay": {
+    "message": "Lång fördröjning: välj scenen ”Film” eller ”Rekommenderad” för video."
+  },
   "videosNone": {
     "message": "Inga videor hittades på den här sidan (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."

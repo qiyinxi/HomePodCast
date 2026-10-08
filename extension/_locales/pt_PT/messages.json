@@ -87,6 +87,9 @@
   "hintNotRunning": {
     "message": "O HomePodCast não está em execução; a imagem não é atrasada."
   },
+  "hintLongDelay": {
+    "message": "Atraso longo: para vídeo, use o cenário «Filmes» ou «Recomendado»."
+  },
   "videosNone": {
     "message": "Nenhum vídeo encontrado nesta página (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."

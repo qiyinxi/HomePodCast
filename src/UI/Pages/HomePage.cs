@@ -359,6 +359,13 @@ internal sealed class HomePage : ScrollPage
 
     private void UpdateStats()
     {
+#if DEBUG
+        if (DemoStreaming && _app.Controller.State == StreamState.Idle)
+        {
+            ShowDemoStreaming();
+            return;
+        }
+#endif
         var c = _app.Controller;
         var s = c.ActiveSender;
         bool streaming = s != null && c.State == StreamState.Streaming;
@@ -461,10 +468,39 @@ internal sealed class HomePage : ScrollPage
         var demo = new NetworkHealth();
         if (DemoNetwork != "stable")
         {
-            foreach (long at in new long[] { 60_000, 250_000, 480_000 }) demo.AddPing(PingTarget.Speaker, at, 48);
+            foreach (long at in new long[] { 60_000, 250_000, 480_000 }) demo.AddPing(PingTarget.Speaker, at, 75);
             demo.AddPing(PingTarget.Router, 150_000, 34); // the router alone: not jitter
         }
         return demo.Assess(500_000, _app.Controller.SafeLatency(_app.Config.LatencyMs), arrivalToRender, routerWatched: true);
+    }
+
+    private static readonly bool DemoStreaming = Environment.GetEnvironmentVariable("HOMEPODCAST_DEMO_STREAMING") is { Length: > 0 };
+    private static readonly DateTime DemoSince = DateTime.UtcNow.AddMinutes(-12).AddSeconds(-34);
+
+    /// <summary>
+    /// Debug builds with HOMEPODCAST_DEMO_STREAMING set, while idle (tutorial and promo recordings without a speaker):
+    /// the page as it looks while streaming, with the values measured on the real machine on 2026-10-08 (85 ms in the
+    /// speaker, a 16 ms buffer, no dropouts, no resends). Release builds have no such path.
+    /// </summary>
+    private void ShowDemoStreaming()
+    {
+        var cfg = _app.Config;
+        var t = DateTime.UtcNow - DemoSince;
+        _dot.DotColor = Icons.Streaming;
+        _status.Text = L.F("已连接 · {0}", cfg.DeviceName ?? "HomePod");
+        _connect.Text = L.T("断开");
+        _connect.Kind = ButtonKind.Secondary;
+        if (_volumeValue.Text == "--") ShowVolume(cfg.Volume ?? 30);
+        _streamStats.Role = TextRole.Secondary;
+        _streamStats.Text = L.F("已推送 {0} · 断音 {1} 次 · {2}", $"{t.Minutes}:{t.Seconds:00}", 0, L.T("音源：默认输出设备"));
+        _effective.SetValue(_app.Controller.SafeLatency(cfg.LatencyMs).ToString());
+        _buffer.SetValue((15 + t.Seconds % 3).ToString()); // the FIFO's depth wanders around its 16 ms target
+        _speakerDelay.SetValue("85");
+        _dropouts.SetValue("0");
+        _resent.SetValue("0/0");
+        _netHint.Collapsed = true;
+        _netLine.Collapsed = false;
+        _netStatus.Text = L.T("网络：稳定");
     }
 #else
     private static NetworkVerdict? DemoVerdict(int arrivalToRender) => null;

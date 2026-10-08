@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "Uitgeschakeld op deze site; het beeld wordt niet vertraagd." },
   "hintNotStreaming": { "message": "HomePodCast streamt niet; het beeld wordt niet vertraagd." },
   "hintNotRunning": { "message": "HomePodCast is niet actief; het beeld wordt niet vertraagd." },
+  "hintLongDelay": { "message": "Lange vertraging: kies voor video de scène ‘Films’ of ‘Aanbevolen’." },
   "videosNone": { "message": "Geen video's gevonden op deze pagina (≥ 200×112)." },
   "videosCount": {
     "message": "Video's op deze pagina: $COUNT$",

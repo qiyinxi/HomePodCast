@@ -144,10 +144,14 @@ public sealed class AppAudio : IDisposable
         set { foreach (var s in _sessions) s.Volume.SetMute(value, ref _context); }
     }
 
+    /// <summary>A made-up meter for rows that have no session (the Debug mixer demo); null for real apps.</summary>
+    internal Func<float>? FakePeak { get; init; }
+
     public float Peak
     {
         get
         {
+            if (FakePeak != null) return FakePeak();
             float peak = 0;
             foreach (var s in _sessions)
                 if (s.Meter.GetPeakValue(out var p) >= 0) peak = Math.Max(peak, p);

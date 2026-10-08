@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "Desactivado en este sitio; la imagen no se retrasa." },
   "hintNotStreaming": { "message": "HomePodCast no está transmitiendo; la imagen no se retrasa." },
   "hintNotRunning": { "message": "HomePodCast no se está ejecutando; la imagen no se retrasa." },
+  "hintLongDelay": { "message": "Retardo largo: para vídeos, usa la escena «Cine» o «Recomendado»." },
   "videosNone": { "message": "No se encontraron vídeos en esta página (≥ 200×112)." },
   "videosCount": {
     "message": "Vídeos en esta página: $COUNT$",

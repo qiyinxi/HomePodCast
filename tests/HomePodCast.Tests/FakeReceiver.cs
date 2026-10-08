@@ -85,8 +85,10 @@ internal sealed class FakeReceiver : IDisposable
                     var bytes = udp.Receive(ref from);
                     into(new Packet(MediaClock.Now, bytes));
                 }
-                catch (SocketException) { }
-                catch (ObjectDisposedException) { return; }
+                catch (SocketException) when (udp.Client != null) { }
+                // Closed while waiting (Dispose): depending on timing UdpClient throws ObjectDisposedException, a
+                // SocketException, or a NullReferenceException (its Client is gone). On CI the last one crashed the test host.
+                catch (Exception e) when (e is SocketException or ObjectDisposedException or NullReferenceException) { return; }
             }
         }) { IsBackground = true, Name = "fake receiver" }.Start();
     }

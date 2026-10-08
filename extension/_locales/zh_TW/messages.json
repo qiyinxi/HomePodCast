@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "已在此網站關閉，畫面不延遲。" },
   "hintNotStreaming": { "message": "HomePodCast 未串流，畫面不延遲。" },
   "hintNotRunning": { "message": "HomePodCast 未執行，畫面不延遲。" },
+  "hintLongDelay": { "message": "延遲較長：看影片建議用「影視」或「推薦」場景。" },
   "videosNone": { "message": "本頁未偵測到影片（≥ 200×112）。" },
   "videosCount": {
     "message": "本頁 $COUNT$ 部影片",
