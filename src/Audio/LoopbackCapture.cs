@@ -113,6 +113,7 @@ public sealed class LoopbackCapture : ICaptureSource
 
                     long now = Stopwatch.GetTimestamp();
                     if (now - lastData > Stopwatch.Frequency / 5) resampler.Reset(); // resume after silence
+                    else NoteGap(now - lastData);
                     lastData = now;
 
                     if (stereo.Length < frames * 2) stereo = new float[frames * 2];
@@ -154,6 +155,17 @@ public sealed class LoopbackCapture : ICaptureSource
             Marshal.ReleaseComObject(enumerator);
         }
     }
+
+    private long _maxGapTicks;
+
+    /// <summary>Longest wait between two packets while audio was flowing (quiet spells excluded).</summary>
+    private void NoteGap(long ticks)
+    {
+        if (ticks > Volatile.Read(ref _maxGapTicks)) Volatile.Write(ref _maxGapTicks, ticks);
+    }
+
+    /// <summary>The longest gap between capture packets since the last call, in ms (for the minute stats).</summary>
+    public double TakeMaxGapMs() => Interlocked.Exchange(ref _maxGapTicks, 0) * 1000.0 / Stopwatch.Frequency;
 
     private void SteerDrift(Resampler resampler)
     {

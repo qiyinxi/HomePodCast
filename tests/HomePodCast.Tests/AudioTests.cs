@@ -96,7 +96,86 @@ public class AudioFifoTests
         var dest = new float[352 * 2];
         while (fifo.Depth >= 352) Assert.True(fifo.Read(dest));
         Assert.False(fifo.Read(dest));    // not enough left: padded with silence
-        Assert.Equal(1, fifo.Underruns);
         Assert.Equal(0, fifo.Depth);
+        fifo.Write(new float[100 * 2]);   // the source is back at once: that was a dropout
+        Assert.Equal(1, fifo.Underruns);
+    }
+
+    private static (AudioFifo Fifo, Action<int> Advance) Clocked(int targetMs = 12)
+    {
+        long now = 0;
+        var fifo = new AudioFifo(44100, targetMs, targetMs * 3 + 10) { Clock = () => now };
+        return (fifo, ms => now += ms * System.Diagnostics.Stopwatch.Frequency / 1000);
+    }
+
+    private static void Drain(AudioFifo fifo)
+    {
+        var dest = new float[352 * 2];
+        while (fifo.Read(dest)) { }
+    }
+
+    [Fact]
+    public void Running_dry_is_a_dropout_only_if_the_source_comes_back_quickly()
+    {
+        var (fifo, advance) = Clocked();
+        fifo.Write(new float[600 * 2]);
+        Drain(fifo);
+        advance(30);                      // a late burst from the capture device
+        fifo.Write(new float[600 * 2]);
+        Assert.Equal(1, fifo.Underruns);
+        Assert.Equal(0, fifo.IdleGaps);
+
+        Drain(fifo);
+        advance(5000);                    // the music was paused for 5 s
+        fifo.Write(new float[600 * 2]);
+        Assert.Equal(1, fifo.Underruns);
+        Assert.Equal(1, fifo.IdleGaps);
+    }
+
+    [Fact]
+    public void Adaptive_target_grows_on_dropouts_and_relaxes_after_clean_reads()
+    {
+        var (fifo, advance) = Clocked();
+        fifo.MaxTargetFrames = 44100 * 30 / 1000;
+        fifo.RelaxAfterReads = 10;
+        int baseTarget = fifo.TargetFrames;
+
+        for (int i = 0; i < 10; i++)     // ten dropouts in a row
+        {
+            fifo.Write(new float[2000 * 2]);
+            Drain(fifo);
+            advance(20);
+        }
+        fifo.Write(new float[2000 * 2]);
+        Assert.Equal(fifo.MaxTargetFrames, fifo.TargetFrames);   // capped at 30 ms
+        Assert.Equal(fifo.TargetFrames + (fifo.CapFrames - fifo.TargetFrames), fifo.CapFrames);
+
+        var dest = new float[352 * 2];
+        int before = fifo.TargetFrames;
+        for (int i = 0; i < 10; i++)
+        {
+            fifo.Write(new float[352 * 2]);
+            Assert.True(fifo.Read(dest));
+        }
+        Assert.Equal(before - 44, fifo.TargetFrames);             // one ms back after 10 clean reads
+        Assert.True(fifo.TargetFrames > baseTarget);
+    }
+
+    [Fact]
+    public void Quiet_spells_never_grow_the_adaptive_target()
+    {
+        var (fifo, advance) = Clocked();
+        fifo.MaxTargetFrames = 44100 * 30 / 1000;
+        int baseTarget = fifo.TargetFrames;
+        for (int i = 0; i < 5; i++)
+        {
+            fifo.Write(new float[600 * 2]);
+            Drain(fifo);
+            advance(1000);
+        }
+        fifo.Write(new float[600 * 2]);
+        Assert.Equal(baseTarget, fifo.TargetFrames);
+        Assert.Equal(0, fifo.Underruns);
+        Assert.Equal(5, fifo.IdleGaps);
     }
 }

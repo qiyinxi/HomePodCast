@@ -21,8 +21,16 @@ public sealed partial class StreamController : IDisposable
     public StreamController(int fifoTargetMs = 12)
     {
         fifoTargetMs = Math.Clamp(fifoTargetMs, 5, 100);
-        _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10);
+        _fifo = new AudioFifo(RtpSender.SampleRate, targetMs: fifoTargetMs, capMs: fifoTargetMs * 3 + 10)
+        {
+            // Adaptive: each dropout adds 4 ms (up to 30), 10 clean minutes take 1 ms back. Measured 2026-10-08 on a
+            // virtual sound card: a fixed 12 ms ran dry about once a minute while the network side was perfect.
+            MaxTargetFrames = Math.Max(fifoTargetMs, MaxFifoTargetMs) * RtpSender.SampleRate / 1000,
+            RelaxAfterReads = 600L * RtpSender.SampleRate / RtpSender.FramesPerPacket,
+        };
     }
+
+    private const int MaxFifoTargetMs = 30;
     private readonly object _lock = new();
     private ICaptureSource? _capture;
     private AirPlayClient? _client;
@@ -213,8 +221,10 @@ public sealed partial class StreamController : IDisposable
     {
         var s = _client?.Sender;
         if (s == null) return;
-        Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms drift={_capture?.DriftPpm ?? 0:F0}ppm " +
-                 $"underruns={_fifo.Underruns} overflows={_fifo.Overflows} sent={s.PacketsSent} late={s.LateWakeups} " +
+        Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +
+                 $"drift={_capture?.DriftPpm ?? 0:F0}ppm underruns={_fifo.Underruns} idle={_fifo.IdleGaps} " +
+                 $"maxGap={(_capture as LoopbackCapture)?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
+                 $"sent={s.PacketsSent} late={s.LateWakeups} " +
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
                  $"rtxMiss={s.RetransmitMisses}");
     }
