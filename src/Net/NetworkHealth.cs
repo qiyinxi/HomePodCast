@@ -39,13 +39,15 @@ public sealed record NetworkVerdict(int Episodes, int Threats, bool Threatened, 
 /// <item>Speaker spikes, lost speaker pings and resend activity less than <see cref="EpisodeGapMs"/> apart are one
 /// episode (one burst of Wi-Fi trouble is one stutter at most). Router spikes alone are not jitter: routers answer
 /// pings to themselves at low priority, and the audio does not wait for them.</item>
-/// <item>An episode threatens when its worst speaker round trip exceeds the margin, a speaker ping was lost, the speaker
-/// asked for a resend while the margin is under <see cref="ResendMs"/>, or a resend missed (the packet was gone).</item>
+/// <item>An episode threatens when its worst speaker round trip exceeds <see cref="SpikeMargins"/> margins,
+/// <see cref="LostPings"/> speaker pings were lost, the speaker asked for a resend while a round trip exceeded the margin
+/// (the copy likely came too late), or a resend missed (the packet was gone). A resend on a quiet network is the
+/// protocol working, not a threat.</item>
 /// <item>A hint is due at <see cref="ThreatEpisodes"/> threats in the window, or at any resend miss.</item>
 /// <item>A threat with a router spike within <see cref="SameTimeMs"/> is the PC's Wi-Fi (both pings cross it);
 /// otherwise the HomePod's. The majority decides; a tie blames the HomePod (Wi-Fi 4 on the HomePod 2).</item>
-/// <item>Suggestion: the latency + <see cref="SmallStepMs"/> when every threat was a spike at most that far over the
-/// margin, else + <see cref="LargeStepMs"/>; rounded up to 5 ms and capped at <see cref="MaxSuggestedMs"/>.</item>
+/// <item>Suggestion: the latency + <see cref="SmallStepMs"/> when every threat was a spike at most that far over its
+/// threshold, else + <see cref="LargeStepMs"/>; rounded up to 5 ms and capped at <see cref="MaxSuggestedMs"/>.</item>
 /// </list>
 /// </summary>
 public sealed class NetworkHealth
@@ -58,16 +60,20 @@ public sealed class NetworkHealth
     /// <summary>A router spike this close to an episode puts it on the PC's hop.</summary>
     public const long SameTimeMs = 1000;
 
-    /// <summary>Kept out of the margin: the PC's own buffer and send timing.</summary>
-    public const int ReserveMs = 20;
+    /// <summary>Kept out of the margin: the PC's send timing.</summary>
+    public const int ReserveMs = 5;
 
     /// <summary>
-    /// What a resend costs: the speaker notices the gap one packet (8 ms) later, asks, and the copy crosses both hops
-    /// again. A resend request threatens only when the margin is smaller than this.
+    /// A speaker round trip threatens only past this many margins. Measured 2026-10-08: the first rule (a round trip over
+    /// the margin, with 20 ms reserved) raised the hint on the real machine while nothing could be heard. A ping crosses
+    /// the air twice and the HomePod may answer pings late; the audio has the whole margin one way.
     /// </summary>
-    public const int ResendMs = 40;
+    public const int SpikeMargins = 2;
 
-    public const int ThreatEpisodes = 2;
+    /// <summary>Lost speaker pings in one episode that make it a threat (one lost ping on its own is common).</summary>
+    public const int LostPings = 2;
+
+    public const int ThreatEpisodes = 3;
     public const int SmallStepMs = 10, LargeStepMs = 15;
     public const int MaxSuggestedMs = 200;
 
@@ -146,26 +152,31 @@ public sealed class NetworkHealth
         {
             // One episode: everything until a quiet gap of more than EpisodeGapMs.
             long start = events[i].At, end = start;
-            long worst = -2; // worst speaker round trip; -1: a ping was lost; -2: no ping spike
+            long worst = 0; // worst answered speaker round trip
+            int lostPings = 0;
             long requests = 0, misses = 0;
             for (; i < events.Count && events[i].At - end <= EpisodeGapMs; i++)
             {
                 var e = events[i];
                 end = e.At;
-                if (e.RttMs is { } rtt) worst = worst == -1 || rtt < 0 ? -1 : Math.Max(worst, rtt);
+                if (e.RttMs is { } rtt)
+                {
+                    if (rtt < 0) lostPings++;
+                    else worst = Math.Max(worst, rtt);
+                }
                 requests += e.Requests;
                 misses += e.Misses;
             }
             episodes++;
 
-            bool lost = worst == -1;
-            bool spikeOver = lost || worst > margin;
-            bool resendLate = requests > 0 && margin < ResendMs;
-            if (!spikeOver && !resendLate && misses == 0) continue;
+            bool lost = lostPings >= LostPings;
+            bool spikeOver = worst > SpikeMargins * margin;
+            bool resendLate = requests > 0 && worst > margin; // a resend while the network was slow likely came too late
+            if (!spikeOver && !lost && !resendLate && misses == 0) continue;
 
             threats++;
             missed |= misses > 0;
-            if (lost || resendLate || misses > 0 || worst - margin > SmallStepMs) allSmall = false;
+            if (lost || resendLate || misses > 0 || worst - SpikeMargins * margin > SmallStepMs) allSmall = false;
             if (router.Any(t => t >= start - SameTimeMs && t <= end + SameTimeMs)) onPc++;
             else onSpeaker++;
         }

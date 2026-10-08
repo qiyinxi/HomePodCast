@@ -20,6 +20,9 @@ public class NetworkHealthTests
         return h;
     }
 
+    private static NetworkHealth Every100s(long rtt, int count = 3) =>
+        Spikes(Enumerable.Range(1, count).Select(k => (k * 100 * S, rtt)).ToArray());
+
     [Fact]
     public void A_quiet_connection_is_stable()
     {
@@ -28,24 +31,35 @@ public class NetworkHealthTests
         Assert.Equal(0, v.Threats);
         Assert.False(v.Threatened);
         Assert.Null(v.SuggestedMs);
-        Assert.Equal(15, v.MarginMs); // 120 − 85 − 20
+        Assert.Equal(30, v.MarginMs); // 120 − 85 − 5
     }
 
     [Fact]
-    public void One_spike_over_the_margin_is_counted_but_is_not_yet_worth_a_hint()
+    public void Spikes_under_twice_the_margin_are_jitter_not_threats()
     {
-        var v = Spikes((100 * S, 48)).Assess(200 * S, 120, A2R, true);
-        Assert.Equal(1, v.Episodes);
-        Assert.Equal(1, v.Threats);
+        // Seen on the real machine 2026-10-08: spikes like these raised the first rule's hint while nothing could be heard.
+        var v = Spikes((60 * S, 35), (250 * S, 48), (480 * S, 60)).Assess(500 * S, 120, A2R, true);
+        Assert.Equal(3, v.Episodes);
+        Assert.Equal(0, v.Threats);
         Assert.False(v.Threatened);
         Assert.Null(v.SuggestedMs);
     }
 
     [Fact]
-    public void Spikes_over_the_margin_suggest_15_ms_more_on_the_speakers_hop()
+    public void Two_big_spikes_are_counted_but_are_not_yet_worth_a_hint()
     {
-        // The example from the brief: 推荐 120 ms, 85 ms in the speaker, three spikes in 10 minutes.
-        var v = Spikes((60 * S, 48), (250 * S, 41), (480 * S, 35)).Assess(500 * S, 120, A2R, true);
+        var v = Spikes((100 * S, 70), (200 * S, 80)).Assess(300 * S, 120, A2R, true);
+        Assert.Equal(2, v.Episodes);
+        Assert.Equal(2, v.Threats);
+        Assert.False(v.Threatened);
+        Assert.Null(v.SuggestedMs);
+    }
+
+    [Fact]
+    public void Three_big_spikes_suggest_more_latency_on_the_speakers_hop()
+    {
+        // 推荐 120 ms, 85 ms in the speaker: round trips over 60 ms; 15, 30 and 5 over → + 15.
+        var v = Spikes((60 * S, 75), (250 * S, 90), (480 * S, 65)).Assess(500 * S, 120, A2R, true);
         Assert.Equal(3, v.Episodes);
         Assert.Equal(3, v.Threats);
         Assert.True(v.Threatened);
@@ -57,42 +71,30 @@ public class NetworkHealthTests
     public void Spikes_less_than_a_second_apart_are_one_episode()
     {
         // 100 ms pings through one bad second: one stutter at most, not five.
-        var h = Spikes((10_000, 40), (10_100, 60), (10_700, 35), (11_600, 33), (12_500, 31));
-        var v = h.Assess(20 * S, 120, A2R, true);
+        var h = Spikes((10_000, 70), (10_100, 90), (10_700, 40), (11_600, 35), (12_500, 31));
+        var v = h.Assess(30 * S, 120, A2R, true);
         Assert.Equal(1, v.Episodes);
-        Assert.False(v.Threatened);
+        Assert.Equal(1, v.Threats);
 
-        h.AddPing(PingTarget.Speaker, 13_501, 31); // 1001 ms after the last one: a new episode
-        v = h.Assess(20 * S, 120, A2R, true);
-        Assert.Equal(2, v.Episodes);
-        Assert.True(v.Threatened);
-    }
-
-    [Fact]
-    public void Spikes_within_the_margin_are_jitter_but_no_threat()
-    {
-        // 影视 200 ms leaves 95 ms: Wi-Fi spikes of 60 ms are absorbed.
-        var v = Spikes((10 * S, 60), (100 * S, 95), (200 * S, 70)).Assess(300 * S, 200, A2R, true);
+        h.AddPing(PingTarget.Speaker, 13_501, 70); // 1001 ms after the last one: a new episode
+        h.AddPing(PingTarget.Speaker, 20_000, 70);
+        v = h.Assess(30 * S, 120, A2R, true);
         Assert.Equal(3, v.Episodes);
-        Assert.Equal(0, v.Threats);
-        Assert.False(v.Threatened);
-        Assert.Null(v.SuggestedMs);
-
-        v = Spikes((10 * S, 96), (100 * S, 120)).Assess(300 * S, 190, A2R, true); // margin 85
         Assert.True(v.Threatened);
     }
 
     [Fact]
-    public void A_lost_ping_is_over_any_margin()
+    public void A_lost_ping_alone_is_no_threat_but_two_in_one_episode_are()
     {
-        var v = Spikes((10 * S, -1), (100 * S, -1)).Assess(300 * S, 300, A2R, true);
-        Assert.Equal(2, v.Threats);
-        Assert.True(v.Threatened);
-        Assert.Null(v.SuggestedMs); // 300 is past the cap: the hint, but no suggestion
+        var single = Spikes((10 * S, -1), (100 * S, -1), (200 * S, -1)).Assess(300 * S, 300, A2R, true);
+        Assert.Equal(3, single.Episodes);
+        Assert.Equal(0, single.Threats);
 
-        v = Spikes((10 * S, 40), (10_300, -1), (100 * S, 32)).Assess(300 * S, 140, A2R, true); // margin 35
-        Assert.Equal(2, v.Episodes);
-        Assert.Equal(1, v.Threats); // the lost ping makes its episode a threat; 32 ms alone is within the margin
+        var pairs = Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1), (200_000, -1), (200_100, -1))
+            .Assess(300 * S, 300, A2R, true);
+        Assert.Equal(3, pairs.Threats);
+        Assert.True(pairs.Threatened);
+        Assert.Null(pairs.SuggestedMs); // 300 is past the cap: the hint, but no suggestion
     }
 
     [Fact]
@@ -108,34 +110,32 @@ public class NetworkHealthTests
     }
 
     [Fact]
-    public void Resend_requests_threaten_only_a_margin_too_small_for_a_resend()
+    public void A_resend_on_a_quiet_network_is_the_protocol_working()
     {
         var h = new NetworkHealth();
         h.AddResends(50 * S, 1, 0);
         h.AddResends(400 * S, 2, 0);
-        var tight = h.Assess(500 * S, 120, A2R, true); // margin 15 < 40
-        Assert.Equal(2, tight.Episodes);
-        Assert.Equal(2, tight.Threats);
-        Assert.True(tight.Threatened);
-        Assert.Equal(135, tight.SuggestedMs);
-
-        var roomy = h.Assess(500 * S, 150, A2R, true); // margin 45: the copy arrives in time
-        Assert.Equal(2, roomy.Episodes);
-        Assert.Equal(0, roomy.Threats);
-        Assert.False(roomy.Threatened);
-
-        Assert.True(h.Assess(500 * S, 144, A2R, true).Threatened);  // margin 39
-        Assert.False(h.Assess(500 * S, 145, A2R, true).Threatened); // margin 40
+        h.AddResends(450 * S, 1, 0);
+        var v = h.Assess(500 * S, 120, A2R, true);
+        Assert.Equal(3, v.Episodes);
+        Assert.Equal(0, v.Threats);
+        Assert.False(v.Threatened);
     }
 
     [Fact]
-    public void A_resend_and_a_spike_in_the_same_second_are_one_episode()
+    public void A_resend_while_the_network_is_slow_likely_came_too_late()
     {
-        var h = Spikes((100_000, 45));
-        h.AddResends(100_250, 1, 0); // sampled a little later
-        var v = h.Assess(200 * S, 120, A2R, true);
-        Assert.Equal(1, v.Episodes);
-        Assert.Equal(1, v.Threats);
+        var h = new NetworkHealth();
+        foreach (long at in new[] { 100_000L, 200_000, 300_000 })
+        {
+            h.AddPing(PingTarget.Speaker, at, 45); // over the 30 ms margin, under twice it
+            h.AddResends(at + 250, 1, 0);          // sampled a little later
+        }
+        var v = h.Assess(400 * S, 120, A2R, true);
+        Assert.Equal(3, v.Episodes);
+        Assert.Equal(3, v.Threats);
+        Assert.True(v.Threatened);
+        Assert.Equal(135, v.SuggestedMs); // a late resend is never "small": + 15
     }
 
     [Fact]
@@ -149,26 +149,26 @@ public class NetworkHealthTests
     [Fact]
     public void Events_older_than_ten_minutes_drop_out()
     {
-        var h = Spikes((10 * S, 50), (20 * S, 50));
+        var h = Spikes((10 * S, 70), (20 * S, 70), (30 * S, 70));
         Assert.True(h.Assess(10 * S + NetworkHealth.WindowMs - 1, 120, A2R, true).Threatened);
 
         var later = h.Assess(10 * S + NetworkHealth.WindowMs, 120, A2R, true); // the first one is exactly 10 minutes old
-        Assert.Equal(1, later.Episodes);
+        Assert.Equal(2, later.Episodes);
         Assert.False(later.Threatened);
 
-        Assert.Equal(0, h.Assess(20 * S + NetworkHealth.WindowMs, 120, A2R, true).Episodes);
+        Assert.Equal(0, h.Assess(30 * S + NetworkHealth.WindowMs, 120, A2R, true).Episodes);
 
-        h.AddResends(30 * S, 0, 1);
-        Assert.True(h.Assess(30 * S + NetworkHealth.WindowMs - 1, 120, A2R, true).Threatened);
-        Assert.False(h.Assess(30 * S + NetworkHealth.WindowMs, 120, A2R, true).Threatened); // even a miss ages out
+        h.AddResends(40 * S, 0, 1);
+        Assert.True(h.Assess(40 * S + NetworkHealth.WindowMs - 1, 120, A2R, true).Threatened);
+        Assert.False(h.Assess(40 * S + NetworkHealth.WindowMs, 120, A2R, true).Threatened); // even a miss ages out
     }
 
     [Fact]
     public void A_router_spike_at_the_same_time_blames_the_pcs_wifi()
     {
-        var h = Spikes((100_000, 60), (300_000, 70));
+        var h = Spikes((100_000, 70), (200_000, 75), (300_000, 80));
         h.AddPing(PingTarget.Router, 100_400, 45);
-        h.AddPing(PingTarget.Router, 299_100, 50); // within a second before
+        h.AddPing(PingTarget.Router, 199_100, 50); // within a second before
         var v = h.Assess(400 * S, 120, A2R, true);
         Assert.True(v.Threatened);
         Assert.Equal(NetworkHop.Pc, v.Hop);
@@ -177,17 +177,17 @@ public class NetworkHealthTests
     [Fact]
     public void A_router_spike_more_than_a_second_away_does_not_count()
     {
-        var h = Spikes((100_000, 60), (300_000, 70));
+        var h = Spikes((100_000, 70), (200_000, 75), (300_000, 80));
         h.AddPing(PingTarget.Router, 101_001, 45);
-        h.AddPing(PingTarget.Router, 298_999, 50);
+        h.AddPing(PingTarget.Router, 198_999, 50);
         Assert.Equal(NetworkHop.Speaker, h.Assess(400 * S, 120, A2R, true).Hop);
     }
 
     [Fact]
     public void The_router_near_the_end_of_a_long_episode_still_counts()
     {
-        var h = Spikes((100_000, 60), (100_800, 40), (101_600, 50), (300_000, 70));
-        h.AddPing(PingTarget.Router, 102_500, 45); // 3.1 s after the episode began, 0.9 s after it ended
+        var h = Spikes((100_000, 70), (100_800, 40), (101_600, 50), (200_000, 70), (300_000, 70));
+        h.AddPing(PingTarget.Router, 102_500, 45); // 2.5 s after the episode began, 0.9 s after it ended
         h.AddPing(PingTarget.Router, 300_000, 45);
         Assert.Equal(NetworkHop.Pc, h.Assess(400 * S, 120, A2R, true).Hop);
     }
@@ -195,39 +195,39 @@ public class NetworkHealthTests
     [Fact]
     public void The_majority_of_threats_decides_the_hop_and_a_tie_blames_the_homepod()
     {
-        var h = Spikes((100 * S, 60), (200 * S, 60), (300 * S, 60));
+        var h = Every100s(70);
         h.AddPing(PingTarget.Router, 100 * S, 40);
         Assert.Equal(NetworkHop.Speaker, h.Assess(400 * S, 120, A2R, true).Hop); // 1 PC, 2 HomePod
 
         h.AddPing(PingTarget.Router, 200 * S, 40);
         Assert.Equal(NetworkHop.Pc, h.Assess(400 * S, 120, A2R, true).Hop); // 2 PC, 1 HomePod
 
-        var tie = Spikes((100 * S, 60), (200 * S, 60));
+        var tie = Every100s(70, count: 4);
         tie.AddPing(PingTarget.Router, 100 * S, 40);
-        Assert.Equal(NetworkHop.Speaker, tie.Assess(400 * S, 120, A2R, true).Hop);
+        tie.AddPing(PingTarget.Router, 200 * S, 40);
+        Assert.Equal(NetworkHop.Speaker, tie.Assess(500 * S, 120, A2R, true).Hop);
     }
 
     [Fact]
     public void Only_threats_are_attributed()
     {
-        // Two router-backed spikes within the 影视 margin, two quiet-router ones beyond it: the HomePod's hop.
-        var h = Spikes((100 * S, 50), (150 * S, 50), (200 * S, 120), (300 * S, -1));
+        // 影视 200 ms (margin 110): two router-backed spikes are absorbed; three quiet-router episodes are threats.
+        var h = Spikes((100 * S, 150), (150 * S, 150), (200 * S, 250), (250 * S, 260), (300_000, -1), (300_100, -1));
         h.AddPing(PingTarget.Router, 100 * S, 40);
         h.AddPing(PingTarget.Router, 150 * S, 40);
         var v = h.Assess(400 * S, 200, A2R, true);
-        Assert.Equal(4, v.Episodes);
-        Assert.Equal(2, v.Threats);
+        Assert.Equal(5, v.Episodes);
+        Assert.Equal(3, v.Threats);
         Assert.Equal(NetworkHop.Speaker, v.Hop);
     }
 
     [Fact]
     public void An_unwatched_router_leaves_the_hop_unknown()
     {
-        var h = Spikes((100 * S, 60), (300 * S, 70));
-        var v = h.Assess(400 * S, 120, A2R, routerWatched: false);
+        var v = Every100s(70).Assess(400 * S, 120, A2R, routerWatched: false);
         Assert.True(v.Threatened);
         Assert.Equal(NetworkHop.Unknown, v.Hop);
-        Assert.Equal(135, v.SuggestedMs);
+        Assert.Equal(130, v.SuggestedMs); // every spike 10 over the threshold: + 10
     }
 
     [Fact]
@@ -242,20 +242,20 @@ public class NetworkHealthTests
     }
 
     [Theory]
-    // latency, worst spike, suggestion: + 10 when every threat was at most 10 ms over the margin, else + 15; up to 5; cap 200
-    [InlineData(140, 40, 150)]  // margin 35: 5 over
-    [InlineData(140, 45, 150)]  // 10 over
-    [InlineData(140, 46, 155)]  // 11 over
-    [InlineData(133, 35, 145)]  // margin 28: 7 over → 143 → 145
-    [InlineData(107, 31, 125)]  // margin 2: 29 over → 122 → 125
-    [InlineData(120, 31, 135)]  // 推荐: any reported spike (> 30 ms) is 16+ over
-    [InlineData(190, 120, 200)] // 205 capped
-    [InlineData(196, 120, 200)] // 215 capped: the cap is still a step up
-    [InlineData(200, 120, null)] // at the cap: no suggestion, only the hint
-    [InlineData(500, -1, null)]  // 音乐
+    // latency, spike (three of them), suggestion: + 10 when every threat was at most 10 ms over twice the margin,
+    // else + 15; rounded up to 5; capped at 200
+    [InlineData(140, 105, 150)]  // margin 50, threshold 100: 5 over
+    [InlineData(140, 110, 150)]  // 10 over
+    [InlineData(140, 111, 155)]  // 11 over
+    [InlineData(133, 90, 145)]   // margin 43, threshold 86: 4 over → 143 → 145
+    [InlineData(120, 61, 130)]   // 推荐: threshold 60
+    [InlineData(120, 75, 135)]
+    [InlineData(190, 250, 200)]  // 205 capped
+    [InlineData(196, 250, 200)]  // 211 capped: the cap is still a step up
+    [InlineData(200, 300, null)] // at the cap: no suggestion, only the hint
     public void Suggestion_adds_10_or_15_ms_rounded_up_to_5_and_capped(int latency, int spike, int? expected)
     {
-        var v = Spikes((100 * S, spike), (300 * S, spike)).Assess(400 * S, latency, A2R, true);
+        var v = Every100s(spike).Assess(400 * S, latency, A2R, true);
         Assert.True(v.Threatened);
         Assert.Equal(expected, v.SuggestedMs);
     }
@@ -263,23 +263,23 @@ public class NetworkHealthTests
     [Fact]
     public void One_large_threat_makes_the_step_15()
     {
-        var v = Spikes((100 * S, 40), (200 * S, 40), (300 * S, 60)).Assess(400 * S, 140, A2R, true); // 5, 5 and 25 over
+        var v = Spikes((100 * S, 105), (200 * S, 105), (300 * S, 130)).Assess(400 * S, 140, A2R, true); // 5, 5 and 30 over
         Assert.Equal(155, v.SuggestedMs);
     }
 
     [Fact]
     public void A_slower_speaker_leaves_less_margin()
     {
-        // The same spikes at the same latency: absorbed with 70 ms in the speaker, a threat with 95.
-        var h = Spikes((100 * S, 31), (300 * S, 31));
-        Assert.False(h.Assess(400 * S, 140, 70, true).Threatened); // margin 50
-        Assert.True(h.Assess(400 * S, 140, 95, true).Threatened);  // margin 25
+        // The same spikes at the same latency: absorbed with 70 ms in the speaker, a threat with 105.
+        var h = Every100s(61);
+        Assert.False(h.Assess(400 * S, 140, 70, true).Threatened); // margin 65, threshold 130
+        Assert.True(h.Assess(400 * S, 140, 105, true).Threatened); // margin 30, threshold 60
     }
 
     [Fact]
     public void Reset_starts_a_new_session_with_nothing_in_it()
     {
-        var h = Spikes((100 * S, 60), (300 * S, 70));
+        var h = Spikes((100 * S, 70), (300 * S, 80));
         h.AddResends(200 * S, 3, 1);
         h.AddPing(PingTarget.Router, 100 * S, 50);
         int session = h.Session;
