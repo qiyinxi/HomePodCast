@@ -183,5 +183,9 @@
   "所有程序都推送到音箱，延迟最低；本机出不出声由 Windows 音量决定。": "All apps are streamed to the speaker with the lowest latency; whether this PC also plays depends on the Windows volume.",
   "已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。": "Routing per app: sound sent to the speaker has about {0} ms more latency, and apps set to \"HomePod\" are silent on this PC.",
   "连接音箱后生效。": "Takes effect once a speaker is connected.",
-  "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Windows output is muted: apps set to \"This PC\" or \"Both\" can't be heard on this PC either."
+  "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Windows output is muted: apps set to \"This PC\" or \"Both\" can't be heard on this PC either.",
+
+  "打开": "Open",
+  "选择": "Select",
+  "切换": "Toggle"
 }
