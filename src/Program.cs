@@ -54,6 +54,9 @@ public static class Program
 
         Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
         Autostart.Repair();
+        // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
+        // tray). Not after crashes, hangs or reboots, and never for test copies.
+        if (AppConfig.Profile == null) Native.RegisterApplicationRestart("--tray", Native.RestartNoCrash | Native.RestartNoHang | Native.RestartNoReboot);
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

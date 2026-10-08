@@ -175,6 +175,10 @@ internal sealed class MainWindow : Form, ISurface
             return;
         }
         base.OnFormClosing(e);
+        // Shutdown/logoff, or an installer's Restart Manager / Task Manager closing us (WM_QUERYENDSESSION or an
+        // external WM_CLOSE): leave the whole app properly — stop streaming, restore per-app volumes and player
+        // delays — instead of leaving a tray process that Windows then has to kill.
+        if (e.CloseReason is CloseReason.WindowsShutDown or CloseReason.TaskManagerClosing) _app.QuitForSystem();
     }
 
     protected override void Dispose(bool disposing)

@@ -378,8 +378,19 @@ internal sealed partial class TrayApp : ApplicationContext
         RaiseStateChanged();
     }
 
+    private bool _quitting;
+
+    /// <summary>Windows is closing us (shutdown, logoff, an installer's Restart Manager, Task Manager).</summary>
+    internal void QuitForSystem()
+    {
+        Log.Info("closed by Windows (shutdown, installer or Task Manager): quitting");
+        Quit();
+    }
+
     internal void Quit()
     {
+        if (_quitting) return; // the main window's FormClosing can call back in while we dispose it
+        _quitting = true;
         _flyout?.Close();
         _form.Flush();
         _tray.Visible = false;

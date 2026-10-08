@@ -22,6 +22,12 @@ internal static partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool CloseHandle(IntPtr handle);
 
+    internal const uint RestartNoCrash = 1, RestartNoHang = 2, RestartNoPatch = 4, RestartNoReboot = 8;
+
+    /// <summary>Lets Restart Manager (installers) restart the app with these arguments after closing it.</summary>
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    internal static partial int RegisterApplicationRestart(string commandLine, uint flags);
+
     [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr AvSetMmThreadCharacteristics(string taskName, ref uint taskIndex);
 
