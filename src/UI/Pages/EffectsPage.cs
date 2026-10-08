@@ -80,8 +80,7 @@ internal sealed class EffectsPage : ScrollPage
         var route = new FieldRow(L.T("送到"), Ui.Row(0, null, _destination));
         var monitor = new FieldRow(L.T("监听设备"), _monitorDevice);
         FieldRow.AlignCaptions(device, level, gain, gate, route, monitor);
-        _delayHint.Text = L.F("经 HomePod 播出的人声会比实际晚约 {0} ms（推流延迟），唱歌请用「本机监听」并戴耳机。",
-            Math.Max(_config.LatencyMs, 100) + 20);
+        ShowDelayHint();
         var card = Ui.Card(head, device, level, gain, gate, route, monitor, _howl, _delayHint, _micStatus, _routeStatus);
         card.Gap = 8;
         return card;
@@ -289,8 +288,14 @@ internal sealed class EffectsPage : ScrollPage
 
     // ---------------------------------------------------------------- lifetime
 
+    /// <summary>The latency can change while the app runs (scenes, slider): refreshed when the page is shown.</summary>
+    private void ShowDelayHint() =>
+        _delayHint.Text = L.F("经 HomePod 播出的人声会比实际晚约 {0} ms（推流延迟），唱歌请用「本机监听」并戴耳机。",
+            Math.Max(_config.LatencyMs, 100) + 20);
+
     public override void PageShown()
     {
+        ShowDelayHint();
         UpdateStatus();
         _statusTimer.Start();
     }

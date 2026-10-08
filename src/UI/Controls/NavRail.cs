@@ -142,7 +142,7 @@ internal sealed class NavItem : FluentControl
         if (_selected)
         {
             int h = Dp(16), w = Dp(3);
-            Shapes.FillRound(g, P.Accent, new Rectangle(0, (Height - h) / 2, w, h), w / 2f);
+            Shapes.FillRound(g, P.Accent, new Rectangle(Dp(3), (Height - h) / 2, w, h), w / 2f); // clear of the focus ring
         }
         int x = Dp(16);
         Shapes.Glyph(g, Glyph, Theme.IconFont(16, DeviceDpi), new Rectangle(x, 0, Dp(16), Height), P.Text);
