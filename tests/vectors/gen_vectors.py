@@ -2,7 +2,7 @@
 
 SRP: srptools (what pyatv uses, and pairs with real HomePods) with fixed secrets.
 bplist: Python's plistlib with a mix of types.
-Run with the pyatv venv:  C:\\Users\\qiyin\\HomePodCast\\venv\\Scripts\\python.exe gen_vectors.py
+Run with any Python that has srptools installed:  pip install srptools && python gen_vectors.py
 """
 
 import base64
