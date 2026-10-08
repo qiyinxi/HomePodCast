@@ -19,6 +19,7 @@ public static class Program
                 "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer")),
                 "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
+                "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
                 "fakeapi" => FakeApi(args),
@@ -63,6 +64,7 @@ public static class Program
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
             """);
+        Console.WriteLine(GroupCli.Usage + "   (experimental)");
         return 0;
     }
 
