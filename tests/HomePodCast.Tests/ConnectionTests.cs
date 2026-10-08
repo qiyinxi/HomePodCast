@@ -6,7 +6,80 @@ using HomePodCast.Net;
 
 namespace HomePodCast.Tests;
 
-/// <summary>StreamController on a group of fake speakers: no mDNS, no RTSP, no audio device.</summary>
+public class LatestRequestQueueTests
+{
+    [Fact]
+    public async Task Requests_run_one_at_a_time_and_the_latest_waiting_one_wins()
+    {
+        var queue = new LatestRequestQueue("test");
+        var ran = new ConcurrentQueue<string>();
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int running = 0, overlap = 0;
+        Action Step(string name, bool block = false) => () =>
+        {
+            if (Interlocked.Increment(ref running) > 1) overlap++;
+            ran.Enqueue(name);
+            if (block)
+            {
+                started.Set();
+                release.Wait(5000);
+            }
+            Interlocked.Decrement(ref running);
+        };
+
+        _ = queue.Post(Step("connect", block: true));
+        Assert.True(started.Wait(5000));
+        var sw = Stopwatch.StartNew();
+        _ = queue.Post(Step("disconnect"));          // replaced before it ran
+        var idle = queue.Post(Step("connect again"));
+        Assert.True(sw.ElapsedMilliseconds < 500, "posting waited for the running request");
+        release.Set();
+        await idle.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(["connect", "connect again"], ran);
+        Assert.Equal(0, overlap);
+
+        // Idle again: the next request starts a new worker.
+        await queue.Post(Step("disconnect")).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("disconnect", ran.Last());
+    }
+
+    [Fact]
+    public async Task A_failing_request_does_not_stop_the_queue()
+    {
+        var queue = new LatestRequestQueue("test");
+        bool ran = false;
+        await queue.Post(() => throw new InvalidOperationException("boom")).WaitAsync(TimeSpan.FromSeconds(5));
+        await queue.Post(() => ran = true).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(ran);
+    }
+
+    [Fact]
+    public async Task Close_drops_what_waits_lets_the_running_one_finish_and_refuses_new_ones()
+    {
+        var queue = new LatestRequestQueue("test");
+        var ran = new ConcurrentQueue<string>();
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        _ = queue.Post(() => { ran.Enqueue("stop"); started.Set(); release.Wait(5000); });
+        Assert.True(started.Wait(5000));
+        _ = queue.Post(() => ran.Enqueue("start"));
+
+        var running = queue.Close();
+        Assert.False(running.IsCompleted);
+        _ = queue.Post(() => ran.Enqueue("late"));
+        release.Set();
+        await running.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50);
+        Assert.Equal(["stop"], ran);
+    }
+}
+
+/// <summary>
+/// StreamController driven like the UI drives it (Connect/Disconnect through a LatestRequestQueue), on a group of
+/// fake speakers: no mDNS, no RTSP, no audio device.
+/// </summary>
 public class ConnectionTests : IDisposable
 {
     private readonly ConcurrentQueue<string> _log = new();
@@ -95,6 +168,67 @@ public class ConnectionTests : IDisposable
     {
         var all = Members();
         return (all.Last(m => m.Name == "A"), all.Last(m => m.Name == "B"));
+    }
+
+    [Fact]
+    public async Task Connect_right_after_Disconnect_ends_connected_and_neither_waits_for_the_slow_stop()
+    {
+        var connection = new LatestRequestQueue("connection");
+        using var c = Controller(captureStopMs: 400);
+        await connection.Post(() => c.StartGroup(Plan, 150, 40)).WaitAsync(TimeSpan.FromSeconds(10));
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+
+        var sw = Stopwatch.StartNew();
+        _ = connection.Post(c.Stop);                                    // Disconnect: stopping takes 400 ms here
+        var idle = connection.Post(() => c.StartGroup(Plan, 150, 40)); // Connect right after it
+        Assert.True(sw.ElapsedMilliseconds < 200, $"the caller waited {sw.ElapsedMilliseconds} ms");
+        await idle.WaitAsync(TimeSpan.FromSeconds(10));
+        await Until(() => c.State == StreamState.Streaming, "streaming again");
+
+        Assert.Equal(1, Volatile.Read(ref _liveCaptures));          // the stopped capture is gone, one runs
+        Assert.Equal(2, Volatile.Read(ref _captures));
+        Assert.NotNull(c.Capture);
+        var members = Members();
+        Assert.Equal(4, members.Count);
+        Assert.True(members[0].Disposed && members[1].Disposed);
+        Assert.False(members[2].Disposed || members[3].Disposed);
+    }
+
+    [Fact]
+    public async Task Disconnect_right_after_Connect_leaves_nothing_running()
+    {
+        var connection = new LatestRequestQueue("connection");
+        using var c = Controller(captureStopMs: 100);
+        for (int round = 0; round < 5; round++)
+        {
+            _ = connection.Post(() => c.StartGroup(Plan, 150, 40));
+            if (round % 2 == 1) await Task.Delay(30); // sometimes let the loop get as far as the capture
+            await connection.Post(c.Stop).WaitAsync(TimeSpan.FromSeconds(10));
+            await Task.Delay(50);                    // a loop Stop gave up on would start its capture by now
+
+            Assert.Equal(StreamState.Idle, c.State);
+            Assert.Null(c.Capture);
+            Assert.Equal(0, Volatile.Read(ref _liveCaptures));
+            Assert.All(Members(), m => Assert.True(m.Disposed));
+        }
+    }
+
+    [Fact]
+    public async Task A_volume_set_while_a_queued_connect_waits_is_kept()
+    {
+        using var c = Controller();
+        int asOf = c.VolumeChanges;      // Connect reads the settings: 40 %
+        c.SetVolume(70);                 // the user moves the slider before the queued start runs
+        c.StartGroup(Plan, 150, 40, asOf);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        Assert.Equal(70, c.Volume);
+        var (a, b) = Latest();
+        Assert.Equal(70, Last(a));
+        Assert.Equal(60, Last(b));
+
+        c.StartGroup(Plan, 150, 40, c.VolumeChanges); // nothing set since: the requested volume
+        await Until(() => Members().Count == 4 && c.State == StreamState.Streaming, "reconnected");
+        Assert.Equal(40, c.Volume);
     }
 
     [Fact]

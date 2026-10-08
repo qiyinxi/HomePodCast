@@ -136,6 +136,12 @@ internal sealed partial class TrayApp : ApplicationContext
 
     // ---------------------------------------------------------------- actions
 
+    /// <summary>
+    /// Connect and Disconnect run here, never on the UI thread: Start first stops the previous loop (up to 3 s, plus
+    /// the speaker's TEARDOWN and the capture's shutdown). One at a time, and the last one asked for wins.
+    /// </summary>
+    private readonly LatestRequestQueue _connection = new("connection");
+
     public void Connect()
     {
         if (Config.DeviceId == null)
@@ -144,18 +150,24 @@ internal sealed partial class TrayApp : ApplicationContext
             return;
         }
         _wantConnected = true;
+        // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
+        string id = Config.DeviceId;
+        string? host = Config.Host;
+        int latency = Config.LatencyMs;
+        double? volume = Config.Volume;
+        int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
         {
-            Controller.StartGroup(group, Config.LatencyMs, Config.Volume);
+            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf));
             return;
         }
-        Controller.Start(Config.DeviceId, Config.Host, Config.LatencyMs, Config.Volume);
+        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf));
     }
 
     public void Disconnect()
     {
         _wantConnected = false;
-        Task.Run(Controller.Stop);
+        _connection.Post(Controller.Stop);
     }
 
     public void ToggleConnection()
@@ -409,6 +421,7 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         if (_quitting) return; // the main window's FormClosing can call back in while we dispose it
         _quitting = true;
+        var connecting = _connection.Close(); // nothing queued starts any more
         _flyout?.Close();
         _form.Flush();
         _tray.Visible = false;
@@ -418,6 +431,8 @@ internal sealed partial class TrayApp : ApplicationContext
         DisposeEffects();
         DisposePlayers();
         _api?.Dispose();
+        // A Start still running would otherwise begin a stream after the Stop below (it never faults).
+        connecting.Wait(TimeSpan.FromSeconds(10));
         Controller.Dispose();
         _tray.Dispose();
         ExitThread();

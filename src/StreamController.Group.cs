@@ -23,7 +23,8 @@ public sealed partial class StreamController
     /// <summary>The sender of whatever is streaming (one speaker or a group), for stats and the sync probe.</summary>
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
 
-    public void StartGroup(GroupPlan plan, int latencyMs, double? volume)
+    /// <param name="volumeAsOf">As for <see cref="Start"/>: a volume set after the request was made is kept.</param>
+    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null)
     {
         lock (_lifecycle)
         {
@@ -36,7 +37,7 @@ public sealed partial class StreamController
             {
                 _run = cts;
                 _groupRunner = runner;
-                Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
+                TakeStartVolume(volume, volumeAsOf);
                 _loop = Task.Run(async () =>
                 {
                     if (await runner.RunAsync(cts.Token)) DisposeCapture(); // a speaker was taken over by another sender
