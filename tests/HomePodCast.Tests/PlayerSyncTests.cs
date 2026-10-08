@@ -227,6 +227,9 @@ public class PlayerSyncTests
         public PlayerProblem? Refuse { get; set; }
         public bool Broken { get; set; }
 
+        /// <summary>Signalled once the first write reached the player; that write then hangs until cancelled.</summary>
+        public TaskCompletionSource? HangFirstWrite { get; init; }
+
         public Task<PlayerReading> ReadAsync(CancellationToken ct)
         {
             Reads++;
@@ -240,6 +243,11 @@ public class PlayerSyncTests
             if (Broken) throw new IOException("broken pipe");
             Writes.Add(delayMs);
             Delay = delayMs;
+            if (HangFirstWrite is { } hang && Writes.Count == 1)
+            {
+                hang.TrySetResult(); // e.g. VLC applied it, its HTTP reply is slow
+                return Task.Delay(Timeout.Infinite, ct);
+            }
             return Task.CompletedTask;
         }
     }
@@ -495,6 +503,23 @@ public class PlayerSyncTests
         _sync.Shutdown(TimeSpan.FromSeconds(2));
         Assert.Equal(new[] { -236, 0 }, mpv.Writes);
         Assert.Equal(new[] { -236, 0 }, vlc.Writes);
+        Assert.Equal(0, _sync.TrackedCount);
+    }
+
+    [Fact]
+    public async Task Shutdown_during_the_first_apply_still_restores_the_player()
+    {
+        // The app exits while the first apply's write is under way (nothing was tracked yet), and that write
+        // would outlast the shutdown timeout: the player must still get its own value back.
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var vlc = new FakePlayer("vlc:2", PlayerKind.Vlc, delay: 40, item: "1") { HangFirstWrite = started };
+        _scanner.Running.Add(vlc);
+        _sync.Start(() => Streaming());
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        _sync.Shutdown(TimeSpan.FromSeconds(1));
+        Assert.Equal(new[] { -236, 40 }, vlc.Writes);
+        Assert.Equal(40, vlc.Delay);
         Assert.Equal(0, _sync.TrackedCount);
     }
 
