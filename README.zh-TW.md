@@ -38,7 +38,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - 系統匣程式：自動找到揚聲器、自動重新連線、睡眠喚醒後恢復，被其他裝置搶走時不會搶回來
 - 在系統匣圖示上按右鍵開啟快速面板：音量和靜音、場景、夜間模式、麥克風、連線或中斷連線
 - 混音器：每個程式各自的音量、靜音和音量表，可選擇依程式分流（HomePod／本機／兩者），見下文
-- 音量上限、夜間模式（壓縮動態範圍＋減弱低音）、全域快速鍵；Windows 靜音時鍵盤音量鍵直接調整 HomePod
+- 音量上限、夜間模式（壓縮動態範圍＋減弱低音）、全域快速鍵；鍵盤音量鍵也能調整 HomePod（跟隨 Windows 音量，或串流時只調整 HomePod），見下文
 - 麥克風送到 HomePod，附殘響和等化器，可用耳機低延遲監聽；串流到揚聲器的所有聲音可選等化器預設集
 - 立體聲組合和多房間同步（實驗性，尚未在實際裝置上驗證）
 - 影音同步測試：螢幕閃光加上「喀」一聲，一眼看出聲音比畫面晚多少
@@ -53,7 +53,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
 
    防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
-3. 程式會自動找到 HomePod 並連線。把電腦的預設輸出裝置設為靜音也沒關係：擷取發生在系統音量之前，HomePod 照樣有聲音。
+3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 HomePod 音量跟隨 Windows 音量，Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
 
 介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
 
@@ -67,7 +67,7 @@ HomePodCast.exe mutetest                     確認靜音後仍能擷取
 
 ## 全部串流與依程式分流
 
-預設情況下，HomePodCast 擷取電腦的整個聲音輸出，全部送到 HomePod。這條路徑本身不會增加延遲，玩遊戲就用它。電腦本身的喇叭是否出聲由 Windows 音量決定：把 Windows 設為靜音，就只在 HomePod 播放。
+預設情況下，HomePodCast 擷取電腦的整個聲音輸出，全部送到 HomePod。這條路徑本身不會增加延遲，玩遊戲就用它。電腦本身的喇叭是否出聲由 Windows 音量決定。想只在 HomePod 播放：在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」（或「僅在 Windows 靜音時」），再把 Windows 設為靜音；在預設的「HomePod 跟隨 Windows 音量」下，Windows 靜音會讓 HomePod 也靜音。
 
 依程式分流可以讓每個程式分別送到 HomePod、本機或兩者（在「混音器」頁設定），例如遊戲聲音送到 HomePod、語音聊天留在耳機裡。代價是延遲：
 
@@ -83,6 +83,17 @@ HomePodCast.exe mutetest                     確認靜音後仍能擷取
 | 系統需求 | Windows 10/11 | Windows 10 2004 或更新版本 |
 
 第一次開啟分流時程式會跳出確認。把所有程式改回「預設」並把預設設為 HomePod，就回到全部串流。若分流時 HomePodCast 被強制結束，設為「HomePod」的程式會維持 0%，直到再次執行 HomePodCast。
+
+## 鍵盤音量鍵
+
+在「設定 → 鍵盤音量鍵」中選擇音量 +、− 和靜音鍵對 HomePod 的作用：
+
+- **HomePod 跟隨 Windows 音量**（預設）：按鍵照常調整 Windows，串流時 HomePod 跟著變。Windows 的 0–100% 對應 HomePod 的 0 到音量上限，Windows 靜音時 HomePod 也靜音。
+- **串流時控制 HomePod**：串流時這三個鍵只調整 HomePod（每次 2%），Windows 音量不變，螢幕下方會顯示 HomePod 音量（獨佔全螢幕的遊戲中不顯示）；未串流時照常調整 Windows。適合預設輸出是電腦喇叭、又只想聽 HomePod 的情況：把 Windows 設為靜音，再用按鍵調整 HomePod。
+- **僅在 Windows 靜音時**：舊版的做法。只有 Windows 靜音或音量為 0 時按鍵才轉給 HomePod，Windows 保持靜音。
+- **關**：按鍵只調整 Windows。
+
+電腦沒有可用的輸出裝置時（沒有安裝音效卡驅動程式，或裝置被停用、拔除），「HomePod 跟隨 Windows 音量」和「僅在 Windows 靜音時」也會在串流時直接以按鍵控制 HomePod，直到裝置恢復。以系統管理員身分執行的程式在前景時，以及遙控器、滑鼠的驅動軟體只送出媒體命令而不是按鍵時，按鍵仍會調整 Windows；這種情況下「HomePod 跟隨 Windows 音量」會跟著變。
 
 ## 建置
 

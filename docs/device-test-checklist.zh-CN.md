@@ -25,7 +25,10 @@
 
 ## 三、按键与托盘
 
-- [ ] 把 Windows 设为**静音**，按键盘音量 +/−、静音键：HomePod 音量跟着变，Windows 保持静音
+- [ ] 「设置 → 键盘音量键」=「HomePod 跟随 Windows 音量」（默认）：推流时按音量 +/−、静音键，Windows 和 HomePod 一起变（Windows 100% = 音量上限），Windows 静音时 HomePod 也静音
+- [ ] 改成「推流时控制 HomePod」：推流时按音量 +/−（按住连续变）、静音键，只有 HomePod 变，Windows 音量不动，屏幕下方弹出 HomePod 音量条约 1.5 秒；断开后按键又调 Windows
+- [ ] 同一模式下进全屏游戏按音量键：游戏不失去焦点、不最小化；独占全屏时不弹音量条
+- [ ] 「仅在 Windows 静音时」：把 Windows 设为**静音**，按音量 +/−、静音键：HomePod 音量跟着变，Windows 保持静音
 - [ ] 快捷键 Ctrl+Alt+PageUp / PageDown / Insert / N 各按一次
 - [ ] 右键托盘图标：面板贴着图标弹出；拖音量、切场景、开关夜间模式；再右键一次能关掉
 - [ ] 左键托盘图标打开主窗口
