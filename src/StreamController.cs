@@ -109,6 +109,7 @@ public sealed partial class StreamController : IDisposable
         {
             var started = Stopwatch.StartNew();
             string? lostReason = null;
+            AirPlayClient? mine = null;
             try
             {
                 Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
@@ -125,7 +126,20 @@ public sealed partial class StreamController : IDisposable
                 var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
                 var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
-                _client = client;
+                // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
+                // by now: publish only while still current, and never touch another loop's client.
+                lock (_lock)
+                {
+                    if (!ct.IsCancellationRequested) _client = mine = client;
+                }
+                if (mine == null)
+                {
+                    client.Dispose();
+                    break;
+                }
+                client.VolumeCapPercent = VolumeCapPercent;
+                if (options.VolumeCapPercent != VolumeCapPercent || options.VolumePercent != (Muted ? 0 : Volume))
+                    PushVolume(); // cap or volume changed while connecting (PushVolume had no client then)
                 if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
                 {
                     ArrivalToRenderMs = a2r;
@@ -147,11 +161,12 @@ public sealed partial class StreamController : IDisposable
             {
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
                 Log.Warn($"stream: {lostReason}");
-                if (ex is FirewallBlockedException) FirewallBlocked?.Invoke();
+                if (ex is FirewallBlockedException && !ct.IsCancellationRequested) FirewallBlocked?.Invoke();
             }
             finally
             {
-                TearDown();
+                // Only this loop's own session (Stop may already have taken and disposed it).
+                if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }
 
             if (ct.IsCancellationRequested) break;
