@@ -33,8 +33,12 @@ HomePod ソフトウェア 27 では TuneBlade から音が出なくなりまし
 
 ## 使い方
 
-1. [.NET 10 デスクトップ ランタイム](https://dotnet.microsoft.com/download/dotnet/10.0)をインストールします。
-2. `HomePodCast.exe` を起動します。初回はファイアウォール規則の追加を求められます（ローカル ネットワークのみ、プライベート ネットワークでのみ有効）。HomePod が時刻同期と再送要求のために PC へ接続してくるためです。
+1. [.NET 10 デスクトップ ランタイム](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）をインストールします。
+2. [Releases](https://github.com/qiyinxi/HomePodCast/releases) から HomePodCast をダウンロードします。パッケージは 2 種類あります。
+   - **インストーラー（推奨）`HomePodCast-<バージョン>-x64.msi`**：インストール先を選べます（既定は `C:\Program Files\HomePodCast`）。スタート メニューのショートカットと必要なファイアウォール規則が自動で追加されます。アップグレードは新しい MSI を実行するだけです。アンインストールは「設定 → アプリ」から行います。「Windows 起動時に自動起動」をオンにしていた場合は、先にアプリでオフにしてください。
+   - **ポータブル版 `HomePodCast-<バージョン>-win-x64.zip`**：任意の場所に展開して `HomePodCast.exe` を起動します。初回はファイアウォール規則の追加を求められます。
+
+   ファイアウォール規則はローカル ネットワークのみを許可し、プライベート ネットワークでのみ有効です。HomePod が時刻同期と再送要求のために PC へ接続してくるため必要です。どちらのパッケージも設定は `%APPDATA%\HomePodCast` に保存されます。
 3. HomePod が自動で見つかり、接続されます。PC の既定の出力デバイスをミュートしてもかまいません。音声はシステム音量より前の段階で取り込むので、HomePod からは普通に音が出ます。
 
 表示言語は Windows の表示言語に従います（中国語・日本語以外の場合は英語）。変更するには、設定ページの「言語 / Language」（またはトレイアイコンの右クリック メニューの「言語 / Language」）を使うか、`%APPDATA%\HomePodCast\config.json` の `"Language"` を `"ja"`、`"en"`、`"zh-CN"`、`"zh-TW"`、`"auto"` のいずれかにします。
@@ -74,6 +78,8 @@ HomePodCast.exe mutetest                     ミュート中も音声を取り�
 dotnet build src -c Release          # app\ に出力
 dotnet test tests\HomePodCast.Tests  # プロトコル・音声・翻訳の単体テスト
 ```
+
+MSI インストーラーは `installer\build.ps1` が WiX Toolset v5（ローカル dotnet ツール）でビルドします。詳しくは [installer/README.md](installer/README.md) を参照してください。
 
 `tools\measure_av.py` はスマホで撮った動画から音と映像のずれを計算します。`tests\vectors\gen_vectors.py` は pyatv が使っている srptools でペアリング アルゴリズムの照合用データを生成します。
 
