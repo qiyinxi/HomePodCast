@@ -54,7 +54,6 @@
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Högtalarens förfrågningar om klocksynk nådde aldrig programmet; oftast blockerar Windows-brandväggen inkommande anslutningar till HomePodCast.exe",
 
   "语言": "Språk",
-  "自动（跟随系统）": "Automatiskt (Windows-språk)",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "Det nya språket används när HomePodCast har startats om. Starta om nu?\n\nLjudet avbryts några sekunder under omstarten.",
 
   "已连接 · {0}（实验性）": "Ansluten · {0} (experimentellt)",
@@ -115,8 +114,6 @@
   "全局快捷键：HomePod 音量、静音、切换场景": "Globala kortkommandon: HomePod-ljudstyrka, ljud av, nästa scen",
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} kortkommando(n) används av andra program; öppna för att välja ett annat",
   "HomePod 静音": "Ljud av på HomePod",
-  "{0}（{1} ms）": "{0} ({1} ms)",
-  "场景：{0}": "Scen: {0}",
   "场景：{0}（{1} ms）": "Scen: {0} ({1} ms)",
 
   "低音增强": "Basförstärkning",
@@ -164,8 +161,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Medhörning: {0} · cirka {1:F0} ms fördröjning",
   " · 断音 {0} 次": " · {0} avbrott",
   "预设": "Förinställning",
-
-  "麦克风与音效…": "Mikrofon och effekter…",
 
   "{0}（按程序分流）": "{0} (routning per app)",
   "本机": "Den här datorn",
@@ -240,5 +235,26 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Om en app får en egen destination växlar HomePodCast till routning per app: Windows kan bara fånga appar en i taget, så ljud till HomePod kommer cirka {0} ms senare än när allt strömmas (webbläsartillägget kompenserar bilden; spel kan inte det).\n\nAppar inställda på \"HomePod\" blir tysta på datorn (0 % i volymmixern i Windows), och systemljud spelas bara upp på datorn.\n\nOm fördröjningen är viktigast, till exempel i spel, fortsätt att strömma allt. Aktivera routning per app?",
   "按程序分流会增加延迟": "Routning per app ger mer fördröjning",
 
-  "推荐": "Rekommenderad"
+  "推荐": "Rekommenderad",
+
+  "{0}：已设为 {1} ms": "{0}: inställd på {1} ms",
+  "{0}：开始播放后自动调整": "{0}: justeras när uppspelningen startar",
+  "{0}：已被手动改为 {1} ms": "{0}: ändrad för hand till {1} ms",
+  "{0}：未开启网页接口（见「设置」）": "{0}: webbgränssnittet är av (se Inställningar)",
+  "{0}：未开启 IPC（见「设置」）": "{0}: IPC är av (se Inställningar)",
+  "{0}：网页接口没有设置密码": "{0}: webbgränssnittet har inget lösenord",
+  "{0}：网页接口密码不对": "{0}: fel lösenord till webbgränssnittet",
+  "{0}：请手动设为 {1} ms": "{0}: ställ in {1} ms för hand",
+  "{0}：调整失败": "{0}: kunde inte justeras",
+  "推流时自动调整 mpv、VLC 的音频延迟。": "mpv och VLC justeras automatiskt under strömning.",
+  "没有发现开着的 mpv、VLC。": "Ingen mpv eller VLC är öppen.",
+  "其他播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。": "Andra spelare: ställ in ljudfördröjningen på -{0} ms. Webbvideo: webbläsartillägget synkar automatiskt.",
+  "本地播放器": "Lokala spelare",
+  "影视场景自动调整播放器": "Justera spelare i scenen \"Film\"",
+  "「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。": "När scenen \"Film\" strömmar spelar mpv och VLC upp ljudet tidigare så att bilden stämmer med HomePod. Deras eget värde återställs när du byter scen, kopplar från eller avslutar.",
+  "复制": "Kopiera",
+  "复制 mpv.conf 这一行": "Kopiera raden för mpv.conf",
+  "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Lägg till den här raden i mpv.conf (oftast i %APPDATA%\\mpv) och starta om mpv:\n{0}",
+  "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Verktyg → Inställningar → Visa inställningar: Alla → Gränssnitt → Huvudgränssnitt: markera \"Web\"; sedan Huvudgränssnitt → Lua: ange ett lösenord och starta om VLC. HomePodCast läser lösenordet från VLC:s inställningar och använder det bara för VLC på den här datorn.",
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Inget användbart gränssnitt; ställ in värdet som visas på sidan Start för hand: PotPlayer med Shift+< / Shift+>; MPC-HC och MPC-BE med + / − på det numeriska tangentbordet, eller med ljudets tidsförskjutning i alternativen."
 }

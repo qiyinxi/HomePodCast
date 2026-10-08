@@ -54,7 +54,6 @@
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Las solicitudes de sincronización de reloj del altavoz no llegan a este programa; normalmente el Firewall de Windows bloquea las conexiones entrantes a HomePodCast.exe",
 
   "语言": "Idioma",
-  "自动（跟随系统）": "Automático (idioma de Windows)",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "El nuevo idioma se aplicará cuando se reinicie HomePodCast. ¿Reiniciar ahora?\n\nEl sonido se interrumpe unos segundos durante el reinicio.",
 
   "已连接 · {0}（实验性）": "Conectado · {0} (experimental)",
@@ -115,8 +114,6 @@
   "全局快捷键：HomePod 音量、静音、切换场景": "Atajos globales: volumen del HomePod, silencio, siguiente escena",
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} atajo(s) en uso por otros programas; ábrelo para elegir otro",
   "HomePod 静音": "Silenciar HomePod",
-  "{0}（{1} ms）": "{0} ({1} ms)",
-  "场景：{0}": "Escena: {0}",
   "场景：{0}（{1} ms）": "Escena: {0} ({1} ms)",
 
   "低音增强": "Más graves",
@@ -164,8 +161,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Escucha: {0} · unos {1:F0} ms de latencia",
   " · 断音 {0} 次": " · {0} cortes",
   "预设": "Preajuste",
-
-  "麦克风与音效…": "Micrófono y efectos…",
 
   "{0}（按程序分流）": "{0} (enrutamiento por aplicación)",
   "本机": "Este PC",
@@ -240,5 +235,26 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Dar a una aplicación su propio destino activa el enrutamiento por aplicación: Windows solo puede capturar las aplicaciones una a una, así que el sonido enviado al HomePod llega unos {0} ms más tarde que al transmitir todo (la extensión del navegador compensa la imagen; los juegos no pueden).\n\nLas aplicaciones en \"HomePod\" dejan de sonar en este PC (0 % en el mezclador de volumen de Windows) y los sonidos del sistema solo suenan en este PC.\n\nSi lo más importante es la latencia, por ejemplo al jugar, sigue transmitiendo todo. ¿Activar el enrutamiento por aplicación?",
   "按程序分流会增加延迟": "El enrutamiento por aplicación añade latencia",
 
-  "推荐": "Recomendado"
+  "推荐": "Recomendado",
+
+  "{0}：已设为 {1} ms": "{0}: ajustado a {1} ms",
+  "{0}：开始播放后自动调整": "{0}: se ajustará al empezar la reproducción",
+  "{0}：已被手动改为 {1} ms": "{0}: cambiado a mano a {1} ms",
+  "{0}：未开启网页接口（见「设置」）": "{0}: la interfaz web está desactivada (ver Configuración)",
+  "{0}：未开启 IPC（见「设置」）": "{0}: IPC está desactivado (ver Configuración)",
+  "{0}：网页接口没有设置密码": "{0}: la interfaz web no tiene contraseña",
+  "{0}：网页接口密码不对": "{0}: la contraseña de la interfaz web no es correcta",
+  "{0}：请手动设为 {1} ms": "{0}: ajústalo a mano a {1} ms",
+  "{0}：调整失败": "{0}: no se pudo ajustar",
+  "推流时自动调整 mpv、VLC 的音频延迟。": "mpv y VLC se ajustan automáticamente durante la transmisión.",
+  "没有发现开着的 mpv、VLC。": "No hay ningún mpv ni VLC abierto.",
+  "其他播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。": "Otros reproductores: ajusta el retardo de audio a -{0} ms. Vídeos web: la extensión del navegador los sincroniza automáticamente.",
+  "本地播放器": "Reproductores locales",
+  "影视场景自动调整播放器": "Ajustar los reproductores en la escena \"Cine\"",
+  "「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。": "Mientras se transmite en la escena \"Cine\", mpv y VLC adelantan el sonido para que la imagen coincida con el HomePod. Su valor original vuelve al cambiar de escena, desconectar o salir.",
+  "复制": "Copiar",
+  "复制 mpv.conf 这一行": "Copiar la línea de mpv.conf",
+  "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Añade esta línea a mpv.conf (normalmente en %APPDATA%\\mpv) y reinicia mpv:\n{0}",
+  "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Herramientas → Preferencias → Mostrar ajustes: Todo → Interfaz → Interfaces principales: marca \"Web\"; luego Interfaces principales → Lua: establece una contraseña y reinicia VLC. HomePodCast lee esta contraseña de la configuración de VLC y solo la usa para comunicarse con VLC en este PC.",
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "No hay ninguna interfaz utilizable; ajusta a mano el valor que muestra la página Inicio: PotPlayer con Shift+< / Shift+>; MPC-HC y MPC-BE con + / − del teclado numérico, o con el desfase de tiempo de audio en las opciones."
 }
