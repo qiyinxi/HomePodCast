@@ -52,7 +52,7 @@ public static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.ThreadException += (_, e) => Log.Error($"UI: {e.Exception}");
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
-        Application.Run(new UI.TrayApp(startHidden, show, openMixer));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.EffectsForm.Standalone() : new UI.TrayApp(startHidden, show, openMixer));
         return 0;
     }
 
