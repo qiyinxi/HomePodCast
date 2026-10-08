@@ -48,6 +48,17 @@ dotnet test tests\HomePodCast.Tests  # 协议与音频单元测试
 
 `tools\measure_av.py` 可以从手机录像里算出音画差；`tests\vectors\gen_vectors.py` 用 pyatv 所用的 srptools 生成配对算法的对照数据。
 
+## 分支与发布
+
+| 分支 / 标签 | 用途 | 规则 |
+| --- | --- | --- |
+| `dev` | 日常开发 | 每次推送都会跑 CI 并产出预览包 |
+| `main` | 在真实 HomePod 上验证过的代码 | 只接受来自 `dev` 的 PR，CI 必须通过 |
+| `vX.Y.Z` 标签 | 正式版本 | 打在 `main` 上，自动构建并发布 GitHub Release |
+| `release/x.y` | 给旧版本打补丁 | 需要时才从对应标签拉出 |
+
+CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做一次音画同步测试。
+
 ## 代码签名政策
 
 发布的 Windows 程序计划使用 [SignPath.io](https://about.signpath.io/) 提供的免费开源代码签名，证书由 [SignPath Foundation](https://signpath.org/) 签发。
