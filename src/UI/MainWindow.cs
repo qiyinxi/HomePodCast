@@ -190,6 +190,7 @@ internal sealed class MainWindow : Form, ISurface
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
     public bool SetMicOn(bool on) => _effects.SetMicOn(on);
+    public void ShowPlayers() => _home.ShowPlayers();
 
     /// <summary>The latency 首页 shows (the scene's, or the slider's while it waits to reconnect).</summary>
     public int LatencyMs => _home.LatencyMs;

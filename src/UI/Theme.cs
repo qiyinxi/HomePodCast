@@ -330,4 +330,8 @@ internal static class Glyph
     public const string OpenInNew = "";
     public const string Warning = "";
     public const string Gauge = "";
+    /// <summary>No icon, but the row keeps the icon column (rows that belong to the one above).</summary>
+    public const string None = "";
+    public const string Video = "";
+    public const string Copy = "";
 }

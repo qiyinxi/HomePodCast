@@ -3,8 +3,8 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, the experimental multi-speaker
-/// dialog, the A/V sync test, and about.</summary>
+/// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, local players in the 影视 scene
+/// (and how to switch on their interfaces), the experimental multi-speaker dialog, the A/V sync test, and about.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
@@ -20,6 +20,7 @@ internal sealed class SettingsPage : ScrollPage
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
     private readonly ToggleSwitch _forward = new();
+    private readonly ToggleSwitch _playerSync = new();
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
 
@@ -47,6 +48,18 @@ internal sealed class SettingsPage : ScrollPage
             L.T("建议把 Windows 设为静音（而不是 0%）：这样音量 +、− 和静音键都会转给 HomePod，Windows 保持静音。"), _forward);
         _hotkeysRow = new SettingRow(Glyph.Keyboard, L.T("全局快捷键"), "", _hotkeys);
 
+        var players = Ui.Section(L.T("本地播放器"));
+        var playerSync = new SettingRow(Glyph.Video, L.T("影视场景自动调整播放器"),
+            L.T("「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。"), _playerSync);
+        var copyMpv = new FluentButton(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 mpv.conf 这一行") };
+        var mpvRow = new SettingRow(Glyph.None, "mpv",
+            L.F("在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}", Players.MpvIpc.ConfigLine), copyMpv);
+        var vlcRow = new SettingRow(Glyph.None, "VLC",
+            L.T("工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。" +
+                "HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。"), null);
+        var manualRow = new SettingRow(Glyph.None, "PotPlayer · MPC-HC · MPC-BE",
+            L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
+
         var tools = Ui.Section(L.T("工具"));
         var group = new FluentButton(L.T("打开"));
         var groupRow = new SettingRow(Glyph.Devices, L.T("多音箱（实验性）"),
@@ -61,9 +74,10 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, forward, _hotkeysRow,
-            tools, groupRow, syncRow, about, aboutRow]);
-        foreach (var header in new Control[] { general, sound, tools, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, forward, _hotkeysRow, groupRow, syncRow, aboutRow })
+            players, playerSync, mpvRow, vlcRow, manualRow, tools, groupRow, syncRow, about, aboutRow]);
+        foreach (var header in new Control[] { general, sound, players, tools, about }) Content.GapBefore[header] = 20;
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, forward, _hotkeysRow,
+                     playerSync, mpvRow, vlcRow, manualRow, groupRow, syncRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
@@ -103,6 +117,12 @@ internal sealed class SettingsPage : ScrollPage
             CapChanged?.Invoke();
         };
         _forward.Toggled += (_, _) => _app.SetForwardVolumeKeys(_forward.Checked);
+        _playerSync.Toggled += (_, _) => _app.SetMoviePlayerSync(_playerSync.Checked);
+        copyMpv.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(Players.MpvIpc.ConfigLine); }
+            catch (Exception ex) { Log.Warn($"clipboard: {ex.Message}"); }
+        };
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
@@ -128,6 +148,7 @@ internal sealed class SettingsPage : ScrollPage
         _autostart.Checked = SafeAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
         _forward.Checked = cfg.ForwardVolumeKeys;
+        _playerSync.Checked = cfg.MoviePlayerSync;
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
     }

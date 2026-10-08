@@ -32,6 +32,7 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _lag = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
     private readonly FluentSlider _latency = Ui.Slider(0, LatencyTuner.MaxMs, LatencyTuner.SmallStep, LatencyTuner.LargeStep);
     private readonly TextBlock _movieHint = Ui.Note();
+    private int _lagMs;
     private readonly LatencyTuner _tuner;
     private readonly TimerDebounce _sliderWait = new(1000), _sceneWait = new(1000);
 
@@ -82,6 +83,7 @@ internal sealed class HomePage : ScrollPage
         {
             ShowLatency();
             LatencyChanged?.Invoke();
+            _app.KickPlayers(); // a scene switch adjusts or restores the players at once
         };
         _statsTimer.Tick += (_, _) => UpdateStats();
         LoadFromConfig();
@@ -214,12 +216,20 @@ internal sealed class HomePage : ScrollPage
         bool live = c.State == StreamState.Streaming && !_tuner.Pending && ms == cfg.LatencyMs;
         int effective = live ? c.EffectiveLatencyMs : c.SafeLatency(ms);
         int captureExtra = c.Capture?.ExtraLatencyMs ?? (_app.Routing.Active ? Audio.RoutedCapture.RoutedExtraLatencyMs : 0);
-        _lag.Text = L.F("声音比画面晚约 {0} ms", LatencyTuner.SoundLagMs(effective, cfg, captureExtra));
-
-        _movieHint.Text = L.F("本地播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。",
-            c.SafeLatency(Scenes.MovieMs) + cfg.VideoDelayExtraMs);
-        _movieHint.Collapsed = cfg.Scene != Scene.Movie;
+        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra);
+        _lag.Text = L.F("声音比画面晚约 {0} ms", _lagMs);
+        ShowPlayers();
         _loading = loading;
+    }
+
+    /// <summary>The 影视 hint: what the local players were set to, and the value for the others.</summary>
+    public void ShowPlayers()
+    {
+        var cfg = _app.Config;
+        _movieHint.Collapsed = cfg.Scene != Scene.Movie;
+        if (_movieHint.Collapsed) return;
+        _movieHint.Text = Players.PlayerText.MovieHint(cfg.MoviePlayerSync, _app.Controller.State == StreamState.Streaming,
+            _app.PlayerStatuses, _lagMs);
     }
 
     /// <summary>Switch scene (tray flyout, hotkey); same rules as the buttons.</summary>
