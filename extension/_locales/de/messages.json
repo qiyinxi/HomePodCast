@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast Video-Sync" },
+  "extDescription": { "message": "Verzögert Webvideos um einige Millisekunden, passend zum Ton, der über AirPlay später am HomePod ankommt." },
+  "htmlLang": { "message": "de" },
+  "statusConnecting": { "message": "Verbindung wird hergestellt…" },
+  "statusNotRunning": { "message": "Läuft nicht" },
+  "statusIdle": { "message": "Kein Streaming" },
+  "statusStreaming": { "message": "Streamt" },
+  "siteLabel": { "message": "Diese Website" },
+  "localFile": { "message": "(lokale Datei)" },
+  "minusLabel": { "message": "1 ms weniger" },
+  "minusTitle": { "message": "1 ms weniger (gedrückt halten zum Weiterregeln)" },
+  "plusLabel": { "message": "1 ms mehr" },
+  "plusTitle": { "message": "1 ms mehr (gedrückt halten zum Weiterregeln)" },
+  "delayCaption": { "message": "Bildverzögerung" },
+  "siteOffset": { "message": "Website-Korrektur" },
+  "reset": { "message": "Zurücksetzen" },
+  "siteToggle": { "message": "Auf dieser Website aktivieren" },
+  "globalToggle": { "message": "Auf allen Websites aktivieren" },
+  "hintUnavailable": { "message": "Auf dieser Seite nicht verfügbar, oder die Seite wurde vor der Installation der Erweiterung geöffnet. Seite neu laden und erneut versuchen." },
+  "hintGlobalOff": { "message": "Auf allen Websites ausgeschaltet; das Bild wird nicht verzögert." },
+  "hintSiteOff": { "message": "Auf dieser Website ausgeschaltet; das Bild wird nicht verzögert." },
+  "hintNotStreaming": { "message": "HomePodCast streamt nicht; das Bild wird nicht verzögert." },
+  "hintNotRunning": { "message": "HomePodCast läuft nicht; das Bild wird nicht verzögert." },
+  "videosNone": { "message": "Keine Videos auf dieser Seite gefunden (≥ 200×112)." },
+  "videosCount": {
+    "message": "Videos auf dieser Seite: $COUNT$",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ verzögert",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "gemessen $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "kopiergeschützt (DRM), nicht verzögerbar" },
+  "videosFullscreen": { "message": "nicht verzögerbar, solange das Videoelement selbst im Vollbild ist" },
+  "videosPlayerUnsupported": { "message": "der Player dieser Seite unterstützt keine Bildverzögerung" },
+  "videosNotDelayed": { "message": "nicht verzögert" }
+}

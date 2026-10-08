@@ -1,0 +1,42 @@
+{
+  "extName": { "message": "HomePodCast Sincronizzazione video" },
+  "extDescription": { "message": "Ritarda i video web di alcuni millisecondi per allinearli all'audio, che arriva più tardi a un HomePod via AirPlay." },
+  "htmlLang": { "message": "it" },
+  "statusConnecting": { "message": "Connessione…" },
+  "statusNotRunning": { "message": "Non in esecuzione" },
+  "statusIdle": { "message": "Nessuna trasmissione" },
+  "statusStreaming": { "message": "In trasmissione" },
+  "siteLabel": { "message": "Questo sito" },
+  "localFile": { "message": "(file locale)" },
+  "minusLabel": { "message": "1 ms in meno" },
+  "minusTitle": { "message": "1 ms in meno (tieni premuto per continuare)" },
+  "plusLabel": { "message": "1 ms in più" },
+  "plusTitle": { "message": "1 ms in più (tieni premuto per continuare)" },
+  "delayCaption": { "message": "Ritardo immagine" },
+  "siteOffset": { "message": "Correzione sito" },
+  "reset": { "message": "Reimposta" },
+  "siteToggle": { "message": "Attiva su questo sito" },
+  "globalToggle": { "message": "Attiva su tutti i siti" },
+  "hintUnavailable": { "message": "Non disponibile su questa pagina, oppure la pagina è stata aperta prima di installare l'estensione. Ricarica la pagina e riprova." },
+  "hintGlobalOff": { "message": "Disattivato su tutti i siti; l'immagine non viene ritardata." },
+  "hintSiteOff": { "message": "Disattivato su questo sito; l'immagine non viene ritardata." },
+  "hintNotStreaming": { "message": "HomePodCast non sta trasmettendo; l'immagine non viene ritardata." },
+  "hintNotRunning": { "message": "HomePodCast non è in esecuzione; l'immagine non viene ritardata." },
+  "videosNone": { "message": "Nessun video trovato su questa pagina (≥ 200×112)." },
+  "videosCount": {
+    "message": "Video su questa pagina: $COUNT$",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ ritardati",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "videosMeasured": {
+    "message": "misurato $MS$ ms",
+    "placeholders": { "ms": { "content": "$1" } }
+  },
+  "videosDrm": { "message": "protetto da copia (DRM), non si può ritardare" },
+  "videosFullscreen": { "message": "non si può ritardare mentre l'elemento video stesso è a schermo intero" },
+  "videosPlayerUnsupported": { "message": "il lettore di questa pagina non supporta il ritardo dell'immagine" },
+  "videosNotDelayed": { "message": "non ritardato" }
+}
