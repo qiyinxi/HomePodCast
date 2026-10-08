@@ -143,11 +143,18 @@ public class FanOutTests
             Assert.Equal(0xD4, p[1]);
             Assert.Equal(p[4..8], p[16..20]); // no latency subtracted: the HomePod adds the SETUP latency itself
         }
-        // The first sync is sent ~10 ms before packet 0, the second ~1 s later on the same line.
+        // The first sync is sent ~10 ms before packet 0, the second ~1 s later. A loaded machine (CI) may wake
+        // the sender late; what must hold is that both lie on one line: RTP step == NTP step.
         uint rtp0 = FakeReceiver.Rtp(sa[0].Bytes), rtp1 = FakeReceiver.Rtp(sa[1].Bytes);
         Assert.InRange((int)unchecked(rtp0 - sender.RtpBase), -1500, 0);
-        Assert.InRange((int)unchecked(rtp1 - rtp0), 44100 - 1500, 44100 + 1500);
+        int rtpStep = (int)unchecked(rtp1 - rtp0);
+        Assert.InRange(rtpStep, 44100 - 1500, 44100 + 22050);
+        double ntpStep = (Ntp(sa[1].Bytes) - Ntp(sa[0].Bytes)) / 4294967296.0;
+        Assert.InRange(rtpStep - ntpStep * RtpSender.SampleRate, -5, 5);
     }
+
+    /// <summary>The 64-bit NTP time of a sync packet (seconds &lt;&lt; 32 | fraction).</summary>
+    private static ulong Ntp(byte[] sync) => System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(sync.AsSpan(8, 8));
 
     [Fact]
     public void Split_channels_send_left_to_one_speaker_and_right_to_the_other() => WithoutStalls(() =>
