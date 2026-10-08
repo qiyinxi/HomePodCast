@@ -257,5 +257,6 @@
   "清除": "Ryd",
   "显示密码": "Vis adgangskode",
   "隐藏密码": "Skjul adgangskode",
-  "保存密码失败：{0}": "Adgangskoden kunne ikke gemmes: {0}"
+  "保存密码失败：{0}": "Adgangskoden kunne ikke gemmes: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows har ingen outputenhed, så apps har intet sted at afspille lyd, og der er intet at optage. Tilslut hovedtelefoner eller højttalere, slå stikregistrering fra i lydkortets indstillinger, brug skærmens HDMI-lyd, eller installer et virtuelt lydkort (f.eks. VB-CABLE); streamingen genoptages af sig selv."
 }

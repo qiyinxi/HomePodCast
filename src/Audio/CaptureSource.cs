@@ -20,4 +20,10 @@ public interface ICaptureSource : IDisposable
 
     /// <summary>Longest wait between two blocks of captured audio since the last call, in ms (minute stats).</summary>
     double TakeMaxGapMs() => 0;
+
+    /// <summary>
+    /// Windows has no output device at all (e.g. onboard audio "not plugged in", the virtual card uninstalled):
+    /// apps have nowhere to play, so there is nothing to capture until one appears.
+    /// </summary>
+    bool NoOutputDevice => false;
 }

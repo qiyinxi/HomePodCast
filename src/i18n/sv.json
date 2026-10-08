@@ -257,5 +257,6 @@
   "清除": "Rensa",
   "显示密码": "Visa lösenord",
   "隐藏密码": "Dölj lösenord",
-  "保存密码失败：{0}": "Det gick inte att spara lösenordet: {0}"
+  "保存密码失败：{0}": "Det gick inte att spara lösenordet: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows har ingen utdataenhet, så appar har ingenstans att spela upp ljud och det finns inget att fånga. Anslut hörlurar eller högtalare, stäng av uttagsidentifiering i ljudkortets inställningar, använd skärmens HDMI-ljud eller installera ett virtuellt ljudkort (t.ex. VB-CABLE); strömningen återupptas av sig själv."
 }

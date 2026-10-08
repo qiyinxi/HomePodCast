@@ -257,5 +257,6 @@
   "清除": "Tyhjennä",
   "显示密码": "Näytä salasana",
   "隐藏密码": "Piilota salasana",
-  "保存密码失败：{0}": "Salasanan tallennus epäonnistui: {0}"
+  "保存密码失败：{0}": "Salasanan tallennus epäonnistui: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windowsissa ei ole yhtään toistolaitetta, joten sovelluksilla ei ole minne toistaa ääntä eikä mitään voi kaapata. Liitä kuulokkeet tai kaiuttimet, poista liitäntöjen tunnistus käytöstä äänikortin asetuksista, käytä näytön HDMI-ääntä tai asenna virtuaalinen äänikortti (kuten VB-CABLE); suoratoisto jatkuu itsestään."
 }

@@ -257,5 +257,6 @@
   "清除": "Cancella",
   "显示密码": "Mostra password",
   "隐藏密码": "Nascondi password",
-  "保存密码失败：{0}": "Impossibile salvare la password: {0}"
+  "保存密码失败：{0}": "Impossibile salvare la password: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows non ha alcun dispositivo di uscita, quindi le app non hanno dove riprodurre l'audio e non c'è nulla da catturare. Collega cuffie o altoparlanti, disattiva il rilevamento dei jack nelle impostazioni della scheda audio, usa l'audio HDMI del monitor o installa una scheda audio virtuale (come VB-CABLE); lo streaming riprenderà da solo."
 }

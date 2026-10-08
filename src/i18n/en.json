@@ -17,7 +17,6 @@
   "HomePod 第二代": "HomePod 2nd gen",
   "音源：{0}": "Source: {0}",
   "音源：默认输出设备": "Source: default output device",
-
   "打开主界面": "Open main window",
   "混音器": "Mixer",
   "退出": "Exit",
@@ -27,7 +26,6 @@
   "HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。": "The HomePod has to connect back to this program (for clock sync and to request lost packets again), but Windows Firewall doesn't allow HomePodCast yet.\n\nClick Yes to approve an administrator prompt that adds an inbound rule limited to the local network and active on private networks only.",
   "没有添加成功（可能取消了授权）。": "The rule wasn't added (the administrator prompt may have been canceled).",
   "请先连接音箱，再做同步测试。": "Connect to the speaker before running the sync test.",
-
   "{0} 音量": "{0} volume",
   "应用（推送到音箱的声音）": "Apps (audio streamed to the speaker)",
   "现在没有程序在发声。": "No app is playing sound right now.",
@@ -35,12 +33,10 @@
   "静音": "Mute",
   "系统声音": "System sounds",
   "进程 {0}": "Process {0}",
-
   "音画同步测试": "A/V sync test",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Every second or two (at random) the HomePod clicks and the circle flashes.\nIf you see the flash before you hear the click, drag the slider right until they coincide.\nThe final value is how far the sound lags the picture in games.",
   "完成": "Done",
   "声音比画面晚约 {0} ms": "Sound lags the picture by about {0} ms",
-
   "未连接": "Not connected",
   "正在连接…": "Connecting…",
   "正在重连（第 {0} 次）…": "Reconnecting (attempt {0})…",
@@ -52,10 +48,8 @@
   "音箱没有响应（网络中断？）": "The speaker isn't responding (network down?)",
   "事件通道异常：{0}": "Event channel error: {0}",
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "The speaker's clock-sync requests never reached this program; usually Windows Firewall is blocking incoming connections to HomePodCast.exe",
-
   "语言": "Language",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "The new language takes effect after HomePodCast restarts. Restart now?\n\nAudio stops for a few seconds during the restart.",
-
   "已连接 · {0}（实验性）": "Connected · {0} (experimental)",
   "{0}：{1}": "{0}: {1}",
   "立体声对 · 实验性": "Stereo pair · experimental",
@@ -89,7 +83,6 @@
   "没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。": "Couldn't find both speakers of this pair (found {0}). Both need to be online to connect.",
   "两台音箱共用一个音量滑块，偏移量加在各自的音量上。": "Both speakers share one volume slider; each offset is added to that speaker's volume.",
   "现在只推送到一台音箱。": "Streaming to one speaker only.",
-
   "游戏": "Gaming",
   "音乐": "Music",
   "影视": "Movies",
@@ -120,7 +113,6 @@
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} hotkey(s) taken by other programs; open to pick another",
   "HomePod 静音": "Mute HomePod",
   "场景：{0}（{1} ms）": "Scene: {0} ({1} ms)",
-
   "低音增强": "Bass boost",
   "人声增强": "Vocal boost",
   "减弱低音": "Reduce bass",
@@ -166,7 +158,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Monitoring: {0} · about {1:F0} ms latency",
   " · 断音 {0} 次": " · {0} dropouts",
   "预设": "Preset",
-
   "{0}（按程序分流）": "{0} (per-app routing)",
   "本机": "This PC",
   "没单独设置的程序送到": "Apps without their own setting go to",
@@ -179,11 +170,9 @@
   "已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。": "Routing per app: sound sent to the speaker has about {0} ms more latency, and apps set to \"HomePod\" are silent on this PC.",
   "连接音箱后生效。": "Takes effect once a speaker is connected.",
   "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Windows output is muted: apps set to \"This PC\" or \"Both\" can't be heard on this PC either.",
-
   "打开": "Open",
   "选择": "Select",
   "切换": "Toggle",
-
   "首页": "Home",
   "设置": "Settings",
   "开始": "Start",
@@ -227,11 +216,8 @@
   "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Stereo pairs, multi-room sync, channel split and per-speaker volume offsets.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Listen for the click and watch the flash to measure how far the sound lags the picture. Connect to the speaker first.",
   "关于": "About",
-
   "{0} 音量偏移": "{0} volume offset",
-
   "按下": "Press",
-
   "全部推送与按程序分流": "Stream everything vs. per-app routing",
   "全部推送（默认，推荐打游戏）": "Stream everything (default, recommended for gaming)",
   "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Captures the whole sound output directly, with no added latency. Every app goes to the HomePod; whether this PC also plays depends on the Windows volume, so mute Windows to hear it on the speaker only.",
@@ -239,9 +225,7 @@
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Turns on as soon as any app has its own destination, or the default is \"This PC\". Windows can only capture apps one by one, and that path is slower: sound sent to the HomePod is about {0} ms later. The browser extension adds this to its picture delay automatically; games can't compensate. Apps set to \"HomePod\" are silent on this PC and show 0% in the Windows volume mixer; system sounds play on this PC only. Set every app back to \"Default\" with HomePod as the default to return to streaming everything.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Giving an app its own destination switches to per-app routing: Windows can only capture apps one by one, so sound sent to the HomePod is about {0} ms later than when streaming everything (the browser extension compensates the picture; games can't).\n\nApps set to \"HomePod\" become silent on this PC (0% in the Windows volume mixer), and system sounds play on this PC only.\n\nIf latency matters most, for example when gaming, keep streaming everything. Turn on per-app routing?",
   "按程序分流会增加延迟": "Per-app routing adds latency",
-
   "推荐": "Recommended",
-
   "{0}：已设为 {1} ms": "{0}: set to {1} ms",
   "{0}：开始播放后自动调整": "{0}: adjusted once playback starts",
   "{0}：已被手动改为 {1} ms": "{0}: changed by hand to {1} ms",
@@ -262,7 +246,6 @@
   "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Add this line to mpv.conf (usually in %APPDATA%\\mpv), then restart mpv:\n{0}",
   "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Tools → Preferences → Show settings: All → Interface → Main interfaces: tick \"Web\"; then Main interfaces → Lua: set a password, and restart VLC. HomePodCast reads this password from VLC's settings and only uses it to talk to VLC on this PC.",
   "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "No usable interface; set the value shown on the Home page by hand: PotPlayer with Shift+< / Shift+>; MPC-HC and MPC-BE with numpad + / −, or \"Audio time shift\" in the options.",
-
   "VLC 网页接口密码（自动读取失败时填写）": "VLC web interface password (if it can't be read automatically)",
   "使用 VLC 设置里的密码": "Using the password from VLC's settings",
   "使用手动输入的密码": "Using the password entered here",
@@ -274,5 +257,6 @@
   "清除": "Clear",
   "显示密码": "Show password",
   "隐藏密码": "Hide password",
-  "保存密码失败：{0}": "Couldn't save the password: {0}"
+  "保存密码失败：{0}": "Couldn't save the password: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows has no output device, so apps have nowhere to play their sound and there is nothing to capture. Plug in headphones or speakers, turn off jack detection in the sound card settings, use your monitor's HDMI audio, or install a virtual sound card (such as VB-CABLE); streaming resumes on its own."
 }

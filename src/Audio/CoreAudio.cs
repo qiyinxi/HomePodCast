@@ -152,6 +152,9 @@ internal static class CoreAudio
     [DllImport("ole32.dll")]
     private static extern int PropVariantClear(ref PropVariant pv);
 
+    /// <summary>E_NOTFOUND (HRESULT_FROM_WIN32(ERROR_NOT_FOUND)): e.g. GetDefaultAudioEndpoint with no output device at all.</summary>
+    public const int NotFound = unchecked((int)0x80070490);
+
     public static void Check(int hr, string what)
     {
         if (hr < 0) Marshal.ThrowExceptionForHR(hr, IntPtr.Zero);

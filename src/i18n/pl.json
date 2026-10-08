@@ -257,5 +257,6 @@
   "清除": "Wyczyść",
   "显示密码": "Pokaż hasło",
   "隐藏密码": "Ukryj hasło",
-  "保存密码失败：{0}": "Nie udało się zapisać hasła: {0}"
+  "保存密码失败：{0}": "Nie udało się zapisać hasła: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows nie ma żadnego urządzenia wyjściowego, więc aplikacje nie mają gdzie odtwarzać dźwięku i nie ma czego przechwytywać. Podłącz słuchawki lub głośniki, wyłącz wykrywanie gniazd w ustawieniach karty dźwiękowej, użyj dźwięku HDMI monitora lub zainstaluj wirtualną kartę dźwiękową (np. VB-CABLE); przesyłanie wznowi się samo."
 }

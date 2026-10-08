@@ -257,5 +257,6 @@
   "清除": "Wissen",
   "显示密码": "Wachtwoord weergeven",
   "隐藏密码": "Wachtwoord verbergen",
-  "保存密码失败：{0}": "Kan het wachtwoord niet opslaan: {0}"
+  "保存密码失败：{0}": "Kan het wachtwoord niet opslaan: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows heeft geen uitvoerapparaat, dus apps kunnen hun geluid nergens afspelen en er valt niets op te nemen. Sluit een koptelefoon of luidsprekers aan, schakel aansluitingsdetectie uit in de geluidskaartinstellingen, gebruik de HDMI-audio van de monitor of installeer een virtuele geluidskaart (zoals VB-CABLE); het streamen gaat daarna vanzelf verder."
 }

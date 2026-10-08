@@ -324,7 +324,14 @@ internal sealed class HomePage : ScrollPage
         var s = c.ActiveSender;
         bool streaming = s != null && c.State == StreamState.Streaming;
         var source = c.Capture?.DeviceName is { } name ? L.F("音源：{0}", name) : L.T("音源：默认输出设备");
-        if (streaming)
+        _streamStats.Role = TextRole.Secondary;
+        if (c.Capture?.NoOutputDevice == true)
+        {
+            // No driver/device to play into: apps make no sound at all, so there is nothing to send.
+            _streamStats.Role = TextRole.Caution;
+            _streamStats.Text = L.T("Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。");
+        }
+        else if (streaming)
         {
             var t = DateTime.UtcNow - _streamingSince;
             string duration = t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes}:{t.Seconds:00}";

@@ -257,5 +257,6 @@
   "清除": "Effacer",
   "显示密码": "Afficher le mot de passe",
   "隐藏密码": "Masquer le mot de passe",
-  "保存密码失败：{0}": "Impossible d'enregistrer le mot de passe : {0}"
+  "保存密码失败：{0}": "Impossible d'enregistrer le mot de passe : {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows n'a aucun périphérique de sortie : les applications ne peuvent jouer leur son nulle part et il n'y a rien à capturer. Branchez un casque ou des haut-parleurs, désactivez la détection des prises dans les paramètres de la carte son, utilisez l'audio HDMI de l'écran ou installez une carte son virtuelle (comme VB-CABLE) ; la diffusion reprendra d'elle-même."
 }

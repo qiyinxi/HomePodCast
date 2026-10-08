@@ -36,6 +36,20 @@ public sealed class RoutedCapture : ICaptureSource
     public string? DeviceName { get; private set; }
     public double DriftPpm { get; private set; }
 
+    private volatile bool _noOutputDevice;
+
+    public bool NoOutputDevice => _noOutputDevice;
+
+    /// <summary>Logged and announced once per change, not on every 2 s retry.</summary>
+    private void SetNoOutputDevice(bool missing)
+    {
+        if (_noOutputDevice == missing) return;
+        _noOutputDevice = missing;
+        if (missing) Log.Warn("Windows has no output device: nothing to capture until one appears");
+        else Log.Info("an output device is available again");
+        DeviceChanged?.Invoke(missing ? "" : DeviceName ?? "");
+    }
+
     private long _maxGapTicks;
     private long _seenUnderruns, _seenOverflows;
     private int _fifoEventsLogged;
@@ -121,7 +135,15 @@ public sealed class RoutedCapture : ICaptureSource
         IntPtr ready = _ready.SafeWaitHandle.DangerousGetHandle();
         try
         {
-            CoreAudio.Check(enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device), "default device");
+            int found = enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device);
+            if (found == CoreAudio.NotFound)
+            {
+                SetNoOutputDevice(true);
+                for (int i = 0; i < 20 && !_stop; i++) Thread.Sleep(100); // look again in 2 s
+                return;
+            }
+            CoreAudio.Check(found, "default device");
+            SetNoOutputDevice(false);
             device.GetId(out var deviceId);
             string name = CoreAudio.FriendlyName(device);
 

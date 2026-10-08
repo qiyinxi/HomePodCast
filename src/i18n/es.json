@@ -257,5 +257,6 @@
   "清除": "Borrar",
   "显示密码": "Mostrar contraseña",
   "隐藏密码": "Ocultar contraseña",
-  "保存密码失败：{0}": "No se pudo guardar la contraseña: {0}"
+  "保存密码失败：{0}": "No se pudo guardar la contraseña: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows no tiene ningún dispositivo de salida, así que las aplicaciones no tienen dónde reproducir el sonido y no hay nada que capturar. Conecta auriculares o altavoces, desactiva la detección de conectores en la configuración de la tarjeta de sonido, usa el audio HDMI del monitor o instala una tarjeta de sonido virtual (como VB-CABLE); la transmisión se reanudará sola."
 }

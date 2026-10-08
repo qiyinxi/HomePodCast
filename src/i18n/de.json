@@ -257,5 +257,6 @@
   "清除": "Löschen",
   "显示密码": "Kennwort anzeigen",
   "隐藏密码": "Kennwort ausblenden",
-  "保存密码失败：{0}": "Kennwort konnte nicht gespeichert werden: {0}"
+  "保存密码失败：{0}": "Kennwort konnte nicht gespeichert werden: {0}",
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows hat kein Ausgabegerät, daher können Apps ihren Ton nirgends abspielen und es gibt nichts aufzunehmen. Schließen Sie Kopfhörer oder Lautsprecher an, deaktivieren Sie die Buchsenerkennung in den Soundkarteneinstellungen, nutzen Sie den HDMI-Ton des Monitors oder installieren Sie eine virtuelle Soundkarte (z. B. VB-CABLE); das Streaming läuft dann von selbst weiter."
 }
