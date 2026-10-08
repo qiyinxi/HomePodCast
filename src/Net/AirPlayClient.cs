@@ -14,7 +14,7 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 /// transient pair-setup → encrypted RTSP → SETUP (session) → event channel → SETUP (stream)
 /// → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
 /// </summary>
-public sealed class AirPlayClient : IDisposable
+public sealed class AirPlayClient : IDisposable, IGroupMember
 {
     private const string PairUserAgent = "AirPlay/320.20";
     private static readonly TimeSpan FeedbackInterval = TimeSpan.FromSeconds(2);
@@ -35,6 +35,14 @@ public sealed class AirPlayClient : IDisposable
 
     /// <summary>Time the speaker says it needs from packet arrival to playout (from the stream SETUP reply).</summary>
     public int? ArrivalToRenderMs { get; private set; }
+
+    /// <summary>Playout delay requested in the stream SETUP, in frames.</summary>
+    public int LatencyFrames { get; private set; }
+
+    public string Name => Info.GetValueOrDefault("name") as string ?? _rtsp.RemoteIp.ToString();
+
+    /// <summary>Where this session's RTP goes (set by the stream SETUP).</summary>
+    internal RtpTarget? StreamTarget { get; private set; }
 
     /// <summary>Raised once when the session dies (speaker closed it, network gone, taken over...).</summary>
     public event Action<string>? Lost;
@@ -63,7 +71,49 @@ public sealed class AirPlayClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Experimental group member (stereo pair / multi-room): the complete session up to and including the
+    /// stream SETUP, with the /feedback heartbeat running but no sender. SpeakerGroup then drives one
+    /// shared RtpSender for all members and calls Record / Flush on each.
+    /// </summary>
+    internal static async Task<AirPlayClient> PrepareAsync(IPAddress host, int port, StreamOptions options,
+        ChannelMode channels, CancellationToken ct)
+    {
+        var rtsp = await RtspConnection.ConnectAsync(host, port, ct);
+        var client = new AirPlayClient(rtsp);
+        try
+        {
+            client.StreamTarget = await client.NegotiateAsync(options, ct) with { Channels = channels };
+            Log.Info($"group member {client.Name} ({host}): {channels}, /info keys: {string.Join(',', client.Info.Keys)}");
+            client.StartFeedback();
+            return client;
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
     private async Task SetupAsync(StreamOptions options, AudioFifo fifo, CancellationToken ct)
+    {
+        var target = await NegotiateAsync(options, ct);
+
+        // --- start: anchor the timeline a little in the future so RECORD/FLUSH fit before packet 0
+        _sender = new RtpSender(target.Control, target.Remote, target.DataPort, target.ControlPort, target.StreamKey,
+            target.Ssrc, LatencyFrames, fifo) { LatencyInSync = options.LatencyInSync };
+        _sender.Start(MediaClock.Now + MediaClock.FromMs(250));
+
+        StartFeedback();
+        Record();
+        Flush(_sender.FirstSeq, _sender.RtpBase);
+
+        double volumeDb = options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20.0;
+        SetVolumeDb(volumeDb);
+    }
+
+    /// <summary>/info, transient pairing, encrypted session SETUP, event channel and stream SETUP.</summary>
+    private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
         var info = _rtsp.Rtsp("GET", "/info");
         if (info.IsSuccess && info.Body.Length > 0)
@@ -113,7 +163,7 @@ public sealed class AirPlayClient : IDisposable
                     ["audioFormat"] = 0x800,          // PCM 44100/16/2
                     ["audioMode"] = "default",
                     ["controlPort"] = ((IPEndPoint)_control.Client.LocalEndPoint!).Port,
-                    ["ct"] = 1,                        // raw PCM
+                    ["ct"] = 1,                        // raw PCM (TODO(ALAC): pairs may need ct=2, see RtpSender.EncodePayloads)
                     ["isMedia"] = true,
                     ["latencyMax"] = Math.Max(latencyFrames, 88200),
                     ["latencyMin"] = latencyFrames,
@@ -135,23 +185,24 @@ public sealed class AirPlayClient : IDisposable
                  $"arrivalToRenderLatency={stream.GetValueOrDefault("arrivalToRenderLatencyMs")}ms latency={options.LatencyMs}ms " +
                  $"sync={(options.LatencyInSync ? "legacy" : "plain")}");
 
-        // --- start: anchor the timeline a little in the future so RECORD/FLUSH fit before packet 0
-        _sender = new RtpSender(_control, _rtsp.RemoteIp, dataPort, controlPort, streamKey, _rtsp.SessionId,
-            latencyFrames, fifo) { LatencyInSync = options.LatencyInSync };
-        _sender.Start(MediaClock.Now + MediaClock.FromMs(250));
-
-        _feedbackTimer = new System.Threading.Timer(_ => Feedback(), null, TimeSpan.Zero, FeedbackInterval);
-        Expect(_rtsp.Rtsp("RECORD"), "RECORD");
-        Expect(_rtsp.Rtsp("FLUSH", extra:
-        [
-            new("Range", "npt=0-"),
-            new("Session", "0"),
-            new("RTP-Info", $"seq={_sender.FirstSeq};rtptime={_sender.RtpBase}"),
-        ]), "FLUSH");
-
-        double volumeDb = options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20.0;
-        SetVolumeDb(volumeDb);
+        LatencyFrames = latencyFrames;
+        return new RtpTarget(_control, _rtsp.RemoteIp, dataPort, controlPort, streamKey, _rtsp.SessionId);
     }
+
+    private void StartFeedback() =>
+        _feedbackTimer = new System.Threading.Timer(_ => Feedback(), null, TimeSpan.Zero, FeedbackInterval);
+
+    public void Record() => Expect(_rtsp.Rtsp("RECORD"), "RECORD");
+
+    /// <summary>Tell the speaker where the stream starts: the first packet's sequence number and RTP time.</summary>
+    public void Flush(ushort firstSeq, uint rtpBase) => Expect(_rtsp.Rtsp("FLUSH", extra:
+    [
+        new("Range", "npt=0-"),
+        new("Session", "0"),
+        new("RTP-Info", $"seq={firstSeq};rtptime={rtpBase}"),
+    ]), "FLUSH");
+
+    RtpTarget IGroupMember.Target => StreamTarget ?? throw new InvalidOperationException("stream not set up");
 
     /// <summary>
     /// The speaker only answers the stream SETUP once it has synced to our NTP clock, so a timeout here
@@ -225,9 +276,13 @@ public sealed class AirPlayClient : IDisposable
         if (Interlocked.Exchange(ref _lostSignalled, 1) == 0)
         {
             Log.Warn($"session lost: {reason}");
+            LostReason = reason;
             Lost?.Invoke(reason);
         }
     }
+
+    /// <summary>Why the session ended, once it has (null while alive, and after a deliberate Dispose).</summary>
+    public string? LostReason { get; private set; }
 
     public static double PercentToDb(double pct) => pct <= 0 ? -144.0 : -30.0 + 30.0 * Math.Clamp(pct, 0, 100) / 100.0;
 
