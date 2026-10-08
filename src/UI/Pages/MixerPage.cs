@@ -273,6 +273,7 @@ internal sealed class MixerPage : ScrollPage
     private void RefreshApps()
     {
         var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
+        _empty.Collapsed = fresh.Count > 0; // also when nothing changed: the first refresh may find no apps at all
         if (fresh.Select(a => a.Key).SequenceEqual(_apps.Select(a => a.Key)))
         {
             foreach (var a in fresh) a.Dispose();
@@ -288,7 +289,6 @@ internal sealed class MixerPage : ScrollPage
             _byKey[app.Key] = row;
             _rows.Controls.Add(row);
         }
-        _empty.Collapsed = fresh.Count > 0;
         ResumeLayout(false);
         LayoutPanel.Relayout(_rows);
     }
