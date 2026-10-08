@@ -6,11 +6,12 @@
  *   const ctrl = HPCDelay.attach(video, { placement: 'overlay' | 'beside', delayMs: 141 });
  *   ctrl.setDelay(ms); ctrl.setEnabled(bool); ctrl.detach(); ctrl.stats();
  *
- * 原理：用 requestVideoFrameCallback 抓取每一帧（记录 metadata.expectedDisplayTime），
+ * 原理：用 requestVideoFrameCallback 抓取每一帧（记录 metadata.presentationTime，见 frameTime()），
  * 存进环形缓冲；requestAnimationFrame 循环里把“捕获时间 ≤ 呈现时间 − 延迟”的最新一帧
  * 画到覆盖在 <video> 上方的 canvas 上。优先用 WebCodecs VideoFrame（零拷贝，但同时最多
  * 持有 videoFrameBudget 个，见 DEFAULT_VIDEOFRAME_BUDGET 的说明），其余帧及
  * VideoFrame 不可用（如跨域视频的 SecurityError）时用 canvas 池（drawImage 拷贝，最大 1920 像素宽）。
+ * 缓冲最多 MAX_FRAMES 帧；帧率 × 延迟放不下时隔帧存（见 storeStride()），延迟画面降帧而不是冻住。
  *
  * 可选参数（opts）：
  *   placement          'overlay'（默认）| 'beside'（调试：延迟画面放在视频右侧）
@@ -20,7 +21,8 @@
  *   videoFrameBudget   最多同时持有的 VideoFrame 数，默认 3（设为 40 即纯 WebCodecs）
  *   stallFallback      默认 true：已缓冲却出现 waiting（疑似解码器饿死）时改用纯 canvas 模式
  *   activeAtZero       true 时延迟为 0 也保持运行（用于测量 canvas 管线本身的延迟）
- *   presentAheadMs     canvas 从 rAF 绘制到上屏的时间，默认 DEFAULT_PRESENT_AHEAD_MS（至少一个刷新周期）
+ *   presentAheadMs     canvas 比原画面多花的上屏时间（rAF 绘制 vs 帧的 presentationTime），默认 0；
+ *                      画布型播放器默认 SOURCE_PRESENT_AHEAD_MS（至少一个刷新周期）
  *   presentAheadFrames 改用刷新周期数表示上面这个时间（给了就优先于 presentAheadMs）
  *
  * 画布型播放器（bilibili 的 <bwp-video> 等：画面画在元素内部的 <canvas> 上，没有 <video>）：
@@ -36,7 +38,7 @@
   const root = globalThis;
   if (root.HPCDelay && typeof root.HPCDelay.attach === 'function') return;
 
-  const VERSION = '0.2.0';
+  const VERSION = '0.2.1';
   const FRAME_MS = 16.7;
   const MAX_FRAMES = 40;
   // 从 <video> 创建的 VideoFrame 直接引用解码器的输出缓冲（零拷贝）。实测 Chrome 154 + D3D11
@@ -45,11 +47,18 @@
   // 因此最多同时持有这么多 VideoFrame（留出余量取 3），超出的帧改用 canvas 拷贝；
   // 两种条目可以混在同一个缓冲里。
   const DEFAULT_VIDEOFRAME_BUDGET = 3;
-  // rAF 里画到 canvas 的帧要过多久才真正上屏（相对 <video> 自己的帧按 expectedDisplayTime 上屏）。
-  // 实测 Chrome + 240 Hz 屏，目标 141 ms、窗口录制按换帧时刻计时：提前 1 个刷新周期（4.2 ms）
-  // 时实际 154.2 ms，2 个 150.0，4 个 141.7——每个周期正好 4.2 ms，即上屏约需 17 ms，
-  // 和刷新率无关地接近一个 60 Hz 帧。60 Hz 屏上这仍是 1 个周期（原先的假设）。
-  const DEFAULT_PRESENT_AHEAD_MS = 16.7;
+  // <video> 的帧按 rVFC 的 presentationTime（帧提交给合成器的时刻，落在刷新周期的起点上）计时：
+  // 原画面在这之后经过的合成、上屏时间，和 rAF 里画到 canvas 上的内容相同，所以 canvas 不用提前。
+  // 不用 expectedDisplayTime：Chrome 154 里它 = presentationTime + 一帧时长（MP4）或一个刷新周期
+  // （WebM，没有帧时长），并不是上屏时刻。实测 240 Hz 屏、窗口录制按换帧时刻计时，目标 250 ms：
+  // 旧做法（expectedDisplayTime，canvas 提前 16.7 ms）60 fps MP4 250.0，WebM（YouTube 的 VP9，
+  // 文件或 MSE）237.5，30 fps MP4 266.7；按 presentationTime 各种格式的中位数都是 250.0
+  // （目标 141 / 538 时 141.7 / 537.5，即最接近的刷新周期）。
+  const DEFAULT_PRESENT_AHEAD_MS = 0;
+  // 没有 presentationTime 时退回 expectedDisplayTime 减去这么多（旧做法，60 fps MP4 时准确）
+  const LEGACY_EDT_AHEAD_MS = 16.7;
+  // 画布型播放器：rAF 里画到 canvas 的帧比按捕获时间戳推算的原画面晚多久上屏（与 DEFAULT_SOURCE_SHOW_MS 一起标定）。
+  const SOURCE_PRESENT_AHEAD_MS = 16.7;
   // 画布型播放器：captureStream 帧的捕获时间（换算到 performance.now）之后多久，这一帧出现在原画面上。
   // 实测 Chrome 154 + 240 Hz 屏，worker 里画 OffscreenCanvas 的模拟 <bwp-video>（tools/avsync
   // testpage.html?mode=bwp）：取 16.7 时目标 141 ms 实际 141.4（2D）/ 140.0（WebGL），目标 250 实际 249.6。
@@ -81,6 +90,25 @@
   };
   const round1 = (v) => Math.round(v * 10) / 10;
   const capacityFor = (delayMs, frameMs = FRAME_MS) => Math.min(MAX_FRAMES, Math.ceil(delayMs / frameMs) + 4);
+
+  // 每隔几帧存一帧（1 = 每帧都存），使最多 cap 帧的缓冲仍能覆盖整个延迟。缓冲满时最旧和最新的帧
+  // 相隔 cap − 1 个间隔，其中留 2 个作余量（最新的帧可能已过去一个间隔、正在显示的帧已移出缓冲）；
+  // 0.98 让帧间隔的测量误差在边界处不会来回切换。覆盖不了时（实测 60 fps、延迟约 650 ms 以上），
+  // 缓冲里最旧的帧也不够旧，延迟画面会整个冻住；隔帧存则降为 30 fps 等。
+  function storeStride(delayMs, frameMs, cap) {
+    if (!(frameMs > 0) || !(delayMs > 0) || cap <= 3) return 1;
+    return Math.max(1, Math.ceil((delayMs * 0.98) / ((cap - 3) * frameMs)));
+  }
+
+  // rVFC 回调里这一帧的时间（与 rAF 时间戳同一时钟），见 DEFAULT_PRESENT_AHEAD_MS 的说明。
+  function frameTime(meta, now, vsync = FRAME_MS) {
+    const pt = meta && meta.presentationTime;
+    if (Number.isFinite(pt) && pt > 0) return pt;
+    const edt = meta && meta.expectedDisplayTime;
+    if (Number.isFinite(edt)) return edt - Math.max(vsync, LEGACY_EDT_AHEAD_MS);
+    return now;
+  }
+
   const clampDelay = (ms) => {
     const n = Number(ms);
     if (!Number.isFinite(n) || n < 0) return 0;
@@ -158,7 +186,7 @@
       this.enabled = opts.enabled !== false;
       this.activeAtZero = !!opts.activeAtZero;
       this.presentAheadFrames = Number.isFinite(opts.presentAheadFrames) ? opts.presentAheadFrames : null;
-      this.presentAheadMs = Number.isFinite(opts.presentAheadMs) ? opts.presentAheadMs : DEFAULT_PRESENT_AHEAD_MS;
+      this.presentAheadMs = Number.isFinite(opts.presentAheadMs) ? opts.presentAheadMs : null; // null = 默认值
       this.captureMode = HAS_VIDEOFRAME && !opts.forceCanvas ? 'videoframe' : 'canvas';
       this.stallFallback = opts.stallFallback !== false;
       this.vfBudget = Number.isFinite(opts.videoFrameBudget)
@@ -184,8 +212,13 @@
       this.shown = 0;
       this.dropped = 0;
       this.missed = 0;
+      this.thinned = 0; // 为覆盖长延迟而没存的帧（见 storeStride）
       this.lastLag = 0;
       this.lastPresented = 0;
+      this.lastFrameT = 0; // 上一帧的时间（测帧间隔）
+      this.lastStoreT = 0; // 上一个存入缓冲的帧的时间
+      this.ivs = [];
+      this.frameMs = FRAME_MS; // 源画面的帧间隔（见 trackInterval）
 
       this.vsync = 16.7;
       this.dts = [];
@@ -304,6 +337,9 @@
         capturedFrames: this.captured,
         shownFrames: this.shown,
         missedFrames: this.missed,
+        thinnedFrames: this.thinned,
+        storeStride: this.stride(),
+        frameMs: round1(this.frameMs),
         heldVideoFrames: this.vfHeld,
         canvasCopies: this.copies,
         waitingEvents: this.waits,
@@ -397,6 +433,11 @@
       return capacityFor(this.delay);
     }
 
+    // 每隔几帧存一帧（见 storeStride）
+    stride() {
+      return storeStride(this.delay, this.frameMs, this.capacity());
+    }
+
     fitStyle(cs) {
       return cs; // object-fit / object-position 从哪里读
     }
@@ -414,22 +455,25 @@
         return;
       }
       const pf = meta.presentedFrames;
-      if (this.lastPresented && pf > this.lastPresented + 1) this.missed += pf - this.lastPresented - 1;
+      const step = this.lastPresented ? pf - this.lastPresented : 0;
+      if (step > 1) this.missed += step - 1;
       this.lastPresented = pf;
+      const t = frameTime(meta, now, this.vsync);
+      if (step === 1 && this.lastFrameT) this.trackInterval(t - this.lastFrameT);
+      this.lastFrameT = t;
       if (v.paused || v.seeking) {
         this.drawLive(); // 暂停/拖动时直接显示当前帧
         return;
       }
-      this.capture(meta, now);
+      this.capture(meta, t);
       this.kick();
     }
 
-    capture(meta, now) {
+    capture(meta, t) {
       const v = this.video;
       const iw = v.videoWidth;
       const ih = v.videoHeight;
-      if (!iw || !ih) return;
-      const t = Number.isFinite(meta.expectedDisplayTime) ? meta.expectedDisplayTime : now;
+      if (!iw || !ih || this.thin(t)) return;
       let e = null;
       if (this.captureMode === 'videoframe' && this.vfHeld < this.vfBudget) {
         try {
@@ -445,9 +489,35 @@
       if (e) this.store(e);
     }
 
+    // 隔帧存（见 storeStride）：离上一个存入的帧不到 stride 帧就不存（也不拷贝）
+    thin(t) {
+      const s = this.stride();
+      if (s > 1 && this.lastStoreT && t > this.lastStoreT && t - this.lastStoreT < (s - 0.5) * this.frameMs) {
+        this.thinned++;
+        return true;
+      }
+      return false;
+    }
+
+    // 帧间隔：最近 15 个的四分位间平均（比中位数稳，单个帧的时间抖动约 ±0.2 ms）
+    trackInterval(dt) {
+      if (!(dt > 2 && dt < 100)) return;
+      const d = this.ivs;
+      d.push(dt);
+      if (d.length > 15) d.shift();
+      if (d.length >= 5) {
+        const s = d.slice().sort((a, b) => a - b);
+        const q = s.length >> 2;
+        let sum = 0;
+        for (let i = q; i < s.length - q; i++) sum += s[i];
+        this.frameMs = Math.min(50, Math.max(4, sum / (s.length - 2 * q)));
+      }
+    }
+
     store(e) {
       const t = e.time;
       this.captured++;
+      this.lastStoreT = t;
       const b = this.buf;
       while (b.length && b[b.length - 1].time >= t) this.release(b.pop()); // 时间倒退：丢弃旧时间线
       b.push(e);
@@ -518,6 +588,8 @@
       for (const e of this.buf) this.release(e);
       this.buf.length = 0;
       this.lastPresented = 0;
+      this.lastFrameT = 0;
+      this.lastStoreT = 0;
     }
 
     // ---------- 显示 ----------
@@ -558,7 +630,7 @@
 
     aheadMs() {
       if (this.presentAheadFrames !== null) return this.presentAheadFrames * this.vsync;
-      return Math.max(this.vsync, this.presentAheadMs);
+      return this.presentAheadMs !== null ? this.presentAheadMs : DEFAULT_PRESENT_AHEAD_MS;
     }
 
     trackVsync(t) {
@@ -877,8 +949,6 @@
       this.tsOff = Infinity; // performance.now() − 帧时间戳 的下界（≈ 捕获时刻的换算）
       this.lastTs = -1;
       this.lastSrcAt = 0;
-      this.ivs = [];
-      this.frameMs = FRAME_MS;
       this.runAt = 0;
       this.run = 0;
       this.retryTimer = 0;
@@ -1001,27 +1071,24 @@
           this.drawLive(f);
           return;
         }
-        const e = this.captureCanvas(ts + this.tsOff + this.showMs, f.displayWidth, f.displayHeight, f);
-        if (e) this.store(e);
+        const t = ts + this.tsOff + this.showMs;
+        if (!this.thin(t)) {
+          const e = this.captureCanvas(t, f.displayWidth, f.displayHeight, f);
+          if (e) this.store(e);
+        }
         this.kick();
       } finally {
         f.close();
       }
     }
 
-    trackInterval(dt) {
-      if (!(dt > 2 && dt < 100)) return;
-      const d = this.ivs;
-      d.push(dt);
-      if (d.length > 15) d.shift();
-      if (d.length >= 5) {
-        const s = d.slice().sort((a, b) => a - b);
-        this.frameMs = Math.min(50, Math.max(4, s[s.length >> 1]));
-      }
-    }
-
     capacity() {
       return capacityFor(this.delay, this.frameMs);
+    }
+
+    aheadMs() {
+      if (this.presentAheadFrames !== null) return this.presentAheadFrames * this.vsync;
+      return Math.max(this.vsync, this.presentAheadMs !== null ? this.presentAheadMs : SOURCE_PRESENT_AHEAD_MS);
     }
 
     isPaused() {
@@ -1131,5 +1198,7 @@
     supported: HAS_RVFC,
     webcodecs: HAS_VIDEOFRAME,
     canvasCapture: HAS_CANVAS_CAPTURE,
+    // 纯函数，供单元测试（extension/test）使用
+    internals: Object.freeze({ capacityFor, storeStride, frameTime, MAX_FRAMES }),
   });
 })();
