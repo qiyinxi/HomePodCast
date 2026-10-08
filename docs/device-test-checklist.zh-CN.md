@@ -63,6 +63,14 @@
 - [ ] iPhone 抢占 HomePod 后，电脑端不抢回；托盘显示被占用
 - [ ] 设置 → 语言切换到 Svenska / English 看一眼，有没有明显不通的翻译
 
+## 九、Apple TV（第 7 代，接上后再测）
+
+- [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
+- [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
+- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低
+- [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
+- [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
+
 ## 测试记录
 
 （Claude 的自动测试结果写在这里）
