@@ -15,12 +15,12 @@ internal sealed class HotkeysForm : FluentDialog
     public HotkeysForm(TrayApp app) : base(L.T("全局快捷键"))
     {
         _app = app;
-        ContentWidth = 560;
+        ContentWidth = 620; // room for the status next to long action names (French, German)
         var rows = new List<FieldRow>();
         foreach (var action in Enum.GetValues<HotkeyAction>())
         {
             var box = new HotkeyBox { Value = Hotkey.FromConfig(_app.Config, action) };
-            var status = new TextBlock("", TextStyle.Caption, TextRole.Secondary);
+            var status = new TextBlock("", TextStyle.Caption, TextRole.Secondary, wrap: true); // "unavailable: …" is long in some languages
             box.ValueChanged += (_, _) => OnChanged(action, box.Value);
             var row = new FieldRow(ActionName(action), Ui.Row(12, status, box, status));
             ((RowPanel)row.Field).FixedWidths[box] = 190;

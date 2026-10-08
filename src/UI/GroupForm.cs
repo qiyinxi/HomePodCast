@@ -194,6 +194,8 @@ internal sealed class GroupForm : FluentDialog
                 _memberRows.Controls.Add(offset, 2, i + 1);
                 _memberRows.Controls.Add(value, 3, i + 1);
             }
+            // The table sizes only AutoSize cells to their content; the others would stay 0×0 and be invisible.
+            foreach (Control cellControl in _memberRows.Controls) cellControl.AutoSize = true;
         }
         _memberRows.ResumeLayout();
 

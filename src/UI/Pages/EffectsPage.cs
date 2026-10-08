@@ -342,7 +342,7 @@ internal sealed class EffectsPage : ScrollPage
     private sealed class EqEditor
     {
         private const int Range = 12;
-        private readonly FluentComboBox _preset = new() { PreferredWidth = 160 };
+        private readonly FluentComboBox _preset = new() { MinWidth = 160 }; // wider for longer preset names
         private readonly FluentSlider[] _bands = new FluentSlider[Equalizer.BandCount];
         private readonly TextBlock[] _values = new TextBlock[Equalizer.BandCount];
         private EqSettings _settings = new();
