@@ -50,6 +50,7 @@ internal sealed partial class TrayApp : ApplicationContext
 
         _form = new MainWindow(this);
         _ = _form.Handle; // create handle so BeginInvoke works before first show
+        InitPlayers();
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
         Controller.HostResolved += host => _ui.Post(_ =>
@@ -69,7 +70,7 @@ internal sealed partial class TrayApp : ApplicationContext
                     streaming,
                     device = Config.DeviceName,
                     latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = streaming ? LatencyTuner.SoundLagMs(Controller.EffectiveLatencyMs, Config, Controller.Capture?.ExtraLatencyMs ?? 0) : 0,
+                    videoDelayMs = VideoDelayMs,
                     videoDelaySource = "estimate",
                 };
             });
@@ -336,6 +337,7 @@ internal sealed partial class TrayApp : ApplicationContext
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeSound();
         DisposeEffects();
+        DisposePlayers();
         _api?.Dispose();
         Controller.Dispose();
         _tray.Dispose();

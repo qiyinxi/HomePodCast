@@ -68,6 +68,12 @@ public sealed class AppConfig
     /// <summary>While streaming with Windows muted or at 0 %, the keyboard volume keys drive the HomePod.</summary>
     public bool ForwardVolumeKeys { get; set; } = true;
 
+    /// <summary>
+    /// 「影视场景自动调整播放器」: while the 影视 scene streams, mpv and VLC get an audio delay of −videoDelayMs
+    /// (Players.PlayerSync); their own value comes back when the scene changes, the stream stops or the app exits.
+    /// </summary>
+    public bool MoviePlayerSync { get; set; } = true;
+
     /// <summary>Global hotkeys such as "Ctrl+Alt+PageUp"; a missing entry means the default, "" means off.</summary>
     public Dictionary<HotkeyAction, string> Hotkeys { get; set; } = new();
 

@@ -189,6 +189,7 @@ internal sealed class MainWindow : Form, ISurface
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
+    public void ShowPlayers() => _home.ShowPlayers();
 
     public void UpdateState()
     {

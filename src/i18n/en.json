@@ -240,5 +240,26 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Giving an app its own destination switches to per-app routing: Windows can only capture apps one by one, so sound sent to the HomePod is about {0} ms later than when streaming everything (the browser extension compensates the picture; games can't).\n\nApps set to \"HomePod\" become silent on this PC (0% in the Windows volume mixer), and system sounds play on this PC only.\n\nIf latency matters most, for example when gaming, keep streaming everything. Turn on per-app routing?",
   "按程序分流会增加延迟": "Per-app routing adds latency",
 
-  "推荐": "Recommended"
+  "推荐": "Recommended",
+
+  "{0}：已设为 {1} ms": "{0}: set to {1} ms",
+  "{0}：开始播放后自动调整": "{0}: adjusted once playback starts",
+  "{0}：已被手动改为 {1} ms": "{0}: changed by hand to {1} ms",
+  "{0}：未开启网页接口（见「设置」）": "{0}: web interface is off (see Settings)",
+  "{0}：未开启 IPC（见「设置」）": "{0}: IPC is off (see Settings)",
+  "{0}：网页接口没有设置密码": "{0}: web interface has no password",
+  "{0}：网页接口密码不对": "{0}: web interface password is wrong",
+  "{0}：请手动设为 {1} ms": "{0}: set it to {1} ms by hand",
+  "{0}：调整失败": "{0}: could not adjust",
+  "推流时自动调整 mpv、VLC 的音频延迟。": "mpv and VLC are adjusted automatically while streaming.",
+  "没有发现开着的 mpv、VLC。": "No mpv or VLC running.",
+  "其他播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。": "Other players: set the audio delay to -{0} ms. Web videos: the browser extension lines them up automatically.",
+  "本地播放器": "Local players",
+  "影视场景自动调整播放器": "Adjust players in the Movies scene",
+  "「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。": "While the Movies scene streams, mpv and VLC play their sound earlier so the picture lines up with the HomePod. Their own value comes back when you change scene, disconnect or quit.",
+  "复制": "Copy",
+  "复制 mpv.conf 这一行": "Copy the mpv.conf line",
+  "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Add this line to mpv.conf (usually in %APPDATA%\\mpv), then restart mpv:\n{0}",
+  "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Tools → Preferences → Show settings: All → Interface → Main interfaces: tick \"Web\"; then Main interfaces → Lua: set a password, and restart VLC. HomePodCast reads this password from VLC's settings and only uses it to talk to VLC on this PC.",
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "No usable interface; set the value shown on the Home page by hand: PotPlayer with Shift+< / Shift+>; MPC-HC and MPC-BE with numpad + / −, or \"Audio time shift\" in the options."
 }
