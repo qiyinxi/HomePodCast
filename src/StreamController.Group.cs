@@ -26,7 +26,7 @@ public sealed partial class StreamController
         {
             _run = cts;
             _groupRunner = runner;
-            Volume = volume;
+            Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
             _loop = Task.Run(async () =>
             {
                 if (await runner.RunAsync(cts.Token)) // a speaker was taken over by another sender
@@ -55,7 +55,8 @@ public sealed partial class StreamController
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
             async c => (IGroupMember)await AirPlayClient.PrepareAsync(m.Address, m.Port, options, plan.ChannelsFor(i), c),
             plan.VolumeOffsetFor(m.DeviceId))).ToList();
-        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects);
+        // The cap is read live, so lowering it while streaming also caps members with a positive offset.
+        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, () => VolumeCapPercent);
         if (group.ArrivalToRenderMs is { } a2r) _groupArrivalToRenderMs = a2r;
         Volume ??= group.MasterVolume;
         return group;

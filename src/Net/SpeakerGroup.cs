@@ -50,13 +50,18 @@ internal sealed class SpeakerGroup : IDisposable
     private int _firstErrorIndex;
     private RtpSender? _sender;
     private int _disposed;
+    private readonly Func<double> _volumeCap;
 
-    private SpeakerGroup(IReadOnlyList<MemberSetup> setups, AudioFifo fifo)
+    private SpeakerGroup(IReadOnlyList<MemberSetup> setups, AudioFifo fifo, Func<double>? volumeCap)
     {
         _setups = setups.ToArray();
         _members = new IGroupMember?[_setups.Length];
         _fifo = fifo;
+        _volumeCap = volumeCap ?? (() => 100);
     }
+
+    /// <summary>The user's ceiling (percent), read live: no member, offset included, is ever sent more.</summary>
+    public double VolumeCapPercent => _volumeCap();
 
     public RtpSender? Sender => _sender;
     public IReadOnlyList<IGroupMember?> Members => _members;
@@ -77,10 +82,10 @@ internal sealed class SpeakerGroup : IDisposable
     /// session to it. If any member fails, whatever did connect is torn down and the failure is thrown.
     /// </summary>
     public static async Task<SpeakerGroup> ConnectAsync(IReadOnlyList<MemberSetup> setups, AudioFifo fifo,
-        double? volumePercent, CancellationToken ct, IAudioEffect? effects = null)
+        double? volumePercent, CancellationToken ct, IAudioEffect? effects = null, Func<double>? volumeCap = null)
     {
         if (setups.Count == 0) throw new ArgumentException("empty group", nameof(setups));
-        var group = new SpeakerGroup(setups, fifo);
+        var group = new SpeakerGroup(setups, fifo, volumeCap);
         try
         {
             await group.PrepareAllAsync(ct);
@@ -98,8 +103,10 @@ internal sealed class SpeakerGroup : IDisposable
             sender.Start(MediaClock.Now + MediaClock.FromMs(250));
             await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), ct);
 
-            group.MasterVolume = volumePercent ?? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0);
-            await group.EachAsync((m, i) => m.SetVolumePercent(MemberVolume(group.MasterVolume, setups[i].VolumeOffset)), ct);
+            group.MasterVolume = VolumeLimit.Clamp(
+                volumePercent ?? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0), group.VolumeCapPercent);
+            await group.EachAsync((m, i) => m.SetVolumePercent(
+                MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), ct);
 
             Log.Info($"group streaming: {string.Join(" + ", setups.Select((s, i) => $"{s.Label} [{sender.Streams[i].Channels}]"))}, " +
                      $"rtpBase={sender.RtpBase} latency={sender.LatencyFrames} frames");
@@ -180,21 +187,25 @@ internal sealed class SpeakerGroup : IDisposable
         if (_lost.Task.IsCompleted) throw new AirPlayException(_lost.Task.Result);
     }
 
-    /// <summary>Linked volume: each speaker gets the shared volume plus its own offset.</summary>
+    /// <summary>Linked volume: each speaker gets the shared volume plus its own offset, never above the cap.</summary>
     public void SetVolumePercent(double master)
     {
         MasterVolume = master;
+        double cap = VolumeCapPercent;
         for (int i = 0; i < _members.Length; i++)
         {
             if (_members[i] is not { } m) continue;
-            try { m.SetVolumePercent(MemberVolume(master, _setups[i].VolumeOffset)); }
+            try { m.SetVolumePercent(MemberVolume(master, _setups[i].VolumeOffset, cap)); }
             catch (Exception ex) { Log.Warn($"group volume, {_setups[i].Label}: {ex.Message}"); }
         }
     }
 
-    /// <summary>Shared volume + offset, clamped to 0..100; a muted (0) group stays muted everywhere.</summary>
-    internal static double MemberVolume(double master, int offset) =>
-        master <= 0 ? 0 : Math.Clamp(master + offset, 0, 100);
+    /// <summary>
+    /// Shared volume + offset, clamped to 0..cap (the offset is added after the shared volume was capped, so
+    /// it is capped again here); a muted (0) group stays muted everywhere.
+    /// </summary>
+    internal static double MemberVolume(double master, int offset, double cap = 100) =>
+        master <= 0 || double.IsNaN(master) ? 0 : Math.Clamp(master + offset, 0, Math.Clamp(cap, 0, 100));
 
     public void LogStats()
     {

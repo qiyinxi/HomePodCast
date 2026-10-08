@@ -29,11 +29,19 @@ public sealed partial class StreamController
     {
         VolumeCapPercent = Math.Clamp(capPercent, 0, 100);
         if (_client is { } client) client.VolumeCapPercent = VolumeCapPercent;
+        var group = _groupRunner?.Current;
+        if (group != null)
+            foreach (var m in group.Members)
+                if (m is AirPlayClient member) member.VolumeCapPercent = VolumeCapPercent;
         if (Volume > VolumeCapPercent)
         {
             Volume = VolumeCapPercent;
             PushVolume();
             Changed?.Invoke();
+        }
+        else if (group != null)
+        {
+            PushVolume(); // a member's positive offset may put it above the new cap
         }
     }
 
