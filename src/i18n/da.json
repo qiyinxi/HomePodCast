@@ -54,7 +54,6 @@
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Højttalerens anmodninger om ursynkronisering nåede aldrig frem til programmet; typisk blokerer Windows Firewall indgående forbindelser til HomePodCast.exe",
 
   "语言": "Sprog",
-  "自动（跟随系统）": "Automatisk (Windows-sprog)",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "Det nye sprog træder i kraft, når HomePodCast genstartes. Genstart nu?\n\nLyden stopper i nogle sekunder under genstarten.",
 
   "已连接 · {0}（实验性）": "Forbundet · {0} (eksperimentelt)",
@@ -115,8 +114,6 @@
   "全局快捷键：HomePod 音量、静音、切换场景": "Globale genvejstaster: HomePod-lydstyrke, slå lyd fra, næste scene",
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} genvejstast(er) bruges af andre programmer; åbn for at vælge en anden",
   "HomePod 静音": "Slå lyd fra på HomePod",
-  "{0}（{1} ms）": "{0} ({1} ms)",
-  "场景：{0}": "Scene: {0}",
   "场景：{0}（{1} ms）": "Scene: {0} ({1} ms)",
 
   "低音增强": "Basforstærkning",
@@ -164,8 +161,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Medhør: {0} · ca. {1:F0} ms forsinkelse",
   " · 断音 {0} 次": " · {0} udfald",
   "预设": "Forudindstilling",
-
-  "麦克风与音效…": "Mikrofon og effekter…",
 
   "{0}（按程序分流）": "{0} (routing pr. app)",
   "本机": "Denne pc",
@@ -240,5 +235,26 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Hvis en app får sin egen destination, skiftes der til routing pr. app: Windows kan kun optage apps én ad gangen, så lyd til HomePod kommer ca. {0} ms senere end ved streaming af alt (browserudvidelsen kompenserer billedet; spil kan ikke).\n\nApps, der er indstillet til \"HomePod\", bliver lydløse på pc'en (0 % i lydstyrkemixeren i Windows), og systemlyde afspilles kun på pc'en.\n\nHvis forsinkelsen betyder mest, f.eks. i spil, så fortsæt med at streame alt. Slå routing pr. app til?",
   "按程序分流会增加延迟": "Routing pr. app giver mere forsinkelse",
 
-  "推荐": "Anbefalet"
+  "推荐": "Anbefalet",
+
+  "{0}：已设为 {1} ms": "{0}: sat til {1} ms",
+  "{0}：开始播放后自动调整": "{0}: justeres, når afspilningen starter",
+  "{0}：已被手动改为 {1} ms": "{0}: ændret manuelt til {1} ms",
+  "{0}：未开启网页接口（见「设置」）": "{0}: webgrænsefladen er slået fra (se Indstillinger)",
+  "{0}：未开启 IPC（见「设置」）": "{0}: IPC er slået fra (se Indstillinger)",
+  "{0}：网页接口没有设置密码": "{0}: webgrænsefladen har ingen adgangskode",
+  "{0}：网页接口密码不对": "{0}: forkert adgangskode til webgrænsefladen",
+  "{0}：请手动设为 {1} ms": "{0}: indstil den manuelt til {1} ms",
+  "{0}：调整失败": "{0}: kunne ikke justeres",
+  "推流时自动调整 mpv、VLC 的音频延迟。": "mpv og VLC justeres automatisk under streaming.",
+  "没有发现开着的 mpv、VLC。": "Ingen mpv eller VLC er åben.",
+  "其他播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。": "Andre afspillere: indstil lydforsinkelsen til -{0} ms. Webvideo: browserudvidelsen synkroniserer automatisk.",
+  "本地播放器": "Lokale afspillere",
+  "影视场景自动调整播放器": "Juster afspillere i scenen \"Film\"",
+  "「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。": "Mens scenen \"Film\" streamer, afspiller mpv og VLC lyden tidligere, så billedet passer med HomePod. Deres egen værdi vender tilbage, når du skifter scene, afbryder eller afslutter.",
+  "复制": "Kopiér",
+  "复制 mpv.conf 这一行": "Kopiér linjen til mpv.conf",
+  "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Tilføj denne linje til mpv.conf (som regel i %APPDATA%\\mpv), og genstart mpv:\n{0}",
+  "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Værktøjer → Indstillinger → Vis indstillinger: Alle → Brugerflade → Hovedbrugerflader: sæt flueben ved \"Web\"; derefter Hovedbrugerflader → Lua: angiv en adgangskode, og genstart VLC. HomePodCast læser adgangskoden fra VLC's indstillinger og bruger den kun til VLC på denne pc.",
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Ingen brugbar grænseflade; indstil værdien fra siden Startside manuelt: PotPlayer med Shift+< / Shift+>; MPC-HC og MPC-BE med + / − på det numeriske tastatur eller med lydens tidsforskydning i indstillingerne."
 }

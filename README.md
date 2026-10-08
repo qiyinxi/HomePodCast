@@ -42,7 +42,7 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
    The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. Both packages keep your settings in `%APPDATA%\HomePodCast`.
 3. The app finds the HomePod and connects by itself. Muting the PC's default output device is fine: audio is captured before the system volume is applied, so the HomePod keeps playing.
 
-The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
+The interface follows the Windows display language (English when HomePodCast has no translation for it). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to a language code such as `"en"`, `"de"` or `"zh-TW"` (the names of the files in `src/i18n`, plus `"zh-CN"`), or to `"auto"`.
 
 Command line (for troubleshooting):
 
@@ -84,7 +84,7 @@ The MSI installer is built with WiX Toolset v5, a local dotnet tool, by `install
 
 `tools\measure_av.py` computes the audio/video offset from a phone video; `tests\vectors\gen_vectors.py` generates reference data for the pairing algorithm with srptools, the library pyatv uses.
 
-Interface texts are written in Simplified Chinese inside `L.T("…")` / `L.F("…{0}", x)`; their translations live in `src/i18n/{en,zh-TW,ja}.json`, and a unit test fails when one is missing. The browser extension's texts are in `extension/_locales`.
+Interface texts are written in Simplified Chinese inside `L.T("…")` / `L.F("…{0}", x)`; their translations live in `src/i18n/<language>.json` (every file there is a UI language; `en.json` is the reference), and a unit test fails when one is missing or a table does not match `en.json`. The browser extension's texts are in `extension/_locales`.
 
 ## Branches and releases
 

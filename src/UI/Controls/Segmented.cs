@@ -86,6 +86,15 @@ internal sealed class Segmented : FluentControl
         int pad = Dp(3);
         int total = w.Sum();
         int avail = Width - pad * 2;
+        if (total > avail && w.Length > 0)
+        {
+            // Too narrow (long words in some languages): give up side padding before cutting into the text.
+            int textPad = Dp(Compact ? 10 : 14) * 2, minPad = Dp(4) * 2;
+            int text = total - textPad * w.Length;
+            int padEach = Math.Max(minPad, (avail - text) / w.Length);
+            w = w.Select(x => x - textPad + padEach).ToArray();
+            total = w.Sum();
+        }
         var result = new Rectangle[w.Length];
         double x = pad;
         for (int i = 0; i < w.Length; i++)

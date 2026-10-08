@@ -54,7 +54,6 @@
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Kaiuttimen kellonsynkronointipyynnöt eivät koskaan saapuneet tähän ohjelmaan; yleensä Windowsin palomuuri estää saapuvat yhteydet HomePodCast.exe-tiedostoon",
 
   "语言": "Kieli",
-  "自动（跟随系统）": "Automaattinen (Windowsin kieli)",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "Uusi kieli otetaan käyttöön, kun HomePodCast käynnistetään uudelleen. Käynnistetäänkö nyt uudelleen?\n\nÄäni katkeaa muutamaksi sekunniksi uudelleenkäynnistyksen aikana.",
 
   "已连接 · {0}（实验性）": "Yhdistetty · {0} (kokeellinen)",
@@ -115,8 +114,6 @@
   "全局快捷键：HomePod 音量、静音、切换场景": "Yleiset pikanäppäimet: HomePodin äänenvoimakkuus, mykistys, seuraava profiili",
   "{0} 个快捷键被其他程序占用，点开换一个": "Muut ohjelmat käyttävät pikanäppäimiä: {0}; avaa ja valitse toinen",
   "HomePod 静音": "Mykistä HomePod",
-  "{0}（{1} ms）": "{0} ({1} ms)",
-  "场景：{0}": "Profiili: {0}",
   "场景：{0}（{1} ms）": "Profiili: {0} ({1} ms)",
 
   "低音增强": "Bassonkorostus",
@@ -164,8 +161,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Kuuntelu: {0} · viive noin {1:F0} ms",
   " · 断音 {0} 次": " · katkoksia {0}",
   "预设": "Esiasetus",
-
-  "麦克风与音效…": "Mikrofoni ja tehosteet…",
 
   "{0}（按程序分流）": "{0} (sovelluskohtainen reititys)",
   "本机": "Tämä tietokone",
@@ -240,5 +235,26 @@
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Kun sovellukselle annetaan oma kohde, käyttöön otetaan sovelluskohtainen reititys: Windows voi kaapata sovelluksia vain yksi kerrallaan, joten HomePodiin lähetetty ääni tulee noin {0} ms myöhemmin kuin kaiken suoratoistossa (selainlaajennus korjaa kuvan viiveen, pelit eivät).\n\nSovellukset, joiden asetus on \"HomePod\", mykistyvät tällä tietokoneella (0 % Windowsin äänenvoimakkuuden mikserissä), ja järjestelmän äänet toistetaan vain tällä tietokoneella.\n\nJos viive on tärkeintä, esimerkiksi pelatessa, jatka kaiken suoratoistoa. Otetaanko sovelluskohtainen reititys käyttöön?",
   "按程序分流会增加延迟": "Sovelluskohtainen reititys lisää viivettä",
 
-  "推荐": "Suositeltu"
+  "推荐": "Suositeltu",
+
+  "{0}：已设为 {1} ms": "{0}: asetettu arvoon {1} ms",
+  "{0}：开始播放后自动调整": "{0}: säädetään, kun toisto alkaa",
+  "{0}：已被手动改为 {1} ms": "{0}: muutettu käsin arvoon {1} ms",
+  "{0}：未开启网页接口（见「设置」）": "{0}: verkkokäyttöliittymä ei ole käytössä (katso Asetukset)",
+  "{0}：未开启 IPC（见「设置」）": "{0}: IPC ei ole käytössä (katso Asetukset)",
+  "{0}：网页接口没有设置密码": "{0}: verkkokäyttöliittymällä ei ole salasanaa",
+  "{0}：网页接口密码不对": "{0}: verkkokäyttöliittymän salasana on väärä",
+  "{0}：请手动设为 {1} ms": "{0}: aseta käsin arvoon {1} ms",
+  "{0}：调整失败": "{0}: säätö epäonnistui",
+  "推流时自动调整 mpv、VLC 的音频延迟。": "mpv ja VLC säädetään automaattisesti suoratoiston aikana.",
+  "没有发现开着的 mpv、VLC。": "mpv:tä tai VLC:tä ei ole auki.",
+  "其他播放器：把音频延迟设为 -{0} ms；网页视频：用浏览器插件自动对齐。": "Muut soittimet: aseta äänen viiveeksi -{0} ms. Verkkovideot: selainlaajennus tahdistaa ne automaattisesti.",
+  "本地播放器": "Paikalliset soittimet",
+  "影视场景自动调整播放器": "Säädä soittimia Elokuvat-profiilissa",
+  "「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。": "Kun Elokuvat-profiili suoratoistaa, mpv ja VLC toistavat äänen aiemmin, jotta kuva osuu yksiin HomePodin kanssa. Niiden oma arvo palautuu, kun vaihdat profiilia, katkaiset yhteyden tai lopetat.",
+  "复制": "Kopioi",
+  "复制 mpv.conf 这一行": "Kopioi mpv.conf-rivi",
+  "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Lisää tämä rivi tiedostoon mpv.conf (yleensä kansiossa %APPDATA%\\mpv) ja käynnistä mpv uudelleen:\n{0}",
+  "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Työkalut → Asetukset → Näytä asetukset: Kaikki → Käyttöliittymä → Pääkäyttöliittymät: valitse \"Web\"; sitten Pääkäyttöliittymät → Lua: aseta salasana ja käynnistä VLC uudelleen. HomePodCast lukee salasanan VLC:n asetuksista ja käyttää sitä vain tämän tietokoneen VLC:hen.",
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Käyttökelpoista liittymää ei ole; aseta Aloitus-sivulla näkyvä arvo käsin: PotPlayer näppäimillä Shift+< / Shift+>; MPC-HC ja MPC-BE numeronäppäimistön + / − -näppäimillä tai asetusten äänen aikasiirrolla."
 }

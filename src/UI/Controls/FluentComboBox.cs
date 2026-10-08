@@ -29,6 +29,9 @@ internal sealed class FluentComboBox : FluentControl
     /// <summary>Width in 96-DPI units for <see cref="GetPreferredSize"/>; 0 = as wide as the longest item.</summary>
     public int PreferredWidth { get; set; }
 
+    /// <summary>Least width in 96-DPI units when sized to the items (<see cref="PreferredWidth"/> = 0).</summary>
+    public int MinWidth { get; set; }
+
     public int SelectedIndex
     {
         get => _selected;
@@ -62,7 +65,7 @@ internal sealed class FluentComboBox : FluentControl
         if (PreferredWidth > 0) return new Size(Dp(PreferredWidth), h);
         int text = Items.Count == 0 ? Dp(80)
             : Items.Max(t => TextRenderer.MeasureText(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
-        return new Size(text + Dp(12 + 38), h);
+        return new Size(Math.Max(text + Dp(12 + 38), Dp(MinWidth)), h);
     }
 
     protected override void OnClick(EventArgs e)

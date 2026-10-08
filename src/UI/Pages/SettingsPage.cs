@@ -28,7 +28,7 @@ internal sealed class SettingsPage : ScrollPage
     {
         _app = app;
 
-        foreach (var (_, name) in LanguageMenu.Choices.Prepend((L.Auto, L.T("自动（跟随系统）")))) _language.Items.Add(name);
+        foreach (var (_, name) in LanguageMenu.Choices.Prepend((L.Auto, LanguageMenu.AutoName))) _language.Items.Add(name);
         _theme.Items.AddRange([L.T("跟随 Windows"), L.T("浅色"), L.T("深色")]);
 
         var general = Ui.Section(L.T("常规"));

@@ -8,14 +8,16 @@ internal static class LanguageMenu
 {
     public static bool RestartRequested { get; private set; }
 
-    // Language names are shown in their own language, never translated.
-    internal static readonly (string Value, string Name)[] Choices =
-    [
-        ("zh-CN", "简体中文"),
-        ("zh-TW", "繁體中文"),
-        ("en", "English"),
-        ("ja", "日本語"),
-    ];
+    /// <summary>Every supported language (L.Languages) under its own name, sorted by that name.</summary>
+    internal static readonly (string Value, string Name)[] Choices = L.Languages
+        .Select(lang => (Value: lang, Name: L.NativeName(lang)))
+        .OrderBy(c => c.Name, StringComparer.InvariantCultureIgnoreCase)
+        .ThenBy(c => c.Value, StringComparer.Ordinal)
+        .ToArray();
+
+    /// <summary>The "auto" entry, naming the language it picks now: "Use Windows setting (Svenska)".</summary>
+    internal static string AutoName =>
+        L.F("{0}（{1}）", L.T("跟随 Windows"), L.NativeName(L.Resolve(L.Auto, System.Globalization.CultureInfo.CurrentUICulture)));
 
     internal static string Normalize(string? configured) =>
         Choices.FirstOrDefault(c => string.Equals(c.Value, configured, StringComparison.OrdinalIgnoreCase)).Value ?? L.Auto;

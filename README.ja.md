@@ -42,7 +42,7 @@ HomePod ソフトウェア 27 では TuneBlade から音が出なくなりまし
    ファイアウォール規則はローカル ネットワークのみを許可し、プライベート ネットワークでのみ有効です。HomePod が時刻同期と再送要求のために PC へ接続してくるため必要です。どちらのパッケージも設定は `%APPDATA%\HomePodCast` に保存されます。
 3. HomePod が自動で見つかり、接続されます。PC の既定の出力デバイスをミュートしてもかまいません。音声はシステム音量より前の段階で取り込むので、HomePod からは普通に音が出ます。
 
-表示言語は Windows の表示言語に従います（中国語・日本語以外の場合は英語）。変更するには、設定ページの「言語 / Language」を使うか、`%APPDATA%\HomePodCast\config.json` の `"Language"` を `"ja"`、`"en"`、`"zh-CN"`、`"zh-TW"`、`"auto"` のいずれかにします。
+表示言語は Windows の表示言語に従います（翻訳のない言語の場合は英語）。変更するには、設定ページの「言語 / Language」を使うか、`%APPDATA%\HomePodCast\config.json` の `"Language"` を言語コード（`"zh-CN"`、または `src/i18n` のファイル名。例：`"ja"`、`"en"`、`"de"`）か `"auto"` にします。
 
 コマンドライン（トラブルシューティング用）：
 
@@ -84,7 +84,7 @@ MSI インストーラーは `installer\build.ps1` が WiX Toolset v5（ロー�
 
 `tools\measure_av.py` はスマホで撮った動画から音と映像のずれを計算します。`tests\vectors\gen_vectors.py` は pyatv が使っている srptools でペアリング アルゴリズムの照合用データを生成します。
 
-UI の文字列は簡体字中国語で `L.T("…")` / `L.F("…{0}", x)` の中に書き、訳文は `src/i18n/{en,zh-TW,ja}.json` に置きます。訳が抜けていると単体テストが失敗します。ブラウザー拡張機能の文字列は `extension/_locales` にあります。
+UI の文字列は簡体字中国語で `L.T("…")` / `L.F("…{0}", x)` の中に書き、訳文は `src/i18n/<言語>.json` に置きます（ファイルごとに 1 つの表示言語で、`en.json` が基準）。訳が抜けていたり `en.json` と一致しなかったりすると単体テストが失敗します。ブラウザー拡張機能の文字列は `extension/_locales` にあります。
 
 ## ブランチとリリース
 

@@ -168,12 +168,12 @@ internal static partial class Theme
     public static Font Font(TextStyle style, int dpi) => Font(style, dpi, L.FontName);
 
     /// <summary>
-    /// Like <see cref="Font(TextStyle, int)"/>, but for text that may not be in the UI language: in the English UI,
-    /// names in Chinese or Japanese (speakers, apps) get a CJK face instead of GDI's fallback.
+    /// Like <see cref="Font(TextStyle, int)"/>, but for text that may not be in the UI language: in a Latin-script
+    /// UI (English, German, …), names in Chinese or Japanese (speakers, apps) get a CJK face instead of GDI's fallback.
     /// </summary>
     public static Font FontFor(TextStyle style, int dpi, string? text)
     {
-        if (L.Language != "en" || string.IsNullOrEmpty(text)) return Font(style, dpi);
+        if (!L.LatinScript || string.IsNullOrEmpty(text)) return Font(style, dpi);
         bool kana = false, han = false;
         foreach (char ch in text)
         {

@@ -6,9 +6,9 @@ namespace HomePodCast;
 /// <summary>
 /// User-visible text. Source strings are written in Simplified Chinese and double as lookup keys:
 /// wrap every UI string in L.T("…") (or L.F("…{0}…", x) for formatted ones). The translations live in
-/// src/i18n/{en,zh-TW,ja}.json (embedded), each mapping source string → translation; a unit test fails
-/// when a wrapped string is missing from any table. Missing entries fall back zh-TW → source,
-/// ja → en → source, en → source.
+/// src/i18n/&lt;language&gt;.json (embedded), each mapping source string → translation; every embedded table is a
+/// supported language, and a unit test fails when a wrapped string is missing from any of them. Missing entries
+/// fall back zh-TW → source, en → source, and any other language → en → source.
 /// </summary>
 internal static class L
 {
@@ -18,14 +18,37 @@ internal static class L
     /// <summary>The source language: strings are looked up but never translated.</summary>
     public const string Source = "zh-CN";
 
-    /// <summary>Supported UI languages, as stored in config.json.</summary>
-    public static readonly string[] Languages = [Source, "zh-TW", "en", "ja"];
+    /// <summary>Embedded tables are named i18n.&lt;language&gt;.json (see HomePodCast.csproj).</summary>
+    private const string ResourcePrefix = "i18n.", ResourceSuffix = ".json";
+
+    /// <summary>Supported UI languages, as stored in config.json: the source and one per embedded table.</summary>
+    public static readonly string[] Languages = Discover();
+
+    // Language names are shown in their own language, never translated.
+    private static readonly Dictionary<string, string> NativeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["zh-CN"] = "简体中文",
+        ["zh-TW"] = "繁體中文",
+        ["en"] = "English",
+        ["ja"] = "日本語",
+        ["de"] = "Deutsch",
+        ["fr"] = "Français",
+        ["es"] = "Español",
+        ["it"] = "Italiano",
+        ["nl"] = "Nederlands",
+        ["pl"] = "Polski",
+        ["pt"] = "Português",
+        ["sv"] = "Svenska",
+        ["da"] = "Dansk",
+        ["nb"] = "Norsk",
+        ["fi"] = "Suomi",
+    };
 
     private static readonly Dictionary<string, IReadOnlyDictionary<string, string>> Tables = new();
     private static volatile IReadOnlyDictionary<string, string>[]? _chain;
     private static string _language = Source;
 
-    /// <summary>The language in use (zh-CN, zh-TW, en or ja).</summary>
+    /// <summary>The language in use (one of <see cref="Languages"/>).</summary>
     public static string Language
     {
         get
@@ -34,6 +57,11 @@ internal static class L
             return _language;
         }
     }
+
+    /// <summary>The UI language is written in Latin script (shown in Segoe UI); false for Chinese and Japanese.</summary>
+    public static bool LatinScript => IsLatinScript(Language);
+
+    internal static bool IsLatinScript(string language) => language is not (Source or "zh-TW" or "ja");
 
     public static string T(string zh)
     {
@@ -60,6 +88,22 @@ internal static class L
         _chain = chain;
     }
 
+    /// <summary>The language's name in that language ("Deutsch", "日本語").</summary>
+    public static string NativeName(string language)
+    {
+        if (NativeNames.TryGetValue(language, out var name)) return name;
+        try
+        {
+            var culture = CultureInfo.GetCultureInfo(language);
+            var native = culture.NativeName;
+            return native.Length == 0 ? language : char.ToUpper(native[0], culture) + native[1..];
+        }
+        catch (CultureNotFoundException)
+        {
+            return language;
+        }
+    }
+
     /// <summary>Config value → language: "auto", empty or unsupported values follow the Windows display language.</summary>
     internal static string Resolve(string? configured, CultureInfo ui)
     {
@@ -68,18 +112,36 @@ internal static class L
             try
             {
                 var c = CultureInfo.GetCultureInfo(configured.Trim().Replace('_', '-'));
-                if (c.TwoLetterISOLanguageName is "zh" or "en" or "ja") return FromCulture(c);
+                var lang = FromCulture(c);
+                // FromCulture answers "en" for anything it doesn't know; only take that when English was asked for.
+                if (lang != "en" || c.TwoLetterISOLanguageName == "en") return lang;
             }
             catch (CultureNotFoundException) { }
         }
         return FromCulture(ui);
     }
 
-    /// <summary>zh-Hans/zh-CN/zh-SG → zh-CN; zh-Hant/zh-TW/zh-HK/zh-MO → zh-TW; ja → ja; anything else → en.</summary>
-    internal static string FromCulture(CultureInfo culture)
+    /// <summary>
+    /// Windows culture → UI language: zh-Hans/zh-CN/zh-SG → zh-CN; zh-Hant/zh-TW/zh-HK/zh-MO → zh-TW;
+    /// nb/nn/no → nb; otherwise the two-letter language (sv-SE → sv, pt-BR → pt) when it has a table; anything else → en.
+    /// </summary>
+    internal static string FromCulture(CultureInfo culture) => FromCulture(culture, Languages);
+
+    /// <summary><see cref="FromCulture(CultureInfo)"/> for a given set of supported languages.</summary>
+    internal static string FromCulture(CultureInfo culture, IReadOnlyCollection<string> supported)
     {
-        if (culture.TwoLetterISOLanguageName == "ja") return "ja";
-        if (culture.TwoLetterISOLanguageName != "zh") return "en";
+        var iso = culture.TwoLetterISOLanguageName;
+        if (iso == "zh") return Chinese(culture);
+        var lang = iso switch
+        {
+            "nb" or "nn" or "no" => "nb",
+            _ => iso,
+        };
+        return supported.Contains(lang) ? lang : "en";
+    }
+
+    private static string Chinese(CultureInfo culture)
+    {
         for (var c = culture; !string.IsNullOrEmpty(c.Name); c = c.Parent)
         {
             switch (c.Name)
@@ -94,11 +156,22 @@ internal static class L
     /// <summary>Tables consulted, in order, before falling back to the source string.</summary>
     internal static string[] Chain(string language) => language switch
     {
+        Source => [],
         "zh-TW" => ["zh-TW"],
-        "ja" => ["ja", "en"],
         "en" => ["en"],
-        _ => [],
+        _ => [language, "en"],
     };
+
+    /// <summary>The source language, then every embedded table (i18n.&lt;language&gt;.json), sorted by code.</summary>
+    private static string[] Discover()
+    {
+        var embedded = typeof(L).Assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal) && n.EndsWith(ResourceSuffix, StringComparison.Ordinal))
+            .Select(n => n[ResourcePrefix.Length..^ResourceSuffix.Length])
+            .Where(lang => lang.Length > 0 && lang != Source)
+            .Order(StringComparer.Ordinal);
+        return [Source, .. embedded];
+    }
 
     /// <summary>The embedded table for a language (empty when there is none).</summary>
     internal static IReadOnlyDictionary<string, string> Table(string language)
@@ -109,7 +182,7 @@ internal static class L
             table = new Dictionary<string, string>();
             try
             {
-                using var stream = typeof(L).Assembly.GetManifestResourceStream($"i18n.{language}.json");
+                using var stream = typeof(L).Assembly.GetManifestResourceStream(ResourcePrefix + language + ResourceSuffix);
                 if (stream != null)
                     table = JsonSerializer.Deserialize<Dictionary<string, string>>(stream) ?? new Dictionary<string, string>();
             }
@@ -124,10 +197,10 @@ internal static class L
     /// <summary>A UI font family that has the glyphs (and glyph shapes) of the current language.</summary>
     public static string FontName => _fontName ??= PickFont(Language switch
     {
-        "en" => ["Segoe UI"],
+        Source => [],
         "zh-TW" => ["Microsoft JhengHei UI"],
         "ja" => ["Yu Gothic UI", "Meiryo UI", "MS UI Gothic"],
-        _ => [],
+        _ => ["Segoe UI"],
     });
 
     private static string? _fontName;

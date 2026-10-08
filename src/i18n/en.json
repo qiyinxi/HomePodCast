@@ -54,7 +54,6 @@
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "The speaker's clock-sync requests never reached this program; usually Windows Firewall is blocking incoming connections to HomePodCast.exe",
 
   "语言": "Language",
-  "自动（跟随系统）": "Automatic (Windows language)",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "The new language takes effect after HomePodCast restarts. Restart now?\n\nAudio stops for a few seconds during the restart.",
 
   "已连接 · {0}（实验性）": "Connected · {0} (experimental)",
