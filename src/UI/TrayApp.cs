@@ -24,7 +24,8 @@ internal sealed partial class TrayApp : ApplicationContext
     public Audio.MixSources MixSources { get; } = new();
 
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false)
+    /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -96,6 +97,11 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             void OpenFlyout(object? s, EventArgs e) { Application.Idle -= OpenFlyout; ShowFlyout(); }
             Application.Idle += OpenFlyout;
+        }
+        if (testOsd != null)
+        {
+            void OpenOsd(object? s, EventArgs e) { Application.Idle -= OpenOsd; ShowTestOsd(testOsd == "muted"); }
+            Application.Idle += OpenOsd;
         }
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
@@ -177,19 +183,25 @@ internal sealed partial class TrayApp : ApplicationContext
         if (_wantConnected) Connect(); // latency is negotiated at SETUP, so reconnect
     }
 
+    /// <summary>A volume chosen in the app (a page slider's debounce, the tray flyout): saved, sent, and Windows follows (跟随 Windows).</summary>
     public void SetVolume(double percent)
     {
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Config.Volume = percent;
         Config.Save();
         if (Controller.Volume != percent || Controller.Muted) Controller.SetVolume(percent); // PreviewVolume may have sent it
+        _followLink?.HomePodChanged();
     }
 
     /// <summary>
     /// A volume slider is moving: send it right away (the controller coalesces — latest value wins, one request
     /// in flight), so the speaker follows the drag. The slider's debounce then saves it via SetVolume/ApplyVolume.
     /// </summary>
-    public void PreviewVolume(double percent) => Controller.SetVolume(VolumeLimit.Clamp(percent, Config.VolumeCapPercent));
+    public void PreviewVolume(double percent)
+    {
+        Controller.SetVolume(VolumeLimit.Clamp(percent, Config.VolumeCapPercent));
+        _followLink?.HomePodChanged();
+    }
 
     /// <summary>A volume chosen in the tray flyout (after its debounce): applied like the pages do, and they follow.</summary>
     public void ApplyVolume(double percent)
@@ -369,11 +381,12 @@ internal sealed partial class TrayApp : ApplicationContext
             old?.Dispose();
             _lastIconState = c.State;
         }
-        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v)
+        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v && _pendingVolume is null)
         {
             Config.Volume = v;
             Config.Save();
         }
+        UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();
         RaiseStateChanged();
     }

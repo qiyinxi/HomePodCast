@@ -112,10 +112,13 @@ public sealed partial class StreamController : IDisposable
         capture?.Dispose(); // RoutedCapture: makes silenced apps audible here again
     }
 
-    public void SetVolume(double percent)
+    public void SetVolume(double percent) => SetVolume(percent, unmute: true);
+
+    /// <param name="unmute">False: a muted speaker stays muted and keeps the new volume for when it is unmuted.</param>
+    public void SetVolume(double percent, bool unmute)
     {
         Volume = VolumeLimit.Clamp(percent, VolumeCapPercent);
-        Muted = false;
+        if (unmute) Muted = false;
         PushVolume();
     }
 

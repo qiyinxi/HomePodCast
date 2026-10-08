@@ -99,7 +99,8 @@ public class SceneTests
         Assert.Equal(120, cfg.LatencyMs);
         Assert.Equal(100, cfg.VolumeCapPercent);
         Assert.False(cfg.NightMode);
-        Assert.True(cfg.ForwardVolumeKeys);
+        Assert.Equal(VolumeKeyMode.FollowWindows, cfg.VolumeKeys);
+        Assert.Null(cfg.ForwardVolumeKeys);
     }
 
     [Fact]

@@ -16,13 +16,53 @@ internal readonly record struct EndpointState(bool Muted, float Level)
 /// <summary>What one change means: move the speaker volume by Percent points, or toggle its mute; Restore = put Windows back.</summary>
 internal readonly record struct ForwardAction(double Percent, bool ToggleMute, bool Restore);
 
+/// <summary>How the Windows output endpoint is watched (<see cref="VolumeKeyRules.EndpointModeFor"/>).</summary>
+internal enum EndpointMode
+{
+    Off,
+
+    /// <summary>VolumeKeyMode.WhenWindowsMuted: key steps on a silent Windows go to the HomePod, Windows is put back.</summary>
+    Forward,
+
+    /// <summary>
+    /// VolumeKeyMode.FollowWindows: every change of the Windows volume or mute that isn't ours is reported; levels asked
+    /// for with RequestLevel are written to the watched endpoint with our event context (never followed back).
+    /// </summary>
+    Follow,
+}
+
 /// <summary>
-/// Volume-key forwarding. Loopback capture is taken before the endpoint volume, so the usual setup is
-/// Windows muted (or at 0 %) while the HomePod plays. The keyboard's volume keys would then just unmute
-/// the PC speakers; instead, while Windows is silent and we are streaming, each key step becomes a HomePod
-/// volume step and Windows is put straight back to silent. Changes that don't look like a key press
+/// The Windows side of <see cref="VolumeKeyMode.FollowWindows"/>: turns endpoint notifications into transitions
+/// to follow. Our own writes (our event context) and repeated states (channel-only changes) are not followed, and
+/// nothing is followed before a baseline is known, so taking the baseline (stream start, mode or device change)
+/// never moves the HomePod. Not thread-safe; the forwarder locks around it.
+/// </summary>
+internal sealed class WindowsVolumeFollower
+{
+    private EndpointState? _last;
+
+    public void Reset(EndpointState? baseline = null) => _last = baseline;
+
+    public (EndpointState From, EndpointState To)? Next(EndpointState now, bool ours)
+    {
+        var last = _last;
+        _last = now;
+        if (ours || last is not { } from || from == now) return null;
+        return (from, now);
+    }
+}
+
+/// <summary>
+/// Watches the Windows output endpoint's volume for two modes (<see cref="Mode"/>):
+/// <para><see cref="EndpointMode.Forward"/> (volume-key forwarding). Loopback capture is taken before the endpoint
+/// volume, so a common setup is Windows muted (or at 0 %) while the HomePod plays. The keyboard's volume keys would
+/// then just unmute the PC speakers; instead, while Windows is silent and we are streaming, each key step becomes a
+/// HomePod volume step and Windows is put straight back to silent. Changes that don't look like a key press
 /// (dragging the Windows slider, clicking unmute) are left alone, so Windows audio can always be taken back.
-/// Known limit: at 0 % (not muted) Windows sends nothing for "volume down", so only muting gives both keys.
+/// Known limit: at 0 % (not muted) Windows sends nothing for "volume down", so only muting gives both keys.</para>
+/// <para><see cref="EndpointMode.Follow"/>: every change of the Windows level or mute is raised as
+/// <see cref="WindowsChanged"/> (the HomePod follows it), a fresh baseline as <see cref="FollowStarted"/> (both sides are
+/// aligned), and <see cref="RequestLevel"/> writes the level that stands for the HomePod volume (FollowWindowsLink).</para>
 /// </summary>
 internal sealed partial class VolumeKeyForwarder : IDisposable
 {
@@ -37,20 +77,55 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
     private readonly EndpointVolumeCallback _callback;
     private readonly IntPtr _callbackPtr;
     private readonly Thread _thread;
-    private volatile bool _active, _stop;
+    private readonly WindowsVolumeFollower _follower = new();
+    private volatile EndpointMode _mode;
+    private volatile bool _stop;
     private int _keys;              // VolumeKeys seen held at notification time (callback thread → worker)
     private EndpointState _baseline;
-    private bool _tracking;         // _baseline was taken while active
+    private bool _tracking;         // _baseline was taken for _trackedMode
+    private EndpointMode _trackedMode;
     private long _lastForward;
 
-    /// <summary>Raised on the worker thread with ± percent points for the speaker.</summary>
+    /// <summary>Raised on the worker thread with ± percent points for the speaker (Forward).</summary>
     public event Action<double>? VolumeStep;
 
-    /// <summary>Raised on the worker thread when the mute key was pressed.</summary>
+    /// <summary>Raised on the worker thread when the mute key was pressed (Forward).</summary>
     public event Action? MuteToggled;
 
-    public VolumeKeyForwarder()
+    /// <summary>Raised on Windows' notification thread when the Windows level or mute changed, not by us (Follow).</summary>
+    public event Action<EndpointState, EndpointState>? WindowsChanged;
+
+    /// <summary>
+    /// Raised on the worker thread with the endpoint's state when following starts from a fresh baseline: the mode was
+    /// switched to Follow (stream start, reconnect, mode change) or another endpoint is watched now.
+    /// </summary>
+    public event Action<EndpointState>? FollowStarted;
+
+    private volatile bool _rebaseline;   // the mode was switched: take a new baseline even if the worker never saw the old mode
+    private int _levelPending;           // 1 when _pendingLevel is to be written (UI → worker)
+    private float _pendingLevel;
+
+    /// <summary>
+    /// Follow: set the watched endpoint's master level (0..1), with our event context so the change isn't followed back.
+    /// Done on the worker thread, latest request wins; dropped when not following or without an endpoint. Thread-safe.
+    /// </summary>
+    public void RequestLevel(float level)
     {
+        Volatile.Write(ref _pendingLevel, Math.Clamp(level, 0f, 1f));
+        Volatile.Write(ref _levelPending, 1);
+        _wake.Set();
+    }
+
+    private readonly Func<string?> _endpointId;
+
+    /// <param name="endpointId">
+    /// The render endpoint whose volume is watched, as an IMMDevice id; null (or a null result) = the Windows default
+    /// output. Asked again at every device check (once a second, on the worker thread), so a new answer re-subscribes
+    /// to that endpoint within a second. Must be quick and thread-safe.
+    /// </param>
+    public VolumeKeyForwarder(Func<string?>? endpointId = null)
+    {
+        _endpointId = endpointId ?? (() => null);
         _callback = new EndpointVolumeCallback(OnNotify);
         _callbackPtr = Marshal.GetComInterfaceForObject<EndpointVolumeCallback, IAudioEndpointVolumeCallback>(_callback);
         _thread = new Thread(Run) { IsBackground = true, Name = "Volume keys" };
@@ -58,14 +133,16 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         _thread.Start();
     }
 
-    /// <summary>Forward only while true (streaming and the option is on). Thread-safe.</summary>
-    public bool Active
+    /// <summary>What to do with endpoint changes (Off unless streaming). Thread-safe.</summary>
+    public EndpointMode Mode
     {
-        get => _active;
+        get => _mode;
         set
         {
-            if (_active == value) return;
-            _active = value;
+            if (_mode == value) return;
+            lock (_follower) _follower.Reset(); // a new baseline is taken before anything is followed
+            _mode = value;
+            _rebaseline = true;
             _wake.Set();
         }
     }
@@ -94,9 +171,18 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
 
     private void OnNotify(Guid context, bool muted, float level)
     {
-        if (context == _context || !_active) return; // our own restore, or nothing to do
-        Interlocked.Or(ref _keys, (int)KeysHeld());
-        _wake.Set();
+        switch (_mode)
+        {
+            case EndpointMode.Follow:
+                (EndpointState From, EndpointState To)? change;
+                lock (_follower) change = _follower.Next(new EndpointState(muted, level), ours: context == _context);
+                if (change is { } c) WindowsChanged?.Invoke(c.From, c.To);
+                return;
+            case EndpointMode.Forward when context != _context: // not our own restore
+                Interlocked.Or(ref _keys, (int)KeysHeld());
+                _wake.Set();
+                return;
+        }
     }
 
     private static VolumeKeys KeysHeld()
@@ -108,6 +194,40 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         return k;
     }
 
+    /// <summary>
+    /// Windows has a default output device whose volume we can watch. Checked once a second (also while Off), so the
+    /// volume keys can be taken over while there is none (<see cref="VolumeKeyRules.RouteFor"/>). True until the first check.
+    /// </summary>
+    public bool OutputDevicePresent => _outputDevice;
+
+    /// <summary>Raised on the worker thread when <see cref="OutputDevicePresent"/> changes.</summary>
+    public event Action<bool>? OutputDeviceChanged;
+
+    private volatile bool _outputDevice = true;
+    private bool _outputDeviceChecked;
+
+    private void SetOutputDevice(bool present, string? problem)
+    {
+        if (_outputDeviceChecked && _outputDevice == present) return;
+        bool first = !_outputDeviceChecked;
+        _outputDeviceChecked = true;
+        if (present) { if (!first) Log.Info("volume keys: a Windows output device is back"); }
+        else Log.Warn($"volume keys: no usable Windows output device ({problem}); while streaming the volume keys go to the HomePod");
+        if (_outputDevice == present) return;
+        _outputDevice = present;
+        OutputDeviceChanged?.Invoke(present);
+    }
+
+    private string? WantedEndpointId()
+    {
+        try { return _endpointId() is { Length: > 0 } id ? id : null; }
+        catch (Exception ex)
+        {
+            Log.Warn($"volume keys: endpoint choice failed, using the default output: {ex.Message}");
+            return null;
+        }
+    }
+
     private void Run()
     {
         IMMDeviceEnumerator? enumerator = null;
@@ -115,7 +235,6 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         long nextDeviceCheck = 0;
         try
         {
-            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
             while (!_stop)
             {
                 try
@@ -123,27 +242,37 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
                     if (Stopwatch.GetTimestamp() >= nextDeviceCheck)
                     {
                         nextDeviceCheck = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
-                        if (endpoint == null || !endpoint.IsDefault(enumerator))
+                        if (enumerator == null)
+                        {
+                            try { enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom(); }
+                            catch (Exception ex) { SetOutputDevice(false, $"audio service unavailable: {ex.Message}"); }
+                        }
+                        string? wanted = WantedEndpointId();
+                        if (enumerator != null && (endpoint == null || !endpoint.IsCurrent(enumerator, wanted)))
                         {
                             endpoint?.Dispose();
-                            endpoint = Endpoint.TryOpen(enumerator, _callbackPtr);
+                            endpoint = null;
+                            lock (_follower) _follower.Reset(); // another device: its level is not a change to follow
+                            endpoint = Endpoint.TryOpen(enumerator, wanted, _callbackPtr, out var problem);
                             _tracking = false; // new device: take a fresh baseline
+                            SetOutputDevice(endpoint != null, problem);
                         }
                     }
-                    if (endpoint != null) Handle(endpoint);
+                    if (endpoint != null)
+                    {
+                        Handle(endpoint);
+                        WritePendingLevel(endpoint);
+                    }
+                    else Interlocked.Exchange(ref _levelPending, 0); // nothing to write to
                 }
                 catch (Exception ex) when (!_stop)
                 {
                     Log.Warn($"volume keys: {ex.Message}");
-                    endpoint?.Dispose();
-                    endpoint = null;
+                    try { endpoint?.Dispose(); } catch { }
+                    endpoint = null; // opened again (or found missing) at the next check
                 }
                 _wake.WaitOne(1000);
             }
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"volume keys disabled: {ex.Message}");
         }
         finally
         {
@@ -156,15 +285,24 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
     {
         var keys = (VolumeKeys)Interlocked.Exchange(ref _keys, 0);
         if (!endpoint.TryRead(out var now)) return;
-        if (!_active || !_tracking)
+        var mode = _mode;
+        if (mode == EndpointMode.Off || !_tracking || mode != _trackedMode || _rebaseline)
         {
-            if (_active && now.IsSilent)
+            _rebaseline = false;
+            if (mode == EndpointMode.Forward && now.IsSilent)
                 Log.Info($"volume keys: Windows output is {(now.Muted ? "muted" : "at 0 %")}, keys go to the speaker");
             _baseline = now;
-            _tracking = _active;
+            _trackedMode = mode;
+            _tracking = mode != EndpointMode.Off;
+            if (mode == EndpointMode.Follow)
+            {
+                lock (_follower) _follower.Reset(now);
+                Log.Info($"volume keys: the HomePod follows the Windows volume (now {now.Level:P0}{(now.Muted ? ", muted" : "")})");
+                FollowStarted?.Invoke(now);
+            }
             return;
         }
-        if (now == _baseline) return;
+        if (mode != EndpointMode.Forward || now == _baseline) return;
 
         var action = Decide(_baseline, now, keys, endpoint.Step);
         if (!action.Restore)
@@ -181,6 +319,17 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         else VolumeStep?.Invoke(action.Percent);
     }
 
+    /// <summary>Follow: a level asked for by <see cref="RequestLevel"/>, written with our context (not followed back).</summary>
+    private void WritePendingLevel(Endpoint endpoint)
+    {
+        if (Interlocked.Exchange(ref _levelPending, 0) == 0) return;
+        if (_mode != EndpointMode.Follow || !_tracking || _trackedMode != EndpointMode.Follow) return;
+        float level = Volatile.Read(ref _pendingLevel);
+        int hr = endpoint.SetLevel(level, _context);
+        if (hr < 0) Log.Warn($"volume keys: setting the Windows volume failed 0x{hr:X8}");
+        else Log.Debug($"volume keys: Windows volume → {level:P0} (follows the HomePod)");
+    }
+
     public void Dispose()
     {
         _stop = true;
@@ -189,51 +338,80 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         Marshal.Release(_callbackPtr);
     }
 
-    /// <summary>The default render endpoint's volume control with our callback registered.</summary>
+    /// <summary>A render endpoint's volume control (the default output, or the one asked for) with our callback registered.</summary>
     private sealed class Endpoint : IDisposable
     {
+        private const int DeviceStateActive = 1;
+
         private readonly IMMDevice _device;
         private readonly IAudioEndpointVolume _volume;
         private readonly IntPtr _callback;
         private readonly string _id;
+        private readonly bool _isDefault; // opened as "the default output" (else by id)
 
         public float Step { get; }
 
-        private Endpoint(IMMDevice device, IAudioEndpointVolume volume, IntPtr callback, string id, float step)
+        private Endpoint(IMMDevice device, IAudioEndpointVolume volume, IntPtr callback, string id, bool isDefault, float step)
         {
             _device = device;
             _volume = volume;
             _callback = callback;
             _id = id;
+            _isDefault = isDefault;
             Step = step;
         }
 
-        public static Endpoint? TryOpen(IMMDeviceEnumerator enumerator, IntPtr callback)
+        /// <summary>
+        /// The volume of endpoint <paramref name="wantedId"/> (null = the default output), or null with the reason:
+        /// no device (E_NOTFOUND 0x80070490), the device not active (unplugged, disabled), no endpoint volume.
+        /// </summary>
+        public static Endpoint? TryOpen(IMMDeviceEnumerator enumerator, string? wantedId, IntPtr callback, out string? problem)
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var device) < 0) return null;
-            device.GetId(out var id);
-            var iid = typeof(IAudioEndpointVolume).GUID;
-            if (device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj) < 0)
+            int hr = wantedId == null
+                ? enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var device)
+                : enumerator.GetDevice(wantedId, out device);
+            if (hr < 0 || device == null)
             {
+                problem = wantedId == null ? $"no default output device, 0x{hr:X8}" : $"output device {wantedId} not found, 0x{hr:X8}";
+                return null;
+            }
+            if (wantedId != null && (device.GetState(out int state) < 0 || state != DeviceStateActive))
+            {
+                problem = $"output device {wantedId} not active";
                 Marshal.ReleaseComObject(device);
                 return null;
             }
-            var volume = (IAudioEndpointVolume)obj;
+            device.GetId(out var id);
+            id ??= wantedId ?? "";
+            var iid = typeof(IAudioEndpointVolume).GUID;
+            hr = device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj);
+            if (hr < 0 || obj is not IAudioEndpointVolume volume)
+            {
+                problem = $"endpoint volume unavailable, 0x{hr:X8}";
+                Marshal.ReleaseComObject(device);
+                return null;
+            }
             float step = volume.GetVolumeStepInfo(out _, out uint count) >= 0 && count > 1 ? 1f / (count - 1) : ShellStep;
-            int hr = volume.RegisterControlChangeNotify(callback);
+            hr = volume.RegisterControlChangeNotify(callback);
             if (hr < 0)
             {
-                Log.Warn($"volume keys: register notify failed 0x{hr:X8}");
+                problem = $"volume notifications unavailable, 0x{hr:X8}";
                 Marshal.ReleaseComObject(volume);
                 Marshal.ReleaseComObject(device);
                 return null;
             }
-            return new Endpoint(device, volume, callback, id, step);
+            problem = null;
+            Log.Info($"volume keys: watching {(wantedId == null ? "the default output" : "output")} \"{CoreAudio.FriendlyName(device)}\"");
+            return new Endpoint(device, volume, callback, id, wantedId == null, step);
         }
 
-        public bool IsDefault(IMMDeviceEnumerator enumerator)
+        /// <summary>Still the endpoint to watch: the default output (when asked for that), or <paramref name="wantedId"/> and active.</summary>
+        public bool IsCurrent(IMMDeviceEnumerator enumerator, string? wantedId)
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var current) < 0) return false;
+            if (wantedId != null)
+                return !_isDefault && wantedId == _id && _device.GetState(out int state) >= 0 && state == DeviceStateActive;
+            if (!_isDefault) return false;
+            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var current) < 0 || current == null) return false;
             current.GetId(out var id);
             Marshal.ReleaseComObject(current);
             return id == _id;
@@ -246,6 +424,9 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
             state = new EndpointState(muted, level);
             return true;
         }
+
+        /// <summary>The master level only (the mute state stays as it is).</summary>
+        public int SetLevel(float level, Guid context) => _volume.SetMasterVolumeLevelScalar(level, ref context);
 
         /// <summary>Back to the silent state, mute first when it was muted so the PC speakers stay quiet.</summary>
         public void Restore(EndpointState s, Guid context)

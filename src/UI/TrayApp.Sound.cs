@@ -2,13 +2,22 @@ using HomePodCast.Audio;
 
 namespace HomePodCast.UI;
 
-// Scenes, night mode, volume cap, speaker mute, global hotkeys and volume-key forwarding.
+// Scenes, night mode, volume cap, speaker mute, global hotkeys and the keyboard volume keys (VolumeKeyMode).
 internal sealed partial class TrayApp
 {
     private const double HotkeyVolumeStep = 5;
 
+    /// <summary>Volume keys, hotkeys and the Windows volume move the speaker at once; the config is saved this long after the last step.</summary>
+    private const int VolumeSaveDelayMs = 400;
+
     private GlobalHotkeys? _hotkeys;
-    private VolumeKeyForwarder? _forwarder;
+    private VolumeKeyForwarder? _forwarder;   // Windows endpoint: FollowWindows, WhenWindowsMuted, output device present
+    private VolumeKeyHook? _keyHook;          // keyboard hook: WhileStreaming (and no output device)
+    private VolumeOsd? _osd;
+    private FollowWindowsLink? _followLink;    // FollowWindows: one volume on both sides
+    private TimerDebounce? _volumeSave;
+    private double? _pendingVolume;
+    private VolumeKeyRoute _route;
 
     /// <summary>Configured hotkeys that could not be registered (another program holds them, or unreadable).</summary>
     public HashSet<HotkeyAction> UnavailableHotkeys { get; } = [];
@@ -32,25 +41,38 @@ internal sealed partial class TrayApp
         _hotkeys.Pressed += OnHotkey;
         ApplyHotkeys();
 
+        _volumeSave = new TimerDebounce(VolumeSaveDelayMs);
+        _volumeSave.Tick += SavePendingVolume;
         try
         {
-            _forwarder = new VolumeKeyForwarder();
+            _forwarder = new VolumeKeyForwarder(); // watches the default output; takes a Func<string?> endpoint id for another one
             _forwarder.VolumeStep += pct => _ui.Post(_ => NudgeVolume(pct), null);
             _forwarder.MuteToggled += () => _ui.Post(_ => ToggleSpeakerMute(), null);
-            Controller.Changed += UpdateForwarder;
-            UpdateForwarder();
+            var forwarder = _forwarder;
+            _followLink = new FollowWindowsLink(new HomePodSide(this), forwarder.RequestLevel); // writes only the watched endpoint
+            _forwarder.FollowStarted += state => _ui.Post(_ =>
+            {
+                if (_route == VolumeKeyRoute.Follow) _followLink?.Start(state); // align, lowering only
+            }, null);
+            _forwarder.WindowsChanged += (from, to) => _ui.Post(_ => FollowWindows(from, to), null);
+            _forwarder.OutputDeviceChanged += _ => _ui.Post(_ => UpdateVolumeKeys(), null);
         }
         catch (Exception ex)
         {
-            Log.Warn($"volume-key forwarding unavailable: {ex.Message}");
+            Log.Warn($"Windows volume watching unavailable: {ex.Message}");
         }
+        _keyHook = new VolumeKeyHook(command => _ui.Post(_ => OnVolumeKey(command), null));
+        UpdateVolumeKeys();
     }
 
     private void DisposeSound()
     {
-        Controller.Changed -= UpdateForwarder;
+        SavePendingVolume();
         _hotkeys?.Dispose();
+        _keyHook?.Dispose();
         _forwarder?.Dispose();
+        _osd?.Dispose();
+        _volumeSave?.Dispose();
     }
 
     // ---------------------------------------------------------------- actions
@@ -76,11 +98,13 @@ internal sealed partial class TrayApp
         if (Config.Volume > cap) Config.Volume = cap;
         Config.Save();
         Controller.SetVolumeCap(cap);
+        _followLink?.CapChanged(); // 跟随 Windows: the mapping changed; align again, lowering only
         RaiseStateChanged();
     }
 
     public void SetSpeakerMuted(bool muted)
     {
+        SavePendingVolume(); // saved first, so a late save can't unmute
         Controller.SetMuted(muted);
         _form.ShowSoundOptions();
         RaiseStateChanged();
@@ -88,27 +112,121 @@ internal sealed partial class TrayApp
 
     public void ToggleSpeakerMute() => SetSpeakerMuted(!Controller.Muted);
 
-    /// <summary>Step the speaker volume (hotkeys, forwarded volume keys); unmutes and respects the cap.</summary>
+    /// <summary>Step the speaker volume (hotkeys, volume keys); unmutes and respects the cap.</summary>
     public void NudgeVolume(double delta)
     {
         if ((Controller.Volume ?? Config.Volume) is not { } current) return; // speaker volume not known yet
-        SetVolume(Math.Clamp(current + delta, 0, Config.VolumeCapPercent));
-        _form.ShowVolume(Controller.Volume ?? current);
+        SetVolumeLive(current + delta);
+    }
+
+    /// <summary>
+    /// A volume from the keys, hotkeys or the Windows volume: sent at once like a slider drag (the controller coalesces),
+    /// saved once the steps stop, so held keys don't write the config 30 times a second.
+    /// </summary>
+    /// <param name="fromWindows">It came from the Windows volume (跟随 Windows): not written back to Windows.</param>
+    /// <param name="unmute">False only for lowering at alignment: a muted HomePod stays muted.</param>
+    private void SetVolumeLive(double percent, bool fromWindows = false, bool unmute = true)
+    {
+        percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
+        Controller.SetVolume(percent, unmute);
+        if (!fromWindows) _followLink?.HomePodChanged();
+        _pendingVolume = percent;
+        _volumeSave?.Restart();
+        _form.ShowVolume(percent);
         _form.ShowSoundOptions();
         RaiseStateChanged();
     }
 
-    public void SetForwardVolumeKeys(bool on)
+    /// <summary>The debounce of <see cref="SetVolumeLive"/>: saves what the speaker has now (a slider may have moved it
+    /// since). It was sent already, and Windows followed already, so this only saves (and never unmutes).</summary>
+    private void SavePendingVolume()
     {
-        Config.ForwardVolumeKeys = on;
+        _volumeSave?.Stop();
+        if (_pendingVolume is not { } percent) return;
+        _pendingVolume = null;
+        Config.Volume = VolumeLimit.Clamp(Controller.Volume ?? percent, Config.VolumeCapPercent);
         Config.Save();
-        UpdateForwarder();
     }
 
-    private void UpdateForwarder()
+    /// <summary>The HomePod side of <see cref="FollowWindowsLink"/>: volumes from Windows go out without being written back.</summary>
+    private sealed class HomePodSide(TrayApp app) : IFollowHomePod
     {
-        if (_forwarder != null) _forwarder.Active = Config.ForwardVolumeKeys && Controller.State == StreamState.Streaming;
+        public double? Volume => app.Controller.Volume ?? app.Config.Volume;
+        public bool Muted => app.Controller.Muted;
+        public double Cap => app.Config.VolumeCapPercent;
+        public void SetVolume(double percent, bool unmute) => app.SetVolumeLive(percent, fromWindows: true, unmute);
+        public void SetMuted(bool muted) => app.SetSpeakerMuted(muted);
     }
+
+    // ---------------------------------------------------------------- volume keys
+
+    /// <summary>Windows has an output device whose volume can be followed (true until first checked).</summary>
+    public bool OutputDevicePresent => _forwarder?.OutputDevicePresent ?? false;
+
+    public void SetVolumeKeyMode(VolumeKeyMode mode)
+    {
+        if (Config.VolumeKeys == mode) return;
+        Config.VolumeKeys = mode;
+        Config.Save();
+        Log.Info($"volume keys: {mode}");
+        UpdateVolumeKeys();
+    }
+
+    /// <summary>Hook in or out, start or stop watching Windows: after a mode change, the stream starting or stopping,
+    /// or the output device going or coming back. UI thread.</summary>
+    private void UpdateVolumeKeys()
+    {
+        bool streaming = Controller.State == StreamState.Streaming;
+        bool device = OutputDevicePresent;
+        var mode = Config.VolumeKeys;
+        var route = VolumeKeyRules.RouteFor(mode, streaming, device);
+        if (route != VolumeKeyRoute.Follow) _followLink?.Stop(); // starts again from the watcher's next baseline
+        if (_forwarder != null) _forwarder.Mode = VolumeKeyRules.EndpointModeFor(route);
+        if (_keyHook != null)
+        {
+            _keyHook.SetState(mode, streaming, device);
+            if (route == VolumeKeyRoute.Intercept) _keyHook.Install();
+            else _keyHook.Uninstall();
+        }
+        if (route != _route) Log.Info($"volume keys: {route} ({mode}, {(streaming ? "streaming" : "not streaming")}, " +
+                                      $"{(device ? "output device present" : "no output device")})");
+        _route = route;
+        _form?.ShowVolumeKeys();
+    }
+
+    /// <summary>A volume key taken by the hook: one step (2 %, unmutes) or the speaker-mute toggle, and the OSD.</summary>
+    private void OnVolumeKey(VolumeKeyCommand command)
+    {
+        if (command == VolumeKeyCommand.Mute) ToggleSpeakerMute();
+        else NudgeVolume(VolumeKeyRules.StepFor(command));
+        if (VolumeOsd.Allowed()) ShowVolumeOsd(); // not over an exclusive full-screen game or a presentation
+    }
+
+    /// <summary>FollowWindows: the Windows volume or mute changed (not by us); the HomePod follows within the cap.</summary>
+    private void FollowWindows(EndpointState from, EndpointState to)
+    {
+        if (_route != VolumeKeyRoute.Follow) return; // stopped streaming or switched mode meanwhile
+        Log.Debug($"Windows volume {to.Level:P0}{(to.Muted ? ", muted" : "")} → HomePod");
+        _followLink?.WindowsChanged(from, to);
+    }
+
+    /// <summary>The HomePod volume (or mute) on the OSD; it closes itself after fading out, and the next one is made new.</summary>
+    private void ShowVolumeOsd(double? fallback = null, bool? muted = null, int? holdMs = null)
+    {
+        try
+        {
+            if (_osd is not { IsDisposed: false }) _osd = new VolumeOsd();
+            if (holdMs is { } hold) _osd.HoldMs = hold;
+            _osd.Present(Controller.Volume ?? Config.Volume ?? fallback, muted ?? Controller.Muted, Config.VolumeCapPercent);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"volume OSD: {ex.Message}");
+        }
+    }
+
+    /// <summary><c>gui --osd</c> / <c>--osd-muted</c>: the OSD for a minute, for checking its look (sends nothing).</summary>
+    private void ShowTestOsd(bool muted) => ShowVolumeOsd(fallback: 42, muted: muted, holdMs: 60_000);
 
     // ---------------------------------------------------------------- hotkeys
 
