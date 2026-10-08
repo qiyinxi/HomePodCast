@@ -4,6 +4,7 @@ using System.Runtime.ExceptionServices;
 using System.Windows.Forms;
 using HomePodCast.Net;
 using HomePodCast.UI;
+using HomePodCast.UI.Controls;
 
 namespace HomePodCast.Tests;
 
@@ -32,16 +33,16 @@ public class GroupFormTests
         Snapshot(form, "group-pair");
 
         Assert.Equal([("左声道", "客厅  192.168.50.11"), ("右声道", "客厅 (2)  192.168.50.12")], Rows(form));
-        Assert.False(Find<ComboBox>(form).Enabled); // a pair needs no second speaker
+        Assert.False(Find<FluentComboBox>(form).Enabled); // a pair needs no second speaker
 
-        Find<CheckBox>(form, "交换左右").Checked = true;
+        Find<ToggleSwitch>(form, "交换左右").Checked = true;
         Assert.Equal([("右声道", "客厅  192.168.50.11"), ("左声道", "客厅 (2)  192.168.50.12")], Rows(form));
 
-        Find<CheckBox>(form, "电脑端分声道").Checked = false;
+        Find<ToggleSwitch>(form, "电脑端分声道").Checked = false;
         Assert.All(Rows(form), r => Assert.Equal("完整立体声", r.Role));
-        Assert.False(Find<CheckBox>(form, "交换左右").Enabled);
+        Assert.False(Find<ToggleSwitch>(form, "交换左右").Enabled);
 
-        All<NumericUpDown>(form)[1].Value = -6;
+        All<FluentSlider>(form)[1].Value = -6;
         form.Apply();
         Assert.False(cfg.GroupSplitChannels);
         Assert.True(cfg.GroupSwapChannels);
@@ -56,7 +57,7 @@ public class GroupFormTests
         form.SetFound([A]);
         Snapshot(form, "group-pair-incomplete");
         Assert.Empty(Rows(form));
-        Assert.Contains(All<Label>(form), l => l.Text.Contains("两只都在线"));
+        Assert.Contains(All<TextBlock>(form), l => l.Text.Contains("两只都在线"));
     });
 
     [Fact]
@@ -66,17 +67,17 @@ public class GroupFormTests
         using var form = new GroupForm(cfg);
         form.SetFound([Other, A, B, Device("卧室", "AA:00:00:00:00:05", "192.168.50.5")]);
 
-        var combo = Find<ComboBox>(form);
+        var combo = Find<FluentComboBox>(form);
         Assert.True(combo.Enabled);
         // (不使用), the pair is not offered as a second speaker, the current speaker neither
         Assert.Equal(["（不使用）", "书房  192.168.50.30"], combo.Items.Cast<string>());
         Assert.Empty(Rows(form));
-        Assert.False(Find<CheckBox>(form, "电脑端分声道").Enabled);
+        Assert.False(Find<ToggleSwitch>(form, "电脑端分声道").Enabled);
 
         combo.SelectedIndex = 1;
         Snapshot(form, "group-multiroom");
         Assert.Equal([("完整立体声", "卧室"), ("完整立体声", "书房")], Rows(form));
-        Find<CheckBox>(form, "电脑端分声道").Checked = true;
+        Find<ToggleSwitch>(form, "电脑端分声道").Checked = true;
         Assert.Equal([("左声道", "卧室"), ("右声道", "书房")], Rows(form));
 
         form.Apply();
@@ -94,7 +95,7 @@ public class GroupFormTests
     private static List<(string Role, string Name)> Rows(Form form)
     {
         var table = All<TableLayoutPanel>(form).Single(); // the member rows
-        var cells = table.Controls.OfType<Label>().Select(l => (Pos: table.GetPositionFromControl(l), l.Text)).ToList();
+        var cells = table.Controls.OfType<TextBlock>().Select(l => (Pos: table.GetPositionFromControl(l), l.Text)).ToList();
         return cells.Where(c => c.Pos.Column == 0).OrderBy(c => c.Pos.Row)
             .Select(c => (c.Text, cells.Single(n => n.Pos.Row == c.Pos.Row && n.Pos.Column == 1).Text)).ToList();
     }

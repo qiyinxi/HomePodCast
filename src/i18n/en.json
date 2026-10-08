@@ -90,7 +90,6 @@
   "音乐": "Music",
   "影视": "Movies",
   "自定义": "Custom",
-  "快捷键与音量键": "Hotkeys and volume keys",
   "点输入框，再按下新的组合键（要包含 Ctrl 或 Alt）；Backspace 清除。": "Click a box, then press the new key combination (it must include Ctrl or Alt). Backspace clears it.",
   "Windows 静音或音量为 0 时，键盘音量键调节 HomePod 音量": "When Windows is muted or at 0%, the keyboard volume keys control the HomePod",
   "建议把 Windows 设为静音（而不是 0%）：这样音量 +、− 和静音键都会转给 HomePod，Windows 保持静音。": "Mute Windows rather than setting it to 0%: then volume up, volume down and mute all go to the HomePod while Windows stays muted.",
@@ -227,5 +226,7 @@
   "工具": "Tools",
   "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Stereo pairs, multi-room sync, channel split and per-speaker volume offsets.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Listen for the click and watch the flash to measure how far the sound lags the picture. Connect to the speaker first.",
-  "关于": "About"
+  "关于": "About",
+
+  "{0} 音量偏移": "{0} volume offset"
 }
