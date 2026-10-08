@@ -129,7 +129,10 @@ public class PlayerEndpointTests
         await using var mpv = new FakeMpv(delaySeconds: 0.1);
         var scanner = new FixedScanner(new MpvEndpoint(mpv.Name, Environment.ProcessId, "mpv"));
         var sync = new PlayerSync(scanner);
-        await sync.StepAsync(new PlayerSyncInput(true, StreamState.Streaming, 236), CancellationToken.None);
+        // The app polls every 2 s, so a step that times out (a slow CI machine before the fake pipe listens)
+        // is simply retried; do the same here.
+        for (int i = 0; i < 10 && !sync.Statuses.Any(s => s.State == PlayerState.Applied); i++)
+            await sync.StepAsync(new PlayerSyncInput(true, StreamState.Streaming, 236), CancellationToken.None);
         Assert.Equal(-0.236, mpv.Delay, 9);
         Assert.Equal(PlayerState.Applied, sync.Statuses.Single().State);
         await sync.StepAsync(new PlayerSyncInput(true, StreamState.Idle, 0), CancellationToken.None);
