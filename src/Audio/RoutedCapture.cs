@@ -121,6 +121,10 @@ public sealed class RoutedCapture : ICaptureSource
                 Log.Warn($"capture: {ex.Message}; retrying");
                 Thread.Sleep(1000);
             }
+            catch (Exception)
+            {
+                break; // failed while being stopped: an unhandled one would end the app
+            }
         }
     }
 

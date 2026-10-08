@@ -106,6 +106,10 @@ public sealed class MicCapture : ITapSource, IDisposable
                 Log.Warn($"mic: {ex.Message}; retrying");
                 for (int i = 0; i < 20 && !_stop; i++) Thread.Sleep(100);
             }
+            catch (Exception)
+            {
+                break; // failed while being stopped (e.g. after Dispose gave up waiting): an unhandled one would end the app
+            }
         }
         Running = false;
         StatusChanged?.Invoke();
