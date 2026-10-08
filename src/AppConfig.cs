@@ -26,6 +26,26 @@ public sealed class AppConfig
 
     public int LocalApiPort { get; set; } = Net.LocalApi.DefaultPort;
 
+    // ---- Scenes, volume cap, night mode, hotkeys, volume-key forwarding
+
+    /// <summary>Usage preset; a preset pins LatencyMs to its own value (Scenes.LatencyMs).</summary>
+    public Scene Scene { get; set; } = Scene.Custom;
+
+    /// <summary>The user's own latency, remembered while a preset is active and restored by 「自定义」.</summary>
+    public int? CustomLatencyMs { get; set; }
+
+    /// <summary>Ceiling for the HomePod's own volume, percent; 100 = no limit.</summary>
+    public int VolumeCapPercent { get; set; } = 100;
+
+    /// <summary>Night mode: dynamic-range compression of the audio before it is sent.</summary>
+    public bool NightMode { get; set; }
+
+    /// <summary>While streaming with Windows muted or at 0 %, the keyboard volume keys drive the HomePod.</summary>
+    public bool ForwardVolumeKeys { get; set; } = true;
+
+    /// <summary>Global hotkeys such as "Ctrl+Alt+PageUp"; a missing entry means the default, "" means off.</summary>
+    public Dictionary<HotkeyAction, string> Hotkeys { get; set; } = new();
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
