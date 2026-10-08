@@ -1,0 +1,127 @@
+{
+  "extName": {
+    "message": "HomePodCast Videosynk",
+    "description": "Extension name, also the popup heading."
+  },
+  "extDescription": {
+    "message": "Fördröjer webbvideo med några millisekunder så att bilden matchar ljudet, som når en HomePod senare via AirPlay.",
+    "description": "Store/extension description, at most 132 characters."
+  },
+  "htmlLang": {
+    "message": "sv",
+    "description": "BCP 47 tag of this translation, used as the popup's lang attribute."
+  },
+  "statusConnecting": {
+    "message": "Ansluter…",
+    "description": "Status while the popup asks the HomePodCast app for its state."
+  },
+  "statusNotRunning": {
+    "message": "Körs inte",
+    "description": "Status: the HomePodCast app is not running."
+  },
+  "statusIdle": {
+    "message": "Strömmar inte",
+    "description": "Status: the app runs but sends no audio to the speaker."
+  },
+  "statusStreaming": {
+    "message": "Strömmar",
+    "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
+  },
+  "siteLabel": {
+    "message": "Den här webbplatsen",
+    "description": "Label in front of the current site's host name."
+  },
+  "localFile": {
+    "message": "(lokal fil)",
+    "description": "Shown instead of a host name for file:// pages."
+  },
+  "minusLabel": {
+    "message": "1 ms mindre",
+    "description": "Accessible name of the − button."
+  },
+  "minusTitle": {
+    "message": "1 ms mindre (håll ned för att fortsätta justera)",
+    "description": "Tooltip of the − button."
+  },
+  "plusLabel": {
+    "message": "1 ms mer",
+    "description": "Accessible name of the + button."
+  },
+  "plusTitle": {
+    "message": "1 ms mer (håll ned för att fortsätta justera)",
+    "description": "Tooltip of the + button."
+  },
+  "delayCaption": {
+    "message": "Bildfördröjning",
+    "description": "Caption under the big delay number."
+  },
+  "siteOffset": {
+    "message": "Justering för webbplatsen",
+    "description": "Label of the per-site correction added to the delay, followed by e.g. +5 ms."
+  },
+  "reset": {
+    "message": "Återställ",
+    "description": "Button that sets the site offset back to 0."
+  },
+  "siteToggle": {
+    "message": "Aktivera på den här webbplatsen",
+    "description": "Switch for the current site."
+  },
+  "globalToggle": {
+    "message": "Aktivera på alla webbplatser",
+    "description": "Master switch."
+  },
+  "hintUnavailable": {
+    "message": "Inte tillgängligt på den här sidan, eller så öppnades sidan innan tillägget installerades. Läs in sidan igen och försök på nytt.",
+    "description": "The page has no content script."
+  },
+  "hintGlobalOff": {
+    "message": "Avstängt på alla webbplatser; bilden fördröjs inte."
+  },
+  "hintSiteOff": {
+    "message": "Avstängt på den här webbplatsen; bilden fördröjs inte."
+  },
+  "hintNotStreaming": {
+    "message": "HomePodCast strömmar inte; bilden fördröjs inte."
+  },
+  "hintNotRunning": {
+    "message": "HomePodCast körs inte; bilden fördröjs inte."
+  },
+  "videosNone": {
+    "message": "Inga videor hittades på den här sidan (≥ 200×112).",
+    "description": "Only videos at least 200×112 pixels are handled."
+  },
+  "videosCount": {
+    "message": "Videor på sidan: $COUNT$",
+    "description": "First part of the video summary line; parts are joined with ' · '.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "2" }
+    }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ fördröjs",
+    "description": "How many of the videos are being delayed.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "videosMeasured": {
+    "message": "uppmätt $MS$ ms",
+    "description": "Average delay actually shown, in milliseconds.",
+    "placeholders": {
+      "ms": { "content": "$1", "example": "141" }
+    }
+  },
+  "videosDrm": {
+    "message": "kopieringsskyddad (DRM), kan inte fördröjas"
+  },
+  "videosFullscreen": {
+    "message": "kan inte fördröjas när själva videoelementet visas i helskärm"
+  },
+  "videosPlayerUnsupported": {
+    "message": "sidans spelare stöder inte bildfördröjning"
+  },
+  "videosNotDelayed": {
+    "message": "fördröjs inte"
+  }
+}
