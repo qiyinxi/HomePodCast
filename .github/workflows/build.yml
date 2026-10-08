@@ -71,6 +71,8 @@ jobs:
             node --check $_.FullName
             if ($LASTEXITCODE) { throw "syntax error in $($_.FullName)" }
           }
+          node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
+          if ($LASTEXITCODE) { throw 'browser extension tests failed' }
 
       - name: Check Python tools
         shell: pwsh
