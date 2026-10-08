@@ -10,6 +10,13 @@ Sub-frame resolution: a true delay of e.g. 8.46 frames shows up as a difference 
 delay to a fraction of a frame (as long as the capture instants are not phase-locked to the video).
 The median is always a whole frame.
 
+Event-driven captures (Windows Graphics Capture delivers a frame when the window changes) ARE
+phase-locked: at 60 captures/s on a faster display every capture lands just after the original
+switches frames, before the delayed copy does, and the per-frame difference sticks to one value.
+So the script also times the transitions: for each video frame number, the capture time at which it
+first appears on the delayed side minus the time it first appears on the original. With captures
+faster than the video (e.g. 240/s) that resolves the delay to a few ms ("TRANSITION" line).
+
 usage:
   python measure.py capture.mp4 [--left x,y,w,h --right x,y,w,h] [--debug-png rows.png]
                     [--fps 60] [--tol 3] [--json out.json]
@@ -276,6 +283,31 @@ def jump_filter(num, ok, t, fps, tol, min_run=3):
     return out
 
 
+def transitions(num, ok, t):
+    """{frame number: [(t_before, t_first), ...]}: capture time at which the number first appears and
+    the capture time just before it (the switch happened in between). Clean +1 steps between two
+    consecutive captured frames only."""
+    out = {}
+    i = np.nonzero(ok)[0]
+    for a, b in zip(i[:-1], i[1:]):
+        if b == a + 1 and (num[b] - num[a]) % LOOP == 1:
+            out.setdefault(int(num[b]), []).append((t[a], t[b]))
+    return out
+
+
+def transition_lags(num, ok, t, max_lag=2.0):
+    """Per frame number: (first seen on delayed - first seen on original, midpoint difference), seconds."""
+    orig, dela = transitions(num[0], ok[0], t), transitions(num[1], ok[1], t)
+    lags = []
+    for n, events in dela.items():
+        for a1, b1 in events:
+            cands = [(a0, b0) for a0, b0 in orig.get(n, ()) if 0 < b1 - b0 < max_lag]
+            if cands:
+                a0, b0 = max(cands, key=lambda e: e[1])
+                lags.append((b1 - b0, (a1 + b1) / 2 - (a0 + b0) / 2, b1 - a1, b0 - a0))
+    return np.array(lags).reshape(-1, 4)
+
+
 def write_png(path, gray, rows, ox, oy):
     rgb = np.repeat(gray[:, :, None], 3, axis=2).copy()
     colours = [(0, 140, 255)] * N_REG + [(255, 40, 40)] * N_BITS + [(255, 200, 0)] * (2 * N_BITS)
@@ -404,6 +436,16 @@ def main():
               "the mean resolves it)")
     print(f"RESULT delay mean {mean * ms:.1f} ms ({mean:.2f} frames), median {med * ms:.1f} ms, "
           f"sd {sd * ms:.1f} ms, valid {res['valid']}/{n}")
+    tl = transition_lags(nums, [stats[0] == 0, stats[1] == 0], t)
+    if len(tl):
+        first, mid, gap = tl[:, 0] * 1000, tl[:, 1] * 1000, np.r_[tl[:, 2], tl[:, 3]] * 1000
+        res["transition"] = dict(pairs=len(tl), mean_ms=float(first.mean()), median_ms=float(np.median(first)),
+                                 sd_ms=float(first.std(ddof=1)) if len(tl) > 1 else 0.0,
+                                 mid_mean_ms=float(mid.mean()), capture_gap_mean_ms=float(gap.mean()))
+        r = res["transition"]
+        print(f"TRANSITION lag (first appearance, delayed - original): mean {r['mean_ms']:.1f} ms, "
+              f"median {r['median_ms']:.1f} ms, sd {r['sd_ms']:.1f} ms over {r['pairs']} frames; "
+              f"midpoint mean {r['mid_mean_ms']:.1f} ms; capture gap before a switch {r['capture_gap_mean_ms']:.1f} ms")
     res["playback_rate"] = {"left": rates[0], "right": rates[1]}
     res["stale_capture"] = bool(stale)
     if a.json:

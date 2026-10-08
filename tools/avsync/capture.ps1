@@ -4,7 +4,7 @@
 
   1. serves the repo root with `python -m http.server` on 127.0.0.1 (so ../../extension/src resolves)
   2. opens testpage.html?delay=<ms> in a NEW Chrome instance with a throwaway --user-data-dir in %TEMP%
-  3. waits for the page, then -Warmup seconds, and records the window with ffmpeg gdigrab at 60 fps
+  3. waits for the page, then -Warmup seconds, and records that window only (ffmpeg gfxcapture, 60 fps)
   4. closes that Chrome instance and the server, deletes the temp profile, runs measure.py
 
   Output (next to this script): capture_<ms>.mp4, capture_<ms>.json (results),
@@ -12,12 +12,14 @@
   engine/stats line under the videos says HPCDelay, not STUB).
 
 .PARAMETER Method
+  gfx     : Windows Graphics Capture of the test window's HWND (ffmpeg gfxcapture, needs ffmpeg 8+).
+            Records only that window, even when it is covered. Default.
   title   : gdigrab -i title="HPC AVSYNC TEST - Google Chrome" (window DC; may come out black for
             GPU-composited Chrome windows)
-  desktop : gdigrab of the screen region under the window (window is brought to the front and must
-            stay uncovered)
-  ddagrab : Desktop Duplication of monitor -Output (window must be on that monitor, uncovered)
-  auto    : title, and if measure.py cannot decode that recording, desktop (default)
+  desktop : gdigrab of the screen region under the window. Records WHATEVER is on top there, so if
+            another window covers the test page it ends up in the file. Only use on a quiet desktop.
+  ddagrab : Desktop Duplication of monitor -Output (same caveat as desktop)
+  auto    : gfx, then title. Never falls back to the screen-region methods.
 
 .EXAMPLE
   .\capture.ps1 -Delay 141
@@ -27,12 +29,14 @@ param(
     [int]$Delay = 141,
     [double]$Seconds = 15,
     [double]$Warmup = 5,
-    [ValidateSet('auto', 'title', 'desktop', 'ddagrab')][string]$Method = 'auto',
+    [ValidateSet('auto', 'gfx', 'title', 'desktop', 'ddagrab')][string]$Method = 'auto',
     [int]$Port = 0,                      # 0 = pick a free port
     [int]$Output = 0,                    # ddagrab monitor index
     [string]$Python = 'C:\Users\qiyin\HomePodCast\venv\Scripts\python.exe',
     [string]$Chrome = 'C:\Program Files\Google\Chrome\Application\chrome.exe',
     [string]$Title = 'HPC AVSYNC TEST',
+    [int]$PresentAhead = -1,             # -1 = engine default; otherwise passed as ?present=N
+    [int]$CaptureFps = 240,              # gfx: max captures/s; above the video rate for transition timing
     [switch]$KeepProfile
 )
 $ErrorActionPreference = 'Stop'
@@ -95,12 +99,16 @@ function Invoke-Record([string]$How, $Win) {
     $x0 = [Math]::Max($r.L, $vx); $y0 = [Math]::Max($r.T, $vy)
     $x1 = [Math]::Min($r.R, $vx + [HpcWin]::GetSystemMetrics(78)); $y1 = [Math]::Min($r.B, $vy + [HpcWin]::GetSystemMetrics(79))
     $w = ($x1 - $x0) -band -2; $h = ($y1 - $y0) -band -2
-    if ($How -ne 'title') {
+    if ($How -in 'desktop', 'ddagrab') {
         [void][HpcWin]::ShowWindow($Win.Handle, 9)            # SW_RESTORE
         [void][HpcWin]::SetForegroundWindow($Win.Handle)
         Start-Sleep -Milliseconds 500
     }
     switch ($How) {
+        'gfx' {
+            Write-Host "recording $Seconds s: gfxcapture hwnd=$($Win.Handle) up to $CaptureFps/s (this window only)"
+            $in = @('-f', 'lavfi', '-i', "gfxcapture=hwnd=$($Win.Handle.ToInt64()):capture_cursor=0:max_framerate=${CaptureFps},hwdownload,format=bgra")
+        }
         'title' {
             Write-Host "recording $Seconds s: gdigrab title=`"$($Win.Title)`""
             $in = @('-f', 'gdigrab', '-framerate', '60', '-draw_mouse', '0', '-i', "title=$($Win.Title)")
@@ -134,6 +142,7 @@ $work = Join-Path $env:TEMP ('hpc_avsync_' + [guid]::NewGuid().ToString('N').Sub
 $profileDir = Join-Path $work 'profile'
 New-Item -ItemType Directory -Force $profileDir | Out-Null
 $url = "http://127.0.0.1:$Port/tools/avsync/testpage.html?delay=$Delay"
+if ($PresentAhead -ge 0) { $url += "&present=$PresentAhead" }
 $server = $null; $browser = $null; $rc = 1
 try {
     $server = Start-Process -FilePath $Python -PassThru -WindowStyle Hidden `
@@ -173,7 +182,7 @@ try {
     Write-Host "warming up $Warmup s..."
     Start-Sleep -Seconds $Warmup
 
-    $methods = if ($Method -eq 'auto') { @('title', 'desktop') } else { @($Method) }
+    $methods = if ($Method -eq 'auto') { @('gfx', 'title') } else { @($Method) }
     foreach ($m in $methods) {
         $last = ($m -eq $methods[-1])
         try { Invoke-Record $m $win } catch {
@@ -202,5 +211,5 @@ finally {
 & $Python (Join-Path $here 'measure.py') $out --debug-png "${base}_rows.png" --json "$base.json"
 $rc = $LASTEXITCODE
 Write-Host "files: $out, $base.json, ${base}_rows.png, ${base}_page.png"
-if ($rc -ne 0) { Write-Host 'measurement failed: look at the _page.png frame; try -Method desktop or -Method ddagrab' }
+if ($rc -ne 0) { Write-Host 'measurement failed: look at the _page.png frame (-Method desktop/ddagrab work too, but record anything covering the window)' }
 exit $rc

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "HomePodCast 视频同步",
+  "version": "0.1.0",
+  "description": "把网页视频的画面延迟若干毫秒，与经 AirPlay 推送到 HomePod、较晚响起的声音对齐。",
+  "minimum_chrome_version": "102",
+  "permissions": ["storage"],
+  "host_permissions": ["http://127.0.0.1:47100/*"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "all_frames": true,
+      "run_at": "document_idle",
+      "js": ["src/delay-engine.js", "src/content.js"]
+    }
+  ],
+  "action": {
+    "default_title": "HomePodCast 视频同步",
+    "default_popup": "src/popup.html"
+  }
+}

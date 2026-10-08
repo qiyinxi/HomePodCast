@@ -63,7 +63,10 @@
   const start = () => {
     if (ctl || attachError) return;
     try {
-      ctl = engine.attach(video, { placement: 'beside' });
+      // ?present=N overrides the engine's presentAheadFrames (calibration runs)
+      const opts = { placement: 'beside' };
+      if (params.has('present')) opts.presentAheadFrames = Number(params.get('present'));
+      ctl = engine.attach(video, opts);
       ctl.setDelay(delayMs);
       ctl.setEnabled(true);
     } catch (e) {

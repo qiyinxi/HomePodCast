@@ -5,3 +5,4 @@ publish/
 *.user
 .vs/
 test-results/
+extension/test/*.mp4
