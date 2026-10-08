@@ -155,6 +155,7 @@ internal sealed class HomePage : ScrollPage
         _volume.Scroll += (_, _) =>
         {
             _volumeValue.Text = _volume.Value.ToString();
+            _app.PreviewVolume(_volume.Value); // the speaker follows the drag; the debounce only saves
             _volumeWait.Restart();
         };
         _volumeWait.Tick += () =>

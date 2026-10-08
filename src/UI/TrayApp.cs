@@ -182,8 +182,14 @@ internal sealed partial class TrayApp : ApplicationContext
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Config.Volume = percent;
         Config.Save();
-        Controller.SetVolume(percent);
+        if (Controller.Volume != percent || Controller.Muted) Controller.SetVolume(percent); // PreviewVolume may have sent it
     }
+
+    /// <summary>
+    /// A volume slider is moving: send it right away (the controller coalesces — latest value wins, one request
+    /// in flight), so the speaker follows the drag. The slider's debounce then saves it via SetVolume/ApplyVolume.
+    /// </summary>
+    public void PreviewVolume(double percent) => Controller.SetVolume(VolumeLimit.Clamp(percent, Config.VolumeCapPercent));
 
     /// <summary>A volume chosen in the tray flyout (after its debounce): applied like the pages do, and they follow.</summary>
     public void ApplyVolume(double percent)

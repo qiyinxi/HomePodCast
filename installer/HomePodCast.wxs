@@ -47,6 +47,9 @@
 
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
+    <!-- Show the install folder in Settings → Apps (InstallLocation). -->
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="execute" />
+
     <!--
       The app is framework-dependent: it needs the .NET 10 Desktop Runtime (x64). Look for
       System.Windows.Forms.dll 10.x under shared\Microsoft.WindowsDesktop.App\<version>\ in the

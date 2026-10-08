@@ -108,6 +108,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
         _volume.Scroll += (_, _) =>
         {
             _volumeValue.Text = _volume.Value.ToString();
+            _app.PreviewVolume(_volume.Value); // the speaker follows the drag; the debounce only saves
             _volumeWait.Restart();
         };
         _volume.MouseWheel += (_, e) => _volume.UserSetValue(_volume.Value + Math.Sign(e.Delta) * 2);

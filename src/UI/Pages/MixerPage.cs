@@ -62,6 +62,7 @@ internal sealed class MixerPage : ScrollPage
         _master.Scroll += (_, _) =>
         {
             _masterValue.Text = _master.Value.ToString();
+            _app.PreviewVolume(_master.Value); // the speaker follows the drag; the debounce only saves
             _masterWait.Restart();
         };
         _masterWait.Tick += () =>
