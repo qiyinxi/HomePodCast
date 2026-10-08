@@ -144,6 +144,7 @@ public class LocalizationTests(ITestOutputHelper output)
     {
         foreach (var lang in Translated) Assert.NotEmpty(L.Table(lang));
         Assert.Equal("Connect", L.Table("en")["连接"]);
+        Assert.Equal("Verbinden", L.Table("de")["连接"]);
         Assert.Empty(L.Table(L.Source));
     }
 
@@ -202,16 +203,18 @@ public class LocalizationTests(ITestOutputHelper output)
     [Theory]
     [InlineData(null, "ja-JP", "ja")]
     [InlineData("auto", "zh-HK", "zh-TW")]
-    [InlineData("AUTO", "ko-KR", "en")]
+    [InlineData("AUTO", "fr-FR", "fr")]
     [InlineData("auto", "ko-KR", "en")]
     [InlineData("zh-CN", "en-US", "zh-CN")]
     [InlineData("zh-TW", "ja-JP", "zh-TW")]
     [InlineData("en", "zh-CN", "en")]
     [InlineData("en", "de-DE", "en")]
     [InlineData("ja", "en-US", "ja")]
+    [InlineData("de", "en-US", "de")]
+    [InlineData("nl-BE", "en-US", "nl")]
     [InlineData("zh_tw", "en-US", "zh-TW")]
     [InlineData("ko", "ja-JP", "ja")]          // unsupported value: follow Windows
-    [InlineData("xx", "ja-JP", "ja")]
+    [InlineData("xx", "de-DE", "de")]
     [InlineData("nonsense!", "zh-CN", "zh-CN")]
     public void Config_value_overrides_the_display_language(string? configured, string ui, string expected) =>
         Assert.Equal(expected, L.Resolve(configured, CultureInfo.GetCultureInfo(ui)));
@@ -244,6 +247,7 @@ public class LocalizationTests(ITestOutputHelper output)
         Assert.Equal(L.Languages.Order(StringComparer.Ordinal), choices.Select(c => c.Value).Order(StringComparer.Ordinal));
         var names = choices.Select(c => c.Name).ToList();
         Assert.Equal(names.Order(StringComparer.InvariantCultureIgnoreCase), names);
+        Assert.True(names.IndexOf("Deutsch") < names.IndexOf("English") && names.IndexOf("English") < names.IndexOf("Español"));
         output.WriteLine(string.Join(", ", names));
     }
 }
