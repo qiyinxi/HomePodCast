@@ -17,7 +17,6 @@
   "HomePod 第二代": "HomePod 2. sukupolvi",
   "音源：{0}": "Lähde: {0}",
   "音源：默认输出设备": "Lähde: oletustoistolaite",
-
   "打开主界面": "Avaa pääikkuna",
   "混音器": "Mikseri",
   "退出": "Lopeta",
@@ -27,7 +26,6 @@
   "HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。": "HomePodin on voitava muodostaa yhteys takaisin tähän ohjelmaan (kellon synkronointia ja kadonneiden pakettien uudelleenpyyntöjä varten), mutta Windowsin palomuuri ei vielä salli HomePodCastia.\n\nValitse Kyllä ja hyväksy järjestelmänvalvojan kehote, niin palomuuriin lisätään saapuvan liikenteen sääntö, joka koskee vain lähiverkkoa ja on voimassa vain yksityisissä verkoissa.",
   "没有添加成功（可能取消了授权）。": "Sääntöä ei lisätty (järjestelmänvalvojan kehote on ehkä peruutettu).",
   "请先连接音箱，再做同步测试。": "Yhdistä kaiuttimeen ennen synkronointitestiä.",
-
   "{0} 音量": "{0}: äänenvoimakkuus",
   "应用（推送到音箱的声音）": "Sovellukset (kaiuttimeen suoratoistettava ääni)",
   "现在没有程序在发声。": "Mikään sovellus ei toista ääntä juuri nyt.",
@@ -35,12 +33,10 @@
   "静音": "Mykistä",
   "系统声音": "Järjestelmän äänet",
   "进程 {0}": "Prosessi {0}",
-
   "音画同步测试": "A/V-synkronointitesti",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "HomePod naksahtaa sekunnin tai kahden välein (satunnaisesti), ja ympyrä välähtää samalla.\nJos näet välähdyksen ennen kuin kuulet naksahduksen, vedä liukusäädintä oikealle, kunnes ne osuvat yhteen.\nLopullinen arvo kertoo, kuinka paljon ääni on peleissä kuvaa jäljessä.",
   "完成": "Valmis",
   "声音比画面晚约 {0} ms": "Ääni on noin {0} ms kuvaa jäljessä",
-
   "未连接": "Ei yhdistetty",
   "正在连接…": "Yhdistetään…",
   "正在重连（第 {0} 次）…": "Yhdistetään uudelleen ({0}. yritys)…",
@@ -52,10 +48,8 @@
   "音箱没有响应（网络中断？）": "Kaiutin ei vastaa (onko verkko poikki?)",
   "事件通道异常：{0}": "Tapahtumakanavan virhe: {0}",
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Kaiuttimen kellonsynkronointipyynnöt eivät koskaan saapuneet tähän ohjelmaan; yleensä Windowsin palomuuri estää saapuvat yhteydet HomePodCast.exe-tiedostoon",
-
   "语言": "Kieli",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "Uusi kieli otetaan käyttöön, kun HomePodCast käynnistetään uudelleen. Käynnistetäänkö nyt uudelleen?\n\nÄäni katkeaa muutamaksi sekunniksi uudelleenkäynnistyksen aikana.",
-
   "已连接 · {0}（实验性）": "Yhdistetty · {0} (kokeellinen)",
   "{0}：{1}": "{0}: {1}",
   "立体声对 · 实验性": "Stereopari · kokeellinen",
@@ -84,7 +78,6 @@
   "没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。": "Parin molempia kaiuttimia ei löytynyt (löytyi {0}). Molempien on oltava verkossa, jotta yhteys voidaan muodostaa.",
   "两台音箱共用一个音量滑块，偏移量加在各自的音量上。": "Kaiuttimilla on yhteinen äänenvoimakkuuden liukusäädin; kunkin korjaus lisätään kyseisen kaiuttimen äänenvoimakkuuteen.",
   "现在只推送到一台音箱。": "Suoratoistetaan vain yhteen kaiuttimeen.",
-
   "游戏": "Pelit",
   "音乐": "Musiikki",
   "影视": "Elokuvat",
@@ -115,7 +108,6 @@
   "{0} 个快捷键被其他程序占用，点开换一个": "Muut ohjelmat käyttävät pikanäppäimiä: {0}; avaa ja valitse toinen",
   "HomePod 静音": "Mykistä HomePod",
   "场景：{0}（{1} ms）": "Profiili: {0} ({1} ms)",
-
   "低音增强": "Bassonkorostus",
   "人声增强": "Lauluäänen korostus",
   "减弱低音": "Bassonvaimennus",
@@ -161,7 +153,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Kuuntelu: {0} · viive noin {1:F0} ms",
   " · 断音 {0} 次": " · katkoksia {0}",
   "预设": "Esiasetus",
-
   "{0}（按程序分流）": "{0} (sovelluskohtainen reititys)",
   "本机": "Tämä tietokone",
   "没单独设置的程序送到": "Kohde sovelluksille, joilla ei ole omaa asetusta",
@@ -174,11 +165,9 @@
   "已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。": "Sovelluskohtainen reititys: kaiuttimeen lähetettävällä äänellä on noin {0} ms enemmän viivettä, ja sovellukset, joiden asetus on \"HomePod\", ovat hiljaa tällä tietokoneella.",
   "连接音箱后生效。": "Tulee voimaan, kun kaiutin on yhdistetty.",
   "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Windowsin äänilähtö on mykistetty: sovellukset, joiden asetus on \"Tämä tietokone\" tai \"Molemmat\", eivät kuulu myöskään tällä tietokoneella.",
-
   "打开": "Avaa",
   "选择": "Valitse",
   "切换": "Vaihda",
-
   "首页": "Aloitus",
   "设置": "Asetukset",
   "开始": "Aloita",
@@ -222,11 +211,8 @@
   "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Stereoparit, monihuonesynkronointi, kanavien jako ja kaiutinkohtaiset äänenvoimakkuuden korjaukset.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Kuuntele naksahdusta ja katso välähdystä, niin näet, kuinka paljon ääni on kuvaa jäljessä. Yhdistä ensin kaiuttimeen.",
   "关于": "Tietoja",
-
   "{0} 音量偏移": "{0}: äänenvoimakkuuden korjaus",
-
   "按下": "Paina",
-
   "全部推送与按程序分流": "Kaiken suoratoisto vai sovelluskohtainen reititys",
   "全部推送（默认，推荐打游戏）": "Kaiken suoratoisto (oletus, suositeltu pelaamiseen)",
   "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Kaappaa koko äänilähdön suoraan ilman lisäviivettä. Kaikki sovellukset ohjataan HomePodiin; se, kuuluuko ääni myös tietokoneelta, riippuu Windowsin äänenvoimakkuudesta, joten mykistä Windows, jos haluat kuulla äänen vain kaiuttimesta.",
@@ -234,16 +220,14 @@
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Otetaan käyttöön heti, kun jollakin sovelluksella on oma kohde tai oletuskohde on \"Tämä tietokone\". Windows voi kaapata sovelluksia vain yksi kerrallaan, ja tämä tapa on hitaampi: HomePodiin lähetetty ääni tulee noin {0} ms myöhemmin. Selainlaajennus lisää tämän automaattisesti kuvan viiveeseen; peleissä sitä ei voi korvata. Sovellukset, joiden asetus on \"HomePod\", ovat hiljaa tällä tietokoneella, ja niillä näkyy 0 % Windowsin äänenvoimakkuuden mikserissä; järjestelmän äänet toistetaan vain tällä tietokoneella. Palaa kaiken suoratoistoon asettamalla kaikki sovellukset takaisin asetukseen \"Oletus\" ja oletuskohteeksi HomePod.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Kun sovellukselle annetaan oma kohde, käyttöön otetaan sovelluskohtainen reititys: Windows voi kaapata sovelluksia vain yksi kerrallaan, joten HomePodiin lähetetty ääni tulee noin {0} ms myöhemmin kuin kaiken suoratoistossa (selainlaajennus korjaa kuvan viiveen, pelit eivät).\n\nSovellukset, joiden asetus on \"HomePod\", mykistyvät tällä tietokoneella (0 % Windowsin äänenvoimakkuuden mikserissä), ja järjestelmän äänet toistetaan vain tällä tietokoneella.\n\nJos viive on tärkeintä, esimerkiksi pelatessa, jatka kaiken suoratoistoa. Otetaanko sovelluskohtainen reititys käyttöön?",
   "按程序分流会增加延迟": "Sovelluskohtainen reititys lisää viivettä",
-
   "推荐": "Suositeltu",
-
   "{0}：已设为 {1} ms": "{0}: asetettu arvoon {1} ms",
   "{0}：开始播放后自动调整": "{0}: säädetään, kun toisto alkaa",
   "{0}：已被手动改为 {1} ms": "{0}: muutettu käsin arvoon {1} ms",
   "{0}：未开启网页接口（见「设置」）": "{0}: verkkokäyttöliittymä ei ole käytössä (katso Asetukset)",
   "{0}：未开启 IPC（见「设置」）": "{0}: IPC ei ole käytössä (katso Asetukset)",
-  "{0}：网页接口没有设置密码": "{0}: verkkokäyttöliittymällä ei ole salasanaa",
-  "{0}：网页接口密码不对": "{0}: verkkokäyttöliittymän salasana on väärä",
+  "{0}：没有找到网页接口密码（见「设置」）": "{0}: verkkokäyttöliittymän salasanaa ei löytynyt (katso Asetukset)",
+  "{0}：密码错误，请在设置里重新输入": "{0}: väärä salasana – syötä se uudelleen asetuksissa",
   "{0}：请手动设为 {1} ms": "{0}: aseta käsin arvoon {1} ms",
   "{0}：调整失败": "{0}: säätö epäonnistui",
   "推流时自动调整 mpv、VLC 的音频延迟。": "mpv ja VLC säädetään automaattisesti suoratoiston aikana.",
@@ -256,5 +240,17 @@
   "复制 mpv.conf 这一行": "Kopioi mpv.conf-rivi",
   "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Lisää tämä rivi tiedostoon mpv.conf (yleensä kansiossa %APPDATA%\\mpv) ja käynnistä mpv uudelleen:\n{0}",
   "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Työkalut → Asetukset → Näytä asetukset: Kaikki → Käyttöliittymä → Pääkäyttöliittymät: valitse \"Web\"; sitten Pääkäyttöliittymät → Lua: aseta salasana ja käynnistä VLC uudelleen. HomePodCast lukee salasanan VLC:n asetuksista ja käyttää sitä vain tämän tietokoneen VLC:hen.",
-  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Käyttökelpoista liittymää ei ole; aseta Aloitus-sivulla näkyvä arvo käsin: PotPlayer näppäimillä Shift+< / Shift+>; MPC-HC ja MPC-BE numeronäppäimistön + / − -näppäimillä tai asetusten äänen aikasiirrolla."
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Käyttökelpoista liittymää ei ole; aseta Aloitus-sivulla näkyvä arvo käsin: PotPlayer näppäimillä Shift+< / Shift+>; MPC-HC ja MPC-BE numeronäppäimistön + / − -näppäimillä tai asetusten äänen aikasiirrolla.",
+  "VLC 网页接口密码（自动读取失败时填写）": "VLC:n verkkokäyttöliittymän salasana (jos sitä ei voi lukea automaattisesti)",
+  "使用 VLC 设置里的密码": "Käytössä VLC:n asetusten salasana",
+  "使用手动输入的密码": "Käytössä tähän syötetty salasana",
+  "密码错误，请在设置里重新输入": "Väärä salasana – syötä se uudelleen asetuksissa",
+  "没有找到密码，请在这里输入": "Salasanaa ei löytynyt – syötä se tähän",
+  "已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。": "Tähän syötetty salasana on tallennettu (salattuna; vain Windows-tilisi voi purkaa sen).",
+  "先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。": "Ensin käytetään VLC:n omaa salasanaa; tätä käytetään, jos sitä ei voi lukea tai se on väärä. Tallennetaan salattuna tälle tietokoneelle.",
+  "保存": "Tallenna",
+  "清除": "Tyhjennä",
+  "显示密码": "Näytä salasana",
+  "隐藏密码": "Piilota salasana",
+  "保存密码失败：{0}": "Salasanan tallennus epäonnistui: {0}"
 }

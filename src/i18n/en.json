@@ -242,8 +242,8 @@
   "{0}：已被手动改为 {1} ms": "{0}: changed by hand to {1} ms",
   "{0}：未开启网页接口（见「设置」）": "{0}: web interface is off (see Settings)",
   "{0}：未开启 IPC（见「设置」）": "{0}: IPC is off (see Settings)",
-  "{0}：网页接口没有设置密码": "{0}: web interface has no password",
-  "{0}：网页接口密码不对": "{0}: web interface password is wrong",
+  "{0}：没有找到网页接口密码（见「设置」）": "{0}: no web interface password found (see Settings)",
+  "{0}：密码错误，请在设置里重新输入": "{0}: wrong password; enter it again in Settings",
   "{0}：请手动设为 {1} ms": "{0}: set it to {1} ms by hand",
   "{0}：调整失败": "{0}: could not adjust",
   "推流时自动调整 mpv、VLC 的音频延迟。": "mpv and VLC are adjusted automatically while streaming.",
@@ -256,5 +256,18 @@
   "复制 mpv.conf 这一行": "Copy the mpv.conf line",
   "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Add this line to mpv.conf (usually in %APPDATA%\\mpv), then restart mpv:\n{0}",
   "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Tools → Preferences → Show settings: All → Interface → Main interfaces: tick \"Web\"; then Main interfaces → Lua: set a password, and restart VLC. HomePodCast reads this password from VLC's settings and only uses it to talk to VLC on this PC.",
-  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "No usable interface; set the value shown on the Home page by hand: PotPlayer with Shift+< / Shift+>; MPC-HC and MPC-BE with numpad + / −, or \"Audio time shift\" in the options."
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "No usable interface; set the value shown on the Home page by hand: PotPlayer with Shift+< / Shift+>; MPC-HC and MPC-BE with numpad + / −, or \"Audio time shift\" in the options.",
+
+  "VLC 网页接口密码（自动读取失败时填写）": "VLC web interface password (if it can't be read automatically)",
+  "使用 VLC 设置里的密码": "Using the password from VLC's settings",
+  "使用手动输入的密码": "Using the password entered here",
+  "密码错误，请在设置里重新输入": "Wrong password; enter it again in Settings",
+  "没有找到密码，请在这里输入": "No password found; enter it here",
+  "已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。": "A password entered here is saved (encrypted; only your Windows account can decrypt it).",
+  "先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。": "VLC's own password is used first; this one is used when that can't be read or is wrong. Stored encrypted on this PC.",
+  "保存": "Save",
+  "清除": "Clear",
+  "显示密码": "Show password",
+  "隐藏密码": "Hide password",
+  "保存密码失败：{0}": "Couldn't save the password: {0}"
 }

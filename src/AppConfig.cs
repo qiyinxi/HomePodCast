@@ -74,6 +74,12 @@ public sealed class AppConfig
     /// </summary>
     public bool MoviePlayerSync { get; set; } = true;
 
+    /// <summary>
+    /// The VLC web-interface password typed in 设置 (used only when the one in VLC's own settings is missing or
+    /// refused): base64 of a DPAPI blob for the current Windows user (Players.VlcPassword). Never plaintext.
+    /// </summary>
+    public string? VlcPasswordProtected { get; set; }
+
     /// <summary>Global hotkeys such as "Ctrl+Alt+PageUp"; a missing entry means the default, "" means off.</summary>
     public Dictionary<HotkeyAction, string> Hotkeys { get; set; } = new();
 
@@ -134,12 +140,14 @@ public sealed class AppConfig
             : new AppConfig { Scene = Scene.Recommended, AutoConnect = false, LocalApiPort = 0 };
     }
 
-    public void Save()
+    public void Save() => Save(FilePath);
+
+    internal void Save(string path)
     {
-        System.IO.Directory.CreateDirectory(Directory);
-        var tmp = FilePath + ".tmp";
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var tmp = path + ".tmp";
         File.WriteAllText(tmp, JsonSerializer.Serialize(this, Json));
-        File.Move(tmp, FilePath, overwrite: true);
+        File.Move(tmp, path, overwrite: true);
     }
 }
 

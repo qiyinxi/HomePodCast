@@ -17,7 +17,6 @@
   "HomePod 第二代": "HomePod 2. Generation",
   "音源：{0}": "Quelle: {0}",
   "音源：默认输出设备": "Quelle: Standardausgabegerät",
-
   "打开主界面": "Hauptfenster öffnen",
   "混音器": "Mixer",
   "退出": "Beenden",
@@ -27,7 +26,6 @@
   "HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。": "Der HomePod muss sich zurück mit diesem Programm verbinden (für den Zeitabgleich und um verlorene Pakete erneut anzufordern), aber die Windows-Firewall lässt HomePodCast noch nicht zu.\n\n\"Ja\" öffnet eine Administratorabfrage, die eine eingehende Regel hinzufügt: nur für das lokale Netzwerk und nur in privaten Netzwerken aktiv.",
   "没有添加成功（可能取消了授权）。": "Die Regel wurde nicht hinzugefügt (vielleicht wurde die Administratorabfrage abgebrochen).",
   "请先连接音箱，再做同步测试。": "Vor dem Synchrontest zuerst mit dem Lautsprecher verbinden.",
-
   "{0} 音量": "Lautstärke von {0}",
   "应用（推送到音箱的声音）": "Apps (an den Lautsprecher gestreamter Ton)",
   "现在没有程序在发声。": "Gerade gibt keine App Ton wieder.",
@@ -35,12 +33,10 @@
   "静音": "Stummschalten",
   "系统声音": "Systemsounds",
   "进程 {0}": "Prozess {0}",
-
   "音画同步测试": "A/V-Synchrontest",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Alle ein bis zwei Sekunden (zufällig) klickt der HomePod, und der Kreis blinkt.\nKommt das Blinken vor dem Klick, den Regler nach rechts ziehen, bis beides gleichzeitig ist.\nDer Endwert zeigt, wie weit der Ton in Spielen dem Bild hinterherhinkt.",
   "完成": "Fertig",
   "声音比画面晚约 {0} ms": "Ton ca. {0} ms hinter dem Bild",
-
   "未连接": "Nicht verbunden",
   "正在连接…": "Verbindung wird hergestellt…",
   "正在重连（第 {0} 次）…": "Erneut verbinden (Versuch {0})…",
@@ -52,10 +48,8 @@
   "音箱没有响应（网络中断？）": "Der Lautsprecher antwortet nicht (Netzwerk unterbrochen?)",
   "事件通道异常：{0}": "Fehler im Ereigniskanal: {0}",
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Die Zeitabgleich-Anfragen des Lautsprechers kommen nicht bei diesem Programm an; meist blockiert die Windows-Firewall eingehende Verbindungen zu HomePodCast.exe",
-
   "语言": "Sprache",
   "界面语言会在 HomePodCast 重新启动后切换。现在重新启动吗？\n\n重新启动时声音会中断几秒。": "Die neue Sprache gilt nach einem Neustart von HomePodCast. Jetzt neu starten?\n\nWährend des Neustarts ist der Ton einige Sekunden unterbrochen.",
-
   "已连接 · {0}（实验性）": "Verbunden · {0} (experimentell)",
   "{0}：{1}": "{0}: {1}",
   "立体声对 · 实验性": "Stereopaar · experimentell",
@@ -84,7 +78,6 @@
   "没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。": "Nicht beide Lautsprecher dieses Paars gefunden ({0} gefunden). Zum Verbinden müssen beide online sein.",
   "两台音箱共用一个音量滑块，偏移量加在各自的音量上。": "Beide Lautsprecher teilen sich einen Lautstärkeregler; der Versatz wird zur Lautstärke des jeweiligen Lautsprechers addiert.",
   "现在只推送到一台音箱。": "Es wird nur an einen Lautsprecher gestreamt.",
-
   "游戏": "Spiele",
   "音乐": "Musik",
   "影视": "Filme",
@@ -115,7 +108,6 @@
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} Tastenkürzel von anderen Programmen belegt; zum Ändern öffnen",
   "HomePod 静音": "HomePod stummschalten",
   "场景：{0}（{1} ms）": "Szene: {0} ({1} ms)",
-
   "低音增强": "Mehr Bass",
   "人声增强": "Stimmen betonen",
   "减弱低音": "Weniger Bass",
@@ -161,7 +153,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Mithören: {0} · ca. {1:F0} ms Latenz",
   " · 断音 {0} 次": " · {0} Aussetzer",
   "预设": "Voreinstellung",
-
   "{0}（按程序分流）": "{0} (Routing pro App)",
   "本机": "Dieser PC",
   "没单独设置的程序送到": "Apps ohne eigene Einstellung gehen an",
@@ -174,11 +165,9 @@
   "已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。": "Routing pro App aktiv: Der Ton zum Lautsprecher hat ca. {0} ms mehr Latenz, und Apps mit \"HomePod\" sind auf diesem PC stumm.",
   "连接音箱后生效。": "Gilt, sobald ein Lautsprecher verbunden ist.",
   "Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。": "Die Windows-Ausgabe ist stumm: Apps mit \"Dieser PC\" oder \"Beides\" sind auf diesem PC ebenfalls nicht zu hören.",
-
   "打开": "Öffnen",
   "选择": "Auswählen",
   "切换": "Umschalten",
-
   "首页": "Start",
   "设置": "Einstellungen",
   "开始": "Starten",
@@ -222,11 +211,8 @@
   "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Stereopaare, Multiroom-Synchronisation, Kanalaufteilung und Lautstärkeversatz pro Lautsprecher.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Auf den Klick hören und das Blinken beobachten, um zu messen, wie weit der Ton dem Bild hinterherhinkt. Zuerst mit dem Lautsprecher verbinden.",
   "关于": "Info",
-
   "{0} 音量偏移": "Lautstärkeversatz von {0}",
-
   "按下": "Drücken",
-
   "全部推送与按程序分流": "Alles streamen oder Routing pro App",
   "全部推送（默认，推荐打游戏）": "Alles streamen (Standard, empfohlen für Spiele)",
   "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Erfasst die gesamte Tonausgabe direkt, ohne zusätzliche Latenz. Alle Apps gehen an den HomePod; ob dieser PC mitspielt, hängt von der Windows-Lautstärke ab. Windows stummschalten, um nur den Lautsprecher zu hören.",
@@ -234,16 +220,14 @@
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Wird aktiv, sobald eine App ein eigenes Ziel hat oder das Standardziel \"Dieser PC\" ist. Windows kann Apps nur einzeln erfassen, und dieser Weg ist langsamer: Der Ton zum HomePod kommt ca. {0} ms später. Die Browsererweiterung rechnet das automatisch in die Bildverzögerung ein; Spiele können es nicht ausgleichen. Apps mit \"HomePod\" sind auf diesem PC stumm und stehen im Windows-Lautstärkemixer auf 0 %; Systemsounds laufen nur auf diesem PC. Um wieder alles zu streamen, alle Apps auf \"Standard\" zurücksetzen und HomePod als Standard wählen.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Bekommt eine App ein eigenes Ziel, wird auf Routing pro App umgestellt: Windows kann Apps nur einzeln erfassen, daher kommt der Ton zum HomePod ca. {0} ms später als beim Streamen von allem (die Browsererweiterung gleicht das Bild aus, Spiele nicht).\n\nApps mit \"HomePod\" werden auf diesem PC stumm (0 % im Windows-Lautstärkemixer), und Systemsounds laufen nur auf diesem PC.\n\nWenn die Latenz am wichtigsten ist, etwa beim Spielen, besser alles streamen. Routing pro App aktivieren?",
   "按程序分流会增加延迟": "Routing pro App erhöht die Latenz",
-
   "推荐": "Empfohlen",
-
   "{0}：已设为 {1} ms": "{0}: auf {1} ms gestellt",
   "{0}：开始播放后自动调整": "{0}: wird beim Abspielen angepasst",
   "{0}：已被手动改为 {1} ms": "{0}: manuell auf {1} ms geändert",
   "{0}：未开启网页接口（见「设置」）": "{0}: Weboberfläche ist aus (siehe Einstellungen)",
   "{0}：未开启 IPC（见「设置」）": "{0}: IPC ist aus (siehe Einstellungen)",
-  "{0}：网页接口没有设置密码": "{0}: Weboberfläche hat kein Passwort",
-  "{0}：网页接口密码不对": "{0}: falsches Passwort für die Weboberfläche",
+  "{0}：没有找到网页接口密码（见「设置」）": "{0}: Kein Kennwort für die Weboberfläche gefunden (siehe Einstellungen)",
+  "{0}：密码错误，请在设置里重新输入": "{0}: Falsches Kennwort; in den Einstellungen erneut eingeben",
   "{0}：请手动设为 {1} ms": "{0}: manuell auf {1} ms stellen",
   "{0}：调整失败": "{0}: Anpassung fehlgeschlagen",
   "推流时自动调整 mpv、VLC 的音频延迟。": "mpv und VLC werden beim Streamen automatisch angepasst.",
@@ -256,5 +240,17 @@
   "复制 mpv.conf 这一行": "mpv.conf-Zeile kopieren",
   "在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}": "Diese Zeile in mpv.conf einfügen (meist in %APPDATA%\\mpv) und mpv neu starten:\n{0}",
   "工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。": "Werkzeuge → Einstellungen → Einstellungen zeigen: Alle → Interface → Hauptinterfaces: \"Web\" ankreuzen; dann Hauptinterfaces → Lua: ein Passwort setzen und VLC neu starten. HomePodCast liest dieses Passwort aus den VLC-Einstellungen und nutzt es nur für VLC auf diesem PC.",
-  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Keine nutzbare Schnittstelle; den auf der Seite \"Start\" angezeigten Wert manuell einstellen: PotPlayer mit Shift+< / Shift+>; MPC-HC und MPC-BE mit + / − auf dem Ziffernblock oder über die Audio-Zeitverschiebung in den Optionen."
+  "没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。": "Keine nutzbare Schnittstelle; den auf der Seite \"Start\" angezeigten Wert manuell einstellen: PotPlayer mit Shift+< / Shift+>; MPC-HC und MPC-BE mit + / − auf dem Ziffernblock oder über die Audio-Zeitverschiebung in den Optionen.",
+  "VLC 网页接口密码（自动读取失败时填写）": "Kennwort der VLC-Weboberfläche (falls es nicht automatisch gelesen werden kann)",
+  "使用 VLC 设置里的密码": "Kennwort aus den VLC-Einstellungen wird verwendet",
+  "使用手动输入的密码": "Hier eingegebenes Kennwort wird verwendet",
+  "密码错误，请在设置里重新输入": "Falsches Kennwort; in den Einstellungen erneut eingeben",
+  "没有找到密码，请在这里输入": "Kein Kennwort gefunden; hier eingeben",
+  "已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。": "Ein hier eingegebenes Kennwort ist gespeichert (verschlüsselt; nur Ihr Windows-Konto kann es entschlüsseln).",
+  "先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。": "Zuerst wird das Kennwort aus VLC verwendet; dieses hier nur, wenn jenes nicht lesbar oder falsch ist. Verschlüsselt auf diesem PC gespeichert.",
+  "保存": "Speichern",
+  "清除": "Löschen",
+  "显示密码": "Kennwort anzeigen",
+  "隐藏密码": "Kennwort ausblenden",
+  "保存密码失败：{0}": "Kennwort konnte nicht gespeichert werden: {0}"
 }

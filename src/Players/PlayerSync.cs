@@ -188,7 +188,9 @@ internal sealed class PlayerSync : IDisposable
 
     private async Task<PlayerStatus> ApplyAsync(IPlayerEndpoint endpoint, int target, CancellationToken ct)
     {
-        PlayerStatus Status(PlayerState state, int? ms = null) => new(endpoint.Kind, endpoint.Name, state, ms);
+        // Which password the player took (never the password) goes with every state reached by talking to it.
+        PlayerStatus Status(PlayerState state, int? ms = null) => new(endpoint.Kind, endpoint.Name, state, ms,
+            state is PlayerState.Applied or PlayerState.Waiting or PlayerState.UserChanged ? endpoint.PasswordInUse : null);
         try
         {
             var reading = await endpoint.ReadAsync(ct).ConfigureAwait(false);

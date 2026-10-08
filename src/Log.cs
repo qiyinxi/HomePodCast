@@ -37,6 +37,9 @@ public static class Log
         if (Verbose) Write("DEBUG", msg);
     }
 
+    /// <summary>Every line as it is written (tests check what reaches the log).</summary>
+    internal static event Action<string>? Written;
+
     private static void Write(string level, string msg)
     {
         var line = $"{DateTime.Now:HH:mm:ss.fff} {level,-5} {msg}";
@@ -45,5 +48,6 @@ public static class Log
             if (ToConsole) Console.WriteLine(line);
             _file?.WriteLine(line);
         }
+        Written?.Invoke(line);
     }
 }

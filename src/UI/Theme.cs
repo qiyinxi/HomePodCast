@@ -330,6 +330,8 @@ internal static class Glyph
     public const string OpenInNew = "";
     public const string Warning = "";
     public const string Gauge = "";
+    /// <summary>Eye (show a password) and crossed-out eye (hide it).</summary>
+    public const string View = "", Hide = "";
     /// <summary>No icon, but the row keeps the icon column (rows that belong to the one above).</summary>
     public const string None = "";
     public const string Video = "";

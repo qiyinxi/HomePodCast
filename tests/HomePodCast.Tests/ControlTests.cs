@@ -130,6 +130,29 @@ public class ControlTests
     });
 
     [Fact]
+    public void Password_box_is_masked_until_revealed_and_clear_forgets_and_masks_again() => Sta.Run(() =>
+    {
+        using var box = new PasswordBox("VLC");
+        int changed = 0;
+        box.PasswordChanged += (_, _) => changed++;
+        Assert.False(box.Revealed); // masked by default
+        Assert.Equal("", box.Password);
+
+        box.Password = "typed";
+        Assert.Equal(1, changed);
+        box.Revealed = true;
+        Assert.True(box.Revealed);
+        Assert.Equal("typed", box.Password); // showing it keeps what was typed
+        box.Revealed = false;
+        Assert.Equal("typed", box.Password);
+
+        box.Revealed = true;
+        box.Clear();
+        Assert.Equal("", box.Password);
+        Assert.False(box.Revealed);
+    });
+
+    [Fact]
     public void Toggle_switch_reports_user_flips_separately() => Sta.Run(() =>
     {
         using var toggle = new ToggleSwitch("夜间模式");
