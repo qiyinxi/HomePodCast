@@ -60,8 +60,8 @@ internal sealed class FluentComboBox : FluentControl
     {
         int h = Dp(32);
         if (PreferredWidth > 0) return new Size(Dp(PreferredWidth), h);
-        var font = StyleFont(TextStyle.Body);
-        int text = Items.Count == 0 ? Dp(80) : Items.Max(t => TextRenderer.MeasureText(t, font, Size.Empty, TextFlags.Measure).Width);
+        int text = Items.Count == 0 ? Dp(80)
+            : Items.Max(t => TextRenderer.MeasureText(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
         return new Size(text + Dp(12 + 38), h);
     }
 
@@ -121,6 +121,7 @@ internal sealed class FluentComboBox : FluentControl
             var item = new ToolStripMenuItem(Items[i])
             {
                 Checked = i == _selected,
+                Font = Theme.FontFor(TextStyle.Body, DeviceDpi, Items[i]),
                 Padding = new Padding(Dp(8), Dp(6), Dp(8), Dp(6)),
                 AutoSize = true,
             };
@@ -149,7 +150,7 @@ internal sealed class FluentComboBox : FluentControl
         Shapes.FillRound(g, fill, r, radius);
         Shapes.BorderRound(g, P.ControlBorder, r, radius, Hairline);
         var textRect = new Rectangle(Dp(11), 0, Width - Dp(11 + 36), Height);
-        TextRenderer.DrawText(g, SelectedText ?? "", StyleFont(TextStyle.Body), textRect, enabled ? P.Text : P.TextDisabled, TextFlags.Line);
+        TextRenderer.DrawText(g, SelectedText ?? "", Theme.FontFor(TextStyle.Body, DeviceDpi, SelectedText), textRect, enabled ? P.Text : P.TextDisabled, TextFlags.Line);
         Shapes.Glyph(g, Glyph.ChevronDown, Theme.IconFont(12, DeviceDpi), new Rectangle(Width - Dp(32), 0, Dp(20), Height),
             enabled ? P.TextSecondary : P.TextDisabled);
         if (FocusVisible) DrawFocusRing(g, r, radius + Dp(1));
@@ -165,7 +166,17 @@ internal sealed class FluentComboBox : FluentControl
 
     private sealed class ComboAccessible(FluentComboBox owner) : ControlAccessibleObject(owner)
     {
-        public override string? Value => owner.SelectedText;
+        /// <summary>Setting the value picks the item with that text (as the user would).</summary>
+        public override string? Value
+        {
+            get => owner.SelectedText;
+            set
+            {
+                int index = value == null ? -1 : owner.Items.IndexOf(value);
+                if (index >= 0 && owner.Enabled) owner.Select(index, user: true);
+            }
+        }
+
         public override string DefaultAction => L.T("打开");
         public override void DoDefaultAction() => owner.Open();
     }

@@ -151,7 +151,7 @@ internal static partial class Theme
 
     private static readonly Dictionary<(TextStyle, int, string), Font> Fonts = new();
     private static readonly Dictionary<(int, int), Font> IconFonts = new();
-    private static string? _semibold;
+    private static readonly Dictionary<string, string?> Semibold = new();
 
     private static float Points(TextStyle style) => style switch
     {
@@ -165,33 +165,51 @@ internal static partial class Theme
     };
 
     /// <summary>A UI font for the current language (L.FontName), in pixels for <paramref name="dpi"/>; cached, never dispose.</summary>
-    public static Font Font(TextStyle style, int dpi)
+    public static Font Font(TextStyle style, int dpi) => Font(style, dpi, L.FontName);
+
+    /// <summary>
+    /// Like <see cref="Font(TextStyle, int)"/>, but for text that may not be in the UI language: in the English UI,
+    /// names in Chinese or Japanese (speakers, apps) get a CJK face instead of GDI's fallback.
+    /// </summary>
+    public static Font FontFor(TextStyle style, int dpi, string? text)
     {
-        var key = (style, dpi, L.FontName);
+        if (L.Language != "en" || string.IsNullOrEmpty(text)) return Font(style, dpi);
+        bool kana = false, han = false;
+        foreach (char ch in text)
+        {
+            if (ch is >= '぀' and <= 'ヿ') kana = true;
+            else if (ch is >= '㐀' and <= '鿿' or >= '豈' and <= '﫿' or >= '＀' and <= '￯') han = true;
+        }
+        return kana ? Font(style, dpi, "Yu Gothic UI") : han ? Font(style, dpi, "Microsoft YaHei UI") : Font(style, dpi);
+    }
+
+    private static Font Font(TextStyle style, int dpi, string family)
+    {
+        var key = (style, dpi, family);
         lock (Fonts)
         {
             if (Fonts.TryGetValue(key, out var font)) return font;
             float px = Points(style) * dpi / 72f;
             bool strong = style is TextStyle.BodyStrong or TextStyle.Subtitle or TextStyle.Title or TextStyle.Display or TextStyle.Metric;
-            font = strong && SemiboldFamily() is { } semi
+            font = strong && SemiboldOf(family) is { } semi
                 ? new Font(semi, px, FontStyle.Regular, GraphicsUnit.Pixel)
-                : new Font(L.FontName, px, strong ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
+                : new Font(family, px, strong ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
             return Fonts[key] = font;
         }
     }
 
-    /// <summary>"Segoe UI Semibold" / "Yu Gothic UI Semibold" when the UI font has one; YaHei and JhengHei use Bold.</summary>
-    private static string? SemiboldFamily()
+    /// <summary>"Segoe UI Semibold" / "Yu Gothic UI Semibold" where the family has one; YaHei and JhengHei use Bold.</summary>
+    private static string? SemiboldOf(string family)
     {
-        if (_semibold != null) return _semibold.Length == 0 ? null : _semibold;
-        _semibold = "";
+        if (Semibold.TryGetValue(family, out var known)) return known;
+        string? name = null;
         try
         {
-            using var family = new FontFamily(L.FontName + " Semibold");
-            _semibold = family.Name;
+            using var f = new FontFamily(family + " Semibold");
+            name = f.Name;
         }
         catch (ArgumentException) { }
-        return _semibold.Length == 0 ? null : _semibold;
+        return Semibold[family] = name;
     }
 
     private static string? _iconFamily;

@@ -153,4 +153,17 @@ internal sealed class FluentButton : FluentControl, IButtonControl
         }
         if (FocusVisible) DrawFocusRing(g, r, radius + Dp(1));
     }
+
+    protected override AccessibleObject CreateAccessibilityInstance() => new ButtonAccessible(this);
+
+    private sealed class ButtonAccessible(FluentButton owner) : ControlAccessibleObject(owner)
+    {
+        public override string DefaultAction => L.T("按下");
+
+        // Posted: a click may open a modal dialog, which must not run inside the accessibility call.
+        public override void DoDefaultAction()
+        {
+            if (owner.IsHandleCreated) owner.BeginInvoke(owner.PerformClick);
+        }
+    }
 }

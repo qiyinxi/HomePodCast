@@ -52,7 +52,7 @@ internal sealed class TextBlock : FluentControl
 
     public HorizontalAlignment Align { get; set; } = HorizontalAlignment.Left;
 
-    public Font TextFont => StyleFont(_style);
+    public Font TextFont => Theme.FontFor(_style, DeviceDpi, Text);
 
     protected override void OnTextChanged(EventArgs e)
     {

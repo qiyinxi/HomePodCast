@@ -228,5 +228,7 @@
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Listen for the click and watch the flash to measure how far the sound lags the picture. Connect to the speaker first.",
   "关于": "About",
 
-  "{0} 音量偏移": "{0} volume offset"
+  "{0} 音量偏移": "{0} volume offset",
+
+  "按下": "Press"
 }
