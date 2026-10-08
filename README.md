@@ -23,6 +23,7 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 - One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
 - Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
+- Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
 - Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys that control the HomePod while Windows is muted
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
@@ -37,7 +38,7 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 2. Run `HomePodCast.exe`. The first time, it asks to add a firewall rule (local network only, active on private networks only): the HomePod has to connect back to the PC for clock sync and to request lost packets again.
 3. The app finds the HomePod and connects by itself. Muting the PC's default output device is fine: audio is captured before the system volume is applied, so the HomePod keeps playing.
 
-The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, use Settings → Language (or right-click the tray icon → Language), or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
+The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
 
 Command line (for troubleshooting):
 
