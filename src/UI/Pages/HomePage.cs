@@ -78,7 +78,11 @@ internal sealed class HomePage : ScrollPage
         _tips.SetToolTip(_dropouts, L.T("这次连接中电脑这边断音的次数"));
         _tips.SetToolTip(_resent, L.T("音箱要求重发的包：已重发 / 请求"));
 
-        _tuner.Changed += ShowLatency;
+        _tuner.Changed += () =>
+        {
+            ShowLatency();
+            LatencyChanged?.Invoke();
+        };
         _statsTimer.Tick += (_, _) => UpdateStats();
         LoadFromConfig();
     }
@@ -165,6 +169,12 @@ internal sealed class HomePage : ScrollPage
     /// <summary>The volume was changed here (the mixer's master slider follows).</summary>
     public event Action<double>? VolumeApplied;
 
+    /// <summary>The scene or the latency shown here changed (the tray flyout follows).</summary>
+    public event Action? LatencyChanged;
+
+    /// <summary>The latency shown here: the scene's, or the slider's while it waits to reconnect.</summary>
+    public int LatencyMs => _tuner.Value;
+
     // ---------------------------------------------------------------- state
 
     private void LoadFromConfig()
@@ -212,7 +222,7 @@ internal sealed class HomePage : ScrollPage
         _loading = loading;
     }
 
-    /// <summary>Switch scene (tray menu, hotkey); same rules as the buttons.</summary>
+    /// <summary>Switch scene (tray flyout, hotkey); same rules as the buttons.</summary>
     public void SelectScene(Scene scene) => _tuner.SelectScene(scene);
 
     /// <summary>Scene, speaker mute, night mode and cap (also after changes from the tray or hotkeys).</summary>

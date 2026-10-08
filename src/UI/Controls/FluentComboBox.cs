@@ -215,7 +215,7 @@ internal sealed class FluentComboBox : FluentControl
     }
 }
 
-/// <summary>Menus (combo box lists, the tray menu) in the theme's colours with rounded highlights.</summary>
+/// <summary>Menus (combo box lists) in the theme's colours with rounded highlights.</summary>
 internal sealed class FluentMenuRenderer : ToolStripRenderer
 {
     private static Theme.Palette P => Theme.P;

@@ -244,7 +244,7 @@ internal static partial class Theme
     // ---------------------------------------------------------------- windows
 
     private const int DwmUseImmersiveDarkMode = 20, DwmUseImmersiveDarkModeOld = 19;
-    private const int DwmWindowCornerPreference = 33, DwmSystemBackdropType = 38;
+    private const int DwmWindowCornerPreference = 33, DwmBorderColor = 34, DwmSystemBackdropType = 38;
 
     /// <summary>Windows 11 22H2 (build 22621) has DWMWA_SYSTEMBACKDROP_TYPE.</summary>
     public static bool MicaSupported => Environment.OSVersion.Version.Build >= 22621;
@@ -271,6 +271,19 @@ internal static partial class Theme
     {
         int round = 3; // DWMWCP_ROUNDSMALL
         DwmSetWindowAttribute(handle, DwmWindowCornerPreference, ref round, sizeof(int));
+    }
+
+    /// <summary>Windows 11 (build 22000) rounds windows and draws their border itself.</summary>
+    public static bool RoundedWindows => Environment.OSVersion.Version.Build >= 22000;
+
+    /// <summary>A borderless panel (the tray flyout): rounded corners and a hairline border in the popup colour on Windows 11.</summary>
+    public static void StyleFlyout(IntPtr handle)
+    {
+        if (!RoundedWindows) return; // Windows 10: the panel paints its own border
+        int round = 2; // DWMWCP_ROUND
+        DwmSetWindowAttribute(handle, DwmWindowCornerPreference, ref round, sizeof(int));
+        int border = ColorTranslator.ToWin32(P.PopupBorder);
+        DwmSetWindowAttribute(handle, DwmBorderColor, ref border, sizeof(int));
     }
 
     /// <summary>Scroll bars (and other common-control parts) in the light or dark system style.</summary>

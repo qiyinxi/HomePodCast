@@ -7,17 +7,14 @@ internal sealed partial class TrayApp
 {
     private const double HotkeyVolumeStep = 5;
 
-    private readonly ToolStripMenuItem _sceneMenu = new();
-    private readonly ToolStripMenuItem _nightItem = new(L.T("夜间模式"));
-    private readonly ToolStripMenuItem _muteItem = new(L.T("HomePod 静音"));
     private GlobalHotkeys? _hotkeys;
     private VolumeKeyForwarder? _forwarder;
 
     /// <summary>Configured hotkeys that could not be registered (another program holds them, or unreadable).</summary>
     public HashSet<HotkeyAction> UnavailableHotkeys { get; } = [];
 
-    /// <summary>Called once from the constructor, after the tray menu is built and before the main window.</summary>
-    private void InitSound(ContextMenuStrip menu)
+    /// <summary>Called once from the constructor, before the tray icon and the main window.</summary>
+    private void InitSound()
     {
         bool dirty = Scenes.Reconcile(Config);
         int cap = VolumeLimit.NormalizeCap(Config.VolumeCapPercent);
@@ -30,20 +27,6 @@ internal sealed partial class TrayApp
         if (dirty) Config.Save();
         Controller.SetVolumeCap(cap);
         Controller.NightMode.Enabled = Config.NightMode;
-
-        foreach (var scene in Scenes.All)
-        {
-            var item = new ToolStripMenuItem { Tag = scene };
-            item.Click += (_, _) => SelectScene(scene);
-            _sceneMenu.DropDownItems.Add(item);
-        }
-        _nightItem.Click += (_, _) => SetNightMode(!Config.NightMode);
-        _muteItem.Click += (_, _) => ToggleSpeakerMute();
-        int at = menu.Items.IndexOf(_toggleItem) + 1;
-        ToolStripItem[] items = [new ToolStripSeparator(), _sceneMenu, _nightItem, _muteItem, new ToolStripSeparator()];
-        for (int i = 0; i < items.Length; i++) menu.Items.Insert(at + i, items[i]);
-        menu.Opening += (_, _) => RefreshSoundMenu();
-        RefreshSoundMenu();
 
         _hotkeys = new GlobalHotkeys();
         _hotkeys.Pressed += OnHotkey;
@@ -70,19 +53,6 @@ internal sealed partial class TrayApp
         _forwarder?.Dispose();
     }
 
-    private void RefreshSoundMenu()
-    {
-        foreach (ToolStripMenuItem item in _sceneMenu.DropDownItems)
-        {
-            var scene = (Scene)item.Tag!;
-            item.Text = L.F("{0}（{1} ms）", Scenes.Name(scene), Scenes.LatencyMs(scene, Scenes.CustomMs(Config)));
-            item.Checked = scene == Config.Scene;
-        }
-        _sceneMenu.Text = L.F("场景：{0}", Scenes.Name(Config.Scene));
-        _nightItem.Checked = Config.NightMode;
-        _muteItem.Checked = Controller.Muted;
-    }
-
     // ---------------------------------------------------------------- actions
 
     /// <summary>Switch scene; the main window owns the reconnect debounce (same rule as the latency slider).</summary>
@@ -96,6 +66,7 @@ internal sealed partial class TrayApp
         ApplyNightEq();
         Log.Info($"night mode {(on ? "on" : "off")}");
         _form.ShowSoundOptions();
+        RaiseStateChanged();
     }
 
     public void SetVolumeCap(int cap)
@@ -105,12 +76,14 @@ internal sealed partial class TrayApp
         if (Config.Volume > cap) Config.Volume = cap;
         Config.Save();
         Controller.SetVolumeCap(cap);
+        RaiseStateChanged();
     }
 
     public void SetSpeakerMuted(bool muted)
     {
         Controller.SetMuted(muted);
         _form.ShowSoundOptions();
+        RaiseStateChanged();
     }
 
     public void ToggleSpeakerMute() => SetSpeakerMuted(!Controller.Muted);
@@ -122,6 +95,7 @@ internal sealed partial class TrayApp
         SetVolume(Math.Clamp(current + delta, 0, Config.VolumeCapPercent));
         _form.ShowVolume(Controller.Volume ?? current);
         _form.ShowSoundOptions();
+        RaiseStateChanged();
     }
 
     public void SetForwardVolumeKeys(bool on)

@@ -130,7 +130,7 @@ internal sealed class LatencyTuner
         _apply(Value);
     }
 
-    /// <summary>Switch scene (buttons, tray menu, hotkey). The slider follows at once; the reconnect waits.</summary>
+    /// <summary>Switch scene (buttons, tray flyout, hotkey). The slider follows at once; the reconnect waits.</summary>
     public void SelectScene(Scene scene)
     {
         if (scene == _config.Scene)
