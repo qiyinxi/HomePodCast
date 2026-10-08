@@ -1,0 +1,53 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Unit tests
+        run: dotnet test tests/HomePodCast.Tests -c Release
+
+      - name: Publish (framework-dependent, single file)
+        run: >
+          dotnet publish src/HomePodCast.csproj -c Release -r win-x64
+          --self-contained false -p:PublishSingleFile=true -o publish/HomePodCast
+
+      - name: Package browser extension
+        if: hashFiles('extension/manifest.json') != ''
+        shell: pwsh
+        run: Compress-Archive -Path extension/* -DestinationPath publish/HomePodCast-extension.zip
+
+      - name: Package app
+        shell: pwsh
+        run: |
+          Copy-Item LICENSE, README.md publish/HomePodCast/
+          Compress-Archive -Path publish/HomePodCast/* -DestinationPath publish/HomePodCast-win-x64.zip
+
+      # Code signing via SignPath (https://signpath.org) goes here once the project is approved:
+      # submit publish/HomePodCast/HomePodCast.exe to SignPath and replace it with the signed file.
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HomePodCast
+          path: publish/*.zip
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: publish/*.zip
