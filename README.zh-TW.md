@@ -53,7 +53,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
 
    防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
-3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 HomePod 音量跟隨 Windows 音量，Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
+3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 Windows 音量就是 HomePod 音量：兩邊保持一致（連線時對齊到較小的那個），Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
 
 介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
 
@@ -88,7 +88,7 @@ HomePodCast.exe mutetest                     確認靜音後仍能擷取
 
 在「設定 → 鍵盤音量鍵」中選擇音量 +、− 和靜音鍵對 HomePod 的作用：
 
-- **HomePod 跟隨 Windows 音量**（預設）：按鍵照常調整 Windows，串流時 HomePod 跟著變。Windows 的 0–100% 對應 HomePod 的 0 到音量上限，Windows 靜音時 HomePod 也靜音。
+- **HomePod 跟隨 Windows 音量**（預設）：串流時 Windows 音量就是 HomePod 音量。Windows 的 0–100% 對應 HomePod 的 0 到音量上限；按鍵和 Windows 音量滑桿會改變 HomePod，在程式裡調整 HomePod 也會改變 Windows。連線時和變更音量上限時，兩邊對齊到較小的那個，哪一邊都不會自己變大。Windows 靜音時 HomePod 也靜音。
 - **串流時控制 HomePod**：串流時這三個鍵只調整 HomePod（每次 2%），Windows 音量不變，螢幕下方會顯示 HomePod 音量（獨佔全螢幕的遊戲中不顯示）；未串流時照常調整 Windows。適合預設輸出是電腦喇叭、又只想聽 HomePod 的情況：把 Windows 設為靜音，再用按鍵調整 HomePod。
 - **僅在 Windows 靜音時**：舊版的做法。只有 Windows 靜音或音量為 0 時按鍵才轉給 HomePod，Windows 保持靜音。
 - **關**：按鍵只調整 Windows。

@@ -94,7 +94,7 @@
   "仅在 Windows 静音时": "Windows のミュート中のみ",
   "关": "オフ",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "送信中は音量＋・−・ミュートの各キーで HomePod だけを調整し、Windows の音量は変わりません。画面下部に HomePod の音量が表示されます。送信していないときは通常どおり Windows を調整します。",
-  "音量键照常调 Windows，HomePod 跟着变（Windows 100% 对应音量上限）；Windows 静音时 HomePod 也静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "音量キーは通常どおり Windows を調整し、HomePod も連動します（Windows の 100% が音量の上限に対応）。Windows をミュートすると HomePod もミュートされます。既定の出力が PC のスピーカーで、HomePod だけで聴きたい場合は「送信中は HomePod を操作」を選んでください。",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Windows の音量がそのまま HomePod の音量になります（Windows の 100% が音量の上限）。音量キーは通常どおり Windows を調整し、このアプリで HomePod を調整すると Windows の音量も変わります。接続時は両方を小さいほうに合わせます。Windows をミュートすると HomePod もミュートされます。既定の出力が PC のスピーカーで、HomePod だけで聴きたい場合は「送信中は HomePod を操作」を選んでください。",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Windows がミュートまたは音量 0 のときだけ、音量キーで HomePod を調整し、Windows はミュートのままにします（0% ではなくミュートがおすすめ）。",
   "音量键只调 Windows，不影响 HomePod。": "音量キーは Windows だけを調整し、HomePod には影響しません。",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "使用できる出力デバイスがありません：送信中は音量キーで HomePod を直接操作します。",

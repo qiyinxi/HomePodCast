@@ -94,7 +94,7 @@
   "仅在 Windows 静音时": "Bare når Windows er dempet",
   "关": "Av",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "Under strømming endrer tastene for volum opp, volum ned og demp bare HomePod, og volumet i Windows endres ikke; HomePod-volumet vises nederst på skjermen. Uten strømming styrer de Windows som vanlig.",
-  "音量键照常调 Windows，HomePod 跟着变（Windows 100% 对应音量上限）；Windows 静音时 HomePod 也静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Tastene styrer Windows som vanlig, og HomePod følger med (100 % i Windows = maks. volum); når Windows er dempet, er HomePod også dempet. Hvis PC-høyttalerne er standardutgangen og du bare vil høre HomePod, velger du \"Styr HomePod under strømming\".",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Volumet i Windows er HomePod-volumet (100 % i Windows = maks. volum): tastene styrer Windows som vanlig, og endrer du HomePod i appen, endres også Windows; ved tilkobling går begge sider til den laveste av de to. Når Windows er dempet, er HomePod også dempet; hvis PC-høyttalerne er standardutgangen og du bare vil høre HomePod, velger du \"Styr HomePod under strømming\".",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Bare når Windows er dempet eller på 0 %, styrer volumtastene HomePod i stedet, og Windows forblir dempet (demp heller enn å sette volumet til 0 %).",
   "音量键只调 Windows，不影响 HomePod。": "Volumtastene styrer bare Windows, ikke HomePod.",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "Ingen brukbar lydutgang: Under strømming styrer volumtastene HomePod direkte.",

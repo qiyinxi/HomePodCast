@@ -24,7 +24,10 @@ internal enum EndpointMode
     /// <summary>VolumeKeyMode.WhenWindowsMuted: key steps on a silent Windows go to the HomePod, Windows is put back.</summary>
     Forward,
 
-    /// <summary>VolumeKeyMode.FollowWindows: every change of the Windows volume or mute is reported; Windows is never written.</summary>
+    /// <summary>
+    /// VolumeKeyMode.FollowWindows: every change of the Windows volume or mute that isn't ours is reported; levels asked
+    /// for with RequestLevel are written to the watched endpoint with our event context (never followed back).
+    /// </summary>
     Follow,
 }
 
@@ -58,7 +61,8 @@ internal sealed class WindowsVolumeFollower
 /// (dragging the Windows slider, clicking unmute) are left alone, so Windows audio can always be taken back.
 /// Known limit: at 0 % (not muted) Windows sends nothing for "volume down", so only muting gives both keys.</para>
 /// <para><see cref="EndpointMode.Follow"/>: every change of the Windows level or mute is raised as
-/// <see cref="WindowsChanged"/> (the HomePod follows it); this mode never writes to Windows.</para>
+/// <see cref="WindowsChanged"/> (the HomePod follows it), a fresh baseline as <see cref="FollowStarted"/> (both sides are
+/// aligned), and <see cref="RequestLevel"/> writes the level that stands for the HomePod volume (FollowWindowsLink).</para>
 /// </summary>
 internal sealed partial class VolumeKeyForwarder : IDisposable
 {
@@ -88,8 +92,29 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
     /// <summary>Raised on the worker thread when the mute key was pressed (Forward).</summary>
     public event Action? MuteToggled;
 
-    /// <summary>Raised on Windows' notification thread when the Windows level or mute changed (Follow).</summary>
+    /// <summary>Raised on Windows' notification thread when the Windows level or mute changed, not by us (Follow).</summary>
     public event Action<EndpointState, EndpointState>? WindowsChanged;
+
+    /// <summary>
+    /// Raised on the worker thread with the endpoint's state when following starts from a fresh baseline: the mode was
+    /// switched to Follow (stream start, reconnect, mode change) or another endpoint is watched now.
+    /// </summary>
+    public event Action<EndpointState>? FollowStarted;
+
+    private volatile bool _rebaseline;   // the mode was switched: take a new baseline even if the worker never saw the old mode
+    private int _levelPending;           // 1 when _pendingLevel is to be written (UI → worker)
+    private float _pendingLevel;
+
+    /// <summary>
+    /// Follow: set the watched endpoint's master level (0..1), with our event context so the change isn't followed back.
+    /// Done on the worker thread, latest request wins; dropped when not following or without an endpoint. Thread-safe.
+    /// </summary>
+    public void RequestLevel(float level)
+    {
+        Volatile.Write(ref _pendingLevel, Math.Clamp(level, 0f, 1f));
+        Volatile.Write(ref _levelPending, 1);
+        _wake.Set();
+    }
 
     private readonly Func<string?> _endpointId;
 
@@ -117,6 +142,7 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
             if (_mode == value) return;
             lock (_follower) _follower.Reset(); // a new baseline is taken before anything is followed
             _mode = value;
+            _rebaseline = true;
             _wake.Set();
         }
     }
@@ -232,7 +258,12 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
                             SetOutputDevice(endpoint != null, problem);
                         }
                     }
-                    if (endpoint != null) Handle(endpoint);
+                    if (endpoint != null)
+                    {
+                        Handle(endpoint);
+                        WritePendingLevel(endpoint);
+                    }
+                    else Interlocked.Exchange(ref _levelPending, 0); // nothing to write to
                 }
                 catch (Exception ex) when (!_stop)
                 {
@@ -255,18 +286,20 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         var keys = (VolumeKeys)Interlocked.Exchange(ref _keys, 0);
         if (!endpoint.TryRead(out var now)) return;
         var mode = _mode;
-        if (mode == EndpointMode.Off || !_tracking || mode != _trackedMode)
+        if (mode == EndpointMode.Off || !_tracking || mode != _trackedMode || _rebaseline)
         {
+            _rebaseline = false;
             if (mode == EndpointMode.Forward && now.IsSilent)
                 Log.Info($"volume keys: Windows output is {(now.Muted ? "muted" : "at 0 %")}, keys go to the speaker");
-            if (mode == EndpointMode.Follow)
-            {
-                lock (_follower) _follower.Reset(now);
-                Log.Info($"volume keys: the HomePod follows the Windows volume (now {(now.Muted ? "muted" : $"{now.Level:P0}")})");
-            }
             _baseline = now;
             _trackedMode = mode;
             _tracking = mode != EndpointMode.Off;
+            if (mode == EndpointMode.Follow)
+            {
+                lock (_follower) _follower.Reset(now);
+                Log.Info($"volume keys: the HomePod follows the Windows volume (now {now.Level:P0}{(now.Muted ? ", muted" : "")})");
+                FollowStarted?.Invoke(now);
+            }
             return;
         }
         if (mode != EndpointMode.Forward || now == _baseline) return;
@@ -284,6 +317,17 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
         Log.Debug($"volume key: {(action.ToggleMute ? "mute" : $"{action.Percent:+0.#;-0.#}%")} → speaker");
         if (action.ToggleMute) MuteToggled?.Invoke();
         else VolumeStep?.Invoke(action.Percent);
+    }
+
+    /// <summary>Follow: a level asked for by <see cref="RequestLevel"/>, written with our context (not followed back).</summary>
+    private void WritePendingLevel(Endpoint endpoint)
+    {
+        if (Interlocked.Exchange(ref _levelPending, 0) == 0) return;
+        if (_mode != EndpointMode.Follow || !_tracking || _trackedMode != EndpointMode.Follow) return;
+        float level = Volatile.Read(ref _pendingLevel);
+        int hr = endpoint.SetLevel(level, _context);
+        if (hr < 0) Log.Warn($"volume keys: setting the Windows volume failed 0x{hr:X8}");
+        else Log.Debug($"volume keys: Windows volume → {level:P0} (follows the HomePod)");
     }
 
     public void Dispose()
@@ -380,6 +424,9 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
             state = new EndpointState(muted, level);
             return true;
         }
+
+        /// <summary>The master level only (the mute state stays as it is).</summary>
+        public int SetLevel(float level, Guid context) => _volume.SetMasterVolumeLevelScalar(level, ref context);
 
         /// <summary>Back to the silent state, mute first when it was muted so the PC speakers stay quiet.</summary>
         public void Restore(EndpointState s, Guid context)

@@ -53,7 +53,7 @@ If you try it on other hardware, please open an issue with the device model, its
    - **Portable: `HomePodCast-<version>-win-x64.zip`.** Unzip it anywhere and run `HomePodCast.exe`. The first time, it asks to add the firewall rule.
 
    The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. Both packages keep your settings in `%APPDATA%\HomePodCast`.
-3. The app finds the HomePod and connects by itself. Audio is captured before the Windows volume is applied, so the Windows volume never changes the sound that is sent; the HomePod has its own volume. By default that volume follows the Windows volume, and muting Windows mutes the HomePod too. If your default output is the PC speakers and you want to hear only the HomePod, set Settings → Keyboard volume keys to "Control the HomePod while streaming" and mute Windows (see [Keyboard volume keys](#keyboard-volume-keys)).
+3. The app finds the HomePod and connects by itself. Audio is captured before the Windows volume is applied, so the Windows volume never changes the sound that is sent; the HomePod has its own volume. By default the Windows volume is the HomePod volume: the two stay in step (on connecting, both go to the lower of the two), and muting Windows mutes the HomePod too. If your default output is the PC speakers and you want to hear only the HomePod, set Settings → Keyboard volume keys to "Control the HomePod while streaming" and mute Windows (see [Keyboard volume keys](#keyboard-volume-keys)).
 
 The interface follows the Windows display language (English when HomePodCast has no translation for it). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to a language code such as `"en"`, `"de"` or `"zh-TW"` (the names of the files in `src/i18n`, plus `"zh-CN"`), or to `"auto"`.
 
@@ -88,7 +88,7 @@ The app asks for confirmation the first time routing turns on. Set every app bac
 
 Settings → Keyboard volume keys decides what volume up, volume down and mute do to the HomePod:
 
-- **HomePod follows the Windows volume** (default): the keys change Windows as usual, and while streaming the HomePod follows. Windows 0–100% maps to 0 up to the volume limit, and muting Windows mutes the HomePod.
+- **HomePod follows the Windows volume** (default): while streaming, the Windows volume is the HomePod volume. Windows 0–100% maps to 0 up to the volume limit; the keys and the Windows volume slider move the HomePod, and changing the HomePod in this app moves Windows. On connecting, and when the limit changes, both sides go to the lower of the two, so neither gets louder by itself. Muting Windows mutes the HomePod.
 - **Control the HomePod while streaming**: while streaming, the three keys change only the HomePod (2% per step) and leave the Windows volume alone; a small indicator at the bottom of the screen shows the HomePod volume (not over exclusive full-screen games). When not streaming, the keys change Windows as usual. Use this when the PC speakers are the default output and you want to hear only the HomePod: mute Windows, then use the keys for the HomePod.
 - **Only while Windows is muted**: the earlier behaviour. Key presses go to the HomePod only while Windows is muted or at 0%, and Windows stays muted.
 - **Off**: the keys change only Windows.

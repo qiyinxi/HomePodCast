@@ -246,8 +246,8 @@ internal sealed class SettingsPage : ScrollPage
     private static string VolumeKeyModeDescription(VolumeKeyMode mode) => mode switch
     {
         VolumeKeyMode.WhileStreaming => L.T("推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。"),
-        VolumeKeyMode.FollowWindows => L.T("音量键照常调 Windows，HomePod 跟着变（Windows 100% 对应音量上限）；Windows 静音时 HomePod 也静音。" +
-                                          "如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。"),
+        VolumeKeyMode.FollowWindows => L.T("Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；" +
+                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。"),
         VolumeKeyMode.WhenWindowsMuted => L.T("只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。"),
         _ => L.T("音量键只调 Windows，不影响 HomePod。"),
     };

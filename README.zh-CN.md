@@ -53,7 +53,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
    - **便携版 `HomePodCast-<版本>-win-x64.zip`**：解压到任意位置，运行 `HomePodCast.exe`，第一次会请求添加防火墙规则。
 
    防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。两种包的设置都保存在 `%APPDATA%\HomePodCast`。
-3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 HomePod 音量跟随 Windows 音量，Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
+3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
 
 界面语言跟随 Windows 显示语言（没有对应译文的语言显示英文）。想换成别的语言：在「设置」页选择「语言 / Language」，或者把 `%APPDATA%\HomePodCast\config.json` 里的 `"Language"` 设为语言代码（`"zh-CN"`，或 `src/i18n` 里的文件名，比如 `"en"`、`"de"`）或 `"auto"`。
 
@@ -88,7 +88,7 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 
 在「设置 → 键盘音量键」里选择音量 +、− 和静音键对 HomePod 起什么作用：
 
-- **HomePod 跟随 Windows 音量**（默认）：按键照常调 Windows，推流时 HomePod 跟着变。Windows 的 0–100% 对应 HomePod 的 0 到音量上限，Windows 静音时 HomePod 也静音。
+- **HomePod 跟随 Windows 音量**（默认）：推流时 Windows 音量就是 HomePod 音量。Windows 的 0–100% 对应 HomePod 的 0 到音量上限；按键和 Windows 音量滑块会改 HomePod，在程序里调 HomePod 也会改 Windows。连接时和改音量上限时，两边对齐到较小的那个，哪边都不会自己变大。Windows 静音时 HomePod 也静音。
 - **推流时控制 HomePod**：推流时这三个键只调 HomePod（每次 2%），Windows 音量不变，屏幕下方会显示 HomePod 音量（独占全屏的游戏里不显示）；不推流时照常调 Windows。适合默认输出是电脑扬声器、又只想听 HomePod 的情况：把 Windows 静音，再用按键调 HomePod。
 - **仅在 Windows 静音时**：旧版的做法。只有 Windows 静音或音量为 0 时按键才转给 HomePod，Windows 保持静音。
 - **关**：按键只调 Windows。

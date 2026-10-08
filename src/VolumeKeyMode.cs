@@ -8,8 +8,9 @@ namespace HomePodCast;
 public enum VolumeKeyMode
 {
     /// <summary>
-    /// The keys change Windows as usual and the HomePod follows the Windows master volume (scaled to the volume cap);
-    /// muting Windows mutes the HomePod. The default (older configs with ForwardVolumeKeys = true move here).
+    /// The Windows master volume is the HomePod volume (Windows 100 % = the volume cap), both ways, aligned down on connect
+    /// (<see cref="FollowWindowsLink"/>); the keys change Windows as usual and muting Windows mutes the HomePod.
+    /// The default (older configs with ForwardVolumeKeys = true move here).
     /// Without a Windows output device it behaves like <see cref="WhileStreaming"/> (<see cref="VolumeKeyRules.RouteFor"/>).
     /// </summary>
     FollowWindows,
@@ -49,6 +50,12 @@ internal readonly record struct HookDecision(bool Swallow, VolumeKeyCommand Comm
 internal readonly record struct FollowAction(double? Percent, bool? Mute)
 {
     public bool IsNone => Percent is null && Mute is null;
+}
+
+/// <summary>Bringing both sides together in <see cref="VolumeKeyMode.FollowWindows"/>: lower the HomePod to a percent, or Windows to a level.</summary>
+internal readonly record struct AlignAction(double? HomePod, float? WindowsLevel)
+{
+    public bool IsNone => HomePod is null && WindowsLevel is null;
 }
 
 /// <summary>
@@ -143,6 +150,27 @@ internal static class VolumeKeyRules
     /// <summary>HomePod percent for a Windows master level (0..1): the whole Windows range spans 0…cap.</summary>
     public static double FollowPercent(float level, double cap) =>
         Math.Round(Math.Clamp(level, 0f, 1f) * Math.Clamp(cap, 0, 100), 1);
+
+    /// <summary>The Windows master level (0..1) that stands for a HomePod percent: HomePod × 100 / cap.</summary>
+    public static float WindowsLevelFor(double homePodPercent, double cap)
+    {
+        cap = Math.Clamp(cap, 0, 100);
+        return cap <= 0 || double.IsNaN(homePodPercent) ? 0f : (float)Math.Clamp(homePodPercent / cap, 0, 1);
+    }
+
+    /// <summary>
+    /// <see cref="VolumeKeyMode.FollowWindows"/> on (re)connect, mode switch or cap change: m = Windows × cap / 100.
+    /// If m is below the HomePod, the HomePod goes down to m; if it is above, Windows goes down to HomePod × 100 / cap.
+    /// Neither side is ever raised, so a Windows left at 100 % can't make the next key press jump the HomePod up.
+    /// </summary>
+    public static AlignAction Align(float windowsLevel, double homePodPercent, double cap)
+    {
+        double mapped = FollowPercent(windowsLevel, cap);
+        if (mapped < homePodPercent - 0.05) return new AlignAction(mapped, null);
+        float level = WindowsLevelFor(homePodPercent, cap);
+        if (level < Math.Clamp(windowsLevel, 0f, 1f) - 0.0005f) return new AlignAction(null, level);
+        return default;
+    }
 
     /// <summary>
     /// Windows went from <paramref name="from"/> to <paramref name="to"/>: mute follows mute, and a new level (while

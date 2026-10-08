@@ -14,6 +14,7 @@ internal sealed partial class TrayApp
     private VolumeKeyForwarder? _forwarder;   // Windows endpoint: FollowWindows, WhenWindowsMuted, output device present
     private VolumeKeyHook? _keyHook;          // keyboard hook: WhileStreaming (and no output device)
     private VolumeOsd? _osd;
+    private FollowWindowsLink? _followLink;    // FollowWindows: one volume on both sides
     private TimerDebounce? _volumeSave;
     private double? _pendingVolume;
     private VolumeKeyRoute _route;
@@ -47,6 +48,12 @@ internal sealed partial class TrayApp
             _forwarder = new VolumeKeyForwarder(); // watches the default output; takes a Func<string?> endpoint id for another one
             _forwarder.VolumeStep += pct => _ui.Post(_ => NudgeVolume(pct), null);
             _forwarder.MuteToggled += () => _ui.Post(_ => ToggleSpeakerMute(), null);
+            var forwarder = _forwarder;
+            _followLink = new FollowWindowsLink(new HomePodSide(this), forwarder.RequestLevel); // writes only the watched endpoint
+            _forwarder.FollowStarted += state => _ui.Post(_ =>
+            {
+                if (_route == VolumeKeyRoute.Follow) _followLink?.Start(state); // align, lowering only
+            }, null);
             _forwarder.WindowsChanged += (from, to) => _ui.Post(_ => FollowWindows(from, to), null);
             _forwarder.OutputDeviceChanged += _ => _ui.Post(_ => UpdateVolumeKeys(), null);
         }
@@ -91,6 +98,7 @@ internal sealed partial class TrayApp
         if (Config.Volume > cap) Config.Volume = cap;
         Config.Save();
         Controller.SetVolumeCap(cap);
+        _followLink?.CapChanged(); // 跟随 Windows: the mapping changed; align again, lowering only
         RaiseStateChanged();
     }
 
@@ -112,13 +120,16 @@ internal sealed partial class TrayApp
     }
 
     /// <summary>
-    /// A volume from the keys, hotkeys or the Windows volume: sent at once like a slider drag (PreviewVolume, which
-    /// also ends a mute), saved with SetVolume once the steps stop, so held keys don't write the config 30 times a second.
+    /// A volume from the keys, hotkeys or the Windows volume: sent at once like a slider drag (the controller coalesces),
+    /// saved once the steps stop, so held keys don't write the config 30 times a second.
     /// </summary>
-    private void SetVolumeLive(double percent)
+    /// <param name="fromWindows">It came from the Windows volume (跟随 Windows): not written back to Windows.</param>
+    /// <param name="unmute">False only for lowering at alignment: a muted HomePod stays muted.</param>
+    private void SetVolumeLive(double percent, bool fromWindows = false, bool unmute = true)
     {
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
-        PreviewVolume(percent);
+        Controller.SetVolume(percent, unmute);
+        if (!fromWindows) _followLink?.HomePodChanged();
         _pendingVolume = percent;
         _volumeSave?.Restart();
         _form.ShowVolume(percent);
@@ -126,12 +137,25 @@ internal sealed partial class TrayApp
         RaiseStateChanged();
     }
 
+    /// <summary>The debounce of <see cref="SetVolumeLive"/>: saves what the speaker has now (a slider may have moved it
+    /// since). It was sent already, and Windows followed already, so this only saves (and never unmutes).</summary>
     private void SavePendingVolume()
     {
         _volumeSave?.Stop();
         if (_pendingVolume is not { } percent) return;
         _pendingVolume = null;
-        SetVolume(Controller.Volume ?? percent); // what the speaker has now (a slider may have moved it since)
+        Config.Volume = VolumeLimit.Clamp(Controller.Volume ?? percent, Config.VolumeCapPercent);
+        Config.Save();
+    }
+
+    /// <summary>The HomePod side of <see cref="FollowWindowsLink"/>: volumes from Windows go out without being written back.</summary>
+    private sealed class HomePodSide(TrayApp app) : IFollowHomePod
+    {
+        public double? Volume => app.Controller.Volume ?? app.Config.Volume;
+        public bool Muted => app.Controller.Muted;
+        public double Cap => app.Config.VolumeCapPercent;
+        public void SetVolume(double percent, bool unmute) => app.SetVolumeLive(percent, fromWindows: true, unmute);
+        public void SetMuted(bool muted) => app.SetSpeakerMuted(muted);
     }
 
     // ---------------------------------------------------------------- volume keys
@@ -156,6 +180,7 @@ internal sealed partial class TrayApp
         bool device = OutputDevicePresent;
         var mode = Config.VolumeKeys;
         var route = VolumeKeyRules.RouteFor(mode, streaming, device);
+        if (route != VolumeKeyRoute.Follow) _followLink?.Stop(); // starts again from the watcher's next baseline
         if (_forwarder != null) _forwarder.Mode = VolumeKeyRules.EndpointModeFor(route);
         if (_keyHook != null)
         {
@@ -178,15 +203,11 @@ internal sealed partial class TrayApp
     }
 
     /// <summary>FollowWindows: the Windows volume or mute changed (not by us); the HomePod follows within the cap.</summary>
-    private void FollowWindows(Audio.EndpointState from, Audio.EndpointState to)
+    private void FollowWindows(EndpointState from, EndpointState to)
     {
         if (_route != VolumeKeyRoute.Follow) return; // stopped streaming or switched mode meanwhile
-        var action = VolumeKeyRules.Follow(from, to, Config.VolumeCapPercent);
-        if (action.IsNone) return;
-        Log.Debug($"Windows volume {(to.Muted ? "muted" : $"{to.Level:P0}")} → HomePod " +
-                  (action.Percent is { } p ? $"{p:0.#}%" : action.Mute == true ? "muted" : "unmuted"));
-        if (action.Percent is { } percent) SetVolumeLive(percent); // also ends a mute
-        else if (action.Mute is { } mute && mute != Controller.Muted) SetSpeakerMuted(mute);
+        Log.Debug($"Windows volume {to.Level:P0}{(to.Muted ? ", muted" : "")} → HomePod");
+        _followLink?.WindowsChanged(from, to);
     }
 
     /// <summary>The HomePod volume (or mute) on the OSD; it closes itself after fading out, and the next one is made new.</summary>
