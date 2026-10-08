@@ -43,9 +43,18 @@ internal sealed class MixerPage : ScrollPage
         _routeRow = new SettingRow(Glyph.Devices, L.T("没单独设置的程序送到"), "", _routeDefault);
         _routeRow.DescriptionText.Wrap = true;
 
+        var modes = Ui.Card(
+            Ui.Header(L.T("全部推送与按程序分流")),
+            Ui.Stack(4,
+                new TextBlock(L.T("全部推送（默认，推荐打游戏）"), TextStyle.BodyStrong),
+                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。"))),
+            Ui.Stack(4,
+                new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
+                Ui.Note(L.F("只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))));
+
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
         var note = Ui.Note(L.T("和 Windows 音量合成器是同一套设置，系统会记住每个程序的音量。"));
-        Content.Controls.AddRange([masterCard, _routeRow, appsHeader, _rows, _empty, note]);
+        Content.Controls.AddRange([masterCard, _routeRow, modes, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
         _empty.Collapsed = true;
@@ -64,7 +73,13 @@ internal sealed class MixerPage : ScrollPage
         _routeDefault.SelectionChangeCommitted += (_, _) =>
         {
             if (_routeDefault.SelectedIndex < 0) return;
-            _app.Routing.Default = Routes[_routeDefault.SelectedIndex];
+            var route = Routes[_routeDefault.SelectedIndex];
+            if (!ConfirmRouting(_app.Routing.Rules with { Default = route }))
+            {
+                SyncRoutes();
+                return;
+            }
+            _app.Routing.Default = route;
             SyncRoutes();
         };
         _meterTimer.Tick += (_, _) => UpdateMeters();
@@ -197,6 +212,23 @@ internal sealed class MixerPage : ScrollPage
         _routeRow.DescriptionText.Role = !AppRouting.Supported ? TextRole.Caution : TextRole.Secondary;
     }
 
+    /// <summary>
+    /// The first time a change would switch per-app routing on, say what it costs (about 35 ms more latency
+    /// on everything sent to the speaker) and let the user back out. Asked once; a yes is remembered.
+    /// </summary>
+    private bool ConfirmRouting(RouteRules next)
+    {
+        if (_app.Config.RoutingNoticeAccepted || _app.Routing.Active || !AppRouting.Supported || !next.NeedsRouting)
+            return true;
+        var answer = MessageBox.Show(FindForm(),
+            L.F("给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？", RoutedCapture.RoutedExtraLatencyMs),
+            L.T("按程序分流会增加延迟"), MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes) return false;
+        _app.Config.RoutingNoticeAccepted = true;
+        _app.Config.Save();
+        return true;
+    }
+
     private string RouteStatus()
     {
         var routing = _app.Routing;
@@ -308,7 +340,18 @@ internal sealed class MixerPage : ScrollPage
             seg.SelectionChangeCommitted += (_, _) =>
             {
                 if (seg.SelectedIndex < 0) return;
-                _page._app.Routing.Set(_app.ExeKey, seg.SelectedIndex == 0 ? null : Routes[seg.SelectedIndex - 1]);
+                AudioRoute? route = seg.SelectedIndex == 0 ? null : Routes[seg.SelectedIndex - 1];
+                var routing = _page._app.Routing;
+                var apps = new Dictionary<string, AudioRoute>(routing.Rules.Apps);
+                var key = RouteRules.KeyFor(_app.ExeKey);
+                if (route is { } r) apps[key] = r;
+                else apps.Remove(key);
+                if (!_page.ConfirmRouting(routing.Rules with { Apps = apps }))
+                {
+                    _page.SyncRoutes();
+                    return;
+                }
+                routing.Set(_app.ExeKey, route);
                 _page.SyncRoutes();
             };
             return seg;

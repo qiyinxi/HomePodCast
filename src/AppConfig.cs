@@ -84,6 +84,9 @@ public sealed class AppConfig
     /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
 
+    /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
+    public bool RoutingNoticeAccepted { get; set; }
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

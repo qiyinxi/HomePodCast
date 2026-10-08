@@ -20,10 +20,15 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 ## Features
 
 - AirPlay 2 realtime audio: transient pairing, encrypted throughout, latency adjustable from 100 to 500 ms in 1 ms steps
+- One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
+- Scenes: one click for gaming (105 ms), music (300 ms) or movies (500 ms)
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
-- Mixer: volume, mute and a level meter for every app
+- Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both), see below
+- Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys that control the HomePod while Windows is muted
+- Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
+- Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
-- Browser extension (in development): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound
+- Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound
 - Interface in English, Simplified Chinese, Traditional Chinese and Japanese
 
 ## Usage
@@ -32,7 +37,7 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 2. Run `HomePodCast.exe`. The first time, it asks to add a firewall rule (local network only, active on private networks only): the HomePod has to connect back to the PC for clock sync and to request lost packets again.
 3. The app finds the HomePod and connects by itself. Muting the PC's default output device is fine: audio is captured before the system volume is applied, so the HomePod keeps playing.
 
-The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, right-click the tray icon and choose Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
+The interface follows the Windows display language (English unless Windows is set to Chinese or Japanese). To pick another language, use Settings → Language (or right-click the tray icon → Language), or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to `"en"`, `"zh-CN"`, `"zh-TW"`, `"ja"` or `"auto"`.
 
 Command line (for troubleshooting):
 
@@ -41,6 +46,25 @@ HomePodCast.exe scan                         list the AirPlay speakers on the lo
 HomePodCast.exe stream --host <IP> --latency 120 --seconds 30
 HomePodCast.exe mutetest                     check that capture still works while muted
 ```
+
+## Stream everything vs. per-app routing
+
+By default HomePodCast captures the PC's whole sound output and sends all of it to the HomePod. That path adds no latency of its own, so it is the one to use for gaming. Whether the PC's own speakers also play is up to the Windows volume: mute Windows to hear everything on the HomePod only.
+
+Per-app routing sends each app to the HomePod, this PC, or both (set on the Mixer page), for example game audio to the HomePod and voice chat on your headset. It costs latency:
+
+| | Stream everything (default) | Per-app routing |
+| --- | --- | --- |
+| When it's on | Whenever routing isn't | As soon as any app has its own destination, or the default is "This PC" |
+| How sound is captured | The whole output in one piece | Each app separately (Windows process loopback) |
+| Extra latency to the HomePod | None | About 35 ms (measured from playback to send: 21 ms vs 55 ms) |
+| Web video lip-sync (browser extension) | Compensated | Compensated, extra 35 ms included |
+| Games | Lowest latency | 35 ms later, can't be compensated |
+| Apps set to "HomePod" | — | Silent on this PC; shown at 0% in the Windows volume mixer |
+| System sounds | Follow the Windows volume | Play on this PC only |
+| Requires | Windows 10/11 | Windows 10 version 2004 or later |
+
+The app asks for confirmation the first time routing turns on. Set every app back to "Default" with HomePod as the default to return to streaming everything. If HomePodCast is killed while routing, apps set to "HomePod" stay at 0% until it runs again.
 
 ## Building
 
