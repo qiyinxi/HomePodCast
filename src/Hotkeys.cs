@@ -6,12 +6,14 @@ public enum HotkeyAction { VolumeUp, VolumeDown, Mute, NextScene }
 public readonly record struct Hotkey(Keys Modifiers, Keys Key)
 {
     // Defaults: Ctrl+Alt with keys games and common apps leave alone. Not Ctrl+Alt+arrows (Intel
-    // graphics rotates the screen, music players use them), not End/Home/Break (Remote Desktop).
+    // graphics rotates the screen, music players use them), not End/Home/Break (Remote Desktop), and
+    // volume/mute on the navigation cluster, which never doubles as an AltGr character. Ctrl+Alt+M was
+    // the first choice for mute but another program already held it on the development machine.
     public static readonly IReadOnlyDictionary<HotkeyAction, string> Defaults = new Dictionary<HotkeyAction, string>
     {
         [HotkeyAction.VolumeUp] = "Ctrl+Alt+PageUp",
         [HotkeyAction.VolumeDown] = "Ctrl+Alt+PageDown",
-        [HotkeyAction.Mute] = "Ctrl+Alt+M",
+        [HotkeyAction.Mute] = "Ctrl+Alt+Insert",
         [HotkeyAction.NextScene] = "Ctrl+Alt+N",
     };
 
