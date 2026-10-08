@@ -33,15 +33,14 @@ public sealed class AudioFifo
     public void Write(ReadOnlySpan<float> interleaved)
     {
         int frames = interleaved.Length / 2;
+        if (frames > _capacity)
+        {
+            interleaved = interleaved[^(_capacity * 2)..];
+            frames = _capacity;
+        }
         lock (_lock)
         {
-            if (_count + frames > CapFrames)
-            {
-                int drop = Math.Min(_count, _count + frames - TargetFrames);
-                Skip(drop);
-                Overflows++;
-                DroppedFrames += drop;
-            }
+            if (_count + frames > _capacity) Skip(_count + frames - _capacity); // ring full: oldest go first
             int write = (_read + _count) % _capacity;
             for (int i = 0; i < frames; i++)
             {
@@ -49,7 +48,16 @@ public sealed class AudioFifo
                 _buf[write * 2 + 1] = interleaved[i * 2 + 1];
                 if (++write == _capacity) write = 0;
             }
-            _count = Math.Min(_count + frames, _capacity);
+            _count += frames;
+
+            if (_count > CapFrames)
+            {
+                // Too far ahead of the sender: jump back to the target so latency stays bounded.
+                int drop = _count - TargetFrames;
+                Skip(drop);
+                Overflows++;
+                DroppedFrames += drop;
+            }
         }
     }
 

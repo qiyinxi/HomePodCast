@@ -190,17 +190,25 @@ public sealed class RtpSender : IDisposable
     {
         long elapsedFrames = (long)Math.Round((now - T0) * (double)SampleRate / MediaClock.Frequency);
         uint rtpNow = unchecked(RtpBase + (uint)elapsedFrames);
+        var p = BuildSyncPacket(rtpNow, MediaClock.NtpAt(now), first, LatencyInSync ? LatencyFrames : 0);
+        try { _control.Send(p, p.Length, _controlRemote); } catch (SocketException) { }
+    }
+
+    /// <summary>
+    /// 0xD4 sync packet: RTP time "now" ↔ NTP time. Measured on HomePod OS 27: the speaker adds the SETUP
+    /// latency on top of whatever this packet says, so subtracting the latency here as well (as pyatv
+    /// does) doubles the real delay — pass 0 unless reproducing that legacy behaviour.
+    /// </summary>
+    internal static byte[] BuildSyncPacket(uint rtpNow, ulong ntp, bool first, int latencyFrames)
+    {
         var p = new byte[20];
         p[0] = first ? (byte)0x90 : (byte)0x80;
         p[1] = 0xD4;
         BinaryPrimitives.WriteUInt16BigEndian(p.AsSpan(2), 7);
-        // Measured on HomePod OS 27: it adds the SETUP latency on top of whatever the sync packet
-        // says, so putting the latency here as well (as pyatv does) doubles the real delay.
-        uint anchor = LatencyInSync ? unchecked(rtpNow - (uint)LatencyFrames) : rtpNow;
-        BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(4), anchor);
-        BinaryPrimitives.WriteUInt64BigEndian(p.AsSpan(8), MediaClock.NtpAt(now));
+        BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(4), unchecked(rtpNow - (uint)latencyFrames));
+        BinaryPrimitives.WriteUInt64BigEndian(p.AsSpan(8), ntp);
         BinaryPrimitives.WriteUInt32BigEndian(p.AsSpan(16), rtpNow);
-        try { _control.Send(p, p.Length, _controlRemote); } catch (SocketException) { }
+        return p;
     }
 
     private void ControlLoop()

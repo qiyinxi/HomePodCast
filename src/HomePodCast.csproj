@@ -21,4 +21,8 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="HomePodCast.Tests" />
+  </ItemGroup>
+
 </Project>

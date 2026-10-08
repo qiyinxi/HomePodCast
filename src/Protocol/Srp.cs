@@ -34,11 +34,16 @@ public sealed class SrpClient
     public byte[] PublicKey { get; }
     public byte[]? SessionKey { get; private set; }
 
-    public SrpClient(string username, string password)
+    public SrpClient(string username, string password) : this(username, password, RandomNumberGenerator.GetBytes(32))
+    {
+    }
+
+    /// <summary>Fixed private key — for reproducible test vectors only.</summary>
+    internal SrpClient(string username, string password, byte[] privateKey)
     {
         _username = username;
         _password = password;
-        _a = new BigInteger(RandomNumberGenerator.GetBytes(32), isUnsigned: true, isBigEndian: true);
+        _a = new BigInteger(privateKey, isUnsigned: true, isBigEndian: true);
         PublicKey = Bytes(BigInteger.ModPow(G, _a, N));
     }
 
