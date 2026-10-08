@@ -23,6 +23,7 @@ public static class Program
                 "mutetest" => MuteTest(),
                 "proctest" => ProcTest.Run(args),
                 "tone" => ProcTest.Tone(args),
+                "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 _ => Help(),
             };

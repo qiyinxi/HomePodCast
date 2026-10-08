@@ -48,7 +48,7 @@ internal static class ProcTest
             using var sessionB = WaitForSession((uint)b.Id);
             if (sessionA == null || sessionB == null) throw new InvalidOperationException("child sessions did not appear");
             origSessionMute = sessionA.Muted;
-            origSessionVol = sessionA.Volume;
+            origSessionVol = sessionA.RawVolume;
 
             using var rig = new Rig();
             rig.Open("endpoint", null, true, 0);
@@ -66,21 +66,22 @@ internal static class ProcTest
             sessionA.Muted = true;
             rows.Add(("A session muted", rig.Measure()));
             sessionA.Muted = false;
-            sessionA.Volume = 0f;
+            sessionA.RawVolume = 0f;
             rows.Add(("A session vol 0", rig.Measure()));
-            sessionA.Volume = 0.5f;
+            sessionA.RawVolume = 0.5f;
             rows.Add(("A session vol 50%", rig.Measure()));
 
             // Can a tiny session volume (inaudible locally) be undone by gain on the captured float data?
             foreach (float tiny in new[] { 1e-3f, 1e-4f, 1e-5f, 1e-6f })
             {
-                sessionA.Volume = tiny;
-                float readBack = sessionA.Volume;
+                sessionA.RawVolume = tiny;
+                float readBack = sessionA.RawVolume;
                 var m = rig.Measure(300, 1000);
+                Log.Info($"  session meter: {sessionA.Peak:F4} (tone {ToneAmp}: the meter is before the session volume if this stays at the tone level)");
                 Log.Info($"A session vol {tiny:E0} (reads back {readBack:E3}): " + string.Join(", ", m.Select(kv =>
                     $"{kv.Key} {kv.Value.Amplitude(0):E3} (x1/vol = {kv.Value.Amplitude(0) / tiny:F4})")));
             }
-            sessionA.Volume = origSessionVol;
+            sessionA.RawVolume = origSessionVol;
             sessionA.Muted = origSessionMute.Value;
 
             endpoint.SetMute(true, ref ctx);
@@ -147,7 +148,7 @@ internal static class ProcTest
         {
             if (sessionA != null && origSessionMute is { } m)
             {
-                try { sessionA.Volume = origSessionVol; sessionA.Muted = m; } catch { }
+                try { sessionA.RawVolume = origSessionVol; sessionA.Muted = m; } catch { }
                 sessionA.Dispose();
             }
             endpoint.SetMasterVolumeLevelScalar(origVol, ref ctx);

@@ -18,11 +18,16 @@ internal sealed class TrayApp : ApplicationContext
 
     public AppConfig Config { get; }
     public StreamController Controller { get; }
+    public Audio.AppRouting Routing { get; private set; } = null!;
+
+    /// <summary>Extra inputs (e.g. a microphone) mixed into the stream; see <see cref="Audio.IMixSource"/>.</summary>
+    public Audio.MixSources MixSources { get; } = new();
 
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
+        SetUpRouting();
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
         var menu = new ContextMenuStrip();
@@ -59,7 +64,7 @@ internal sealed class TrayApp : ApplicationContext
                     streaming,
                     device = Config.DeviceName,
                     latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = streaming ? Controller.EffectiveLatencyMs + Config.VideoDelayExtraMs : 0,
+                    videoDelayMs = streaming ? Controller.EffectiveLatencyMs + Config.VideoDelayExtraMs + (Controller.Capture?.ExtraLatencyMs ?? 0) : 0,
                     videoDelaySource = "estimate",
                 };
             });
@@ -89,6 +94,14 @@ internal sealed class TrayApp : ApplicationContext
             if (Config.AutoConnect) Connect();
         }
         RefreshDevices();
+    }
+
+    /// <summary>Per-app routing: the capture follows the mixer's HomePod / 本机 / 两者 rules.</summary>
+    private void SetUpRouting()
+    {
+        Routing = new Audio.AppRouting(Config);
+        Controller.CaptureFactory = fifo => new Audio.RoutedCapture(fifo, RtpSender.SampleRate, Routing, MixSources);
+        Task.Run(Audio.SessionRouter.RestoreLeftovers); // apps left silent by a run that did not exit cleanly
     }
 
     // ---------------------------------------------------------------- actions
