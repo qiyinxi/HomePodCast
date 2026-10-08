@@ -125,6 +125,7 @@ internal sealed class MainForm : Form
         _syncTest.AutoSize = true;
         _syncTest.Margin = new Padding(10, 3, 3, 3);
         tools.Controls.AddRange([_mixer, _syncTest]);
+        AddGroupButton(tools);
         layout.Controls.Add(tools, 0, 7);
         layout.SetColumnSpan(tools, 3);
 
@@ -193,6 +194,14 @@ internal sealed class MainForm : Form
         _statsTimer.Tick += (_, _) => UpdateStats();
 
         LoadFromConfig();
+    }
+
+    /// <summary>Experimental stereo pair / multi-room settings (GroupForm).</summary>
+    private void AddGroupButton(FlowLayoutPanel tools)
+    {
+        var button = new Button { Text = L.T("多音箱（实验性）…"), AutoSize = true, Margin = new Padding(10, 3, 3, 3) };
+        button.Click += (_, _) => GroupForm.ShowFor(_app, this);
+        tools.Controls.Add(button);
     }
 
     private Button StepButton(string text, int delta)
