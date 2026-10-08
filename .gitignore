@@ -2,6 +2,7 @@ bin/
 app/
 obj/
 publish/
+.wix/
 *.user
 .vs/
 test-results/
