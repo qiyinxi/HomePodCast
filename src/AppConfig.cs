@@ -109,18 +109,23 @@ public sealed class AppConfig
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep 卧室 readable
     };
 
-    public static AppConfig Load()
+    public static AppConfig Load() => Load(FilePath);
+
+    internal static AppConfig Load(string path)
     {
         try
         {
-            if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(FilePath), Json) ?? new AppConfig();
+            if (File.Exists(path))
+                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
         }
         catch (Exception ex)
         {
             Log.Warn($"config unreadable, using defaults: {ex.Message}");
         }
-        return Profile is null ? new AppConfig() : new AppConfig { AutoConnect = false, LocalApiPort = 0 };
+        // A fresh install starts on the recommended scene; a file without "Scene" (older versions) stays Custom.
+        return Profile is null
+            ? new AppConfig { Scene = Scene.Recommended }
+            : new AppConfig { Scene = Scene.Recommended, AutoConnect = false, LocalApiPort = 0 };
     }
 
     public void Save()

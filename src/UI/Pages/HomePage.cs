@@ -26,7 +26,7 @@ internal sealed class HomePage : ScrollPage
     private List<AirPlayDevice> _devices = [];
 
     // scene / latency
-    private readonly Segmented _scenes = new(Scenes.All.Select(Scenes.Name).ToArray());
+    private readonly Segmented _scenes = new(Scenes.All.Select(Scenes.Name).ToArray()) { EqualWidths = false }; // "Recommended" is long
     private readonly TextBlock _latencyValue = new("", TextStyle.Display);
     private readonly TextBlock _latencyHint = new("", TextStyle.Caption, TextRole.Secondary);
     private readonly TextBlock _lag = new("", TextStyle.Body, TextRole.Secondary, wrap: true);

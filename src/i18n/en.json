@@ -238,5 +238,7 @@
   "按程序分流（额外延迟约 {0} ms）": "Per-app routing (about {0} ms more latency)",
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Turns on as soon as any app has its own destination, or the default is \"This PC\". Windows can only capture apps one by one, and that path is slower: sound sent to the HomePod is about {0} ms later. The browser extension adds this to its picture delay automatically; games can't compensate. Apps set to \"HomePod\" are silent on this PC and show 0% in the Windows volume mixer; system sounds play on this PC only. Set every app back to \"Default\" with HomePod as the default to return to streaming everything.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Giving an app its own destination switches to per-app routing: Windows can only capture apps one by one, so sound sent to the HomePod is about {0} ms later than when streaming everything (the browser extension compensates the picture; games can't).\n\nApps set to \"HomePod\" become silent on this PC (0% in the Windows volume mixer), and system sounds play on this PC only.\n\nIf latency matters most, for example when gaming, keep streaming everything. Turn on per-app routing?",
-  "按程序分流会增加延迟": "Per-app routing adds latency"
+  "按程序分流会增加延迟": "Per-app routing adds latency",
+
+  "推荐": "Recommended"
 }

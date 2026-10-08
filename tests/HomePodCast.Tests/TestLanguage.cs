@@ -9,5 +9,11 @@ internal static class TestLanguage
     /// Windows display language of whatever machine runs them.
     /// </summary>
     [ModuleInitializer]
-    internal static void UseSourceLanguage() => L.Use(L.Source);
+    internal static void UseSourceLanguage()
+    {
+        L.Use(L.Source);
+        // Anything a test saves (dialogs call Config.Save) goes to %APPDATA%\HomePodCast-unit-tests, never
+        // to the real config of whoever runs the tests.
+        Environment.SetEnvironmentVariable("HOMEPODCAST_PROFILE", "unit-tests");
+    }
 }

@@ -4,18 +4,26 @@ namespace HomePodCast;
 
 /// <summary>Usage presets. Each one is only a requested latency; the floor in StreamController.SafeLatency still applies.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<Scene>))]
-public enum Scene { Custom, Game, Music, Movie }
+public enum Scene { Custom, Game, Music, Movie, Recommended }
 
 public static class Scenes
 {
-    public const int GameMs = 105, MusicMs = 300, MovieMs = 500;
+    /// <summary>
+    /// Recommended = the safe everyday value, and the scene of a fresh install (a config written before scenes
+    /// existed stays Custom, so its own latency is kept). Game = the lowest that measured clean on the test
+    /// HomePod over Wi-Fi. Music needs no picture, so it takes the most headroom. Movie works together with
+    /// other software (the browser extension delays the picture, players shift their audio): ~80 ms more
+    /// headroom than Recommended for long films, while the extension only has to hold ~14 frames at 60 fps.
+    /// </summary>
+    public const int RecommendedMs = 120, GameMs = 105, MusicMs = 500, MovieMs = 200;
 
     /// <summary>UI order, and the order the scene hotkey cycles through.</summary>
-    public static readonly Scene[] All = [Scene.Game, Scene.Music, Scene.Movie, Scene.Custom];
+    public static readonly Scene[] All = [Scene.Recommended, Scene.Game, Scene.Music, Scene.Movie, Scene.Custom];
 
     /// <summary>Latency to request for a scene; Custom is the user's own value.</summary>
     public static int LatencyMs(Scene scene, int customMs) => scene switch
     {
+        Scene.Recommended => RecommendedMs,
         Scene.Game => GameMs,
         Scene.Music => MusicMs,
         Scene.Movie => MovieMs,
@@ -26,6 +34,7 @@ public static class Scenes
 
     public static string Name(Scene scene) => scene switch
     {
+        Scene.Recommended => L.T("推荐"),
         Scene.Game => L.T("游戏"),
         Scene.Music => L.T("音乐"),
         Scene.Movie => L.T("影视"),

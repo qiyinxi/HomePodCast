@@ -21,7 +21,7 @@ Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
 
 - AirPlay 2 realtime audio: transient pairing, encrypted throughout, latency adjustable from 100 to 500 ms in 1 ms steps
 - One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
-- Scenes: one click for gaming (105 ms), music (300 ms) or movies (500 ms)
+- Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
 - Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys that control the HomePod while Windows is muted

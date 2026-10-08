@@ -88,7 +88,7 @@ public class LatencyTunerTests
         var t = Tuner(cfg);
         t.SelectScene(Scene.Music);
         Assert.Equal(Scene.Music, cfg.Scene);
-        Assert.Equal(300, t.Value);
+        Assert.Equal(Scenes.MusicMs, t.Value);
         Assert.True(_scene.Enabled);
 
         t.UserSet(280);

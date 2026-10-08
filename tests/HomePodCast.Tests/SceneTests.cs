@@ -5,9 +5,10 @@ namespace HomePodCast.Tests;
 public class SceneTests
 {
     [Theory]
+    [InlineData(Scene.Recommended, 120)]
     [InlineData(Scene.Game, 105)]
-    [InlineData(Scene.Music, 300)]
-    [InlineData(Scene.Movie, 500)]
+    [InlineData(Scene.Music, 500)]
+    [InlineData(Scene.Movie, 200)]
     [InlineData(Scene.Custom, 137)]
     public void Each_scene_maps_to_its_latency(Scene scene, int ms)
     {
@@ -21,16 +22,17 @@ public class SceneTests
         Assert.Equal(105, c.SafeLatency(Scenes.LatencyMs(Scene.Game, 0)));   // 85 + 15 = 100 < 105
         c.ArrivalToRenderMs = 95;
         Assert.Equal(110, c.SafeLatency(Scenes.LatencyMs(Scene.Game, 0)));   // floor wins: max(105, 95 + 15)
-        Assert.Equal(500, c.SafeLatency(Scenes.LatencyMs(Scene.Movie, 0)));
+        Assert.Equal(200, c.SafeLatency(Scenes.LatencyMs(Scene.Movie, 0)));
     }
 
     [Fact]
-    public void Hotkey_cycles_game_music_movie_custom()
+    public void Hotkey_cycles_recommended_game_music_movie_custom()
     {
+        Assert.Equal(Scene.Game, Scenes.Next(Scene.Recommended));
         Assert.Equal(Scene.Music, Scenes.Next(Scene.Game));
         Assert.Equal(Scene.Movie, Scenes.Next(Scene.Music));
         Assert.Equal(Scene.Custom, Scenes.Next(Scene.Movie));
-        Assert.Equal(Scene.Game, Scenes.Next(Scene.Custom));
+        Assert.Equal(Scene.Recommended, Scenes.Next(Scene.Custom));
     }
 
     [Fact]
@@ -38,7 +40,7 @@ public class SceneTests
     {
         var cfg = new AppConfig { Scene = Scene.Music, LatencyMs = 105, CustomLatencyMs = 140 };
         Assert.True(Scenes.Reconcile(cfg));
-        Assert.Equal(300, cfg.LatencyMs);
+        Assert.Equal(500, cfg.LatencyMs);
         Assert.Equal(140, Scenes.CustomMs(cfg));
         Assert.False(Scenes.Reconcile(cfg));
 
@@ -49,6 +51,25 @@ public class SceneTests
         var bad = new AppConfig { Scene = (Scene)42, LatencyMs = 120 };
         Scenes.Reconcile(bad);
         Assert.Equal(Scene.Custom, bad.Scene);
+    }
+
+    [Fact]
+    public void Config_from_an_older_version_keeps_its_own_latency()
+    {
+        // 0.1 configs have no "Scene": they stay 自定义 at the saved latency instead of jumping to 推荐.
+        var old = JsonSerializer.Deserialize<AppConfig>("""{ "LatencyMs": 105 }""")!;
+        Assert.Equal(Scene.Custom, old.Scene);
+        Assert.False(Scenes.Reconcile(old));
+        Assert.Equal(105, old.LatencyMs);
+    }
+
+    [Fact]
+    public void A_fresh_install_starts_on_the_recommended_scene()
+    {
+        var cfg = AppConfig.Load(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "config.json"));
+        Assert.Equal(Scene.Recommended, cfg.Scene);
+        Assert.False(Scenes.Reconcile(cfg));
+        Assert.Equal(Scenes.RecommendedMs, cfg.LatencyMs);
     }
 
     [Fact]
