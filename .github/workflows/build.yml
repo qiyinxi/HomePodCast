@@ -41,10 +41,10 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          # tag v1.2.3 -> 1.2.3; PR -> 0.1.0-pr.<n>.<run>; branch -> 0.1.0-<branch>.<run>
+          # tag v1.2.3 -> 1.2.3; PR -> 0.2.0-pr.<n>.<run>; branch -> 0.2.0-<branch>.<run>
           $v = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') }
-               elseif ('${{ github.event_name }}' -eq 'pull_request') { '0.1.0-pr.${{ github.event.number }}.${{ github.run_number }}' }
-               else { '0.1.0-' + ('${{ github.ref_name }}' -replace '[^A-Za-z0-9]', '-') + '.${{ github.run_number }}' }
+               elseif ('${{ github.event_name }}' -eq 'pull_request') { '0.2.0-pr.${{ github.event.number }}.${{ github.run_number }}' }
+               else { '0.2.0-' + ('${{ github.ref_name }}' -replace '[^A-Za-z0-9]', '-') + '.${{ github.run_number }}' }
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "version $v"
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results
@@ -88,7 +88,7 @@ jobs:
       # and the SIGNPATH_API_TOKEN secret plus the organization/project/policy ids are known.
       # - name: Upload unsigned exe
       #   id: unsigned
-      #   uses: actions/upload-artifact@v4
+      #   uses: actions/upload-artifact@v7
       #   with:
       #     name: unsigned
       #     path: publish/HomePodCast/HomePodCast.exe
@@ -107,13 +107,13 @@ jobs:
         shell: pwsh
         run: |
           $v = '${{ steps.ver.outputs.version }}'
-          Copy-Item LICENSE, README.md publish/HomePodCast/
+          Copy-Item LICENSE, README*.md publish/HomePodCast/
           Compress-Archive -Path publish/HomePodCast/* -DestinationPath "publish/HomePodCast-$v-win-x64.zip"
           if (Test-Path extension/manifest.json) {
-            Compress-Archive -Path extension/* -DestinationPath "publish/HomePodCast-extension-$v.zip"
+            Compress-Archive -Path (Get-Item extension/manifest.json, extension/src, extension/_locales -ErrorAction SilentlyContinue) -DestinationPath "publish/HomePodCast-extension-$v.zip"
           }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages
           path: publish/*.zip
