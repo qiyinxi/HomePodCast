@@ -134,8 +134,15 @@ internal static class L
 
     private static string PickFont(string[] candidates)
     {
-        using var installed = new System.Drawing.Text.InstalledFontCollection();
-        var names = installed.Families.Select(f => f.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return candidates.FirstOrDefault(names.Contains) ?? "Microsoft YaHei UI";
+        foreach (var name in candidates)
+        {
+            try
+            {
+                using var family = new System.Drawing.FontFamily(name); // throws if not installed
+                return name;
+            }
+            catch (ArgumentException) { }
+        }
+        return "Microsoft YaHei UI";
     }
 }
