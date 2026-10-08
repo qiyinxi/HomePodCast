@@ -12,6 +12,9 @@ namespace HomePodCast.Audio;
 /// </summary>
 public sealed class LocalMonitor : IDisposable
 {
+    /// <summary>Why the monitor is paused while its device is the one the stream captures (translated with L.T).</summary>
+    public const string CapturedText = "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。";
+
     private static readonly long DeviceCheckInterval = Stopwatch.Frequency;
     private const int MaxExtraMs = 20;
 
@@ -57,6 +60,13 @@ public sealed class LocalMonitor : IDisposable
 
     /// <summary>Raised on the monitor thread when the device opens, fails or closes.</summary>
     public event Action? StatusChanged;
+
+    /// <summary>
+    /// Endpoint ids the monitor must not play on (the one the stream captures: the mic would reach the speaker
+    /// through it). Checked whenever a device is opened; MicEffects normally doesn't start a monitor there at all,
+    /// this only closes the moment a followed default output switches onto it.
+    /// </summary>
+    public Func<string, bool>? Refuse { get; init; }
 
     public LocalMonitor(ITapSource source, string? deviceId = null)
     {
@@ -106,6 +116,7 @@ public sealed class LocalMonitor : IDisposable
             device = AudioEndpoints.Open(enumerator, EDataFlow.Render, DeviceId)
                      ?? throw new InvalidOperationException(DeviceId == null ? L.T("没有可用的输出设备") : L.T("找不到所选的监听设备"));
             device.GetId(out var openedId);
+            if (Refuse?.Invoke(openedId) == true) throw new InvalidOperationException(L.T(CapturedText));
             DeviceName = CoreAudio.FriendlyName(device);
             stream = SharedStream.Open(device, ready.SafeWaitHandle.DangerousGetHandle());
             var fmt = stream.Format;

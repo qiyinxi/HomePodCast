@@ -6,11 +6,13 @@ namespace HomePodCast.Audio;
 
 /// <summary>
 /// Capture with per-app routing. Without routing rules it is exactly today's path: loopback of the
-/// whole default output (lowest latency). With rules it captures each app that should reach the
-/// speaker through its own process-loopback client (include tree), compensating the apps that the
-/// router silences here, and mixes them. Extra sources (<see cref="MixSources"/>) are added after
-/// resampling. Default-device and routing changes re-open the inputs on this thread; the FIFO and
-/// therefore the speaker connection stay untouched.
+/// whole output device (lowest latency): the Windows default output, or the device chosen in the
+/// mixer (<see cref="AppRouting.CaptureDeviceId"/>, "routing by sound card"; a chosen device that is
+/// gone is never replaced by the default, see <see cref="CaptureEndpoint"/>). With rules it captures
+/// each app on that device that should reach the speaker through its own process-loopback client
+/// (include tree), compensating the apps that the router silences there, and mixes them. Extra
+/// sources (<see cref="MixSources"/>) are added after resampling. Device, setting and routing changes
+/// re-open the inputs on this thread; the FIFO and therefore the speaker connection stay untouched.
 /// </summary>
 public sealed class RoutedCapture : ICaptureSource
 {
@@ -25,29 +27,38 @@ public sealed class RoutedCapture : ICaptureSource
 
     private readonly AudioFifo _fifo;
     private readonly int _outRate;
+    private readonly AppRouting _routing;
     private readonly MixSources _sources;
     private readonly SessionRouter _router;
     private readonly Thread _thread;
     private readonly AutoResetEvent _ready = new(false);
     private readonly ConcurrentDictionary<uint, byte> _capturing = new();
     private volatile bool _stop;
+    private volatile bool _devicesChanged;
     private double _avgDepth;
 
     public string? DeviceName { get; private set; }
     public double DriftPpm { get; private set; }
 
-    private volatile bool _noOutputDevice;
+    private volatile CaptureState _state = CaptureState.Capturing;
+    private volatile string? _endpointId;
 
-    public bool NoOutputDevice => _noOutputDevice;
+    public bool NoOutputDevice => _state == CaptureState.NoOutputDevice;
+
+    public bool CaptureDeviceMissing => _state == CaptureState.ChosenDeviceMissing;
+
+    public string? EndpointId => _endpointId;
 
     /// <summary>Logged and announced once per change, not on every 2 s retry.</summary>
-    private void SetNoOutputDevice(bool missing)
+    private void SetState(CaptureState state)
     {
-        if (_noOutputDevice == missing) return;
-        _noOutputDevice = missing;
-        if (missing) Log.Warn("Windows has no output device: nothing to capture until one appears");
-        else Log.Info("an output device is available again");
-        DeviceChanged?.Invoke(missing ? "" : DeviceName ?? "");
+        if (_state == state) return;
+        _state = state;
+        if (state == CaptureState.NoOutputDevice) Log.Warn("Windows has no output device: nothing to capture until one appears");
+        else if (state == CaptureState.ChosenDeviceMissing)
+            Log.Warn("the chosen capture device is unplugged, disabled or gone: capturing nothing (not the default output) until it is back");
+        else Log.Info("an output device to capture is available again");
+        DeviceChanged?.Invoke(state == CaptureState.Capturing ? DeviceName ?? "" : "");
     }
 
     private long _maxGapTicks;
@@ -84,6 +95,7 @@ public sealed class RoutedCapture : ICaptureSource
     {
         _fifo = fifo;
         _outRate = outRate;
+        _routing = routing;
         _sources = sources ?? new MixSources();
         _avgDepth = fifo.TargetFrames;
         _router = new SessionRouter(routing, root => _capturing.ContainsKey(root));
@@ -94,8 +106,17 @@ public sealed class RoutedCapture : ICaptureSource
 
     public void Start()
     {
+        _routing.Changed += OnDevicesChanged; // e.g. another capture device chosen: switch now, not within a second
+        AudioDeviceWatcher.Changed += OnDevicesChanged; // a chosen device plugged back in: resume at once
         _router.Start();
         _thread.Start();
+    }
+
+    /// <summary>Any thread: look at the devices again on the next cycle (or end the 2 s wait for one).</summary>
+    private void OnDevicesChanged()
+    {
+        _devicesChanged = true;
+        _ready.Set();
     }
 
     private sealed class Client(LoopbackStream stream, RouteTarget target)
@@ -128,7 +149,10 @@ public sealed class RoutedCapture : ICaptureSource
         }
     }
 
-    /// <summary>Capture until stopped, the default device changes, or routing switches mode.</summary>
+    /// <summary>
+    /// Capture until stopped, the device to capture changes (the default output while following it, or the
+    /// setting), the chosen device goes away, or routing switches mode.
+    /// </summary>
     private void CaptureDevice()
     {
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
@@ -139,16 +163,33 @@ public sealed class RoutedCapture : ICaptureSource
         IntPtr ready = _ready.SafeWaitHandle.DangerousGetHandle();
         try
         {
-            int found = enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device);
-            if (found == CoreAudio.NotFound)
+            _devicesChanged = false;
+            string? chosen = _routing.CaptureDeviceId;
+            bool follow = CaptureEndpoint.FollowsDefault(chosen);
+            if (follow)
             {
-                SetNoOutputDevice(true);
-                for (int i = 0; i < 20 && !_stop; i++) Thread.Sleep(100); // look again in 2 s
+                int found = enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device);
+                if (found == CoreAudio.NotFound) device = null;
+                else CoreAudio.Check(found, "default device");
+            }
+            else
+            {
+                device = AudioEndpoints.Open(enumerator, EDataFlow.Render, chosen); // never the default instead
+            }
+            string? deviceId = null;
+            if (device != null && device.GetId(out var id) >= 0) deviceId = id;
+            var target = CaptureEndpoint.Resolve(chosen, follow ? deviceId : null, chosenActive: !follow && deviceId != null);
+            if (target.State != CaptureState.Capturing || device == null || deviceId == null)
+            {
+                _endpointId = null;
+                SetState(target.State == CaptureState.Capturing ? CaptureState.NoOutputDevice : target.State);
+                // Look again in 2 s, or as soon as a device comes or goes or another one is chosen.
+                for (int i = 0; i < 20 && !_stop && !_devicesChanged && CaptureEndpoint.SameChoice(_routing.CaptureDeviceId, chosen); i++)
+                    Thread.Sleep(100);
                 return;
             }
-            CoreAudio.Check(found, "default device");
-            SetNoOutputDevice(false);
-            device.GetId(out var deviceId);
+            SetState(CaptureState.Capturing);
+            _endpointId = deviceId;
             string name = CoreAudio.FriendlyName(device);
 
             var plan = _router.Plan;
@@ -161,12 +202,13 @@ public sealed class RoutedCapture : ICaptureSource
                 rate = endpoint.Format.SampleRate;
             }
             var mixer = new StreamMixer(maxLagFrames: rate * 30 / 1000);
-            const int EndpointId = -1;
-            if (endpoint != null) mixer.Add(EndpointId);
+            const int WholeEndpoint = -1;
+            if (endpoint != null) mixer.Add(WholeEndpoint);
 
             Routed = routed;
             DeviceName = routed ? L.F("{0}（按程序分流）", name) : name;
-            Log.Info($"capturing \"{name}\" {rate} Hz, {(routed ? "per app (process loopback)" : "whole output")}");
+            Log.Info($"capturing \"{name}\" {rate} Hz, {(routed ? "per app (process loopback)" : "whole output")}" +
+                     $"{(follow ? "" : ", chosen capture device")}");
             DeviceChanged?.Invoke(DeviceName);
 
             var resampler = new Resampler(rate, _outRate);
@@ -198,7 +240,7 @@ public sealed class RoutedCapture : ICaptureSource
                 {
                     drained.Clear();
                     if (!endpoint.Drain(drained)) return; // device invalidated
-                    if (drained.Count > 0) mixer.Push(EndpointId, CollectionsMarshal.AsSpan(drained));
+                    if (drained.Count > 0) mixer.Push(WholeEndpoint, CollectionsMarshal.AsSpan(drained));
                 }
                 uint? broken = null;
                 foreach (var (root, c) in clients)
@@ -259,24 +301,28 @@ public sealed class RoutedCapture : ICaptureSource
                     TrackPeak(output);
                 }
 
-                if (now >= nextDeviceCheck)
+                string? choice = _routing.CaptureDeviceId;
+                bool choiceChanged = !CaptureEndpoint.SameChoice(choice, chosen);
+                if (choiceChanged || _devicesChanged || now >= nextDeviceCheck)
                 {
+                    _devicesChanged = false;
                     nextDeviceCheck = now + DeviceCheckInterval;
-                    if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var currentDevice) >= 0)
+                    // The default output only matters while following it (a chosen device ignores default changes).
+                    string? defaultId = CaptureEndpoint.FollowsDefault(choice) ? AudioEndpoints.DefaultId(enumerator, EDataFlow.Render) : null;
+                    if (CaptureEndpoint.ShouldReopen(choice, deviceId, defaultId, AudioEndpoints.IsActive(device)))
                     {
-                        currentDevice.GetId(out var currentId);
-                        Marshal.ReleaseComObject(currentDevice);
-                        if (currentId != deviceId)
-                        {
-                            Log.Info("default output device changed, switching");
-                            return;
-                        }
+                        Log.Info(choiceChanged ? "capture device setting changed, switching"
+                            : CaptureEndpoint.FollowsDefault(choice) ? "default output device changed, switching"
+                            : "chosen capture device is no longer available");
+                        return;
                     }
+                    chosen = choice; // e.g. now following the default, which is the device already open
                 }
             }
         }
         finally
         {
+            _endpointId = null;
             foreach (var (root, c) in clients)
             {
                 _capturing.TryRemove(root, out _);
@@ -393,6 +439,8 @@ public sealed class RoutedCapture : ICaptureSource
     {
         if (_stop) return;
         _stop = true;
+        _routing.Changed -= OnDevicesChanged;
+        AudioDeviceWatcher.Changed -= OnDevicesChanged;
         _ready.Set();
         if (_thread.IsAlive) _thread.Join(1000);
         _router.Dispose(); // makes silenced apps audible here again

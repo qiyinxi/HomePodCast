@@ -129,6 +129,144 @@ public static class AudioEndpoints
         try { return device.GetId(out var id) >= 0 ? id : null; }
         finally { Marshal.ReleaseComObject(device); }
     }
+
+    /// <summary>Id of the current default output, or null (none, or Core Audio unavailable).</summary>
+    public static string? DefaultOutputId()
+    {
+        try
+        {
+            var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+            try { return DefaultId(enumerator, EDataFlow.Render); }
+            finally { Marshal.ReleaseComObject(enumerator); }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether the device is still active (not unplugged, disabled or uninstalled).</summary>
+    internal static bool IsActive(IMMDevice device) =>
+        device.GetState(out int state) >= 0 && state == CoreAudio3.DeviceStateActive;
+}
+
+/// <summary>
+/// Endpoint notifications (IMMNotificationClient): an output or input device was added, removed, enabled, disabled,
+/// plugged or unplugged, or the default changed. <see cref="Changed"/> is raised on a Windows notification thread
+/// and must only set flags or post: no Core Audio calls that could wait on that thread.
+/// </summary>
+public static class AudioDeviceWatcher
+{
+    private static readonly object Lock = new();
+    private static IMMDeviceEnumerator? _enumerator;
+    private static IntPtr _client;
+    private static Action? _changed;
+
+    /// <summary>Something about the audio devices changed. Subscribing starts the watch; it runs until the app exits.</summary>
+    public static event Action? Changed
+    {
+        add
+        {
+            lock (Lock)
+            {
+                _changed += value;
+                if (_client == IntPtr.Zero) Start();
+            }
+        }
+        remove
+        {
+            lock (Lock) _changed -= value;
+        }
+    }
+
+    private static void Start()
+    {
+        try
+        {
+            // An MTA thread-pool thread: the enumerator must not belong to the UI thread's apartment.
+            Task.Run(() =>
+            {
+                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+                var client = Marshal.GetComInterfaceForObject<Notifier, IMMNotificationClient>(new Notifier());
+                int hr = enumerator.RegisterEndpointNotificationCallback(client);
+                if (hr < 0)
+                {
+                    Marshal.Release(client);
+                    Marshal.ReleaseComObject(enumerator);
+                    Log.Warn($"device notifications unavailable (0x{hr:X8})");
+                    return;
+                }
+                _enumerator = enumerator;
+                _client = client;
+            }).Wait();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"device notifications unavailable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Unregister (app exit).</summary>
+    public static void Stop()
+    {
+        lock (Lock)
+        {
+            _changed = null;
+            if (_client == IntPtr.Zero || _enumerator == null) return;
+            var (enumerator, client) = (_enumerator, _client);
+            _client = IntPtr.Zero;
+            _enumerator = null;
+            // On an MTA thread like the registration (the enumerator lives there).
+            Task.Run(() =>
+            {
+                try { enumerator.UnregisterEndpointNotificationCallback(client); } catch { }
+                Marshal.Release(client);
+                Marshal.ReleaseComObject(enumerator);
+            }).Wait(2000);
+        }
+    }
+
+    private static void Raise()
+    {
+        try { _changed?.Invoke(); }
+        catch (Exception ex) { Log.Warn($"device notification: {ex.Message}"); }
+    }
+
+    /// <summary>Our IMMNotificationClient (a COM-callable wrapper).</summary>
+    internal sealed class Notifier(Action? raised = null) : IMMNotificationClient
+    {
+        private void Fire()
+        {
+            if (raised != null) raised();
+            else Raise();
+        }
+
+        public int OnDeviceStateChanged(string? deviceId, int newState)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDeviceAdded(string? deviceId)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDeviceRemoved(string? deviceId)
+        {
+            Fire();
+            return 0;
+        }
+
+        public int OnDefaultDeviceChanged(int flow, int role, string? defaultDeviceId)
+        {
+            if (flow == (int)EDataFlow.Render && role == (int)ERole.Console) Fire();
+            return 0;
+        }
+
+        public int OnPropertyValueChanged(string? deviceId, PropertyKeyValue key) => 0; // names, formats: not needed
+    }
 }
 
 /// <summary>

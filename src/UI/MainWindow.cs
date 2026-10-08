@@ -216,6 +216,9 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.UpdateState();
     }
 
+    /// <summary>An output device was added, removed, enabled, disabled, or the default changed.</summary>
+    public void AudioDevicesChanged() => _mixer.AudioDevicesChanged();
+
     public void ShowSoundOptions()
     {
         _home.ShowSoundOptions();

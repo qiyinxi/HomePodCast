@@ -4,8 +4,10 @@ using System.Runtime.InteropServices;
 namespace HomePodCast.Audio;
 
 /// <summary>
-/// Keeps the routing plan current (rules x sessions on the default output x process tree) and silences
-/// "HomePod only" sessions here once their capture runs, restoring them when that ends. Runs on its own
+/// Keeps the routing plan current (rules x sessions on the captured output x process tree) and silences
+/// "HomePod only" sessions there once their capture runs, restoring them when that ends. The captured
+/// output is the Windows default output, or the device chosen in AppRouting.CaptureDeviceId (rules then
+/// apply to the apps playing on that device; see <see cref="CaptureEndpoint"/>). Runs on its own
 /// MTA thread so session enumeration never stalls the capture thread. Reacts to new sessions at once
 /// (IAudioSessionNotification) and re-checks everything every second. While anything is silenced it
 /// re-reads those volumes (and the default output) every timer tick, well inside the ~35-50 ms the
@@ -227,8 +229,9 @@ internal sealed class SessionRouter : IDisposable
         {
             if (_silenced.Count == 0 || _stop) return false;
 
-            // The apps' audio moves to the new device, where their sessions are not silenced yet.
-            if (managerDevice != null && DefaultDeviceId(devices) is { } id && id != managerDevice)
+            // The apps' audio moves to the new device, where their sessions are not silenced yet (a new default
+            // output while following it, or another capture device chosen).
+            if (managerDevice != null && CapturedDeviceId(devices) is { } id && !CaptureEndpoint.Same(id, managerDevice))
             {
                 _gate.CloseAll();
                 Poke();
@@ -258,18 +261,9 @@ internal sealed class SessionRouter : IDisposable
         }
     }
 
-    private static string? DefaultDeviceId(IMMDeviceEnumerator devices)
-    {
-        if (devices.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var device) < 0) return null;
-        try
-        {
-            return device.GetId(out var id) >= 0 ? id : null;
-        }
-        finally
-        {
-            Marshal.ReleaseComObject(device);
-        }
-    }
+    /// <summary>The device whose sessions are planned: the chosen capture device, or the default output.</summary>
+    private string? CapturedDeviceId(IMMDeviceEnumerator devices) =>
+        _routing.CaptureDeviceId ?? AudioEndpoints.DefaultId(devices, EDataFlow.Render);
 
     private static void Restore(ISimpleAudioVolume volume, uint pid)
     {
@@ -310,7 +304,9 @@ internal sealed class SessionRouter : IDisposable
         IMMDevice? device = null;
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device) < 0) return result;
+            // The captured device; a chosen one that is missing has no sessions to plan (never the default instead).
+            device = AudioEndpoints.Open(enumerator, EDataFlow.Render, _routing.CaptureDeviceId);
+            if (device == null) return result;
             device.GetId(out var id);
             if (manager == null || id != managerDevice)
             {
@@ -363,12 +359,17 @@ internal sealed class SessionRouter : IDisposable
         manager = null;
     }
 
-    /// <summary>Undo silencing left behind by a run that did not exit cleanly (any thread; MTA).</summary>
+    /// <summary>
+    /// Undo silencing left behind by a run that did not exit cleanly (any thread; MTA). On every output: that run
+    /// may have captured a chosen device that is no longer the one chosen.
+    /// </summary>
     public static void RestoreLeftovers()
     {
         try
         {
-            foreach (var app in AppAudio.Enumerate())
+            var outputs = AudioEndpoints.Outputs().Select(e => (string?)e.Id).DefaultIfEmpty(null);
+            foreach (var output in outputs)
+            foreach (var app in AppAudio.Enumerate(output))
             {
                 try { app.RestoreIfSilenced(); } catch { }
                 app.Dispose();

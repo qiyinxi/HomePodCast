@@ -266,5 +266,17 @@
   "显示密码": "Show password",
   "隐藏密码": "Hide password",
   "保存密码失败：{0}": "Couldn't save the password: {0}",
-  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows has no output device, so apps have nowhere to play their sound and there is nothing to capture. Plug in headphones or speakers, turn off jack detection in the sound card settings, use your monitor's HDMI audio, or install a virtual sound card (such as VB-CABLE); streaming resumes on its own."
+  "Windows 没有可用的输出设备，程序的声音无处播放，所以也采集不到。插上耳机或音箱、在声卡设置里关闭插孔检测、用显示器的 HDMI 音频，或安装一个虚拟声卡（如 VB-CABLE），之后会自动恢复。": "Windows has no output device, so apps have nowhere to play their sound and there is nothing to capture. Plug in headphones or speakers, turn off jack detection in the sound card settings, use your monitor's HDMI audio, or install a virtual sound card (such as VB-CABLE); streaming resumes on its own.",
+  "采集设备": "Capture device",
+  "跟随 Windows 默认输出（推荐）": "Follow the Windows default output (recommended)",
+  "{0}（不可用）": "{0} (unavailable)",
+  "打开 Windows 应用音量设置": "Open Windows app volume settings",
+  "按声卡分流（没有额外延迟）": "Routing by sound card (no extra latency)",
+  "在 Windows 的应用音量设置（或程序自己的设置）里，把要推送的程序的输出设为一个你不用来听的设备，再在上面的「采集设备」里选它；语音聊天等其他程序照常在耳机里播放。整个设备一次抓取，不像按程序分流那样多约 {0} ms。需要一个空闲的或虚拟的声卡，比如 VB-CABLE、网易 UU 加速器的虚拟声卡、Steam Streaming Speakers，或不带喇叭的 HDMI 显示器；HomePodCast 没法自己装虚拟声卡（那是要微软签名的内核驱动）。有些游戏只在启动时选择输出设备，改完要重启游戏。": "In the Windows app volume settings (or the app's own settings), set the apps you want on the HomePod to play on a device you don't listen to, then choose that device as the capture device above; voice chat and other apps keep playing on your headphones. The whole device is captured in one piece, without the roughly {0} ms that per-app routing adds. This needs a spare or virtual sound card, such as VB-CABLE, NetEase UU's virtual sound card, Steam Streaming Speakers, or an HDMI monitor without speakers; HomePodCast can't install a virtual sound card itself (it is a kernel driver that must be signed by Microsoft). Some games only pick their output device at launch, so restart the game after changing it.",
+  "推送 Windows 默认输出上的所有声音；默认输出改变时自动跟随。": "Sends everything on the Windows default output, and follows it when the default changes.",
+  "只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。": "Only sound on \"{0}\" is sent; apps on other devices (such as voice chat on your headphones) are not.",
+  "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" is unavailable (unplugged, disabled or uninstalled). The default output is not used instead; capture resumes by itself when the device is back.",
+  "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "The chosen capture device \"{0}\" is unavailable (unplugged, disabled or uninstalled). So that no other sound reaches the HomePod, the default output is not used instead; streaming resumes by itself when the device is back. You can also switch back to the Windows default output on the Mixer page.",
+  "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Your monitor device is the one being captured, so monitoring would also send your voice to the HomePod. Monitoring on this PC is paused; use headphones or another device instead.",
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "With a capture device chosen, \"HomePod follows the Windows volume\" follows that device's volume, while the volume keys only change the Windows default output. To control the HomePod with the volume keys, make that device the default output."
 }

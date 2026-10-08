@@ -118,6 +118,17 @@ public sealed class AppConfig
     /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
     public bool RoutingNoticeAccepted { get; set; }
 
+    // ---- Capture device ("routing by sound card", Audio.CaptureEndpoint) ----
+
+    /// <summary>
+    /// Output device whose loopback is sent; null = follow the Windows default output (the default, as before).
+    /// A chosen device that is missing is never replaced by the default output.
+    /// </summary>
+    public string? CaptureDeviceId { get; set; }
+
+    /// <summary>Its name when it was chosen, shown while the device is unplugged or uninstalled.</summary>
+    public string? CaptureDeviceName { get; set; }
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

@@ -323,9 +323,19 @@ internal sealed class HomePage : ScrollPage
         var c = _app.Controller;
         var s = c.ActiveSender;
         bool streaming = s != null && c.State == StreamState.Streaming;
-        var source = c.Capture?.DeviceName is { } name ? L.F("音源：{0}", name) : L.T("音源：默认输出设备");
+        var cfg = _app.Config;
+        var source = c.Capture?.DeviceName is { } name ? L.F("音源：{0}", name)
+            : cfg.CaptureDeviceId != null ? L.F("音源：{0}", cfg.CaptureDeviceName ?? cfg.CaptureDeviceId)
+            : L.T("音源：默认输出设备");
         _streamStats.Role = TextRole.Secondary;
-        if (c.Capture?.NoOutputDevice == true)
+        if (c.Capture?.CaptureDeviceMissing == true)
+        {
+            // Never the default output instead: that could send voice chat or other private audio to the speaker.
+            _streamStats.Role = TextRole.Caution;
+            _streamStats.Text = L.F("所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。",
+                cfg.CaptureDeviceName ?? cfg.CaptureDeviceId);
+        }
+        else if (c.Capture?.NoOutputDevice == true)
         {
             // No driver/device to play into: apps make no sound at all, so there is nothing to send.
             _streamStats.Role = TextRole.Caution;

@@ -47,6 +47,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _ = _form.Handle; // create handle so BeginInvoke works before first show
         _form.LatencyChanged += RaiseStateChanged;
         InitPlayers();
+        InitCapture();
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
         Controller.HostResolved += host => _ui.Post(_ =>
@@ -386,6 +387,7 @@ internal sealed partial class TrayApp : ApplicationContext
             Config.Volume = v;
             Config.Save();
         }
+        UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();
         RaiseStateChanged();
@@ -408,6 +410,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();
         DisposePlayers();

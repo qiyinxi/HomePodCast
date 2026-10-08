@@ -29,6 +29,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly Segmented _destination = new(["HomePod", L.T("本机监听"), L.T("两者")]) { EqualWidths = false };
     private readonly FluentComboBox _monitorDevice = new();
     private readonly TextBlock _howl = new("", TextStyle.BodyStrong, TextRole.Caution, wrap: true);
+    private readonly TextBlock _monitorCaptured = new(L.T(LocalMonitor.CapturedText), TextStyle.Body, TextRole.Caution, wrap: true) { Collapsed = true };
     private readonly TextBlock _delayHint = Ui.Note();
     private readonly TextBlock _micStatus = Ui.Note();
     private readonly TextBlock _routeStatus = Ui.Note();
@@ -81,7 +82,7 @@ internal sealed class EffectsPage : ScrollPage
         var monitor = new FieldRow(L.T("监听设备"), _monitorDevice);
         FieldRow.AlignCaptions(device, level, gain, gate, route, monitor);
         ShowDelayHint();
-        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _howl, _delayHint, _micStatus, _routeStatus);
+        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus, _routeStatus);
         card.Gap = 8;
         return card;
     }
@@ -291,6 +292,8 @@ internal sealed class EffectsPage : ScrollPage
                   (monitor.Underruns > 0 ? L.F(" · 断音 {0} 次", monitor.Underruns) : ""));
         }
         _routeStatus.Text = string.Join("\n", lines);
+        // 本机监听 is paused while its device is the one captured for the speaker (MicEffects.MonitorBlocked).
+        _monitorCaptured.Collapsed = !(mic != null && _fx.MonitorBlocked);
         _nightNote.Text = _config.NightMode ? L.T("夜间模式开着：现在用的是「减弱低音」，关掉夜间模式后恢复这里的设置。") : "";
     }
 

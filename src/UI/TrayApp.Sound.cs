@@ -45,7 +45,9 @@ internal sealed partial class TrayApp
         _volumeSave.Tick += SavePendingVolume;
         try
         {
-            _forwarder = new VolumeKeyForwarder(); // watches the default output; takes a Func<string?> endpoint id for another one
+            // Watches the captured output: the default output, or the chosen capture device (re-read once a second on
+            // its worker; AppRouting keeps it in a volatile field). A chosen device that is missing is not replaced.
+            _forwarder = new VolumeKeyForwarder(() => Routing.CaptureDeviceId);
             _forwarder.VolumeStep += pct => _ui.Post(_ => NudgeVolume(pct), null);
             _forwarder.MuteToggled += () => _ui.Post(_ => ToggleSpeakerMute(), null);
             var forwarder = _forwarder;

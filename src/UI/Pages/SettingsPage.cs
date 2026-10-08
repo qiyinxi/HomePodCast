@@ -259,7 +259,8 @@ internal sealed class SettingsPage : ScrollPage
         if (!_volumeKeys.DroppedDown) _volumeKeys.SelectedIndex = Array.IndexOf(VolumeKeyModes, mode);
         var desc = _volumeKeysRow.DescriptionText;
         bool fallback = mode is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
-        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。") : VolumeKeyModeDescription(mode);
+        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。") : VolumeKeyModeDescription(mode) +
+            (mode == VolumeKeyMode.FollowWindows && _app.Routing.CaptureDeviceId != null ? "\n" + L.T(MixerPage.CaptureVolumeNote) : "");
         desc.Role = fallback ? TextRole.Caution : TextRole.Secondary;
     }
 
@@ -292,6 +293,7 @@ internal sealed class SettingsPage : ScrollPage
     {
         _autostart.Checked = SafeAutostart();
         ShowSoundOptions();
+        ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
     }

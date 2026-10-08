@@ -3,21 +3,42 @@ using System.Runtime.InteropServices;
 namespace HomePodCast.Audio;
 
 /// <summary>
-/// Per-app destinations (HomePod / this PC / both), persisted in <see cref="AppConfig"/>. Changed on the
-/// UI thread; the capture reads <see cref="Rules"/> (an immutable snapshot) from its own threads.
+/// What the capture takes, persisted in <see cref="AppConfig"/>: the output device (<see cref="CaptureDeviceId"/>)
+/// and the per-app destinations on it (HomePod / this PC / both). Changed on the UI thread; the capture reads
+/// <see cref="Rules"/> (an immutable snapshot) and <see cref="CaptureDeviceId"/> from its own threads.
 /// </summary>
 public sealed class AppRouting
 {
     private readonly AppConfig _config;
     private readonly Action _save;
     private volatile RouteRules _rules;
+    private volatile string? _captureDeviceId;
 
     public AppRouting(AppConfig config, Action? save = null)
     {
         _config = config;
         _save = save ?? config.Save;
         _rules = Build();
+        _captureDeviceId = Normalize(config.CaptureDeviceId);
     }
+
+    /// <summary>The output device to capture; null = follow the Windows default output (see <see cref="CaptureEndpoint"/>).</summary>
+    public string? CaptureDeviceId => _captureDeviceId;
+
+    /// <summary>Choose the captured output device (null = the Windows default output); saved, raises <see cref="Changed"/>.</summary>
+    public void SetCaptureDevice(string? id, string? name)
+    {
+        id = Normalize(id);
+        if (id == null ? _captureDeviceId == null : CaptureEndpoint.Same(id, _captureDeviceId)) return;
+        _config.CaptureDeviceId = id;
+        _config.CaptureDeviceName = id == null ? null : name;
+        _captureDeviceId = id;
+        try { _save(); } catch (Exception ex) { Log.Warn($"routing: config not saved: {ex.Message}"); }
+        Log.Info(id == null ? "capture device: follow the Windows default output" : $"capture device: \"{name}\" {id}");
+        Changed?.Invoke();
+    }
+
+    private static string? Normalize(string? id) => string.IsNullOrWhiteSpace(id) ? null : id.Trim();
 
     /// <summary>Process loopback needs Windows 10 2004 (build 19041); older systems keep today's capture.</summary>
     public static bool Supported => ProcessLoopback.IsSupported;

@@ -65,7 +65,7 @@ internal interface IAudioMeterInformation
     [PreserveSig] int GetPeakValue(out float peak);
 }
 
-/// <summary>All audio sessions of one process on the default output device (what goes to the speaker).</summary>
+/// <summary>All audio sessions of one process on the captured output device (what goes to the speaker).</summary>
 public sealed class AppAudio : IDisposable
 {
     private readonly List<(ISimpleAudioVolume Volume, IAudioMeterInformation Meter, IAudioSessionControl2 Control)> _sessions = [];
@@ -152,15 +152,19 @@ public sealed class AppAudio : IDisposable
         Icon?.Dispose();
     }
 
-    /// <summary>Snapshot of the non-expired sessions on the default render device, merged per process.</summary>
-    public static List<AppAudio> Enumerate()
+    /// <summary>
+    /// Snapshot of the non-expired sessions on a render device, merged per process: <paramref name="deviceId"/>
+    /// (the chosen capture device; empty when it is missing) or, when null, the default output.
+    /// </summary>
+    public static List<AppAudio> Enumerate(string? deviceId = null)
     {
         var result = new Dictionary<string, AppAudio>();
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
         IMMDevice? device = null;
         try
         {
-            if (enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device) < 0) return [];
+            device = AudioEndpoints.Open(enumerator, EDataFlow.Render, deviceId);
+            if (device == null) return [];
             var iid = typeof(IAudioSessionManager2).GUID;
             if (device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj) < 0) return [];
             var manager = (IAudioSessionManager2)obj;
