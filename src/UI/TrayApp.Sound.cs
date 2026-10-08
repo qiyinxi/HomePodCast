@@ -93,6 +93,7 @@ internal sealed partial class TrayApp
         Config.NightMode = on;
         Config.Save();
         Controller.NightMode.Enabled = on;
+        ApplyNightEq();
         Log.Info($"night mode {(on ? "on" : "off")}");
         _form.ShowSoundOptions();
     }

@@ -135,7 +135,7 @@ public class MicPathTests(ITestOutputHelper output)
         var monitor = new AudioTap(44100, 48000, 5, 40);
         var data = Interleave(fmt, 144, (i, _) => Math.Sin(i * 0.05) * 0.2);  // 3 ms packets
         var read = new float[352 * 2];
-        IStereoEffect[] effects = [eq, reverb];
+        IAudioEffect[] effects = [eq, reverb];
         AudioTap[] taps = [homepod, monitor];
         long bytes = Signals.Allocated(() =>
         {

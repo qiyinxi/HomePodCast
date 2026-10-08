@@ -57,7 +57,7 @@ public static class EqPresets
 /// filters is compensated (interaction-matrix solve), so the curve goes through the slider values.
 /// Gain changes glide (~30 ms) so preset switches never click; Process is allocation-free.
 /// </summary>
-public sealed class Equalizer : IStereoEffect
+public sealed class Equalizer : IAudioEffect
 {
     public const int BandCount = 5;
     private const int Block = 16;               // coefficient update interval (frames)

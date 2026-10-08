@@ -38,7 +38,7 @@ internal static class Signals
     public static double Db(double ratio) => 20 * Math.Log10(ratio);
 
     /// <summary>Process in WASAPI-sized chunks.</summary>
-    public static void Run(IStereoEffect fx, float[] x, int chunk = 441)
+    public static void Run(IAudioEffect fx, float[] x, int chunk = 441)
     {
         for (int i = 0; i < x.Length / 2; i += chunk)
         {

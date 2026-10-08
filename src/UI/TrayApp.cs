@@ -36,6 +36,7 @@ internal sealed partial class TrayApp : ApplicationContext
         menu.Items.Add(L.T("退出"), null, (_, _) => Quit());
         _toggleItem.Click += (_, _) => ToggleConnection();
         InitSound(menu);
+        InitEffects(menu);
 
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = L.T("HomePod 音响") };
         _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
@@ -313,6 +314,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeSound();
+        DisposeEffects();
         _api?.Dispose();
         Controller.Dispose();
         _tray.Dispose();

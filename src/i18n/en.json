@@ -168,5 +168,7 @@
   "正在打开监听设备…": "Opening the monitor device…",
   "本机监听：{0} · 延迟约 {1:F0} ms": "Monitoring: {0} · about {1:F0} ms latency",
   " · 断音 {0} 次": " · {0} dropouts",
-  "预设": "Preset"
+  "预设": "Preset",
+
+  "麦克风与音效…": "Microphone and effects…"
 }

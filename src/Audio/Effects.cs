@@ -1,8 +1,9 @@
 namespace HomePodCast.Audio;
 
 /// <summary>
-/// In-place processing of interleaved stereo float audio at the stream rate. Called on the real-time
-/// sender thread once per packet (RtpSender.FramesPerPacket frames): must not allocate, lock or block.
+/// In-place processing of interleaved stereo float audio at the stream rate, on a real-time thread (the
+/// sender, once per packet of RtpSender.FramesPerPacket frames, or the mic capture thread): must not
+/// allocate, lock or block; parameter setters may be called from any thread and take effect smoothly.
 /// </summary>
 public interface IAudioEffect
 {

@@ -18,7 +18,7 @@ public sealed class MicCapture : ITapSource, IDisposable
     private readonly Thread _thread;
     private readonly object _tapLock = new();
     private volatile AudioTap[] _taps = [];
-    private volatile IStereoEffect[] _effects = [];
+    private volatile IAudioEffect[] _effects = [];
     private volatile bool _stop;
     private volatile MicPipeline? _pipeline;
     private double _ageMs;
@@ -56,7 +56,7 @@ public sealed class MicCapture : ITapSource, IDisposable
     public float GateThresholdDb { get; set; } = -50;
 
     /// <summary>Effects run in order on the capture thread at 44.1 kHz stereo (e.g. mic EQ, reverb).</summary>
-    public IStereoEffect[] Effects { get => _effects; set => _effects = value ?? []; }
+    public IAudioEffect[] Effects { get => _effects; set => _effects = value ?? []; }
 
     public int Rate => OutputRate;
     public double ChunkMs => Running ? PeriodMs : 0;
@@ -248,7 +248,7 @@ internal sealed class MicPipeline
 
     /// <summary>Load + Deliver in one go (tests).</summary>
     public void Process(ReadOnlySpan<byte> data, int frames, bool silent, float gainDb, bool gate, float gateDb,
-        IStereoEffect[] effects, AudioTap[] taps)
+        IAudioEffect[] effects, AudioTap[] taps)
     {
         Load(data, frames, silent, gainDb, gate, gateDb);
         Deliver(effects, taps);
@@ -288,7 +288,7 @@ internal sealed class MicPipeline
     }
 
     /// <summary>Mono → stereo, resample to 44.1 kHz, run the effects, push to every tap.</summary>
-    public void Deliver(IStereoEffect[] effects, AudioTap[] taps)
+    public void Deliver(IAudioEffect[] effects, AudioTap[] taps)
     {
         var mono = _mono.AsSpan(0, _frames);
         var stereo = _stereo.AsSpan(0, _frames * 2);

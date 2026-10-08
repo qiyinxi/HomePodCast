@@ -7,7 +7,7 @@ namespace HomePodCast.Audio;
 /// between the old and new tap, and switching off fades the wet signal out before bypassing.
 /// Process is allocation-free; tiny values are flushed so a decaying tail never goes subnormal.
 /// </summary>
-public sealed class Reverb : IStereoEffect
+public sealed class Reverb : IAudioEffect
 {
     public const float MaxPreDelayMs = 250;
 
