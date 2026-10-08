@@ -9,7 +9,7 @@ public sealed partial class StreamController
 {
     private GroupRunner? _groupRunner;
     private int? _groupArrivalToRenderMs;
-    private (string Tsid, List<ResolvedMember> Members)? _lastPair;
+    private (string Key, List<ResolvedMember> Members)? _lastPair;
 
     private sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port);
 
@@ -46,7 +46,11 @@ public sealed partial class StreamController
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         if (EffectiveLatencyMs != latencyMs)
             Log.Warn($"latency {latencyMs} ms is below what the speakers can handle; using {EffectiveLatencyMs} ms");
-        var options = new StreamOptions(EffectiveLatencyMs, null) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
+        // One groupUUID per connection, shared by every member's session (see GroupPlan).
+        var options = new StreamOptions(EffectiveLatencyMs, null)
+        {
+            VolumeCapPercent = VolumeCapPercent, Effects = Effects, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
+        };
 
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
             async c => (IGroupMember)await AirPlayClient.PrepareAsync(m.Address, m.Port, options, plan.ChannelsFor(i), c),
@@ -73,16 +77,19 @@ public sealed partial class StreamController
             return list;
         }
 
-        // Stereo pair: reuse last time's addresses while both still answer, else look the pair up again.
-        if (_lastPair is { } last && last.Tsid == plan.PairTsid &&
+        // Stereo pair: reuse last time's addresses while they all still answer, else look the pair up again
+        // (both members, or the leader alone with PairLeaderOnly).
+        string key = $"{plan.PairTsid}|{plan.PairLeaderOnly}";
+        if (_lastPair is { } last && last.Key == key &&
             (await Task.WhenAll(last.Members.Select(m => IsReachable(m.Address, ct)))).All(ok => ok))
             return last.Members;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
-        var found = StereoPairs.Members(devices, plan.PairTsid!);
-        if (found.Count != 2)
-            throw new AirPlayException(L.F("立体声对「{0}」需要两只音箱都在线（现在找到 {1} 只）", plan.Name, found.Count));
-        var members = found.Select(d => new ResolvedMember(d.DeviceId, $"{d.Name} {d.Address}", d.Address, d.Port)).ToList();
-        _lastPair = (plan.PairTsid!, members);
+        var targets = plan.PairTargets(devices);
+        var leader = StereoPairs.Leader(StereoPairs.Members(devices, plan.PairTsid!));
+        Log.Info($"pair {plan.PairTsid}: {(plan.PairLeaderOnly ? "leader only" : "both members")}, " +
+                 string.Join(", ", targets.Select(d => $"{d.Name} {d.Address}{(d == leader ? " (leader)" : "")}")));
+        var members = targets.Select(d => new ResolvedMember(d.DeviceId, $"{d.Name} {d.Address}", d.Address, d.Port)).ToList();
+        _lastPair = (key, members);
         return members;
     }
 

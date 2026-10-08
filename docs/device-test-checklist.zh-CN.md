@@ -63,6 +63,20 @@
 - [ ] iPhone 抢占 HomePod 后，电脑端不抢回；托盘显示被占用
 - [ ] 设置 → 语言切换到 Svenska / English 看一眼，有没有明显不通的翻译
 
+## 九、立体声对（等有两只 HomePod 配成立体声对时再测）
+
+做法依据公开资料：两只音箱各连一路、都收到完整立体声，由这对音箱自己分左右；两路共用一个 groupUUID 和同一时间线（NTP）。「只连接主音箱」是为了验证主音箱会不会转发，默认关闭。以下命令都在安装目录运行，音量一律加 `--volume 20`。
+
+1. - [ ] `HomePodCast.exe scan --txt`：整段输出发我。同时写下 Home App 里哪只是左、哪只是右（用来核对：flags 第 13 位标的主音箱是哪只，gid 里的 `+0+` / `+1+` 是不是对应左 / 右）
+2. - [ ] `HomePodCast.exe info --host 左边IP` 和 `info --host 右边IP`：两段输出都发我（找有没有声道或主从字段）
+3. - [ ] 默认模式：`HomePodCast.exe group --pair --tone --seconds 20 --volume 20 --verbose`，然后在界面里选这对音箱连接，放一段左右声道测试视频：左边只出左、右边只出右吗？两只之间有没有回声 / 一前一后的感觉？
+4. - [ ] 只连主音箱：`group --pair --leader-only --tone --seconds 20 --volume 20`。另一只响不响？主音箱放的是完整立体声还是只有它那一侧？
+5. - [ ] 只连非主音箱：`stream --host 非主音箱IP --tone --seconds 20 --volume 20`。只有它响，还是两只都响？
+6. - [ ] 第 3 步连不上，或者一只很快断开：用 `group --pair --no-group-uuid --tone --seconds 20 --volume 20` 再试一次，看是不是 groupUUID 引起的
+7. - [ ] 音量：在本程序里调音量，两只是否一起变；iPhone 控制中心里这对音箱的音量是否跟着变
+8. - [ ] 默认模式连续放 30 分钟：两只有没有慢慢不同步、断开、单只没声
+9. - [ ] 推流时用 iPhone 抢这对音箱：电脑端两路都退出、不抢回
+
 ## 测试记录
 
 （Claude 的自动测试结果写在这里）

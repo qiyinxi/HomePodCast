@@ -183,6 +183,78 @@ public class SpeakerGroupTests : IDisposable
         Assert.True(a.Disposed && b.Disposed);
     }
 
+    /// <summary>
+    /// A stereo pair as the plan connects it: one session per member from GroupPlan.PairTargets, the channel
+    /// mode from ChannelsFor. Fake receivers check what each member actually gets on the wire.
+    /// </summary>
+    private async Task<(List<FakeMember> Members, float[] Signal, bool Clean)> PlayPair(GroupPlan plan, int ms)
+    {
+        var (links, rechts) = StereoPairTests.IdlePair();
+        var targets = plan.PairTargets([rechts, links]);
+        var members = targets.Select((d, i) => Member(d.Name, plan.ChannelsFor(i))).ToList();
+        var fifo = new AudioFifo(44100, targetMs: 20, capMs: 1000);
+        var signal = TestAudio.Signal(26460);
+        fifo.Write(signal);
+        bool clean;
+        using (var group = await SpeakerGroup.ConnectAsync(members.Select(m => m.Setup()).ToList(), fifo, 30, default))
+        {
+            await Task.Delay(250 + ms); // packet 0 is due 250 ms after the start
+            clean = group.Sender!.SkippedPackets == 0;
+        }
+        await Task.Delay(30);
+        return (members, signal, clean);
+    }
+
+    [Fact]
+    public async Task A_stereo_pair_sends_both_members_the_same_full_stereo_stream()
+    {
+        var plan = GroupPlan.FromConfig(new AppConfig { DeviceId = StereoPairs.PairId("EAFA36AA-9785-54B2-A537-D9EE2A55CF1C") })!;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            var (members, signal, clean) = await PlayPair(plan, 120);
+            if (!clean) continue; // a stalled sender skips packets on purpose; per-packet checks need a clean run
+            Assert.Equal(["Links", "Rechts"], members.Select(m => m.Name));
+            var a = members[0].Receiver.Audio.ToArray();
+            var b = members[1].Receiver.Audio.ToArray();
+            int n = Math.Min(a.Length, b.Length);
+            Assert.True(n >= 8, $"only {n} packets");
+            for (int k = 0; k < n; k++)
+            {
+                var expected = TestAudio.ExpectedPayload(signal, k, ChannelMode.Stereo); // left and right differ
+                Assert.Equal(expected, members[0].Receiver.Decrypt(a[k].Bytes));
+                Assert.Equal(expected, members[1].Receiver.Decrypt(b[k].Bytes));
+                Assert.Equal(FakeReceiver.Rtp(a[k].Bytes), FakeReceiver.Rtp(b[k].Bytes));
+            }
+            Assert.Equal([30.0], members[0].Volumes);
+            Assert.Equal([30.0], members[1].Volumes);
+            return;
+        }
+        Assert.Fail("the sender stalled in every attempt");
+    }
+
+    [Fact]
+    public async Task Leader_only_sends_one_full_stereo_stream_to_the_leader()
+    {
+        var plan = GroupPlan.FromConfig(new AppConfig
+        {
+            DeviceId = StereoPairs.PairId("EAFA36AA-9785-54B2-A537-D9EE2A55CF1C"), GroupPairLeaderOnly = true, GroupSplitChannels = true,
+        })!;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            var (members, signal, clean) = await PlayPair(plan, 80);
+            if (!clean) continue;
+            var leader = Assert.Single(members);
+            Assert.Equal("Links", leader.Name);
+            var packets = leader.Receiver.Audio.ToArray();
+            Assert.True(packets.Length >= 5, $"only {packets.Length} packets");
+            for (int k = 0; k < packets.Length; k++)
+                Assert.Equal(TestAudio.ExpectedPayload(signal, k, ChannelMode.Stereo), leader.Receiver.Decrypt(packets[k].Bytes));
+            Assert.Equal([30.0], leader.Volumes); // the one volume goes to the leader
+            return;
+        }
+        Assert.Fail("the sender stalled in every attempt");
+    }
+
     [Fact]
     public void Member_volume_is_linked_with_an_offset_and_clamped()
     {

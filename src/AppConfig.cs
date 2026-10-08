@@ -32,8 +32,14 @@ public sealed class AppConfig
     /// <summary>Split channels on the PC: the left speaker gets (L,L), the right one (R,R).</summary>
     public bool GroupSplitChannels { get; set; }
 
-    /// <summary>Swap which speaker counts as left (pair members are ordered by device id).</summary>
+    /// <summary>Swap which speaker counts as left (pair members are ordered by gid index, else device id).</summary>
     public bool GroupSwapChannels { get; set; }
+
+    /// <summary>
+    /// Stereo pair: open a session to the tight-sync leader only (to test whether it relays to the other member),
+    /// instead of one session per member, which is the default and the publicly confirmed way.
+    /// </summary>
+    public bool GroupPairLeaderOnly { get; set; }
 
     /// <summary>Per-speaker volume offset in percentage points, keyed by GroupPlan.Key(deviceId).</summary>
     public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
