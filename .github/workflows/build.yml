@@ -131,7 +131,7 @@ jobs:
           name: packages
           path: packages
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: HomePodCast ${{ needs.build.outputs.version }}
           files: packages/*.zip
