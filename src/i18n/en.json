@@ -115,8 +115,6 @@
   "全局快捷键：HomePod 音量、静音、切换场景": "Global hotkeys: HomePod volume, mute, next scene",
   "{0} 个快捷键被其他程序占用，点开换一个": "{0} hotkey(s) taken by other programs; open to pick another",
   "HomePod 静音": "Mute HomePod",
-  "{0}（{1} ms）": "{0} ({1} ms)",
-  "场景：{0}": "Scene: {0}",
   "场景：{0}（{1} ms）": "Scene: {0} ({1} ms)",
 
   "低音增强": "Bass boost",
@@ -164,8 +162,6 @@
   "本机监听：{0} · 延迟约 {1:F0} ms": "Monitoring: {0} · about {1:F0} ms latency",
   " · 断音 {0} 次": " · {0} dropouts",
   "预设": "Preset",
-
-  "麦克风与音效…": "Microphone and effects…",
 
   "{0}（按程序分流）": "{0} (per-app routing)",
   "本机": "This PC",

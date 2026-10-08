@@ -9,7 +9,7 @@ internal enum AppPage { Home, Mixer, Effects, Settings }
 /// <summary>
 /// The one window: a navigation rail (首页 / 混音器 / 麦克风与音效 / 设置) and the pages. Light or dark
 /// with the system (or the "Theme" setting), dark title bar and Mica where Windows has them. Everything
-/// is laid out in code for the window's DPI. Closing only hides it; the tray menu quits.
+/// is laid out in code for the window's DPI. Closing only hides it; the tray flyout quits.
 /// </summary>
 internal sealed class MainWindow : Form, ISurface
 {
@@ -169,7 +169,7 @@ internal sealed class MainWindow : Form, ISurface
     {
         if (e.CloseReason == CloseReason.UserClosing)
         {
-            e.Cancel = true; // closing the window only hides it; quit from the tray menu
+            e.Cancel = true; // closing the window only hides it; quit from the tray flyout
             Hide();
             _app.ShowHiddenHint();
             return;
@@ -189,6 +189,17 @@ internal sealed class MainWindow : Form, ISurface
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
+    public bool SetMicOn(bool on) => _effects.SetMicOn(on);
+
+    /// <summary>The latency 首页 shows (the scene's, or the slider's while it waits to reconnect).</summary>
+    public int LatencyMs => _home.LatencyMs;
+
+    /// <summary>The scene or the latency changed (buttons, slider, hotkey, tray flyout).</summary>
+    public event Action? LatencyChanged
+    {
+        add => _home.LatencyChanged += value;
+        remove => _home.LatencyChanged -= value;
+    }
 
     public void UpdateState()
     {

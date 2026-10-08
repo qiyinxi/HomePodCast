@@ -108,17 +108,7 @@ internal sealed class EffectsPage : ScrollPage
     private void WireEvents()
     {
         _refresh.Click += (_, _) => LoadDevices();
-        _micOn.Toggled += (_, _) =>
-        {
-            if (_micOn.Checked && MonitorsSpeakers(micOn: true) && !ConfirmSpeakers())
-            {
-                _micOn.Checked = false;
-                return;
-            }
-            _fx.MicOn = _micOn.Checked; // not saved: the mic is always off when the app starts
-            UpdateEnabled();
-            UpdateStatus();
-        };
+        _micOn.Toggled += (_, _) => SetMicOn(_micOn.Checked);
         _micDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MicDeviceId = Pick(_micDevice, _inputs, S.MicDeviceId));
         _monitorDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MonitorDeviceId = Pick(_monitorDevice, _outputs, S.MonitorDeviceId));
         _gain.Scroll += (_, _) => Edit(() => S.MicGainDb = _gain.Value);
@@ -134,6 +124,24 @@ internal sealed class EffectsPage : ScrollPage
         _micEq.Changed += () => Edit(() => { });
         _outputEq.Changed += () => Edit(() => { });
         _saveDebounce.Tick += (_, _) => Flush();
+    }
+
+    /// <summary>
+    /// Turn the mic on or off (the switch here, or the tray flyout); asks first when the voice would also go to
+    /// loudspeakers. Returns whether it is on now.
+    /// </summary>
+    public bool SetMicOn(bool on)
+    {
+        if (on && !_fx.MicOn && MonitorsSpeakers(micOn: true) && !ConfirmSpeakers())
+        {
+            _micOn.Checked = false;
+            return false;
+        }
+        _fx.MicOn = on; // not saved: the mic is always off when the app starts
+        _micOn.Checked = on;
+        UpdateEnabled();
+        UpdateStatus();
+        return on;
     }
 
     /// <summary>Apply a UI change to the settings and the engine; save shortly after the last change.</summary>

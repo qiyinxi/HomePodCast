@@ -8,13 +8,13 @@ internal sealed partial class TrayApp : ApplicationContext
 {
     private readonly SynchronizationContext _ui;
     private readonly NotifyIcon _tray;
-    private readonly ToolStripMenuItem _statusItem = new() { Enabled = false };
-    private readonly ToolStripMenuItem _toggleItem = new(L.T("连接"));
     private readonly MainWindow _form;
     private StreamState _lastIconState = (StreamState)(-1);
     private LocalApi? _api;
     private bool _wantConnected;
     private bool _hintShown;
+    private TrayFlyout? _flyout;
+    private long _flyoutClosedAt;
 
     public AppConfig Config { get; }
     public StreamController Controller { get; }
@@ -23,33 +23,28 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <summary>Extra inputs (e.g. a microphone) mixed into the stream; see <see cref="Audio.IMixSource"/>.</summary>
     public Audio.MixSources MixSources { get; } = new();
 
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false)
+    /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
         SetUpRouting();
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
 
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(_statusItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(_toggleItem);
-        menu.Items.Add(L.T("打开主界面"), null, (_, _) => ShowMain(AppPage.Home));
-        menu.Items.Add(L.T("混音器"), null, (_, _) => ShowMixer());
-        menu.Items.Add(L.T("设置"), null, (_, _) => ShowMain(AppPage.Settings));
-        menu.Items.Add(LanguageMenu.Create(Config, Quit));
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(L.T("退出"), null, (_, _) => Quit());
-        _toggleItem.Click += (_, _) => ToggleConnection();
-        InitSound(menu);
-        InitEffects(menu);
+        InitSound();
+        InitEffects();
 
-        StyleMenu(menu);
-        _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true, Text = L.T("HomePod 音响") };
-        _tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
+        // Left click: the main window. Right click: the flyout (volume, scene, night mode, mic, connect, quit).
+        _tray = new NotifyIcon { Visible = true, Text = L.T("HomePod 音响") };
+        _tray.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left) ShowMain();
+            else if (e.Button == MouseButtons.Right) ShowFlyout();
+        };
 
         _form = new MainWindow(this);
         _ = _form.Handle; // create handle so BeginInvoke works before first show
+        _form.LatencyChanged += RaiseStateChanged;
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
         Controller.HostResolved += host => _ui.Post(_ =>
@@ -96,6 +91,11 @@ internal sealed partial class TrayApp : ApplicationContext
             void OpenMixer(object? s, EventArgs e) { Application.Idle -= OpenMixer; ShowMixer(); }
             Application.Idle += OpenMixer;
         }
+        if (openFlyout)
+        {
+            void OpenFlyout(object? s, EventArgs e) { Application.Idle -= OpenFlyout; ShowFlyout(); }
+            Application.Idle += OpenFlyout;
+        }
 
         if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
         if (Config.DeviceId != null)
@@ -107,13 +107,16 @@ internal sealed partial class TrayApp : ApplicationContext
         RefreshDevices();
     }
 
-    /// <summary>The tray menu and its submenus in the theme's colours.</summary>
-    private static void StyleMenu(ToolStripDropDown menu)
-    {
-        menu.Renderer = new Controls.FluentMenuRenderer();
-        menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
-        foreach (var item in menu.Items.OfType<ToolStripMenuItem>().Where(i => i.HasDropDownItems)) StyleMenu(item.DropDown);
-    }
+    /// <summary>
+    /// Something the tray flyout shows changed: connection, volume, mute, scene or latency, night mode, mic, cap.
+    /// Raised on the UI thread.
+    /// </summary>
+    public event Action? StateChanged;
+
+    private void RaiseStateChanged() => StateChanged?.Invoke();
+
+    /// <summary>The latency the scene or the slider asks for now (what 首页 shows), in ms.</summary>
+    public int LatencyMs => _form.LatencyMs;
 
     /// <summary>Per-app routing: the capture follows the mixer's HomePod / 本机 / 两者 rules.</summary>
     private void SetUpRouting()
@@ -179,6 +182,15 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.Volume = percent;
         Config.Save();
         Controller.SetVolume(percent);
+    }
+
+    /// <summary>A volume chosen in the tray flyout (after its debounce): applied like the pages do, and they follow.</summary>
+    public void ApplyVolume(double percent)
+    {
+        SetVolume(percent);
+        _form.ShowVolume(Controller.Volume ?? percent);
+        _form.ShowSoundOptions(); // a new volume also ends a mute
+        RaiseStateChanged();
     }
 
     public async void RefreshDevices()
@@ -265,6 +277,37 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.Activate();
     }
 
+    /// <summary>Open the flyout next to the tray icon; a second right-click closes it.</summary>
+    public void ShowFlyout()
+    {
+        if (_flyout is { IsDisposed: false } open)
+        {
+            open.Close();
+            return;
+        }
+        // Clicking the icon while the flyout is open first takes the focus away, which already closed it.
+        if (Environment.TickCount64 - _flyoutClosedAt < 400) return;
+        try
+        {
+            var anchor = FlyoutPlacement.IconRect(_tray) ?? new Rectangle(Cursor.Position, new Size(1, 1));
+            var flyout = new TrayFlyout(this);
+            flyout.FormClosed += (_, _) =>
+            {
+                _flyout = null;
+                _flyoutClosedAt = Environment.TickCount64;
+            };
+            _flyout = flyout;
+            flyout.ShowAt(anchor);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"tray flyout: {ex}");
+            _flyout?.Dispose();
+            _flyout = null;
+            ShowMain(); // everything in the flyout is in the main window too
+        }
+    }
+
     public void ShowHiddenHint()
     {
         if (_hintShown) return;
@@ -310,8 +353,6 @@ internal sealed partial class TrayApp : ApplicationContext
         var c = Controller;
         if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
 
-        _statusItem.Text = c.StatusText;
-        _toggleItem.Text = c.State == StreamState.Idle ? L.T("连接") : L.T("断开");
         var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
         if (c.State != _lastIconState)
@@ -327,10 +368,12 @@ internal sealed partial class TrayApp : ApplicationContext
             Config.Save();
         }
         _form.UpdateState();
+        RaiseStateChanged();
     }
 
     internal void Quit()
     {
+        _flyout?.Close();
         _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;

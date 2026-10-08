@@ -16,7 +16,7 @@ public static class Program
         {
             return cmd switch
             {
-                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer")),
+                "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer"), openFlyout: args.Contains("--flyout")),
                 "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
@@ -36,7 +36,7 @@ public static class Program
         }
     }
 
-    private static int RunGui(bool startHidden, bool openMixer)
+    private static int RunGui(bool startHidden, bool openMixer, bool openFlyout)
     {
         Log.ToConsole = false;
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
@@ -60,7 +60,7 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout));
         if (UI.LanguageMenu.RestartRequested)
         {
             Log.Info("restarting to apply the UI language");
