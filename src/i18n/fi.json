@@ -278,5 +278,18 @@
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" ei ole käytettävissä (irrotettu, poistettu käytöstä tai asennus poistettu). Oletustoistolaitetta ei käytetä sen sijaan; kaappaus jatkuu itsestään, kun laite palaa.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Valittu kaapattava laite \"{0}\" ei ole käytettävissä (irrotettu, poistettu käytöstä tai asennus poistettu). Jotta HomePodiin ei menisi muuta ääntä, oletustoistolaitetta ei käytetä sen sijaan; suoratoisto jatkuu itsestään, kun laite palaa. Voit myös palata seuraamaan Windowsin oletustoistolaitetta Mikseri-sivulla.",
   "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Kuuntelulaitteesi on se laite, jota kaapataan, joten äänesi menisi myös HomePodiin. Kuuntelu tietokoneella on keskeytetty; käytä kuulokkeita tai muuta laitetta.",
-  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Kun kaapattava laite on valittu, \"HomePod seuraa Windowsin äänenvoimakkuutta\" seuraa sen laitteen äänenvoimakkuutta, kun taas äänenvoimakkuusnäppäimet muuttavat vain Windowsin oletustoistolaitetta. Jos haluat säätää HomePodia äänenvoimakkuusnäppäimillä, tee laitteesta oletustoistolaite."
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Kun kaapattava laite on valittu, \"HomePod seuraa Windowsin äänenvoimakkuutta\" seuraa sen laitteen äänenvoimakkuutta, kun taas äänenvoimakkuusnäppäimet muuttavat vain Windowsin oletustoistolaitetta. Jos haluat säätää HomePodia äänenvoimakkuusnäppäimillä, tee laitteesta oletustoistolaite.",
+  "应用": "Käytä",
+  "最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数": "Kuinka usein Wi-Fi-viive on viimeisen 10 minuutin aikana noussut äkillisesti, ping on kadonnut tai kaiutin on pyytänyt uudelleenlähetystä",
+  "应用建议的延迟": "Käytä ehdotettua viivettä",
+  "切换到「自定义」场景，用建议的延迟重新连接": "Vaihtaa profiiliin \"Mukautettu\" ja yhdistää uudelleen ehdotetulla viiveellä",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "HomePodin Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Kokeile viivettä {1} ms",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Tietokoneen Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Kokeile viivettä {1} ms",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Kokeile viivettä {1} ms",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方": "HomePodin Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Viive on jo suuri; kokeile sijoittaa HomePod niin, että sieltä on näköyhteys reitittimeen",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线": "Tietokoneen Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Viive on jo suuri; kokeile poistaa langattoman sovittimen virransäästö käytöstä tai käytä verkkokaapelia",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号": "Wi-Fi on ollut viime aikoina epävakaa (häiriöt 10 minuutissa: {0}). Viive on jo suuri; kokeile parantaa Wi-Fi-signaalia",
+  "网络：稳定": "Verkko: vakaa",
+  "网络：最近 10 分钟抖动 1 次": "Verkko: 1 häiriö viimeisen 10 minuutin aikana",
+  "网络：最近 10 分钟抖动 {0} 次": "Verkko: {0} häiriötä viimeisen 10 minuutin aikana"
 }

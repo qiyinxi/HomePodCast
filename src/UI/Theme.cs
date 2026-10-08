@@ -336,4 +336,5 @@ internal static class Glyph
     public const string None = "";
     public const string Video = "";
     public const string Copy = "";
+    public const string Wifi = "";
 }

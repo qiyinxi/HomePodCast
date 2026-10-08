@@ -40,7 +40,8 @@ internal sealed class TimerDebounce : IDebounce, IDisposable
 /// <item>the slider (drag, keys, − / +) waits until the mouse is released and nothing moved for 1 s;</item>
 /// <item>a scene switch waits until no scene change for 1 s, so cycling through scenes reconnects once;</item>
 /// <item>moving the slider by hand while a preset is active switches to 自定义 and supersedes a pending scene;</item>
-/// <item>values below the speaker's floor (<see cref="Floor"/>) can't be chosen.</item>
+/// <item>values below the speaker's floor (<see cref="Floor"/>) can't be chosen;</item>
+/// <item>the network hint's 应用 switches to 自定义 at its value and applies it at once (<see cref="UseCustom"/>).</item>
 /// </list>
 /// </summary>
 internal sealed class LatencyTuner
@@ -156,6 +157,26 @@ internal sealed class LatencyTuner
     {
         _scene.Stop();
         _apply(_pendingSceneMs);
+    }
+
+    /// <summary>
+    /// A value the user accepted with one press (首页's network hint): 自定义 at that latency, reconnecting now. Nothing to
+    /// wait for, unlike a slider drag; a pending slider move or scene switch is superseded.
+    /// </summary>
+    public void UseCustom(int ms)
+    {
+        ms = Clamp(ms);
+        _slider.Stop();
+        _scene.Stop();
+        if (_config.Scene != Scene.Custom)
+        {
+            _config.Scene = Scene.Custom;
+            _save();
+            Log.Info($"scene {Scene.Custom}");
+        }
+        Value = ms;
+        Changed?.Invoke();
+        _apply(ms);
     }
 
     /// <summary>Latency quality hint for a value.</summary>

@@ -278,5 +278,18 @@
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" er ikke tilgjengelig (frakoblet, deaktivert eller avinstallert). Standard utdataenhet brukes ikke i stedet; opptaket fortsetter av seg selv når enheten er tilbake.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Den valgte enheten som fanges opp, \"{0}\", er ikke tilgjengelig (frakoblet, deaktivert eller avinstallert). For at ingen annen lyd skal nå HomePod, brukes ikke standard utdataenhet i stedet; strømmingen fortsetter av seg selv når enheten er tilbake. Du kan også gå tilbake til standard utdataenhet i Windows på siden Mikser.",
   "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Medhørsenheten din er den som fanges opp, så stemmen din ville også gå til HomePod. Medhør på PC-en er satt på pause; bruk hodetelefoner eller en annen enhet.",
-  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Når en enhet som fanges opp er valgt, følger \"HomePod følger Windows-volumet\" volumet til den enheten, mens volumtastene bare endrer standard utdataenhet i Windows. Gjør enheten til standard utdataenhet hvis du vil styre HomePod med volumtastene."
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Når en enhet som fanges opp er valgt, følger \"HomePod følger Windows-volumet\" volumet til den enheten, mens volumtastene bare endrer standard utdataenhet i Windows. Gjør enheten til standard utdataenhet hvis du vil styre HomePod med volumtastene.",
+  "应用": "Bruk",
+  "最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数": "Hvor ofte Wi-Fi-forsinkelsen har skutt i været, et ping har gått tapt eller høyttaleren har bedt om ny sending de siste 10 minuttene",
+  "应用建议的延迟": "Bruk den foreslåtte forsinkelsen",
+  "切换到「自定义」场景，用建议的延迟重新连接": "Bytter til scenen \"Egendefinert\" og kobler til på nytt med den foreslåtte forsinkelsen",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Wi-Fi-en til HomePod har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Wi-Fi-en til PC-en har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Wi-Fi-en har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方": "Wi-Fi-en til HomePod har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Forsinkelsen er allerede høy; prøv å plassere HomePod med fri sikt til ruteren",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线": "Wi-Fi-en til PC-en har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Forsinkelsen er allerede høy; prøv å slå av strømsparing på den trådløse adapteren, eller bruk nettverkskabel",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号": "Wi-Fi-en har vært ustabil i det siste (forstyrrelser på 10 minutter: {0}). Forsinkelsen er allerede høy; prøv å forbedre Wi-Fi-signalet",
+  "网络：稳定": "Nettverk: stabilt",
+  "网络：最近 10 分钟抖动 1 次": "Nettverk: 1 forstyrrelse de siste 10 minuttene",
+  "网络：最近 10 分钟抖动 {0} 次": "Nettverk: {0} forstyrrelser de siste 10 minuttene"
 }
