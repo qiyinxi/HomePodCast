@@ -15,7 +15,20 @@ TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a nativ
 | Streaming stats (dropouts / late sends / retransmits) | 0 / 0 / 0 |
 | Memory (private) | about 28 MB |
 
-Test device: HomePod (2nd generation), HomePod software 27.0 (24J361).
+## Tested hardware
+
+HomePodCast is a one-person project and has been tested on exactly one setup:
+
+- Speaker: one HomePod (2nd generation), HomePod software 27.0 (24J361), on Wi-Fi
+- PC: one Windows 11 PC whose default output is a virtual sound card
+
+Not tested on real hardware:
+
+- HomePod mini, HomePod (1st generation), Apple TV, and AirPlay speakers from other brands
+- **Stereo pairs and multi-room**: built from protocol research and tested only against simulated speakers
+- Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
+
+If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`%APPDATA%\HomePodCast\homepodcast.log`).
 
 ## Features
 

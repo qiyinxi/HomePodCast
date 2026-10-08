@@ -15,7 +15,20 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
 | 串流統計（斷音／遲發／重傳） | 0 / 0 / 0 |
 | 記憶體（私有） | 約 28 MB |
 
-測試裝置：HomePod 第二代，HomePod 軟體 27.0（24J361）。
+## 測試裝置
+
+HomePodCast 是個人專案，實際只在一套裝置上測試過：
+
+- 揚聲器：一台 HomePod（第二代），HomePod 軟體 27.0（24J361），Wi‑Fi 連線
+- 電腦：一台 Windows 11 電腦，預設輸出是虛擬音效卡
+
+沒有在實際裝置上測過的：
+
+- HomePod mini、HomePod（第一代）、Apple TV、其他品牌的 AirPlay 揚聲器
+- **立體聲組合和多房間**：依協定資料實作，只用模擬揚聲器測試過
+- 實體音效卡和耳機、其他 Windows 版本，以及電腦走有線或無線網路的差別
+
+如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及記錄檔（`%APPDATA%\HomePodCast\homepodcast.log`）。
 
 ## 功能
 

@@ -15,7 +15,20 @@ TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实
 | 推流统计（断音 / 迟发 / 重传） | 0 / 0 / 0 |
 | 内存（私有） | 约 28 MB |
 
-测试设备：HomePod 第二代，HomePod 软件 27.0（24J361）。
+## 测试设备
+
+HomePodCast 是个人项目，实际只在一套设备上测试过：
+
+- 音箱：一台 HomePod（第二代），HomePod 软件 27.0（24J361），Wi‑Fi 连接
+- 电脑：一台 Windows 11 电脑，默认输出是虚拟声卡
+
+没有在真实设备上测过的：
+
+- HomePod mini、HomePod（第一代）、Apple TV、其他品牌的 AirPlay 音箱
+- **立体声对和多房间**：按协议资料实现，只用模拟音箱测试过
+- 实体声卡和耳机、其他 Windows 版本，以及电脑走有线或无线网络的差别
+
+如果你在别的设备上试用，欢迎开 issue 反馈：设备型号、软件版本、能稳定不断音的最低延迟设置，以及日志（`%APPDATA%\HomePodCast\homepodcast.log`）。
 
 ## 功能
 
