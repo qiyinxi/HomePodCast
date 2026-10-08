@@ -90,14 +90,9 @@ UI の文字列は簡体字中国語で `L.T("…")` / `L.F("…{0}", x)` の中
 
 CI からは HomePod に接続できないため、`dev` を `main` にマージする前に実機で音ズレ測定を行います。
 
-## コード署名ポリシー
+## コード署名
 
-配布する Windows プログラムには、[SignPath.io](https://about.signpath.io/) が提供する無償のオープンソース向けコード署名を使う予定です。証明書は [SignPath Foundation](https://signpath.org/) が発行します。
-
-- 署名するのは、このリポジトリの公開ソースコードから GitHub Actions で自動ビルドしたファイルだけです。
-- コミッター・レビュアー・承認者：リポジトリのメンテナー（[@qiyinxi](https://github.com/qiyinxi)）。
-
-正式な内容は英語版をご覧ください：[Code signing policy](README.md#code-signing-policy)。
+現在の配布ファイルにはまだデジタル署名がないため、インストーラーや exe を初めて実行するときに Windows SmartScreen の警告が出ることがあります（「詳細情報」→「実行」）。配布ファイルはすべて、このリポジトリの公開ソースコードから GitHub Actions で自動ビルドしています。[Releases](https://github.com/qiyinxi/HomePodCast/releases) ページからのみダウンロードしてください。
 
 ## プライバシー ポリシー
 

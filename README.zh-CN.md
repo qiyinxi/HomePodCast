@@ -90,14 +90,9 @@ dotnet test tests\HomePodCast.Tests  # 协议、音频与翻译单元测试
 
 CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做一次音画同步测试。
 
-## 代码签名政策
+## 代码签名
 
-发布的 Windows 程序计划使用 [SignPath.io](https://about.signpath.io/) 提供的免费开源代码签名，证书由 [SignPath Foundation](https://signpath.org/) 签发。
-
-- 只签署由本仓库公开源码、经 GitHub Actions 自动构建出来的文件。
-- 提交者、审核者与批准者：仓库维护者（[@qiyinxi](https://github.com/qiyinxi)）。
-
-以英文原文为准：[Code signing policy](README.md#code-signing-policy)。
+目前发布的程序还没有数字签名，第一次运行安装包或 exe 时 Windows SmartScreen 可能会拦截（点「更多信息」→「仍要运行」）。所有发布文件都由 GitHub Actions 从本仓库的公开源码自动构建，请只从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 页面下载。
 
 ## 隐私政策
 

@@ -90,14 +90,9 @@ Interface texts are written in Simplified Chinese inside `L.T("…")` / `L.F("�
 
 CI can't reach a HomePod, so an A/V sync test on real hardware is done before `dev` is merged into `main`.
 
-## Code signing policy
+## Code signing
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
-[SignPath Foundation](https://signpath.org/).
-
-- Only binaries built by GitHub Actions from the source code in this public repository are signed.
-- Committers and reviewers: [@qiyinxi](https://github.com/qiyinxi)
-- Approvers: [@qiyinxi](https://github.com/qiyinxi)
+Releases are not code-signed yet, so Windows SmartScreen may warn the first time you run the installer or the exe ("More info" → "Run anyway"). Every release is built by GitHub Actions from the public source code in this repository; download it only from the [Releases](https://github.com/qiyinxi/HomePodCast/releases) page.
 
 ## Privacy policy
 
