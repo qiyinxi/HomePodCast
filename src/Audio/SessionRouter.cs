@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -8,12 +7,23 @@ namespace HomePodCast.Audio;
 /// Keeps the routing plan current (rules x sessions on the default output x process tree) and silences
 /// "HomePod only" sessions here once their capture runs, restoring them when that ends. Runs on its own
 /// MTA thread so session enumeration never stalls the capture thread. Reacts to new sessions at once
-/// (IAudioSessionNotification) and re-checks everything every second.
+/// (IAudioSessionNotification) and re-checks everything every second. While anything is silenced it
+/// re-reads those volumes (and the default output) every timer tick, well inside the ~35-50 ms the
+/// capture runs behind, so a volume raised in the Windows mixer or by the app closes the compensation
+/// gate before that louder audio is captured.
 /// </summary>
 internal sealed class SessionRouter : IDisposable
 {
     private static readonly long ConfirmDelay = Stopwatch.Frequency / 10;   // > the ~35-50 ms process-loopback delay
     private static readonly long RefreshInterval = Stopwatch.Frequency;
+
+    /// <summary>Compensation needs a volume check at least this recent (a stalled router fails silent, not loud).</summary>
+    internal static readonly long VerifyWindow = Stopwatch.Frequency / 10;
+
+    /// <summary>Wait between volume checks while something is silenced (rounds up to the ~15.6 ms timer tick).</summary>
+    internal const int WatchIntervalMs = 5;
+    private const int IdleIntervalMs = 250;
+
     private static Guid _context = new("6d1b6a52-5c1a-4c39-9f1e-2a8f6f0b7d31"); // marks our own volume changes
 
     private readonly AppRouting _routing;
@@ -21,7 +31,8 @@ internal sealed class SessionRouter : IDisposable
     private readonly AutoResetEvent _wake = new(false);
     private readonly ManualResetEventSlim _firstPlan = new();
     private readonly Thread _thread;
-    private readonly ConcurrentDictionary<uint, long> _confirmed = new();
+    private readonly CompensationGate _gate = new(ConfirmDelay, VerifyWindow);
+    private readonly HashSet<uint> _unverified = [];
     private readonly Dictionary<string, Tracked> _silenced = [];   // by session instance id
     private readonly object _lock = new();
     private volatile bool _stop;
@@ -44,7 +55,7 @@ internal sealed class SessionRouter : IDisposable
         _routing = routing;
         _isCapturing = isCapturing;
         _routing.Changed += Poke;
-        _thread = new Thread(Run) { IsBackground = true, Name = "Session router" };
+        _thread = new Thread(Run) { IsBackground = true, Name = "Session router", Priority = ThreadPriority.AboveNormal };
         _thread.SetApartmentState(ApartmentState.MTA);
         AppDomain.CurrentDomain.ProcessExit += OnExit;
     }
@@ -65,14 +76,18 @@ internal sealed class SessionRouter : IDisposable
         _wake.Set();
     }
 
-    /// <summary>The target's sessions have been silenced long enough that captured audio is attenuated.</summary>
-    public bool IsConfirmed(uint root, long now) => _confirmed.TryGetValue(root, out var t) && now >= t;
+    /// <summary>
+    /// The target's sessions have been silenced long enough that captured audio is attenuated, and their
+    /// volumes were read back attenuated within <see cref="VerifyWindow"/>.
+    /// </summary>
+    public bool IsConfirmed(uint root, long now) => _gate.IsOpen(root, now);
 
     private void Run()
     {
         IAudioSessionManager2? manager = null;
         string? managerDevice = null;
         var notifier = new Notifier(this);
+        var devices = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
         long nextRefresh = 0;
         bool first = true;
         try
@@ -95,17 +110,15 @@ internal sealed class SessionRouter : IDisposable
                     }
                     _firstPlan.Set();
                 }
-                else
-                {
-                    CheckVolumes();
-                }
-                _wake.WaitOne(250);
+                bool watching = CheckVolumes(devices, managerDevice);
+                _wake.WaitOne(watching ? WatchIntervalMs : IdleIntervalMs);
             }
         }
         finally
         {
             RestoreAll();
             Unregister(ref manager, notifier);
+            Marshal.ReleaseComObject(devices);
             SessionAttenuation.SilencedPids = new HashSet<uint>();
         }
     }
@@ -147,6 +160,7 @@ internal sealed class SessionRouter : IDisposable
         var changed = new HashSet<uint>();
         lock (_lock)
         {
+            if (_stop) return; // exiting: RestoreAll has run or is about to; silence nothing again
             foreach (var t in _silenced.Values) t.Seen = false;
             foreach (var s in sessions)
             {
@@ -191,34 +205,69 @@ internal sealed class SessionRouter : IDisposable
         foreach (var root in plan.Targets.Where(t => t.Compensate).Select(t => t.RootPid))
         {
             bool all = want.Values.Contains(root);
-            if (!all) _confirmed.TryRemove(root, out _);
-            else if (changed.Contains(root) || !_confirmed.ContainsKey(root)) _confirmed[root] = now + ConfirmDelay;
+            if (!all) _gate.Close(root);
+            else if (changed.Contains(root)) _gate.Silenced(root, now);
+            else _gate.Keep(root, now);
         }
-        foreach (var root in _confirmed.Keys.Where(r => !plan.Targets.Any(t => t.Compensate && t.RootPid == r)).ToList())
-            _confirmed.TryRemove(root, out _);
+        foreach (var root in _gate.Roots.Where(r => !plan.Targets.Any(t => t.Compensate && t.RootPid == r)))
+            _gate.Close(root);
         SessionAttenuation.SilencedPids = want.Keys.ToHashSet();
     }
 
-    /// <summary>Between refreshes: someone (the Windows mixer) raised a silenced app's volume -> silence again.</summary>
-    private void CheckVolumes()
+    /// <summary>
+    /// Every tick while something is silenced: a silenced app's volume raised elsewhere (Windows mixer, the app
+    /// itself) is silenced again with compensation paused; volumes read back attenuated keep it allowed. A new
+    /// default output pauses all compensation until the next refresh has silenced the sessions there.
+    /// Returns whether anything is being watched.
+    /// </summary>
+    private bool CheckVolumes(IMMDeviceEnumerator devices, string? managerDevice)
     {
         long now = Stopwatch.GetTimestamp();
         lock (_lock)
         {
+            if (_silenced.Count == 0 || _stop) return false;
+
+            // The apps' audio moves to the new device, where their sessions are not silenced yet.
+            if (managerDevice != null && DefaultDeviceId(devices) is { } id && id != managerDevice)
+            {
+                _gate.CloseAll();
+                Poke();
+                return true;
+            }
+
+            _unverified.Clear();
             foreach (var t in _silenced.Values)
             {
                 try
                 {
                     if (t.Volume.GetMasterVolume(out float raw) < 0 || SessionAttenuation.IsAttenuated(raw) || raw == 0) continue;
-                    _confirmed[t.Root] = now + ConfirmDelay;
+                    _unverified.Add(t.Root);
+                    _gate.Silenced(t.Root, now);
                     t.Volume.SetMasterVolume(SessionAttenuation.Attenuated(raw), ref _context);
                     Log.Info($"routing: pid {t.Pid} volume changed to {raw:P0} elsewhere; still HomePod only");
                 }
                 catch (Exception ex)
                 {
+                    _unverified.Add(t.Root);
                     Log.Debug($"routing: volume check: {ex.Message}");
                 }
             }
+            foreach (var t in _silenced.Values)
+                if (!_unverified.Contains(t.Root)) _gate.Verified(t.Root, now);
+            return true;
+        }
+    }
+
+    private static string? DefaultDeviceId(IMMDeviceEnumerator devices)
+    {
+        if (devices.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var device) < 0) return null;
+        try
+        {
+            return device.GetId(out var id) >= 0 ? id : null;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(device);
         }
     }
 
@@ -244,12 +293,13 @@ internal sealed class SessionRouter : IDisposable
                 ReleaseTracked(t);
             }
             _silenced.Clear();
-            _confirmed.Clear();
+            _gate.CloseAll();
         }
     }
 
     private void OnExit(object? sender, EventArgs e)
     {
+        _stop = true; // the router thread must not silence anything again after this restore
         try { RestoreAll(); } catch { }
     }
 
@@ -264,6 +314,7 @@ internal sealed class SessionRouter : IDisposable
             device.GetId(out var id);
             if (manager == null || id != managerDevice)
             {
+                if (managerDevice != null) _gate.CloseAll(); // nothing on the new device is silenced yet
                 Unregister(ref manager, notifier);
                 var iid = typeof(IAudioSessionManager2).GUID;
                 CoreAudio.Check(device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj), "session manager");

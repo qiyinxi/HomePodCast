@@ -143,6 +143,72 @@ public class SessionAttenuationTests
         Assert.Equal(1f, SessionAttenuation.CompensationGain(true, false, quiet));  // not silenced long enough
         Assert.Equal(1f, SessionAttenuation.CompensationGain(true, true, 0.01f));   // unattenuated: never x100000
     }
+
+    // Gate timing in milliseconds: confirm 100, verification must be at most 100 old.
+    private static CompensationGate Gate() => new(confirmDelay: 100, verifyWindow: 100);
+
+    [Fact]
+    public void Gate_opens_only_after_the_confirm_delay_and_while_volumes_are_being_verified()
+    {
+        var gate = Gate();
+        gate.Silenced(7, now: 0);
+        gate.Verified(7, now: 10);
+        Assert.False(gate.IsOpen(7, 50));     // attenuated audio has not reached the capture yet
+        gate.Verified(7, now: 100);
+        Assert.True(gate.IsOpen(7, 120));
+        Assert.False(gate.IsOpen(8, 120));    // another target
+        // The router stopped re-reading the volumes: an unverified session could be audible again.
+        Assert.False(gate.IsOpen(7, 201));
+        gate.Verified(7, now: 205);
+        Assert.True(gate.IsOpen(7, 210));
+    }
+
+    [Fact]
+    public void Volume_raised_elsewhere_closes_the_gate_at_once_for_the_confirm_delay()
+    {
+        var gate = Gate();
+        gate.Silenced(7, 0);
+        gate.Verified(7, 100);
+        Assert.True(gate.IsOpen(7, 110));
+        // Windows mixer drags the app up: the router silences it again (and does not verify it this round).
+        gate.Silenced(7, 115);
+        Assert.False(gate.IsOpen(7, 116));
+        gate.Verified(7, 130);
+        Assert.False(gate.IsOpen(7, 200));    // the louder audio may still be on its way to the capture
+        gate.Verified(7, 210);
+        Assert.True(gate.IsOpen(7, 215));
+    }
+
+    [Fact]
+    public void Keep_does_not_postpone_an_open_gate_and_a_device_switch_closes_every_gate()
+    {
+        var gate = Gate();
+        gate.Silenced(7, 0);
+        gate.Silenced(9, 0);
+        gate.Verified(7, 100);
+        gate.Verified(9, 100);
+        gate.Keep(7, 105);                    // unchanged at the next refresh
+        Assert.True(gate.IsOpen(7, 110));
+        gate.CloseAll();                      // default output changed: sessions there are not silenced yet
+        Assert.False(gate.IsOpen(7, 111));
+        Assert.False(gate.IsOpen(9, 111));
+        gate.Keep(7, 120);
+        gate.Verified(7, 125);
+        Assert.False(gate.IsOpen(7, 200));
+        Assert.True(gate.IsOpen(7, 220));
+        gate.Close(7);
+        Assert.False(gate.IsOpen(7, 230));
+        Assert.Empty(gate.Roots);
+    }
+
+    [Fact]
+    public void Router_rechecks_volumes_well_inside_the_capture_delay()
+    {
+        // A volume raised elsewhere must be caught before its louder audio reaches the process-loopback
+        // capture (~35 ms later). Waits round up to the 15.6 ms timer tick.
+        Assert.True(Math.Max(SessionRouter.WatchIntervalMs, 15.625) < RoutedCapture.RoutedExtraLatencyMs);
+        Assert.True(SessionRouter.VerifyWindow <= System.Diagnostics.Stopwatch.Frequency / 10);
+    }
 }
 
 public class StreamMixerTests
