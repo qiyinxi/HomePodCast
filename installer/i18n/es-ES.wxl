@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="es-ES" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="Iniciar HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast necesita .NET 10 Desktop Runtime (x64). Descárguelo de https://dotnet.microsoft.com/download/dotnet/10.0, instálelo y vuelva a ejecutar este programa de instalación." />
+  <String Id="DowngradeError" Value="Ya hay instalada una versión más reciente de HomePodCast. Para instalar esta versión anterior, desinstale primero HomePodCast (su configuración se conserva)." />
+  <String Id="ShortcutDescription" Value="Transmitir el sonido de este PC a un HomePod" />
+  <String Id="FirewallRuleDescription" Value="Permite que los altavoces AirPlay de la red local se conecten de vuelta a HomePodCast (sincronización del reloj, solicitudes de retransmisión). Se quita al desinstalar HomePodCast." />
+</WixLocalization>

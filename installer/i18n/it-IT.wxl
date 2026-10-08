@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="it-IT" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="Avvia HomePodCast" />
+  <String Id="DotNetMissing" Value="HomePodCast richiede .NET 10 Desktop Runtime (x64). Scaricarlo da https://dotnet.microsoft.com/download/dotnet/10.0, installarlo e quindi eseguire di nuovo questa installazione." />
+  <String Id="DowngradeError" Value="È già installata una versione più recente di HomePodCast. Per installare questa versione precedente, disinstallare prima HomePodCast (le impostazioni vengono mantenute)." />
+  <String Id="ShortcutDescription" Value="Trasmetti l'audio di questo PC a un HomePod" />
+  <String Id="FirewallRuleDescription" Value="Consente agli altoparlanti AirPlay della rete locale di riconnettersi a HomePodCast (sincronizzazione dell'orologio, richieste di ritrasmissione). Viene rimossa quando si disinstalla HomePodCast." />
+
+  <!-- WixToolset.Firewall.wixext 5.0.2 has these progress and error strings only for en-US, es-ES, ja-JP and pl-PL. -->
+  <String Id="msierrFirewallCannotConnect" Value="Impossibile connettersi a Windows Firewall.  ([2]   [3]   [4]   [5])" />
+  <String Id="WixSchedFirewallExceptionsInstall" Value="Configurazione di Windows Firewall" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="Configurazione di Windows Firewall" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="Annullamento delle modifiche a Windows Firewall" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="Aggiunta delle regole di Windows Firewall" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="Annullamento delle modifiche a Windows Firewall" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="Rimozione delle regole di Windows Firewall" />
+</WixLocalization>

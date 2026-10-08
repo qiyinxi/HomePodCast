@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="nl-NL" Codepage="1252" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="HomePodCast starten" />
+  <String Id="DotNetMissing" Value="HomePodCast heeft de .NET 10 Desktop Runtime (x64) nodig. Download deze via https://dotnet.microsoft.com/download/dotnet/10.0, installeer deze en voer deze installatie daarna opnieuw uit." />
+  <String Id="DowngradeError" Value="Er is al een nieuwere versie van HomePodCast geïnstalleerd. Als u deze oudere versie wilt installeren, verwijdert u eerst HomePodCast (uw instellingen blijven behouden)." />
+  <String Id="ShortcutDescription" Value="Het geluid van deze pc naar een HomePod streamen" />
+  <String Id="FirewallRuleDescription" Value="Hiermee kunnen AirPlay-speakers in het lokale netwerk terugverbinden met HomePodCast (kloksynchronisatie, verzoeken om pakketten opnieuw te verzenden). Wordt verwijderd wanneer HomePodCast wordt verwijderd." />
+
+  <!-- WixToolset.Firewall.wixext 5.0.2 has these progress and error strings only for en-US, es-ES, ja-JP and pl-PL. -->
+  <String Id="msierrFirewallCannotConnect" Value="Kan geen verbinding maken met Windows Firewall.  ([2]   [3]   [4]   [5])" />
+  <String Id="WixSchedFirewallExceptionsInstall" Value="Windows Firewall configureren" />
+  <String Id="WixSchedFirewallExceptionsUninstall" Value="Windows Firewall configureren" />
+  <String Id="WixRollbackFirewallExceptionsInstall" Value="Wijzigingen in Windows Firewall ongedaan maken" />
+  <String Id="WixExecFirewallExceptionsInstall" Value="Windows Firewall-regels toevoegen" />
+  <String Id="WixRollbackFirewallExceptionsUninstall" Value="Wijzigingen in Windows Firewall ongedaan maken" />
+  <String Id="WixExecFirewallExceptionsUninstall" Value="Windows Firewall-regels verwijderen" />
+</WixLocalization>

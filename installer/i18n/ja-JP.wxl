@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="ja-JP" Codepage="932" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="LaunchApp" Value="HomePodCast を起動する" />
+  <String Id="DotNetMissing" Value="HomePodCast には .NET 10 デスクトップ ランタイム (x64) が必要です。https://dotnet.microsoft.com/download/dotnet/10.0 からダウンロードしてインストールし、このセットアップをもう一度実行してください。" />
+  <String Id="DowngradeError" Value="より新しいバージョンの HomePodCast が既にインストールされています。この古いバージョンをインストールするには、先に HomePodCast をアンインストールしてください (設定は保持されます)。" />
+  <String Id="ShortcutDescription" Value="この PC の音声を HomePod に送信します" />
+  <String Id="FirewallRuleDescription" Value="ローカル ネットワーク上の AirPlay スピーカーから HomePodCast への接続 (時刻同期と再送要求) を許可します。HomePodCast をアンインストールすると削除されます。" />
+</WixLocalization>
