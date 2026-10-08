@@ -222,8 +222,8 @@ internal sealed class MixerPage : ScrollPage
             _meterTimer.Dispose();
             _refreshTimer.Dispose();
             _masterWait.Dispose();
+            ClearRows(); // rows first: they let go of their tooltips
             _tips.Dispose();
-            foreach (var a in _apps) a.Dispose();
         }
         base.Dispose(disposing);
     }
@@ -349,6 +349,17 @@ internal sealed class MixerPage : ScrollPage
         public void UpdateMeter()
         {
             try { _meter.SetLevel(_app.Muted ? 0 : _app.Peak); } catch { }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // The page's tooltip would otherwise keep every row ever shown.
+                _page._tips.SetToolTip(_mute, null);
+                _page._tips.SetToolTip(_route, null);
+            }
+            base.Dispose(disposing);
         }
 
         protected override int Arrange(int width, bool apply)
