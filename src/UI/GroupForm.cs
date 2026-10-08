@@ -17,6 +17,7 @@ internal sealed class GroupForm : FluentDialog
     private readonly FluentComboBox _extra = new() { PreferredWidth = 280 };
     private readonly ToggleSwitch _split = new(L.T("电脑端分声道"));
     private readonly ToggleSwitch _swap = new(L.T("交换左右"));
+    private readonly ToggleSwitch _leaderOnly = new(L.T("只连接主音箱（实验）"));
     private readonly TableLayoutPanel _memberRows = new() { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 4 };
     private readonly TextBlock _state = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
     private readonly Dictionary<string, int> _offsets;
@@ -61,6 +62,20 @@ internal sealed class GroupForm : FluentDialog
             ? L.T("立体声对的两只音箱会自动一起连接，不需要再选第二台。")
             : L.T("多房间：选择另一台 AirPlay 音箱，和当前音箱按同一时间线同步播放。")));
 
+        if (_tsid != null)
+        {
+            // A pair plays as one: both members by default, or (to test whether it relays) the leader alone.
+            _leaderOnly.Checked = cfg.GroupPairLeaderOnly;
+            var mode = Ui.Stack(4, _leaderOnly, Ui.Note(L.T(
+                "默认两只音箱各连一路，都收到完整立体声，由这对音箱自己分左右声道，一般不需要电脑端分声道。打开后只连接主音箱，用来实测它会不会转发给另一只。")));
+            Body.Controls.Add(mode);
+            Body.GapBefore[mode] = 16;
+        }
+        else
+        {
+            _leaderOnly.Dispose(); // only pairs have a leader; never shown or read otherwise
+        }
+
         _split.Checked = cfg.GroupSplitChannels;
         _swap.Checked = cfg.GroupSwapChannels;
         var channels = Ui.Stack(4, _split,
@@ -84,6 +99,7 @@ internal sealed class GroupForm : FluentDialog
         _extra.SelectedIndexChanged += (_, _) => ShowMembers();
         _split.CheckedChanged += (_, _) => ShowMembers();
         _swap.CheckedChanged += (_, _) => ShowMembers();
+        _leaderOnly.CheckedChanged += (_, _) => ShowMembers();
         ok.Click += (_, _) => Apply();
         ShowMembers();
         PerformLayout();
@@ -136,12 +152,20 @@ internal sealed class GroupForm : FluentDialog
         _extra.Enabled = true;
     }
 
-    /// <summary>The speakers that would play, in channel order (the first one is left unless swapped).</summary>
+    /// <summary>
+    /// The speakers that would play, in channel order (the first one is left unless swapped); a pair's
+    /// tight-sync leader is marked.
+    /// </summary>
     private List<(string DeviceId, string Name)> Members()
     {
         var cfg = _config;
         if (_tsid != null)
-            return StereoPairs.Members(_found, _tsid).Select(d => (d.DeviceId, $"{d.Name}  {d.Address}")).ToList();
+        {
+            var pair = StereoPairs.Members(_found, _tsid);
+            var leader = StereoPairs.Leader(pair);
+            return pair.Select(d => (d.DeviceId, d == leader ? L.F("{0}（主音箱）", $"{d.Name}  {d.Address}") : $"{d.Name}  {d.Address}"))
+                .ToList();
+        }
         if (cfg.DeviceId == null || _extra.SelectedIndex <= 0 || _extra.SelectedIndex >= _choices.Count) return [];
         var extra = _choices[_extra.SelectedIndex]!;
         return [(cfg.DeviceId, cfg.DeviceName ?? cfg.DeviceId), (extra.DeviceId, extra.Name)];
@@ -152,7 +176,8 @@ internal sealed class GroupForm : FluentDialog
         foreach (var (key, slider) in CurrentOffsetSliders()) _offsets[key] = slider.Value;
 
         var members = Members();
-        bool group = members.Count == 2;
+        bool leaderOnly = _tsid != null && _leaderOnly.Checked;
+        bool group = members.Count == 2 && !leaderOnly;
         _split.Enabled = group;
         _swap.Enabled = group && _split.Checked;
 
@@ -201,10 +226,21 @@ internal sealed class GroupForm : FluentDialog
 
         _state.Text = _config.DeviceId == null ? L.T("请先在主界面选择音箱。")
             : !_scanned ? L.T("正在搜索音箱…")
+            : leaderOnly ? LeaderOnlyState()
             : _tsid != null && members.Count < 2 ? L.F("没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。", members.Count)
             : group ? L.T("两台音箱共用一个音量滑块，偏移量加在各自的音量上。")
             : L.T("现在只推送到一台音箱。");
         PerformLayout();
+    }
+
+    /// <summary>Which member a leader-only connection would use (the same choice as GroupPlan.PairTargets).</summary>
+    private string LeaderOnlyState()
+    {
+        var pair = StereoPairs.Members(_found, _tsid!);
+        if (pair.Count == 0) return L.T("找不到音箱（是否通电、和电脑在同一网络？）");
+        return StereoPairs.Leader(pair) is { } leader
+            ? L.F("只连接主音箱「{0}」。另一只会不会一起响，需要实测。", leader.Name)
+            : L.F("这对音箱都没有标出主音箱，将只连接「{0}」。", pair[0].Name);
     }
 
     private static string Offset(int v) => v == 0 ? "0" : $"{v:+0;-0}";
@@ -219,6 +255,7 @@ internal sealed class GroupForm : FluentDialog
         cfg.GroupSplitChannels = _split.Checked;
         cfg.GroupSwapChannels = _swap.Checked;
         cfg.GroupVolumeOffsets = _offsets.Where(kv => kv.Value != 0).ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (_tsid != null) cfg.GroupPairLeaderOnly = _leaderOnly.Checked;
         if (_tsid == null && _extra.Enabled)
         {
             var extra = _extra.SelectedIndex > 0 && _extra.SelectedIndex < _choices.Count ? _choices[_extra.SelectedIndex] : null;
@@ -230,7 +267,7 @@ internal sealed class GroupForm : FluentDialog
     }
 
     private static string PlayLayout(AppConfig cfg) => GroupPlan.FromConfig(cfg) is { } p
-        ? $"{p.Kind}|{p.PairTsid}|{string.Join(",", p.Members.Select(m => m.DeviceId))}|{p.SplitChannels}|{p.SwapChannels}|" +
+        ? $"{p.Kind}|{p.PairTsid}|{p.PairLeaderOnly}|{string.Join(",", p.Members.Select(m => m.DeviceId))}|{p.SplitChannels}|{p.SwapChannels}|" +
           string.Join(",", p.VolumeOffsets.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}"))
         : "single";
 

@@ -197,8 +197,13 @@ public sealed class RtpSender : IDisposable
         }
     }
 
-    // TODO(ALAC): PCM (ct=1) only. If real stereo pairs turn out to accept only ALAC (ct=2, audioFormat
-    // 0x40000 in the stream SETUP), encode here per mode; the payload (and PacketBytes) then become variable.
+    // TODO(ALAC): PCM (ct=1) only. The one sender publicly confirmed to play a HomePod stereo pair correctly
+    // (OwnTone, two realtime sessions) sends ALAC (ct=2, audioFormat 0x40000); pyatv and this app send PCM to
+    // single HomePods, which accept it. Nothing says a pair member, which is an ordinary HomePod session, would
+    // refuse PCM, so no encoder for now. If one does: the cheapest route is ALAC's uncompressed ("escape")
+    // frame from Apple's open-source ALAC (Apache-2.0): a few header bits, then the samples verbatim, about
+    // 1411 bytes per 352-frame packet, encoded here per mode. A real compressing encoder would be a port of
+    // that ALAC encoder (a few thousand lines). Either way the payload (and PacketBytes) become variable.
     private void EncodePayloads(ReadOnlySpan<float> pcm)
     {
         if (_payloads[(int)ChannelMode.Stereo] is { } stereo) ToS16BigEndian(pcm, stereo);

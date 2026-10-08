@@ -103,4 +103,144 @@ public class StereoPairTests
         Assert.Contains("buddyNotReachable=False", lines[1]);
         Assert.Empty(StereoPairs.Describe([Standalone]));
     }
+
+    // ---- Real pairs, as their TXT records were posted in OwnTone issues (ids and addresses made up) ----
+
+    private const string BueroTsid = "EAFA36AA-9785-54B2-A537-D9EE2A55CF1C";
+
+    /// <summary>OwnTone #1291, idle original HomePods on OS 15.4: gid "&lt;tsid&gt;+index+uuid", bit 13 on "Links" only.</summary>
+    internal static (AirPlayDevice Links, AirPlayDevice Rechts) IdlePair()
+    {
+        // Rechts gets the smaller device id, so ordering by device id would put it first.
+        var links = Device("Links", "BB:00:00:00:00:02", "192.168.50.21", "AudioAccessory1,1",
+            ("tsid", BueroTsid), ("gpn", "Büro 2"), ("igl", "1"), ("gcgl", "1"), ("flags", "0x9a404"), ("tsm", "0"),
+            ("gid", BueroTsid + "+0+6276FFFA-04E1-439E-8139-2C906B34E587"), ("osvers", "15.4"));
+        var rechts = Device("Rechts", "BB:00:00:00:00:01", "192.168.50.22", "AudioAccessory1,1",
+            ("tsid", BueroTsid), ("gpn", "Büro 2"), ("igl", "1"), ("gcgl", "1"), ("flags", "0x98404"), ("tsm", "0"),
+            ("gid", BueroTsid + "+1+4671EEC3-7E13-4DC7-BEC3-C9805D3AB964"), ("osvers", "15.4"));
+        return (links, rechts);
+    }
+
+    [Fact]
+    public void The_leader_is_the_one_member_with_flags_bit_13_and_gid_index_orders_the_pair()
+    {
+        var (links, rechts) = IdlePair();
+        var members = StereoPairs.Members([rechts, Standalone, links], BueroTsid);
+
+        Assert.Equal(["Links", "Rechts"], members.Select(m => m.Name)); // gid index 0, 1 beats device-id order
+        Assert.Same(links, StereoPairs.Leader(members));
+        Assert.Equal(0, StereoPairs.GidIndex(links));
+        Assert.Equal(1, StereoPairs.GidIndex(rechts));
+
+        var role = PairRole.Of(links);
+        Assert.True(role.TightSyncLeader);
+        Assert.False(role.BuddyNotReachable);
+        Assert.False(role.SessionActive);
+        Assert.False(PairRole.Of(rechts).TightSyncLeader);
+
+        // igl/gcgl are 1 on both members, so they can't be what tells the leader apart.
+        Assert.Equal(links.Txt["igl"], rechts.Txt["igl"]);
+
+        var entry = StereoPairs.Merge([rechts, links]).Single();
+        Assert.Equal("Büro 2", entry.Name);
+        Assert.Equal(links.DeviceId, entry.Txt["leader"]);
+        Assert.Equal("BB:00:00:00:00:02,BB:00:00:00:00:01", entry.Txt["members"]);
+    }
+
+    [Fact]
+    public void An_older_pair_with_gid_equal_to_tsid_is_ordered_by_device_id_and_still_has_a_leader()
+    {
+        // OwnTone #704 (HomePod OS 12): both share gid == tsid; the right one had bit 13.
+        const string tsid = "6BA31C4B-5D14-57DC-9B4A-8C919D3E4068";
+        var right = Device("HomePod Right", "CC:00:00:00:00:02", "192.168.2.102", "AudioAccessory1,1",
+            ("tsid", tsid), ("gid", tsid), ("gpn", "Living Room"), ("igl", "1"), ("gcgl", "1"), ("flags", "0x1a404"));
+        var left = Device("HomePod Left", "CC:00:00:00:00:01", "192.168.2.101", "AudioAccessory1,1",
+            ("tsid", tsid), ("gid", tsid), ("gpn", "Living Room"), ("igl", "1"), ("gcgl", "1"), ("flags", "0x18404"));
+
+        var members = StereoPairs.Members([right, left], tsid);
+        Assert.Equal(["HomePod Left", "HomePod Right"], members.Select(m => m.Name)); // by device id
+        Assert.Null(StereoPairs.GidIndex(left));
+        Assert.Same(right, StereoPairs.Leader(members)); // the leader is not always the left one
+    }
+
+    [Fact]
+    public void A_pair_that_is_playing_from_another_sender_is_still_found_by_tsid()
+    {
+        // OwnTone #1413: while in a sender's group both members advertise that group as gid/pgid, igl=gcgl=0,
+        // and bits 11 (relay) and 17 (receiver session active).
+        const string senderGroup = "A918B6A2-BB3F-4A50-A422-0BB043C9F3BF";
+        AirPlayDevice Busy(string name, string id, string flags) => Device(name, id, "192.168.50.2" + id[^1], "AudioAccessory1,1",
+            ("tsid", BueroTsid), ("gpn", "Büro 2"), ("gid", senderGroup), ("pgid", senderGroup), ("pgcgl", "0"),
+            ("igl", "0"), ("gcgl", "0"), ("flags", flags));
+        var links = Busy("Links", "BB:00:00:00:00:02", "0xbac04");
+        var rechts = Busy("Rechts", "BB:00:00:00:00:01", "0xb8c04");
+
+        var pair = StereoPairs.Merge([links, rechts]).Single();
+        Assert.Equal(StereoPairs.PairId(BueroTsid), pair.DeviceId);
+        Assert.Same(links, StereoPairs.Leader([links, rechts]));
+        Assert.All(new[] { links, rechts }, d =>
+        {
+            var r = PairRole.Of(d);
+            Assert.True(r.SessionActive);
+            Assert.True(r.SupportsRelay);
+            Assert.Null(r.GidIndex); // the sender's group id has no index
+        });
+    }
+
+    [Fact]
+    public void Without_exactly_one_bit_13_there_is_no_leader()
+    {
+        var both = new[] { PairMember("A", "AA:00:00:00:00:01", "192.168.50.11"), PairMember("B", "AA:00:00:00:00:02", "192.168.50.12") };
+        Assert.Null(StereoPairs.Leader(both)); // the fixture sets 0x2404 on both
+
+        var none = both.Select(d => d with { Txt = new Dictionary<string, string>(d.Txt) { ["flags"] = "0x18404" } }).ToArray();
+        Assert.Null(StereoPairs.Leader(none));
+
+        // A mini pair whose buddy is gone: the leader shows bit 14 as well.
+        var lonely = PairMember("Keller (2)", "AA:00:00:00:00:03", "192.168.50.13") with
+        {
+            Txt = new Dictionary<string, string> { ["tsid"] = Tsid, ["flags"] = "0x9e404" },
+        };
+        Assert.True(PairRole.Of(lonely).BuddyNotReachable);
+        Assert.True(PairRole.Of(lonely).TightSyncLeader);
+    }
+
+    [Theory]
+    [InlineData(Tsid + "+0+6276FFFA-04E1-439E-8139-2C906B34E587", 0)]
+    [InlineData(Tsid + "+1+X", 1)]
+    [InlineData("A7D5EDDB-26B0-4D2E-A921-06949E8E8675+0+1D921AC6-B591-4141-87E9-D4CF73033038", null)] // prefix is not the tsid
+    [InlineData(Tsid, null)]
+    [InlineData(Tsid + "+x+Y", null)]
+    [InlineData(Tsid + "+-1+Y", null)]
+    [InlineData("", null)]
+    public void Gid_index_is_read_only_from_tsid_plus_number_plus_uuid(string gid, int? expected)
+    {
+        var d = Device("A", "AA:00:00:00:00:01", "192.168.50.11", txt: [("tsid", Tsid), ("gid", gid)]);
+        Assert.Equal(expected, StereoPairs.GidIndex(d));
+    }
+
+    [Fact]
+    public void Scan_report_names_the_leader_the_order_and_every_group_key()
+    {
+        var (links, rechts) = IdlePair();
+        var lines = StereoPairs.Describe([rechts, links]).ToList();
+        Assert.Equal(3, lines.Count);
+        Assert.Contains("stereo pair \"Büro 2\"", lines[0]);
+        Assert.Contains("leader Links", lines[0]);
+        Assert.Contains("order Links, Rechts (by gid index)", lines[0]);
+        var linksLine = lines.Single(l => l.Contains("Links 192.168.50.21"));
+        foreach (var part in new[] { "tightSyncLeader=True", "bit17 sessionActive=False", "bit11 relay=False", "gidIndex=0", "tsm=0", "igl=1", "pgid=-" })
+            Assert.Contains(part, linksLine);
+
+        // A standalone HomePod only shows up with scan --txt.
+        Assert.Empty(StereoPairs.Describe([Standalone]));
+        var single = Assert.Single(StereoPairs.Describe([Standalone], allHomePods: true));
+        Assert.StartsWith("no tsid: ", single);
+        Assert.Contains("tightSyncLeader=False", single);
+
+        var unknown = StereoPairs.Describe([PairMember("A", "AA:00:00:00:00:01", "192.168.50.11"),
+            PairMember("B", "AA:00:00:00:00:02", "192.168.50.12")]).First();
+        Assert.Contains("leader unknown", unknown);
+        Assert.Contains("by device id", unknown);
+    }
 }

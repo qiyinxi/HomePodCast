@@ -17,6 +17,7 @@ public class GroupPlanTests
             """)!;
         Assert.Null(GroupPlan.FromConfig(cfg));
         Assert.False(cfg.GroupSplitChannels);
+        Assert.False(cfg.GroupPairLeaderOnly);
         Assert.Null(cfg.MultiRoomDeviceId);
 
         Assert.Null(GroupPlan.FromConfig(new AppConfig()));
@@ -69,6 +70,72 @@ public class GroupPlanTests
         })!;
         Assert.Equal(first, plan.ChannelsFor(0));
         Assert.Equal(second, plan.ChannelsFor(1));
+    }
+
+    private const string BueroTsid = "EAFA36AA-9785-54B2-A537-D9EE2A55CF1C";
+
+    private static GroupPlan Pair(bool leaderOnly = false, bool split = false) =>
+        GroupPlan.FromConfig(new AppConfig
+        {
+            DeviceId = StereoPairs.PairId(BueroTsid), DeviceName = "Büro 2", GroupPairLeaderOnly = leaderOnly, GroupSplitChannels = split,
+        })!;
+
+    [Fact]
+    public void A_pair_connects_both_members_by_default_in_their_stable_order()
+    {
+        var (links, rechts) = StereoPairTests.IdlePair();
+        var plan = Pair();
+        Assert.False(plan.PairLeaderOnly);
+        Assert.True(plan.SharedGroupUuid);
+
+        Assert.Equal([links, rechts], plan.PairTargets([rechts, links]));
+        // Both get the full stereo signal: the pair plays its own left and right side.
+        Assert.Equal(ChannelMode.Stereo, plan.ChannelsFor(0));
+        Assert.Equal(ChannelMode.Stereo, plan.ChannelsFor(1));
+
+        var ex = Assert.Throws<AirPlayException>(() => plan.PairTargets([links]));
+        Assert.Contains("1", ex.Message); // both must be online
+        Assert.Throws<AirPlayException>(() => plan.PairTargets([]));
+    }
+
+    [Fact]
+    public void Leader_only_connects_the_tight_sync_leader_alone_with_full_stereo()
+    {
+        var (links, rechts) = StereoPairTests.IdlePair();
+        var plan = Pair(leaderOnly: true, split: true);
+        Assert.True(plan.PairLeaderOnly);
+
+        Assert.Equal([links], plan.PairTargets([rechts, links]));
+        Assert.Equal([links], plan.PairTargets([links]));          // the other member may be offline
+        Assert.Equal([rechts], plan.PairTargets([rechts]));        // no leader left: the one that is there
+        Assert.Throws<AirPlayException>(() => plan.PairTargets([]));
+        Assert.Equal(ChannelMode.Stereo, plan.ChannelsFor(0));     // never split for the leader alone
+
+        // No member claims bit 13: the first one in the stable order.
+        var plain = new[] { rechts, links }.Select(d => d with { Txt = new Dictionary<string, string>(d.Txt) { ["flags"] = "0x18404" } }).ToList();
+        Assert.Equal("Links", Assert.Single(plan.PairTargets(plain)).Name);
+
+        // Leader-only is a stereo-pair setting; multi-room ignores it.
+        var multi = GroupPlan.FromConfig(new AppConfig
+        {
+            DeviceId = "AA:00:00:00:00:01", MultiRoomDeviceId = "AA:00:00:00:00:02", GroupPairLeaderOnly = true, GroupSplitChannels = true,
+        })!;
+        Assert.False(multi.PairLeaderOnly);
+        Assert.Equal(ChannelMode.LeftOnly, multi.ChannelsFor(0));
+        Assert.Throws<InvalidOperationException>(() => multi.PairTargets([links, rechts]));
+    }
+
+    [Fact]
+    public void Every_member_of_one_connection_gets_the_same_group_uuid()
+    {
+        var plan = Pair();
+        var id = Guid.NewGuid();
+        var a = plan.SessionExtras(id)!;
+        var b = plan.SessionExtras(id)!;
+        Assert.Equal(id.ToString().ToUpperInvariant(), a["groupUUID"]);
+        Assert.Equal(a["groupUUID"], b["groupUUID"]);
+        Assert.Single(a);
+        Assert.Null((plan with { SharedGroupUuid = false }).SessionExtras(id));
     }
 
     [Fact]

@@ -17,6 +17,12 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>Experiments only (`stream --setup key=value`): keys added to or replaced in the stream SETUP.</summary>
     public IReadOnlyDictionary<string, object?>? StreamSetupOverrides { get; init; }
+
+    /// <summary>
+    /// Group members only (stereo pair / multi-room): keys added to or replaced in the session SETUP, such as
+    /// the group's shared "groupUUID". Null for a single speaker, whose session SETUP stays as it always was.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?>? SessionSetupExtras { get; init; }
 }
 
 /// <summary>
@@ -141,23 +147,10 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
             HapKeys.Derive(shared, "Control-Salt", "Control-Read-Encryption-Key"));
 
         // --- session SETUP
-        var setup1 = Expect(_rtsp.RtspPlist("SETUP", new Dictionary<string, object?>
-        {
-            ["deviceID"] = "02:48:50:43:41:53",
-            ["macAddress"] = "02:48:50:43:41:53",
-            ["sessionUUID"] = Guid.NewGuid().ToString().ToUpperInvariant(),
-            ["timingPort"] = _timing.Port,
-            ["timingProtocol"] = "NTP",
-            ["isMultiSelectAirPlay"] = true,
-            ["groupContainsGroupLeader"] = false,
-            ["senderSupportsRelay"] = false,
-            ["statsCollectionEnabled"] = false,
-            ["name"] = Environment.MachineName,
-            ["model"] = "HomePodCast",
-            ["osName"] = "Windows",
-            ["osVersion"] = Environment.OSVersion.Version.ToString(),
-            ["sourceVersion"] = "690.7.1",
-        }), "SETUP session");
+        if (options.SessionSetupExtras is { } extras)
+            Log.Info($"session SETUP extras: {string.Join(", ", extras.Select(o => $"{o.Key}={o.Value}"))}");
+        var setup1 = Expect(_rtsp.RtspPlist("SETUP",
+            SessionSetupBody(Guid.NewGuid().ToString().ToUpperInvariant(), _timing.Port, options.SessionSetupExtras)), "SETUP session");
         var s1 = BPlist.ReadDict(setup1.Body);
         int eventPort = Convert.ToInt32(s1.GetValueOrDefault("eventPort") ?? 0L);
         Log.Debug($"SETUP session -> eventPort={eventPort} timingPort={s1.GetValueOrDefault("timingPort")}");
@@ -173,7 +166,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
             ["audioFormat"] = 0x800,          // PCM 44100/16/2
             ["audioMode"] = "default",
             ["controlPort"] = ((IPEndPoint)_control.Client.LocalEndPoint!).Port,
-            ["ct"] = 1,                        // raw PCM (TODO(ALAC): pairs may need ct=2, see RtpSender.EncodePayloads)
+            ["ct"] = 1,                        // raw PCM, as pyatv sends (see TODO(ALAC) in RtpSender.EncodePayloads)
             ["isMedia"] = true,
             ["latencyMax"] = Math.Max(latencyFrames, 88200),
             ["latencyMin"] = latencyFrames,
@@ -204,6 +197,53 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
         LatencyFrames = latencyFrames;
         return new RtpTarget(_control, _rtsp.RemoteIp, dataPort, controlPort, streamKey, _rtsp.SessionId);
+    }
+
+    /// <summary>
+    /// The session SETUP plist. Without extras (a single speaker) these are exactly the keys, values and order
+    /// sent before groups existed; a group member gets its extras added or replaced after them.
+    /// Like pyatv's realtime sender: NTP timing, isMultiSelectAirPlay, and groupContainsGroupLeader false (what
+    /// the iOS Music app sends, per OwnTone; members of an iOS group advertise gcgl=0 while playing).
+    /// </summary>
+    /// <remarks>
+    /// TODO(PTP): Apple senders time HomePods (features bit 41) with PTP, and a stereo pair's own tight sync
+    /// runs on it. Public evidence (OwnTone 28.x, NTP-only until 29.1) says two NTP sessions to the members of a
+    /// pair play correctly split stereo, so PTP is not required; it may still hold the two sides closer together.
+    /// What a PTP session would need, from OwnTone's PTP path and shairport-sync/nqptp:
+    ///  1. a PTP clock on this PC (IEEE 1588 Sync/Follow_Up on UDP 319/320; announce as grandmaster, or follow
+    ///     the HomePods' clock) with a 64-bit ClockID;
+    ///  2. here: timingProtocol "PTP" instead of timingPort/"NTP", plus groupUUID, timingPeerInfo
+    ///     {Addresses, ID, ClockID, DeviceType, SupportsClockPortMatchingOverride} and timingPeerList
+    ///     (this PC and every member);
+    ///  3. SETPEERS (or SETPEERSX, features bit 52) with all member addresses on every session after SETUP;
+    ///  4. in RtpSender: PTP-style sync packets carrying the PTP time and ClockID instead of 0xD4 NTP ones.
+    /// Hook: TimingServer would become one of two timing back-ends chosen per group; the sync-packet writer is
+    /// RtpSender.WriteSyncPacket. Not implemented: a PTP master is a project of its own, and nothing shows a
+    /// pair needs it.
+    /// </remarks>
+    internal static Dictionary<string, object?> SessionSetupBody(string sessionUuid, int timingPort,
+        IReadOnlyDictionary<string, object?>? extras)
+    {
+        var body = new Dictionary<string, object?>
+        {
+            ["deviceID"] = "02:48:50:43:41:53",
+            ["macAddress"] = "02:48:50:43:41:53",
+            ["sessionUUID"] = sessionUuid,
+            ["timingPort"] = timingPort,
+            ["timingProtocol"] = "NTP",
+            ["isMultiSelectAirPlay"] = true,
+            ["groupContainsGroupLeader"] = false,
+            ["senderSupportsRelay"] = false,
+            ["statsCollectionEnabled"] = false,
+            ["name"] = Environment.MachineName,
+            ["model"] = "HomePodCast",
+            ["osName"] = "Windows",
+            ["osVersion"] = Environment.OSVersion.Version.ToString(),
+            ["sourceVersion"] = "690.7.1",
+        };
+        if (extras != null)
+            foreach (var (key, value) in extras) body[key] = value;
+        return body;
     }
 
     private void StartFeedback() =>

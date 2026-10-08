@@ -51,6 +51,45 @@ public class GroupFormTests
     });
 
     [Fact]
+    public void Pair_marks_its_leader_and_can_connect_the_leader_alone() => OnSta(() =>
+    {
+        var (links, rechts) = StereoPairTests.IdlePair();
+        var cfg = new AppConfig { DeviceId = StereoPairs.PairId(StereoPairs.Tsid(links)!), DeviceName = "Büro 2" };
+        using var form = new GroupForm(cfg);
+        form.SetFound([rechts, Other, links]);
+        Snapshot(form, "group-pair-leader");
+
+        // Default: both members, full stereo, in gid order; the bit-13 member is marked.
+        Assert.Equal([("完整立体声", "Links  192.168.50.21（主音箱）"), ("完整立体声", "Rechts  192.168.50.22")], Rows(form));
+        var leaderOnly = Find<ToggleSwitch>(form, "只连接主音箱（实验）");
+        Assert.False(leaderOnly.Checked);
+
+        leaderOnly.Checked = true;
+        Snapshot(form, "group-pair-leader-only");
+        Assert.Empty(Rows(form));
+        Assert.False(Find<ToggleSwitch>(form, "电脑端分声道").Enabled);
+        Assert.Contains(All<TextBlock>(form), l => l.Text == "只连接主音箱「Links」。另一只会不会一起响，需要实测。");
+
+        form.Apply();
+        Assert.True(cfg.GroupPairLeaderOnly);
+        Assert.True(GroupPlan.FromConfig(cfg)!.PairLeaderOnly);
+
+        // Without a leader bit the dialog says which member would be used.
+        using var plain = new GroupForm(new AppConfig { DeviceId = StereoPairs.PairId(Tsid), DeviceName = "客厅", GroupPairLeaderOnly = true });
+        plain.SetFound([B, A]);
+        Assert.True(Find<ToggleSwitch>(plain, "只连接主音箱（实验）").Checked);
+        Assert.Contains(All<TextBlock>(plain), l => l.Text == "这对音箱都没有标出主音箱，将只连接「客厅」。");
+    });
+
+    [Fact]
+    public void Multi_room_has_no_leader_only_switch() => OnSta(() =>
+    {
+        using var form = new GroupForm(new AppConfig { DeviceId = "AA:00:00:00:00:05", DeviceName = "卧室" });
+        form.SetFound([Other, A, B]);
+        Assert.DoesNotContain(All<ToggleSwitch>(form), t => t.Text == "只连接主音箱（实验）");
+    });
+
+    [Fact]
     public void Pair_with_one_speaker_missing_says_both_must_be_online() => OnSta(() =>
     {
         using var form = new GroupForm(new AppConfig { DeviceId = StereoPairs.PairId(Tsid), DeviceName = "客厅" });

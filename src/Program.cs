@@ -18,6 +18,7 @@ public static class Program
             {
                 "gui" => RunGui(startHidden: args.Contains("--tray"), openMixer: args.Contains("--mixer"), openFlyout: args.Contains("--flyout")),
                 "scan" => Scan(args.Contains("--txt")).GetAwaiter().GetResult(),
+                "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
@@ -79,6 +80,7 @@ public static class Program
         Console.WriteLine("""
             HomePodCast
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
+              info --host IP                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
             """);
@@ -182,7 +184,19 @@ public static class Program
             Console.WriteLine("  " + d);
             if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
         }
-        foreach (var line in StereoPairs.Describe(devices)) Console.WriteLine(line); // experimental stereo pairs
+        foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
+        return 0;
+    }
+
+    /// <summary>`info --host IP`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
+    private static async Task<int> Info(string[] args)
+    {
+        var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
+        using var rtsp = await RtspConnection.ConnectAsync(host, 7000, CancellationToken.None);
+        var reply = rtsp.Rtsp("GET", "/info");
+        Console.WriteLine($"{host}: {reply.StartLine}");
+        if (reply.IsSuccess && reply.Body.Length > 0)
+            foreach (var line in InfoDump.Lines(Protocol.BPlist.ReadDict(reply.Body))) Console.WriteLine("  " + line);
         return 0;
     }
 
