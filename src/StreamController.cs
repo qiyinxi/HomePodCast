@@ -12,7 +12,7 @@ public enum StreamState { Idle, Connecting, Streaming, Retrying }
 /// speaker if its address changed, and backs off (instead of fighting) when another sender takes over.
 /// All events are raised on the thread pool; the UI marshals them.
 /// </summary>
-public sealed class StreamController : IDisposable
+public sealed partial class StreamController : IDisposable
 {
     private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
 
@@ -81,20 +81,15 @@ public sealed class StreamController : IDisposable
 
     public void SetVolume(double percent)
     {
-        Volume = percent;
-        var client = _client;
-        if (client == null) return;
-        Task.Run(() =>
-        {
-            try { client.SetVolumePercent(percent); }
-            catch (Exception ex) { Log.Warn($"set volume: {ex.Message}"); }
-        });
+        Volume = VolumeLimit.Clamp(percent, VolumeCapPercent);
+        Muted = false;
+        PushVolume();
     }
 
     private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, CancellationToken ct)
     {
         int attempt = 0;
-        Volume = volume;
+        Volume = volume is { } v ? VolumeLimit.Clamp(v, VolumeCapPercent) : null;
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();
@@ -117,7 +112,8 @@ public sealed class StreamController : IDisposable
                 EffectiveLatencyMs = SafeLatency(latencyMs);
                 if (EffectiveLatencyMs != latencyMs)
                     Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
-                var client = await AirPlayClient.ConnectAsync(address, 7000, new StreamOptions(EffectiveLatencyMs, Volume), _fifo, ct);
+                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
+                var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 _client = client;
                 if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
@@ -125,7 +121,7 @@ public sealed class StreamController : IDisposable
                     ArrivalToRenderMs = a2r;
                     ArrivalToRenderChanged?.Invoke(a2r);
                 }
-                Volume ??= client.InitialVolumeDb is { } db ? AirPlayClient.DbToPercent(db) : null;
+                Volume ??= client.InitialVolumeDb is { } db ? VolumeLimit.Clamp(AirPlayClient.DbToPercent(db), VolumeCapPercent) : null;
                 attempt = 0;
                 Set(StreamState.Streaming, $"已连接 · {client.Info.GetValueOrDefault("name")}");
 
