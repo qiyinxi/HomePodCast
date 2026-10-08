@@ -12,6 +12,7 @@ namespace HomePodCast.Net;
 /// how a stutter heard on a real machine can be matched to the network; the router ping tells the two Wi-Fi hops
 /// apart (a speaker spike with a quiet router is the router → speaker hop). 2026-10-08: a stutter while someone raised
 /// an arm coincided with the only retransmit request in 15 minutes, and one with a phone near the speaker with none.
+/// Every spike is also raised as <see cref="Spike"/> for the 首页 network status (<see cref="NetworkHealth"/>).
 /// </summary>
 internal sealed class NetworkWatch : IDisposable
 {
@@ -25,12 +26,23 @@ internal sealed class NetworkWatch : IDisposable
 
     public NetworkWatch(IPAddress speaker, IPAddress? router = null)
     {
-        _speaker = new Probe("the speaker", speaker);
+        _speaker = new Probe("the speaker", speaker, PingTarget.Speaker, RaiseSpike);
         router ??= RouterFor(speaker);
-        if (router != null && !router.Equals(speaker)) _router = new Probe("the router", router);
+        if (router != null && !router.Equals(speaker)) _router = new Probe("the router", router, PingTarget.Router, RaiseSpike);
         _ = Task.Run(() => _speaker.RunAsync(_cts.Token));
         if (_router != null) _ = Task.Run(() => _router.RunAsync(_cts.Token));
     }
+
+    /// <summary>
+    /// Every spike as it happens, on the probe's thread: the round trip in ms (over <see cref="SpikeMs"/>), or -1 for no
+    /// answer. Only once that target has answered at all, so a router that never answers ping raises nothing.
+    /// </summary>
+    public event Action<PingTarget, long>? Spike;
+
+    /// <summary>The router answers ping (and has not been given up on), so a spike can be pinned to a hop.</summary>
+    public bool WatchesRouter => _router is { Watching: true };
+
+    private void RaiseSpike(PingTarget target, long rttMs) => Spike?.Invoke(target, rttMs);
 
     /// <summary>"ping=3/9/41ms lost=0/600 router=1/2/5ms lost=0/600" (median/p99/max since the last call).</summary>
     public string TakeSummary() =>
@@ -67,11 +79,15 @@ internal sealed class NetworkWatch : IDisposable
         return true;
     }
 
-    private sealed class Probe(string name, IPAddress address)
+    private sealed class Probe(string name, IPAddress address, PingTarget target, Action<PingTarget, long> spike)
     {
         private readonly object _lock = new();
         private readonly List<long> _rtts = new();
         private int _sent, _lost;
+        private volatile bool _watching;
+
+        /// <summary>Answered at least once and still pinged.</summary>
+        public bool Watching => _watching;
 
         public async Task RunAsync(CancellationToken ct)
         {
@@ -97,7 +113,7 @@ internal sealed class NetworkWatch : IDisposable
                         rtt = -1;
                     }
                     tries++;
-                    if (rtt >= 0) answered++;
+                    if (rtt >= 0 && answered++ == 0) _watching = true;
                     if (tries == 20 && answered == 0)
                     {
                         Log.Info($"network watch: {name} ({address}) does not answer ping; not watching it");
@@ -110,7 +126,11 @@ internal sealed class NetworkWatch : IDisposable
                         else _rtts.Add(rtt);
                     }
 
-                    if (rtt < 0 || rtt > SpikeMs) worstSince = Math.Max(worstSince, rtt < 0 ? long.MaxValue : rtt);
+                    if (rtt < 0 || rtt > SpikeMs)
+                    {
+                        worstSince = Math.Max(worstSince, rtt < 0 ? long.MaxValue : rtt);
+                        if (answered > 0) spike(target, rtt);
+                    }
                     long now = Stopwatch.GetTimestamp();
                     if (worstSince >= 0 && now - lastSpikeLog >= Stopwatch.Frequency)
                     {
@@ -131,6 +151,10 @@ internal sealed class NetworkWatch : IDisposable
             catch (Exception ex)
             {
                 Log.Warn($"network watch ({name}): {ex.Message}");
+            }
+            finally
+            {
+                _watching = false;
             }
         }
 

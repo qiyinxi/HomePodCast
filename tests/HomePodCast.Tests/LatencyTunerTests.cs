@@ -169,6 +169,49 @@ public class LatencyTunerTests
     }
 
     [Fact]
+    public void The_network_hint_switches_to_custom_and_reconnects_at_once()
+    {
+        var cfg = new AppConfig { Scene = Scene.Recommended, LatencyMs = Scenes.RecommendedMs };
+        var t = Tuner(cfg);
+        int changed = 0;
+        t.Changed += () => changed++;
+
+        t.UseCustom(135);
+        Assert.Equal(Scene.Custom, cfg.Scene);
+        Assert.Equal(1, _saves);
+        Assert.Equal(135, t.Value);
+        Assert.Equal([135], _applied); // no debounce: one press, one reconnect
+        Assert.False(t.Pending);
+        Assert.Equal(1, changed);
+    }
+
+    [Fact]
+    public void The_network_hint_supersedes_a_pending_scene_or_slider_move()
+    {
+        var cfg = new AppConfig { Scene = Scene.Custom, LatencyMs = 120 };
+        var t = Tuner(cfg);
+        t.SelectScene(Scene.Music);
+        t.UseCustom(135);
+        _scene.Elapse();
+        _slider.Elapse();
+        Assert.Equal([135], _applied);
+        Assert.Equal(Scene.Custom, cfg.Scene);
+
+        t.UserSet(150);
+        t.UseCustom(140);
+        _slider.Elapse();
+        Assert.Equal([135, 140], _applied);
+    }
+
+    [Fact]
+    public void The_network_hint_respects_the_floor()
+    {
+        var t = Tuner(new AppConfig { Scene = Scene.Custom, LatencyMs = 120 }, floor: 125);
+        t.UseCustom(110);
+        Assert.Equal([125], _applied);
+    }
+
+    [Fact]
     public void Sound_lag_is_latency_plus_measured_extra_plus_capture_path()
     {
         var cfg = new AppConfig { VideoDelayExtraMs = 36 };

@@ -278,5 +278,18 @@
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" er ikke tilgængelig (frakoblet, deaktiveret eller afinstalleret). Standardoutput bruges ikke i stedet; optagelsen fortsætter af sig selv, når enheden er tilbage.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Den valgte enhed at optage fra, \"{0}\", er ikke tilgængelig (frakoblet, deaktiveret eller afinstalleret). For at ingen anden lyd skal nå HomePod, bruges standardoutput ikke i stedet; streamingen fortsætter af sig selv, når enheden er tilbage. Du kan også skifte tilbage til Windows' standardoutput på siden Mixer.",
   "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Din medhørsenhed er den, der optages, så din stemme ville også gå til HomePod. Medhør på pc'en er sat på pause; brug hovedtelefoner eller en anden enhed.",
-  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Når der er valgt en enhed at optage fra, følger \"HomePod følger Windows' lydstyrke\" den enheds lydstyrke, mens lydstyrketasterne kun ændrer Windows' standardoutput. Gør enheden til standardoutput, hvis du vil styre HomePod med lydstyrketasterne."
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Når der er valgt en enhed at optage fra, følger \"HomePod følger Windows' lydstyrke\" den enheds lydstyrke, mens lydstyrketasterne kun ændrer Windows' standardoutput. Gør enheden til standardoutput, hvis du vil styre HomePod med lydstyrketasterne.",
+  "应用": "Anvend",
+  "最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数": "Hvor ofte Wi-Fi-forsinkelsen er steget brat, et ping er gået tabt, eller højttaleren har bedt om gensendelse de seneste 10 minutter",
+  "应用建议的延迟": "Anvend den foreslåede forsinkelse",
+  "切换到「自定义」场景，用建议的延迟重新连接": "Skifter til scenen \"Brugerdefineret\" og genopretter forbindelsen med den foreslåede forsinkelse",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "HomePods Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Pc'ens Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Prøv en forsinkelse på {1} ms",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方": "HomePods Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Forsinkelsen er allerede høj; prøv at stille HomePod, så den har frit udsyn til routeren",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线": "Pc'ens Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Forsinkelsen er allerede høj; prøv at slå strømsparing fra på den trådløse adapter, eller brug et netværkskabel",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号": "Wi-Fi har været ustabilt på det seneste (udsving på 10 minutter: {0}). Forsinkelsen er allerede høj; prøv at forbedre Wi-Fi-signalet",
+  "网络：稳定": "Netværk: stabilt",
+  "网络：最近 10 分钟抖动 1 次": "Netværk: 1 udsving de seneste 10 minutter",
+  "网络：最近 10 分钟抖动 {0} 次": "Netværk: {0} udsving de seneste 10 minutter"
 }

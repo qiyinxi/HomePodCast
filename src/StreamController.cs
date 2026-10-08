@@ -173,6 +173,7 @@ public sealed partial class StreamController : IDisposable
                 using (var net = new NetworkWatch(address))
                 {
                     _net = net;
+                    using var health = FeedHealth(net, () => client.Sender); // 首页's network status
                     using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
                         lostReason = await lost.Task.WaitAsync(ct);
                     LogStats();

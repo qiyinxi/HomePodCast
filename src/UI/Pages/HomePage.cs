@@ -6,7 +6,8 @@ namespace HomePodCast.UI.Pages;
 /// <summary>
 /// 首页: which speaker, what latency now, is anything wrong. Speaker card (picker, state, connect), scene
 /// card (scene, latency, how far the sound lags the picture), volume card (volume, mute, night mode), and
-/// tiles with the stream statistics the app actually measures.
+/// tiles with the stream statistics the app actually measures, and the network's line (or a hint when Wi-Fi jitter
+/// threatens the latency's margin).
 /// </summary>
 internal sealed class HomePage : ScrollPage
 {
@@ -51,6 +52,17 @@ internal sealed class HomePage : ScrollPage
     private readonly MetricTile _dropouts = new(L.T("断音"));
     private readonly MetricTile _resent = new(L.T("重传"));
 
+    // network: a status line while streaming; instead of it, a hint when the jitter eats the latency's margin
+    // (only the hint's button changes the latency)
+    private readonly TextBlock _netStatus = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
+    private readonly RowPanel _netLine;
+    private readonly TextBlock _netHintText = new("", TextStyle.Body, TextRole.Caution, wrap: true);
+    private readonly FluentButton _netApply = new(L.T("应用"), ButtonKind.Secondary) { MinWidth = 72 };
+    private readonly Card _netHint;
+    private int? _suggestedMs;
+    private int _appliedSession = -1; // Health.Session whose suggestion was applied: no hint again until it reconnects
+    private bool _hintLogged;
+
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
     private long _underrunsAtStart;
@@ -70,7 +82,10 @@ internal sealed class HomePage : ScrollPage
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
         var statsHeader = Ui.Section(L.T("推流状态"));
-        Content.Controls.AddRange([columns, statsHeader, tiles]);
+        _netLine = Ui.Row(8, _netStatus, new GlyphLabel(Glyph.Wifi), _netStatus);
+        _netLine.Collapsed = true;
+        _netHint = BuildNetworkHint();
+        Content.Controls.AddRange([columns, statsHeader, tiles, _netLine, _netHint]);
         Content.GapBefore[statsHeader] = 20;
 
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
@@ -78,6 +93,7 @@ internal sealed class HomePage : ScrollPage
         _tips.SetToolTip(_effective, L.T("这次连接实际使用的延迟"));
         _tips.SetToolTip(_dropouts, L.T("这次连接中电脑这边断音的次数"));
         _tips.SetToolTip(_resent, L.T("音箱要求重发的包：已重发 / 请求"));
+        _tips.SetToolTip(_netStatus, L.T("最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数"));
 
         _tuner.Changed += () =>
         {
@@ -167,6 +183,29 @@ internal sealed class HomePage : ScrollPage
         _mute.Toggled += (_, _) => _app.SetSpeakerMuted(_mute.Checked);
         _night.Toggled += (_, _) => _app.SetNightMode(_night.Checked);
         return card;
+    }
+
+    /// <summary>The caution under the tiles when Wi-Fi jitter eats the latency's margin; collapsed until then.</summary>
+    private Card BuildNetworkHint()
+    {
+        var icon = new GlyphLabel(Glyph.Warning, caution: true);
+        var card = Ui.Card(Ui.Row(12, _netHintText, icon, _netHintText, _netApply));
+        card.Collapsed = true;
+        _netApply.AccessibleName = L.T("应用建议的延迟");
+        _tips.SetToolTip(_netApply, L.T("切换到「自定义」场景，用建议的延迟重新连接"));
+        _netApply.Click += (_, _) => ApplyNetworkSuggestion();
+        return card;
+    }
+
+    /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
+    private void ApplyNetworkSuggestion()
+    {
+        if (_suggestedMs is not { } ms) return;
+        Log.Info($"network hint applied: latency {_app.Controller.EffectiveLatencyMs} → {ms} ms ({Scene.Custom})");
+        _appliedSession = _app.Controller.Health.Session;
+        _suggestedMs = null;
+        _netHint.Collapsed = true;
+        _tuner.UseCustom(ms);
     }
 
     /// <summary>The volume was changed here (the mixer's master slider follows).</summary>
@@ -357,7 +396,79 @@ internal sealed class HomePage : ScrollPage
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
         _dropouts.SetValue(streaming ? (c.Fifo.Underruns - _underrunsAtStart).ToString() : null);
         _resent.SetValue(streaming ? $"{s!.Retransmitted}/{s.RetransmitRequests}" : null);
+        ShowNetwork(streaming);
     }
+
+    /// <summary>
+    /// The 网络 line (jitter episodes in the last 10 minutes) or, when they threaten the margin, the hint naming the
+    /// Wi-Fi hop with a suggested latency. Never changes anything by itself; hidden while not streaming.
+    /// </summary>
+    private void ShowNetwork(bool streaming)
+    {
+        var c = _app.Controller;
+        bool live = streaming && c.HealthWatched;
+        int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
+        var v = live ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched)
+            : DemoVerdict(arrivalToRender);
+
+        bool show = v is { Threatened: true } && c.Health.Session != _appliedSession;
+        _suggestedMs = show ? v!.SuggestedMs : null;
+        _netLine.Collapsed = v == null || show;
+        _netHint.Collapsed = !show;
+        if (v != null && !show)
+            _netStatus.Text = v.Episodes switch
+            {
+                0 => L.T("网络：稳定"),
+                1 => L.T("网络：最近 10 分钟抖动 1 次"), // its own text, for languages with a singular
+                int count => L.F("网络：最近 10 分钟抖动 {0} 次", count),
+            };
+        if (!show)
+        {
+            _hintLogged = false;
+            return;
+        }
+
+        int n = v!.Episodes;
+        _netHintText.Text = ((v.Hop, v.SuggestedMs) switch
+        {
+            (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
+            (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
+            (_, { } ms) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
+            (NetworkHop.Speaker, null) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方", n),
+            (NetworkHop.Pc, null) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线", n),
+            (_, null) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号", n),
+        }).Replace(" ms", "\u00A0ms"); // "135 ms" stays on one line
+        _netApply.Collapsed = v.SuggestedMs is null;
+        if (live && !_hintLogged)
+        {
+            _hintLogged = true;
+            Log.Info($"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v.Threats} of {n} episodes in 10 min " +
+                     $"beyond its {v.MarginMs} ms margin, hop: {v.Hop}); suggesting {v.SuggestedMs?.ToString() ?? "-"} ms");
+        }
+    }
+
+#if DEBUG
+    private static readonly string? DemoNetwork = Environment.GetEnvironmentVariable("HOMEPODCAST_DEMO_NETHINT") is { Length: > 0 } d ? d : null;
+
+    /// <summary>
+    /// Debug builds with HOMEPODCAST_DEMO_NETHINT set, while not streaming (for screenshots): the status as if the
+    /// HomePod's Wi-Fi had spiked three times in 10 minutes, or with "stable", as if nothing happened. Release builds
+    /// have no such path.
+    /// </summary>
+    private NetworkVerdict? DemoVerdict(int arrivalToRender)
+    {
+        if (DemoNetwork == null) return null;
+        var demo = new NetworkHealth();
+        if (DemoNetwork != "stable")
+        {
+            foreach (long at in new long[] { 60_000, 250_000, 480_000 }) demo.AddPing(PingTarget.Speaker, at, 48);
+            demo.AddPing(PingTarget.Router, 150_000, 34); // the router alone: not jitter
+        }
+        return demo.Assess(500_000, _app.Controller.SafeLatency(_app.Config.LatencyMs), arrivalToRender, routerWatched: true);
+    }
+#else
+    private static NetworkVerdict? DemoVerdict(int arrivalToRender) => null;
+#endif
 
     public override void PageShown()
     {
@@ -380,12 +491,12 @@ internal sealed class HomePage : ScrollPage
         base.Dispose(disposing);
     }
 
-    /// <summary>A glyph that only decorates (the volume icon next to the slider).</summary>
-    private sealed class GlyphLabel(string glyph) : FluentControl
+    /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning).</summary>
+    private sealed class GlyphLabel(string glyph, bool caution = false) : FluentControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));
 
         protected override void OnPaint(PaintEventArgs e) =>
-            Shapes.Glyph(e.Graphics, glyph, Theme.IconFont(16, DeviceDpi), ClientRectangle, P.TextSecondary);
+            Shapes.Glyph(e.Graphics, glyph, Theme.IconFont(16, DeviceDpi), ClientRectangle, caution ? P.Caution : P.TextSecondary);
     }
 }

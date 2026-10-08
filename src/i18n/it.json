@@ -278,5 +278,18 @@
   "「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。": "\"{0}\" non è disponibile (scollegato, disattivato o disinstallato). L'uscita predefinita non viene usata al suo posto; la cattura riprende da sola quando il dispositivo torna.",
   "所选的采集设备「{0}」现在不可用（已拔出、停用或卸载）。为了不把别的声音推到 HomePod，不会改用默认输出；设备恢复后自动继续，也可以在「混音器」里改回跟随 Windows 默认输出。": "Il dispositivo catturato scelto, \"{0}\", non è disponibile (scollegato, disattivato o disinstallato). Perché nessun altro audio arrivi a HomePod, l'uscita predefinita non viene usata al suo posto; lo streaming riprende da solo quando il dispositivo torna. Puoi anche tornare a seguire l'uscita predefinita di Windows nella pagina Mixer.",
   "本机监听设备正被采集，监听声音会被推到 HomePod，已暂停本机监听；请改用耳机等其他设备。": "Il dispositivo di ascolto è quello catturato, quindi la tua voce andrebbe anche a HomePod. L'ascolto su questo PC è in pausa; usa le cuffie o un altro dispositivo.",
-  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Con un dispositivo catturato scelto, \"HomePod segue il volume di Windows\" segue il volume di quel dispositivo, mentre i tasti del volume cambiano solo l'uscita predefinita di Windows. Per regolare HomePod con i tasti del volume, imposta quel dispositivo come uscita predefinita."
+  "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。": "Con un dispositivo catturato scelto, \"HomePod segue il volume di Windows\" segue il volume di quel dispositivo, mentre i tasti del volume cambiano solo l'uscita predefinita di Windows. Per regolare HomePod con i tasti del volume, imposta quel dispositivo come uscita predefinita.",
+  "应用": "Applica",
+  "最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数": "Quante volte negli ultimi 10 minuti il ritardo del Wi-Fi ha avuto un picco, un ping è andato perso o l'altoparlante ha chiesto una ritrasmissione",
+  "应用建议的延迟": "Applica la latenza suggerita",
+  "切换到「自定义」场景，用建议的延迟重新连接": "Passa alla scena \"Manuale\" e si riconnette con la latenza suggerita",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Il Wi-Fi di HomePod è instabile ultimamente (instabilità in 10 minuti: {0}). Prova una latenza di {1} ms",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Il Wi-Fi di questo PC è instabile ultimamente (instabilità in 10 minuti: {0}). Prova una latenza di {1} ms",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms": "Il Wi-Fi è instabile ultimamente (instabilità in 10 minuti: {0}). Prova una latenza di {1} ms",
+  "HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方": "Il Wi-Fi di HomePod è instabile ultimamente (instabilità in 10 minuti: {0}). La latenza è già alta; prova a mettere HomePod in vista del router",
+  "电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线": "Il Wi-Fi di questo PC è instabile ultimamente (instabilità in 10 minuti: {0}). La latenza è già alta; prova a disattivare il risparmio energetico della scheda wireless o a usare un cavo di rete",
+  "Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号": "Il Wi-Fi è instabile ultimamente (instabilità in 10 minuti: {0}). La latenza è già alta; prova a migliorare il segnale Wi-Fi",
+  "网络：稳定": "Rete: stabile",
+  "网络：最近 10 分钟抖动 1 次": "Rete: 1 instabilità negli ultimi 10 minuti",
+  "网络：最近 10 分钟抖动 {0} 次": "Rete: {0} instabilità negli ultimi 10 minuti"
 }
