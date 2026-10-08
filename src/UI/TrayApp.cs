@@ -370,6 +370,9 @@ internal sealed partial class TrayApp : ApplicationContext
 
     private void OnControllerChanged()
     {
+        // Quit stops the controller (which posts one last change) and then disposes the tray icon; seen on a real
+        // machine as a NullReferenceException in NotifyIcon.UpdateIcon on every quit.
+        if (_quitting) return;
         var c = Controller;
         if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
 
@@ -378,7 +381,7 @@ internal sealed partial class TrayApp : ApplicationContext
         if (c.State != _lastIconState)
         {
             var old = _tray.Icon;
-            _tray.Icon = Icons.Speaker(Icons.For(c.State));
+            _tray.Icon = Icons.Tray(c.State);
             old?.Dispose();
             _lastIconState = c.State;
         }
