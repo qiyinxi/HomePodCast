@@ -30,6 +30,7 @@
   <!-- UI translations (source string → text), read by L.cs as i18n.<language>.json -->
   <ItemGroup>
     <None Remove="i18n\**" />
+    <EmbeddedResource Include="app.ico" LogicalName="app.ico" />
     <EmbeddedResource Include="i18n\*.json" LogicalName="i18n.%(Filename)%(Extension)" WithCulture="false" />
   </ItemGroup>
 

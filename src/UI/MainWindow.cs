@@ -30,7 +30,7 @@ internal sealed class MainWindow : Form, ISurface
         SuspendLayout();
         AutoScaleMode = AutoScaleMode.None; // sizes come from DeviceDpi (Theme.Dp), never from AutoScale
         Text = "HomePodCast";
-        Icon = Icons.Speaker(Icons.Streaming);
+        Icon = Icons.App;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.P.Window;
         Font = Theme.Font(TextStyle.Body, DeviceDpi);
@@ -250,7 +250,7 @@ internal sealed class PageWindow : Form, ISurface
         Theme.Watch();
         AutoScaleMode = AutoScaleMode.None;
         Text = title;
-        Icon = Icons.Speaker(Icons.Streaming);
+        Icon = Icons.App;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.P.Window;
         Font = Theme.Font(TextStyle.Body, DeviceDpi);

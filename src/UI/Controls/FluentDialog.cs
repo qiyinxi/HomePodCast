@@ -17,7 +17,7 @@ internal abstract class FluentDialog : Form, ISurface, ILayoutRoot
         MaximizeBox = MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        Icon = Icons.Speaker(Icons.Streaming);
+        Icon = Icons.App;
         BackColor = Theme.P.Window;
         Font = Theme.Font(TextStyle.Body, DeviceDpi);
         Body = new StackPanel { Inset = new Padding(24, 20, 24, 20), Gap = 12 };
