@@ -9,14 +9,15 @@ namespace HomePodCast.Audio;
 /// output is the Windows default output, or the device chosen in AppRouting.CaptureDeviceId (rules then
 /// apply to the apps playing on that device; see <see cref="CaptureEndpoint"/>). Runs on its own
 /// MTA thread so session enumeration never stalls the capture thread. Reacts to new sessions at once
-/// (IAudioSessionNotification) and re-checks everything every second. While anything is silenced it
-/// re-reads those volumes (and the default output) every timer tick, well inside the ~35-50 ms the
-/// capture runs behind, so a volume raised in the Windows mixer or by the app closes the compensation
-/// gate before that louder audio is captured.
+/// (IAudioSessionNotification) and re-checks everything every second. A silenced session's volume
+/// raised in the Windows mixer or by the app is reported at once (IAudioSessionEvents): that closes the
+/// compensation gate on the reporting thread, before the louder audio reaches the capture ~35-50 ms
+/// later, and wakes the router to silence the session again right away. As a backstop for a session
+/// whose events fail, it also re-reads those volumes (and the default output) every timer tick.
 /// </summary>
 internal sealed class SessionRouter : IDisposable
 {
-    private static readonly long ConfirmDelay = Stopwatch.Frequency / 10;   // > the ~35-50 ms process-loopback delay
+    internal static readonly long ConfirmDelay = Stopwatch.Frequency / 10;  // > the ~35-50 ms process-loopback delay
     private static readonly long RefreshInterval = Stopwatch.Frequency;
 
     /// <summary>Compensation needs a volume check at least this recent (a stalled router fails silent, not loud).</summary>
@@ -27,6 +28,8 @@ internal sealed class SessionRouter : IDisposable
     private const int IdleIntervalMs = 250;
 
     private static Guid _context = new("6d1b6a52-5c1a-4c39-9f1e-2a8f6f0b7d31"); // marks our own volume changes
+
+    internal static Guid OwnContext => _context;
 
     private readonly AppRouting _routing;
     private readonly Func<uint, bool> _isCapturing;
@@ -43,10 +46,11 @@ internal sealed class SessionRouter : IDisposable
 
     private sealed class Tracked
     {
-        public required object Session;           // RCW; also ISimpleAudioVolume
+        public required object Session;           // RCW; also ISimpleAudioVolume and IAudioSessionControl2
         public uint Pid;
-        public uint Root;
+        public volatile uint Root;                // read by the volume events' thread
         public bool Seen;
+        public IntPtr Events;                     // our IAudioSessionEvents, registered with the session
         public ISimpleAudioVolume Volume => (ISimpleAudioVolume)Session;
     }
 
@@ -83,6 +87,22 @@ internal sealed class SessionRouter : IDisposable
     /// volumes were read back attenuated within <see cref="VerifyWindow"/>.
     /// </summary>
     public bool IsConfirmed(uint root, long now) => _gate.IsOpen(root, now);
+
+    /// <summary>The gate itself (tests).</summary>
+    internal CompensationGate Gate => _gate;
+
+    /// <summary>
+    /// A silenced session of <paramref name="root"/> reported a new volume (IAudioSessionEvents, any thread). Raised
+    /// to an audible level by someone else: compensation stops now, while that louder audio is still ~35-50 ms away
+    /// from the capture, and the router silences the session again at once instead of at its next check. Our own
+    /// changes (<paramref name="context"/>) and levels that stay attenuated or at 0 change nothing.
+    /// </summary>
+    internal void OnSessionVolume(uint root, float volume, Guid context, long now)
+    {
+        if (context == _context || !SessionAttenuation.IsAudible(volume)) return;
+        _gate.Silenced(root, now);
+        _wake.Set(); // straight to CheckVolumes (no full refresh)
+    }
 
     private void Run()
     {
@@ -181,6 +201,7 @@ internal sealed class SessionRouter : IDisposable
                     {
                         _silenced[s.InstanceId] = t = new Tracked { Session = s.Session, Pid = s.Pid, Root = root };
                         kept.Add(s.Session);
+                        Watch(t);
                     }
                     t.Root = root;
                     t.Seen = true;
@@ -272,8 +293,36 @@ internal sealed class SessionRouter : IDisposable
         Log.Info($"routing: pid {pid} audible here again ({SessionAttenuation.Restored(raw):P0})");
     }
 
+    /// <summary>Have the session report volume changes to <see cref="OnSessionVolume"/>; polling stays as the backstop.</summary>
+    private void Watch(Tracked t)
+    {
+        IntPtr events = IntPtr.Zero;
+        try
+        {
+            events = Marshal.GetComInterfaceForObject<VolumeEvents, IAudioSessionEvents>(new VolumeEvents(this, () => t.Root));
+            int hr = ((IAudioSessionControl2)t.Session).RegisterAudioSessionNotification(events);
+            if (hr >= 0)
+            {
+                t.Events = events;
+                return;
+            }
+            Log.Debug($"routing: no volume events for pid {t.Pid} (0x{hr:X8}); polling only");
+        }
+        catch (Exception ex)
+        {
+            Log.Debug($"routing: no volume events for pid {t.Pid}: {ex.Message}; polling only");
+        }
+        if (events != IntPtr.Zero) Marshal.Release(events);
+    }
+
     private static void ReleaseTracked(Tracked t)
     {
+        if (t.Events != IntPtr.Zero)
+        {
+            try { ((IAudioSessionControl2)t.Session).UnregisterAudioSessionNotification(t.Events); } catch { }
+            Marshal.Release(t.Events);
+            t.Events = IntPtr.Zero;
+        }
         try { Marshal.ReleaseComObject(t.Session); } catch { }
     }
 
@@ -400,5 +449,37 @@ internal sealed class SessionRouter : IDisposable
             router.Poke();
             return 0;
         }
+    }
+
+    /// <summary>One silenced session's events, called on a COM thread of the audio service's choosing.</summary>
+    [ClassInterface(ClassInterfaceType.None)]
+    internal sealed class VolumeEvents(SessionRouter router, Func<uint> root) : IAudioSessionEvents, IAgileObject
+    {
+        public int OnSimpleVolumeChanged(float newVolume, int newMute, IntPtr eventContext)
+        {
+            try
+            {
+                var context = eventContext == IntPtr.Zero ? Guid.Empty : Marshal.PtrToStructure<Guid>(eventContext);
+                router.OnSessionVolume(root(), newVolume, context, Stopwatch.GetTimestamp());
+            }
+            catch
+            {
+                // Never let an exception cross back into the audio service.
+            }
+            return 0;
+        }
+
+        public int OnSessionDisconnected(int disconnectReason)
+        {
+            router.Poke(); // device removed, format change, exclusive mode: plan again
+            return 0;
+        }
+
+        // Channel volumes (0..1) and mute only ever lower the level below the attenuated session volume.
+        public int OnDisplayNameChanged(IntPtr newDisplayName, IntPtr eventContext) => 0;
+        public int OnIconPathChanged(IntPtr newIconPath, IntPtr eventContext) => 0;
+        public int OnChannelVolumeChanged(uint channelCount, IntPtr newChannelVolumes, uint changedChannel, IntPtr eventContext) => 0;
+        public int OnGroupingParamChanged(IntPtr newGroupingParam, IntPtr eventContext) => 0;
+        public int OnStateChanged(int newState) => 0;
     }
 }

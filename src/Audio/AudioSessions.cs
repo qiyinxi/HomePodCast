@@ -50,6 +50,20 @@ internal interface IAudioSessionControl2
     [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
 }
 
+// audiopolicy.h (SDK 10.0.19041.0): IAudioSessionEvents 24918ACC-64B3-37C1-8CA9-74A66E9957A8, methods in vtable
+// order. Implemented by us and handed to IAudioSessionControl::RegisterAudioSessionNotification as a COM pointer.
+[ComImport, Guid("24918ACC-64B3-37C1-8CA9-74A66E9957A8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IAudioSessionEvents
+{
+    [PreserveSig] int OnDisplayNameChanged(IntPtr newDisplayName, IntPtr eventContext);
+    [PreserveSig] int OnIconPathChanged(IntPtr newIconPath, IntPtr eventContext);
+    [PreserveSig] int OnSimpleVolumeChanged(float newVolume, int newMute, IntPtr eventContext);
+    [PreserveSig] int OnChannelVolumeChanged(uint channelCount, IntPtr newChannelVolumes, uint changedChannel, IntPtr eventContext);
+    [PreserveSig] int OnGroupingParamChanged(IntPtr newGroupingParam, IntPtr eventContext);
+    [PreserveSig] int OnStateChanged(int newState);
+    [PreserveSig] int OnSessionDisconnected(int disconnectReason);
+}
+
 [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface ISimpleAudioVolume
 {
