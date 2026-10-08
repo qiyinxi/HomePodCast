@@ -1,0 +1,127 @@
+{
+  "extName": {
+    "message": "HomePodCast Videosynk",
+    "description": "Extension name, also the popup heading."
+  },
+  "extDescription": {
+    "message": "Forsinker nettvideo med noen få millisekunder slik at bildet passer til lyden, som når en HomePod senere via AirPlay.",
+    "description": "Store/extension description, at most 132 characters."
+  },
+  "htmlLang": {
+    "message": "nb",
+    "description": "BCP 47 tag of this translation, used as the popup's lang attribute."
+  },
+  "statusConnecting": {
+    "message": "Kobler til…",
+    "description": "Status while the popup asks the HomePodCast app for its state."
+  },
+  "statusNotRunning": {
+    "message": "Kjører ikke",
+    "description": "Status: the HomePodCast app is not running."
+  },
+  "statusIdle": {
+    "message": "Strømmer ikke",
+    "description": "Status: the app runs but sends no audio to the speaker."
+  },
+  "statusStreaming": {
+    "message": "Strømmer",
+    "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
+  },
+  "siteLabel": {
+    "message": "Dette nettstedet",
+    "description": "Label in front of the current site's host name."
+  },
+  "localFile": {
+    "message": "(lokal fil)",
+    "description": "Shown instead of a host name for file:// pages."
+  },
+  "minusLabel": {
+    "message": "1 ms mindre",
+    "description": "Accessible name of the − button."
+  },
+  "minusTitle": {
+    "message": "1 ms mindre (hold inne for å fortsette å justere)",
+    "description": "Tooltip of the − button."
+  },
+  "plusLabel": {
+    "message": "1 ms mer",
+    "description": "Accessible name of the + button."
+  },
+  "plusTitle": {
+    "message": "1 ms mer (hold inne for å fortsette å justere)",
+    "description": "Tooltip of the + button."
+  },
+  "delayCaption": {
+    "message": "Bildeforsinkelse",
+    "description": "Caption under the big delay number."
+  },
+  "siteOffset": {
+    "message": "Justering for nettstedet",
+    "description": "Label of the per-site correction added to the delay, followed by e.g. +5 ms."
+  },
+  "reset": {
+    "message": "Tilbakestill",
+    "description": "Button that sets the site offset back to 0."
+  },
+  "siteToggle": {
+    "message": "Aktiver på dette nettstedet",
+    "description": "Switch for the current site."
+  },
+  "globalToggle": {
+    "message": "Aktiver på alle nettsteder",
+    "description": "Master switch."
+  },
+  "hintUnavailable": {
+    "message": "Ikke tilgjengelig på denne siden, eller siden ble åpnet før utvidelsen ble installert. Last inn siden på nytt og prøv igjen.",
+    "description": "The page has no content script."
+  },
+  "hintGlobalOff": {
+    "message": "Slått av på alle nettsteder; bildet forsinkes ikke."
+  },
+  "hintSiteOff": {
+    "message": "Slått av på dette nettstedet; bildet forsinkes ikke."
+  },
+  "hintNotStreaming": {
+    "message": "HomePodCast strømmer ikke; bildet forsinkes ikke."
+  },
+  "hintNotRunning": {
+    "message": "HomePodCast kjører ikke; bildet forsinkes ikke."
+  },
+  "videosNone": {
+    "message": "Fant ingen videoer på denne siden (≥ 200×112).",
+    "description": "Only videos at least 200×112 pixels are handled."
+  },
+  "videosCount": {
+    "message": "Videoer på siden: $COUNT$",
+    "description": "First part of the video summary line; parts are joined with ' · '.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "2" }
+    }
+  },
+  "videosDelaying": {
+    "message": "$COUNT$ forsinkes",
+    "description": "How many of the videos are being delayed.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "videosMeasured": {
+    "message": "målt $MS$ ms",
+    "description": "Average delay actually shown, in milliseconds.",
+    "placeholders": {
+      "ms": { "content": "$1", "example": "141" }
+    }
+  },
+  "videosDrm": {
+    "message": "kopibeskyttet (DRM), kan ikke forsinkes"
+  },
+  "videosFullscreen": {
+    "message": "kan ikke forsinkes mens selve videoelementet er i fullskjerm"
+  },
+  "videosPlayerUnsupported": {
+    "message": "spilleren på denne siden støtter ikke bildeforsinkelse"
+  },
+  "videosNotDelayed": {
+    "message": "ikke forsinket"
+  }
+}
