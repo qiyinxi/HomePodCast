@@ -59,7 +59,7 @@ public sealed class MicCapture : ITapSource, IDisposable
     public IStereoEffect[] Effects { get => _effects; set => _effects = value ?? []; }
 
     public int Rate => OutputRate;
-    public double ChunkMs => PeriodMs > 0 ? PeriodMs : 10;
+    public double ChunkMs => Running ? PeriodMs : 0;
     public double LatencyMs => Volatile.Read(ref _ageMs) + (_pipeline?.ResamplerDelayMs ?? 0);
 
     /// <summary>Raised on the capture thread when the device opens, fails or closes.</summary>

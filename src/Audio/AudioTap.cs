@@ -12,7 +12,7 @@ public interface ITapSource
     /// <summary>Average time from the sound reaching the input to it being pushed into the taps (ms).</summary>
     double LatencyMs { get; }
 
-    /// <summary>Typical interval between pushes (ms): a consumer's FIFO must cover it.</summary>
+    /// <summary>Typical interval between pushes (ms), 0 while not known yet: a consumer's FIFO must cover it.</summary>
     double ChunkMs { get; }
 
     void Attach(AudioTap tap);

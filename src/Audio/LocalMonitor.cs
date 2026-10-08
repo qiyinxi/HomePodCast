@@ -120,12 +120,15 @@ public sealed class LocalMonitor : IDisposable
             // Keep two periods queued in the device: one playing, one ready.
             int fill = (int)Math.Min(stream.BufferFrames, (uint)Math.Max(2 * stream.PeriodFrames, rate / 500));
             // The FIFO's average depth before a read must cover the read (one period), half a source packet
-            // (packets arrive in bursts) and some scheduling jitter.
-            double targetMs = PeriodMs + _source.ChunkMs / 2 + 2;
+            // (packets arrive in bursts) and some scheduling jitter. The mic opens in parallel: give it a moment
+            // to report its period.
+            for (int i = 0; i < 20 && _source.ChunkMs <= 0 && !_stop; i++) Thread.Sleep(50);
+            double chunkMs = _source.ChunkMs > 0 ? _source.ChunkMs : 10;
+            double targetMs = PeriodMs + chunkMs / 2 + 2;
             tap = new AudioTap(_source.Rate, rate, 0, 0)
             {
                 TargetFrames = (int)(targetMs * rate / 1000),
-                CapFrames = (int)((targetMs + 2 * _source.ChunkMs + MaxExtraMs + 10) * rate / 1000),
+                CapFrames = (int)((targetMs + 2 * chunkMs + MaxExtraMs + 10) * rate / 1000),
             };
             int baseTarget = tap.TargetFrames;
             _tap = tap;
