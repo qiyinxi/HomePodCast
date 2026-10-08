@@ -68,6 +68,11 @@ public sealed class AppConfig
     /// <summary>Global hotkeys such as "Ctrl+Alt+PageUp"; a missing entry means the default, "" means off.</summary>
     public Dictionary<HotkeyAction, string> Hotkeys { get; set; } = new();
 
+    // ---- 麦克风与音效 (UI.EffectsForm, Audio.MicEffects) --------------------------------------------------
+    // Mic device, gain and noise gate; where the voice goes (HomePod / local monitor / both) and the monitor
+    // device; reverb; the mic EQ and the EQ on the whole HomePod output. The mic's on/off is not saved.
+    public Audio.EffectsSettings Effects { get; set; } = new();
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

@@ -55,7 +55,7 @@ public static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"fatal: {e.ExceptionObject}");
         L.Use(AppConfig.Load().Language);
         Log.Info($"UI language {L.Language}");
-        Application.Run(new UI.TrayApp(startHidden, show, openMixer));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.EffectsForm.Standalone() : new UI.TrayApp(startHidden, show, openMixer));
         if (UI.LanguageMenu.RestartRequested)
         {
             Log.Info("restarting to apply the UI language");
