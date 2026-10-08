@@ -35,6 +35,10 @@ public sealed class RoutedCapture : ICaptureSource
 
     public string? DeviceName { get; private set; }
     public double DriftPpm { get; private set; }
+
+    private long _maxGapTicks;
+
+    public double TakeMaxGapMs() => Interlocked.Exchange(ref _maxGapTicks, 0) * 1000.0 / Stopwatch.Frequency;
     public float Peak { get; private set; }
     public double ProportionalGain { get; set; } = 0.02;
 
@@ -186,6 +190,7 @@ public sealed class RoutedCapture : ICaptureSource
                 if (mixer.Mix(mixed) > 0)
                 {
                     if (now - lastData > Stopwatch.Frequency / 5) resampler.Reset(); // resume after silence
+                    else if (now - lastData > Volatile.Read(ref _maxGapTicks)) Volatile.Write(ref _maxGapTicks, now - lastData);
                     lastData = now;
                     resampled.Clear();
                     resampler.Process(CollectionsMarshal.AsSpan(mixed), resampled);

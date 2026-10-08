@@ -17,4 +17,7 @@ public interface ICaptureSource : IDisposable
     event Action<string>? DeviceChanged;
 
     void Start();
+
+    /// <summary>Longest wait between two blocks of captured audio since the last call, in ms (minute stats).</summary>
+    double TakeMaxGapMs() => 0;
 }

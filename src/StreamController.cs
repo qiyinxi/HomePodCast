@@ -223,7 +223,7 @@ public sealed partial class StreamController : IDisposable
         if (s == null) return;
         Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +
                  $"drift={_capture?.DriftPpm ?? 0:F0}ppm underruns={_fifo.Underruns} idle={_fifo.IdleGaps} " +
-                 $"maxGap={(_capture as LoopbackCapture)?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
+                 $"maxGap={_capture?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
                  $"sent={s.PacketsSent} late={s.LateWakeups} " +
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
                  $"rtxMiss={s.RetransmitMisses}");
