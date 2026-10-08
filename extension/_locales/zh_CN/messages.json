@@ -22,6 +22,7 @@
   "hintSiteOff": { "message": "已在此网站关闭，画面不延迟。" },
   "hintNotStreaming": { "message": "HomePodCast 未推流，画面不延迟。" },
   "hintNotRunning": { "message": "HomePodCast 未运行，画面不延迟。" },
+  "hintLongDelay": { "message": "延迟较长：看视频建议用「影视」或「推荐」场景。" },
   "videosNone": { "message": "本页未检测到视频（≥ 200×112）。" },
   "videosCount": {
     "message": "本页 $COUNT$ 个视频",

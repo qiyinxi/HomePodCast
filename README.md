@@ -42,7 +42,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
-- Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound
+- Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
 - Interface in English, Simplified Chinese, Traditional Chinese and Japanese
 
 ## Usage

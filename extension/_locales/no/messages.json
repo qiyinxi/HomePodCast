@@ -87,6 +87,9 @@
   "hintNotRunning": {
     "message": "HomePodCast kjører ikke; bildet forsinkes ikke."
   },
+  "hintLongDelay": {
+    "message": "Lang forsinkelse: velg scenen «Film» eller «Anbefalt» for video."
+  },
   "videosNone": {
     "message": "Fant ingen videoer på denne siden (≥ 200×112).",
     "description": "Only videos at least 200×112 pixels are handled."
