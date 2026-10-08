@@ -51,6 +51,7 @@ public static class Program
         }
 
         Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
+        Autostart.Repair();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

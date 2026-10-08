@@ -158,4 +158,27 @@ public static class Autostart
             else key.DeleteValue(Name, throwOnMissingValue: false);
         }
     }
+
+    /// <summary>
+    /// Autostart is on but its exe no longer exists (the app was moved, or uninstalled and installed elsewhere):
+    /// point it at this copy. A copy that still exists is left alone, so two installs don't fight over it.
+    /// Test copies (HOMEPODCAST_PROFILE) never touch the user's entry.
+    /// </summary>
+    public static void Repair()
+    {
+        if (AppConfig.Profile != null) return;
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (key?.GetValue(Name) is not string current) return;
+            var target = current.StartsWith('"') ? current[1..Math.Max(1, current.IndexOf('"', 1))] : current.Split(' ')[0];
+            if (File.Exists(target) || string.Equals(current, Command, StringComparison.OrdinalIgnoreCase)) return;
+            key.SetValue(Name, Command);
+            Log.Info($"autostart pointed at a missing exe ({target}); now {Command}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart repair: {ex.Message}");
+        }
+    }
 }
