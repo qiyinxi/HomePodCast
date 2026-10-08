@@ -169,7 +169,7 @@ public sealed class LoopbackCapture : IDisposable
         Peak = peak;
     }
 
-    private static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
+    internal static unsafe void ToStereo(IntPtr data, int frames, WaveFormat fmt, Span<float> dst)
     {
         int ch = fmt.Channels;
         byte* p = (byte*)data;

@@ -21,6 +21,8 @@ public static class Program
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
+                "proctest" => ProcTest.Run(args),
+                "tone" => ProcTest.Tone(args),
                 "fakeapi" => FakeApi(args),
                 _ => Help(),
             };
