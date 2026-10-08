@@ -117,10 +117,12 @@ internal static class TestAudio
     public static byte[] ExpectedPayload(float[] signal, int packet, ChannelMode channels)
     {
         var dst = new byte[352 * 4];
-        // A slow machine (CI) can collect packets past the end of the test signal: the drained FIFO sends silence.
-        if ((packet + 1) * 352 * 2 > signal.Length) return dst;
-        var src = signal.AsSpan(packet * 352 * 2, 352 * 2);
-        for (int i = 0; i < 352; i++)
+        // A slow machine (CI) can collect packets past the end of the test signal: the drained FIFO sends silence,
+        // and the packet that straddles the end carries the signal's last frames followed by silence.
+        int start = packet * 352 * 2;
+        if (start >= signal.Length) return dst;
+        var src = signal.AsSpan(start, Math.Min(352 * 2, signal.Length - start));
+        for (int i = 0; i < src.Length / 2; i++)
         {
             float l = src[i * 2], r = src[i * 2 + 1];
             (float a, float b) = channels switch
