@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Drawing.Drawing2D;
 using HomePodCast.Audio;
+using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI;
 
@@ -8,80 +10,45 @@ namespace HomePodCast.UI;
 /// takes) while the circle flashes. The user slides the flash later until both coincide; the slider
 /// value is how far the sound lags the picture — what you actually feel in a game.
 /// </summary>
-internal sealed class SyncTestForm : Form
+internal sealed class SyncTestForm : FluentDialog
 {
     private readonly ClickRenderer _clicks = new();
     private readonly BlockingCollection<long> _due = new();
-    private readonly Panel _circle;
-    private readonly TrackBar _offset;
-    private readonly Label _value;
+    private readonly FlashCircle _circle = new();
+    private readonly FluentSlider _offset;
+    private readonly TextBlock _value = new("", TextStyle.Subtitle) { Align = HorizontalAlignment.Center };
     private readonly Thread _flasher;
     private volatile bool _closing;
     private volatile int _offsetMs;
-    private bool _lit;
 
     public int OffsetMs => _offsetMs;
 
     /// <summary>QPC time at which each click enters the Windows mix (raised on the render thread).</summary>
     public event Action<long>? ClickScheduled;
 
-    public SyncTestForm(int initialOffsetMs)
+    public SyncTestForm(int initialOffsetMs) : base(L.T("音画同步测试"))
     {
-        SuspendLayout();
-        AutoScaleDimensions = new SizeF(96F, 96F); // coordinates below are 96-DPI units
-        AutoScaleMode = AutoScaleMode.Dpi;
-        Text = L.T("音画同步测试");
-        Font = new Font(L.FontName, 10f);
-        BackColor = Color.FromArgb(24, 24, 24);
-        ForeColor = Color.Gainsboro;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = MinimizeBox = false;
+        ContentWidth = 540;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(520, 470);
-        Icon = Icons.Speaker(Icons.Streaming);
-
-        var help = new Label
+        var help = new TextBlock(L.T("HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n" +
+                                     "如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n" +
+                                     "最后的数值 = 打游戏时声音比画面晚多少。"), wrap: true);
+        _offset = new FluentSlider
         {
-            Text = L.T("HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n" +
-                       "如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n" +
-                       "最后的数值 = 打游戏时声音比画面晚多少。"),
-            AutoSize = false,
-            Location = new Point(20, 16),
-            Size = new Size(480, 84), // four lines: English wraps its middle sentence
-        };
-        _circle = new DoubleBufferedPanel { Location = new Point(160, 100), Size = new Size(200, 200) };
-        _circle.Paint += (_, e) =>
-        {
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var b = new SolidBrush(_lit ? Color.White : Color.FromArgb(60, 60, 60));
-            e.Graphics.FillEllipse(b, 10, 10, 180, 180);
-        };
-        _offset = new TrackBar
-        {
-            Location = new Point(20, 320),
-            Size = new Size(480, 45),
             Minimum = 0,
             Maximum = 600,
             SmallChange = 5,
             LargeChange = 20,
-            TickFrequency = 50,
             Value = Math.Clamp(initialOffsetMs, 0, 600),
+            AccessibleName = L.T("音画同步测试"),
         };
-        _value = new Label { Location = new Point(20, 372), Size = new Size(480, 28), Font = new Font(Font.FontFamily, 12f, FontStyle.Bold) };
-        var done = new Button
-        {
-            Text = L.T("完成"),
-            Location = new Point(400, 412),
-            Size = new Size(100, 36),
-            DialogResult = DialogResult.OK,
-            BackColor = Color.FromArgb(50, 50, 50),
-            FlatStyle = FlatStyle.Flat,
-        };
+        var done = new FluentButton(L.T("完成"), ButtonKind.Primary) { DialogResult = DialogResult.OK, MinWidth = 110 };
+        Body.Controls.AddRange([help, _circle, _offset, _value, ButtonRow(done)]);
+        Body.GapBefore[_circle] = 16;
         AcceptButton = done;
         _offset.ValueChanged += (_, _) => UpdateValue();
-        Controls.AddRange([help, _circle, _offset, _value, done]);
-        ResumeLayout(false);
         UpdateValue();
+        ActiveControl = _offset;
 
         _clicks.ClickScheduled += when =>
         {
@@ -89,6 +56,7 @@ internal sealed class SyncTestForm : Form
             if (!_due.IsAddingCompleted) _due.Add(when);
         };
         _flasher = new Thread(FlashLoop) { IsBackground = true, Name = "Sync flasher" };
+        PerformLayout();
     }
 
     private void UpdateValue()
@@ -125,8 +93,7 @@ internal sealed class SyncTestForm : Form
         {
             BeginInvoke(() =>
             {
-                _lit = lit;
-                _circle.Invalidate();
+                _circle.Lit = lit;
                 _circle.Update();
             });
         }
@@ -141,8 +108,27 @@ internal sealed class SyncTestForm : Form
         base.OnFormClosing(e);
     }
 
-    private sealed class DoubleBufferedPanel : Panel
+    /// <summary>The flashing circle on a dark stage (high contrast in both themes).</summary>
+    private sealed class FlashCircle : FluentControl
     {
-        public DoubleBufferedPanel() => DoubleBuffered = true;
+        private bool _lit;
+
+        public bool Lit
+        {
+            get => _lit;
+            set { _lit = value; Invalidate(); }
+        }
+
+        public override Size GetPreferredSize(Size proposedSize) => new(proposedSize.Width, Dp(220));
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            Shapes.FillRound(g, Color.FromArgb(24, 24, 24), new Rectangle(0, 0, Width, Height), Dp(8));
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int d = Height - Dp(40);
+            using var b = new SolidBrush(_lit ? Color.White : Color.FromArgb(60, 60, 60));
+            g.FillEllipse(b, (Width - d) / 2f, Dp(20), d, d);
+        }
     }
 }

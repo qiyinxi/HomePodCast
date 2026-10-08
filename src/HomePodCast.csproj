@@ -15,6 +15,8 @@
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- The custom controls (UI/Controls) are built in code, never in the designer: no serialization attributes. -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
     <!-- Fixed output location so the firewall rule for the exe survives rebuilds. -->
     <OutputPath>..\app\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
