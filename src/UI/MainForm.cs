@@ -2,7 +2,7 @@ using HomePodCast.Net;
 
 namespace HomePodCast.UI;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private const int LatencyMax = 500, LatencyStep = 1;
 
@@ -132,6 +132,7 @@ internal sealed class MainForm : Form
         _stats.MaximumSize = new Size(textWidth, 0);
         layout.Controls.Add(_stats, 0, 8);
         layout.SetColumnSpan(_stats, 3);
+        BuildSoundRows(layout);
 
         for (int i = 0; i < 9; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
