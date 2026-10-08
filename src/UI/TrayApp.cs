@@ -101,6 +101,11 @@ internal sealed class TrayApp : ApplicationContext
             return;
         }
         _wantConnected = true;
+        if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
+        {
+            Controller.StartGroup(group, Config.LatencyMs, Config.Volume);
+            return;
+        }
         Controller.Start(Config.DeviceId, Config.Host, Config.LatencyMs, Config.Volume);
     }
 
@@ -148,6 +153,7 @@ internal sealed class TrayApp : ApplicationContext
         try
         {
             var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            found = StereoPairs.Merge(found); // a stereo pair shows as one entry (experimental)
             // Keep the configured speaker in the list even if it didn't answer this time.
             if (Config.DeviceId != null && !found.Any(d =>
                     StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(Config.DeviceId), StringComparison.OrdinalIgnoreCase)))
@@ -183,7 +189,7 @@ internal sealed class TrayApp : ApplicationContext
         using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
-        var sender = Controller.Client?.Sender;
+        var sender = Controller.ActiveSender;
         var scheduled = new System.Collections.Concurrent.ConcurrentQueue<long>();
         var local = new List<double>();
         test.ClickScheduled += when => scheduled.Enqueue(when);

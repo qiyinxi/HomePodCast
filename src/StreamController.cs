@@ -12,7 +12,7 @@ public enum StreamState { Idle, Connecting, Streaming, Retrying }
 /// speaker if its address changed, and backs off (instead of fighting) when another sender takes over.
 /// All events are raised on the thread pool; the UI marshals them.
 /// </summary>
-public sealed class StreamController : IDisposable
+public sealed partial class StreamController : IDisposable
 {
     private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
 
@@ -74,6 +74,7 @@ public sealed class StreamController : IDisposable
         }
         try { loop?.Wait(3000); } catch { }
         TearDown();
+        TearDownGroup();
         _capture?.Dispose();
         _capture = null;
         Set(StreamState.Idle, "未连接");
@@ -82,6 +83,7 @@ public sealed class StreamController : IDisposable
     public void SetVolume(double percent)
     {
         Volume = percent;
+        if (SetGroupVolume(percent)) return;
         var client = _client;
         if (client == null) return;
         Task.Run(() =>
@@ -106,12 +108,7 @@ public sealed class StreamController : IDisposable
                 host = address.ToString();
                 HostResolved?.Invoke(host);
 
-                if (_capture == null)
-                {
-                    _capture = new LoopbackCapture(_fifo, RtpSender.SampleRate);
-                    _capture.DeviceChanged += _ => Changed?.Invoke();
-                    _capture.Start();
-                }
+                EnsureCapture();
 
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                 EffectiveLatencyMs = SafeLatency(latencyMs);
@@ -165,6 +162,15 @@ public sealed class StreamController : IDisposable
             Set(StreamState.Retrying, $"{lostReason}，{delay.TotalSeconds:F0} 秒后重试");
             try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
         }
+    }
+
+    /// <summary>Capture runs across reconnects; shared by the single-speaker and the group loop.</summary>
+    private void EnsureCapture()
+    {
+        if (_capture != null) return;
+        _capture = new LoopbackCapture(_fifo, RtpSender.SampleRate);
+        _capture.DeviceChanged += _ => Changed?.Invoke();
+        _capture.Start();
     }
 
     /// <summary>Raised when the speaker's address was (re)discovered, so it can be remembered.</summary>
