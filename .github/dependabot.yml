@@ -1,7 +1,9 @@
 version: 2
 updates:
+  # Updates land on dev like any other change; they reach main with the next verified merge.
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev
     schedule:
       interval: weekly
 
@@ -9,5 +11,9 @@ updates:
     directories:
       - /src
       - /tests/HomePodCast.Tests
+    target-branch: dev
     schedule:
       interval: weekly
+    groups:
+      test-tools:
+        patterns: ['xunit*', 'Microsoft.NET.Test.Sdk', 'coverlet*']
