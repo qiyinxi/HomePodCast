@@ -18,6 +18,14 @@ public sealed class AppConfig
     /// <summary>Capture→sender FIFO target. Smaller = lower latency, but must cover capture jitter.</summary>
     public int FifoTargetMs { get; set; } = 12;
 
+    /// <summary>
+    /// How much later than the requested playout delay the HomePod is actually heard, relative to the
+    /// picture (PC-side capture + speaker output). Phone-video measurement 2026-10-07: 120 ms → 156 ms.
+    /// </summary>
+    public int VideoDelayExtraMs { get; set; } = 36;
+
+    public int LocalApiPort { get; set; } = Net.LocalApi.DefaultPort;
+
     [JsonIgnore]
     public static string Directory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HomePodCast");

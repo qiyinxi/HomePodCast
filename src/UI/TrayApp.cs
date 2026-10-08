@@ -12,6 +12,7 @@ internal sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem _toggleItem = new("连接");
     private readonly MainForm _form;
     private StreamState _lastIconState = (StreamState)(-1);
+    private LocalApi? _api;
     private bool _wantConnected;
     private bool _hintShown;
 
@@ -46,6 +47,27 @@ internal sealed class TrayApp : ApplicationContext
             if (Config.Host != host) { Config.Host = host; Config.Save(); }
         }, null);
         Controller.FirewallBlocked += () => _ui.Post(_ => OfferFirewallRule(), null);
+        try
+        {
+            _api = new LocalApi(Config.LocalApiPort, () =>
+            {
+                bool streaming = Controller.State == StreamState.Streaming;
+                return new
+                {
+                    app = "HomePodCast",
+                    version = typeof(TrayApp).Assembly.GetName().Version?.ToString(3),
+                    streaming,
+                    device = Config.DeviceName,
+                    latencyMs = Controller.EffectiveLatencyMs,
+                    videoDelayMs = streaming ? Controller.EffectiveLatencyMs + Config.VideoDelayExtraMs : 0,
+                    videoDelaySource = "estimate",
+                };
+            });
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            Log.Warn($"local API not started (port {Config.LocalApiPort}): {ex.Message}");
+        }
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
 
@@ -280,6 +302,7 @@ internal sealed class TrayApp : ApplicationContext
     {
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        _api?.Dispose();
         Controller.Dispose();
         _tray.Dispose();
         ExitThread();

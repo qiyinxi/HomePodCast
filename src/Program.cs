@@ -20,6 +20,8 @@ public static class Program
                 "scan" => Scan().GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
+                "mutetest" => MuteTest(),
+                "fakeapi" => FakeApi(args),
                 _ => Help(),
             };
         }
@@ -72,6 +74,80 @@ public static class Program
         r.ClickScheduled += when => Log.Info($"click scheduled {Net.MediaClock.ToMs(when - Net.MediaClock.Now):F1} ms from now");
         r.Start();
         Thread.Sleep(3500);
+        return 0;
+    }
+
+    /// <summary>
+    /// Does WASAPI loopback still see audio when the endpoint is muted / at zero volume?
+    /// Decides whether "mute Windows, stream to HomePod" works without a virtual sound card.
+    /// Restores the original mute state and volume afterwards.
+    /// </summary>
+    private static int MuteTest()
+    {
+        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out var device);
+        var iid = typeof(IAudioEndpointVolume).GUID;
+        device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj);
+        var vol = (IAudioEndpointVolume)obj;
+        var ctx = Guid.Empty;
+        vol.GetMute(out bool origMute);
+        vol.GetMasterVolumeLevelScalar(out float origVol);
+        Log.Info($"device \"{CoreAudio.FriendlyName(device)}\": muted={origMute} volume={origVol:P0}");
+
+        var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 1000);
+        using var capture = new LoopbackCapture(fifo, RtpSender.SampleRate);
+        using var clicks = new ClickRenderer();
+        capture.Start();
+        clicks.Start();
+
+        float Measure(string label)
+        {
+            Thread.Sleep(300);
+            float max = 0;
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 3000) { max = Math.Max(max, capture.Peak); Thread.Sleep(20); }
+            Log.Info($"{label,-14} loopback peak = {max:F3}");
+            return max;
+        }
+
+        try
+        {
+            vol.SetMute(false, ref ctx);
+            vol.SetMasterVolumeLevelScalar(Math.Max(origVol, 0.5f), ref ctx);
+            Measure("unmuted");
+            vol.SetMute(true, ref ctx);
+            Measure("muted");
+            vol.SetMute(false, ref ctx);
+            vol.SetMasterVolumeLevelScalar(0f, ref ctx);
+            Measure("volume 0%");
+        }
+        finally
+        {
+            vol.SetMasterVolumeLevelScalar(origVol, ref ctx);
+            vol.SetMute(origMute, ref ctx);
+            vol.GetMute(out bool m);
+            vol.GetMasterVolumeLevelScalar(out float v);
+            Log.Info($"restored: muted={m} volume={v:P0}");
+        }
+        return 0;
+    }
+
+    /// <summary>Serve the extension status endpoint with a fixed delay, no speaker needed (for testing).</summary>
+    private static int FakeApi(string[] args)
+    {
+        int delay = int.Parse(Opt(args, "--delay") ?? "141");
+        int seconds = int.Parse(Opt(args, "--seconds") ?? "600");
+        using var api = new LocalApi(LocalApi.DefaultPort, () => new
+        {
+            app = "HomePodCast",
+            version = "fake",
+            streaming = delay > 0,
+            device = "测试",
+            latencyMs = Math.Max(0, delay - 36),
+            videoDelayMs = delay,
+            videoDelaySource = "fake",
+        });
+        Thread.Sleep(TimeSpan.FromSeconds(seconds));
         return 0;
     }
 
