@@ -52,7 +52,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
    - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
 
-   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
+   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定都儲存在 `%APPDATA%\HomePodCast`。
 3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 Windows 音量就是 HomePod 音量：兩邊保持一致（連線時對齊到較小的那個），Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
 
 介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
