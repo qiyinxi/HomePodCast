@@ -263,7 +263,8 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
     /// <summary>
     /// The speaker only answers the stream SETUP once it has synced to our NTP clock, so a timeout here
-    /// with zero timing requests means its packets never reached us (almost always the firewall).
+    /// with zero timing requests means its packets never reached us (almost always the firewall; on a Public
+    /// network, always: our rule only applies on Private ones).
     /// </summary>
     private HttpMessage SetupStream(Dictionary<string, object?> body)
     {
@@ -273,7 +274,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         }
         catch (IOException) when (_timing.RequestsAnswered == 0)
         {
-            throw new FirewallBlockedException();
+            throw new FirewallBlockedException(NetworkProfile.ForLocalAddress(_rtsp.LocalIp));
         }
     }
 
@@ -369,5 +370,14 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
 public class AirPlayException(string message) : Exception(message);
 
-public sealed class FirewallBlockedException() : AirPlayException(
-    L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接"));
+/// <param name="network">
+/// The network the speaker is reached through: when it is Public and the firewall doesn't let us in there (it reads
+/// the rules), the message says so, which is what the main window and the tray show.
+/// </param>
+public sealed class FirewallBlockedException(NetworkProfile? network = null) : AirPlayException(Describe(network))
+{
+    private static string Describe(NetworkProfile? network) =>
+        network is { Category: NetworkCategory.Public } && !Firewall.Inspect().PublicAllowed
+            ? L.F("网络「{0}」是公用网络，Windows 防火墙拦截了音箱连回本程序的连接", network.DisplayName)
+            : L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
+}
