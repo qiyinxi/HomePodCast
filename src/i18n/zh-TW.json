@@ -342,5 +342,11 @@
   "读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。": "讀不到開機啟動的狀態。也可以在 Windows 設定 → 應用程式 → 啟動 裡開啟或關閉 HomePodCast。",
   "已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。": "已在 Windows 設定的「啟動」頁面裡關閉，只能在那裡重新開啟。",
   "开机启动由组织的策略管理。": "開機啟動由組織的原則管理。",
-  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "HomePodCast 的開機啟動在 Windows 設定裡被關閉了，只能在那裡重新開啟。\n\n按「是」開啟 Windows 設定的「啟動」頁面，然後開啟 HomePodCast。"
+  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "HomePodCast 的開機啟動在 Windows 設定裡被關閉了，只能在那裡重新開啟。\n\n按「是」開啟 Windows 設定的「啟動」頁面，然後開啟 HomePodCast。",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风": "Windows 的隱私權設定不允許 HomePodCast 使用麥克風",
+  "打开麦克风隐私设置": "開啟麥克風隱私權設定",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Windows 的隱私權設定不允許 HomePodCast 使用麥克風。允許之後，把麥克風關閉再開啟。",
+  "无法使用麦克风": "無法使用麥克風",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows 的隱私權設定不允許 HomePodCast 使用麥克風。\n\n請在 Windows 設定 → 隱私權與安全性 → 麥克風 裡開啟「麥克風存取」，並在應用程式清單裡開啟 HomePodCast，然後把麥克風關閉再開啟。\n\n按「是」開啟 Windows 設定。",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows 的隱私權設定不允許 HomePodCast 使用麥克風。\n\n請在 Windows 設定 → 隱私權與安全性 → 麥克風 裡開啟「麥克風存取」和「允許桌面應用程式存取您的麥克風」，然後把麥克風關閉再開啟。\n\n按「是」開啟 Windows 設定。"
 }

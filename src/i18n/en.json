@@ -342,5 +342,11 @@
   "读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。": "Couldn't read whether HomePodCast starts with Windows. You can also turn it on or off in Windows Settings → Apps → Startup.",
   "已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。": "Turned off on the Startup page of Windows Settings; it can only be turned on again there.",
   "开机启动由组织的策略管理。": "Starting with Windows is managed by your organization's policy.",
-  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "Starting HomePodCast with Windows was turned off in Windows Settings and can only be turned on again there.\n\nClick Yes to open the Startup page of Windows Settings, then turn on HomePodCast."
+  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "Starting HomePodCast with Windows was turned off in Windows Settings and can only be turned on again there.\n\nClick Yes to open the Startup page of Windows Settings, then turn on HomePodCast.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风": "Windows privacy settings don't allow HomePodCast to use the microphone",
+  "打开麦克风隐私设置": "Open microphone privacy settings",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Windows privacy settings don't allow HomePodCast to use the microphone. Once you allow it, turn the microphone off and on again.",
+  "无法使用麦克风": "Can't use the microphone",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows privacy settings don't allow HomePodCast to use the microphone.\n\nIn Windows Settings → Privacy & security → Microphone, turn on \"Microphone access\" and HomePodCast in the list of apps, then turn the microphone off and on again.\n\nClick Yes to open Windows Settings.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows privacy settings don't allow HomePodCast to use the microphone.\n\nIn Windows Settings → Privacy & security → Microphone, turn on \"Microphone access\" and \"Let desktop apps access your microphone\", then turn the microphone off and on again.\n\nClick Yes to open Windows Settings."
 }

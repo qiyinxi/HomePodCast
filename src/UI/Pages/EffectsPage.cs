@@ -32,6 +32,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly TextBlock _monitorCaptured = new(L.T(LocalMonitor.CapturedText), TextStyle.Body, TextRole.Caution, wrap: true) { Collapsed = true };
     private readonly TextBlock _delayHint = Ui.Note();
     private readonly TextBlock _micStatus = Ui.Note();
+    private readonly FluentButton _micPrivacy = new(L.T("打开麦克风隐私设置"), ButtonKind.Link, Glyph.OpenInNew) { Collapsed = true };
     private readonly TextBlock _routeStatus = Ui.Note();
 
     private readonly ToggleSwitch _reverbOn = new(L.T("开启混响"));
@@ -82,7 +83,8 @@ internal sealed class EffectsPage : ScrollPage
         var monitor = new FieldRow(L.T("监听设备"), _monitorDevice);
         FieldRow.AlignCaptions(device, level, gain, gate, route, monitor);
         ShowDelayHint();
-        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus, _routeStatus);
+        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus,
+            Ui.Row(0, null, _micPrivacy), _routeStatus);
         card.Gap = 8;
         return card;
     }
@@ -109,6 +111,7 @@ internal sealed class EffectsPage : ScrollPage
     private void WireEvents()
     {
         _refresh.Click += (_, _) => LoadDevices();
+        _micPrivacy.Click += (_, _) => AppEnvironment.OpenUri(MicCapture.PrivacySettingsUri);
         _micOn.Toggled += (_, _) => SetMicOn(_micOn.Checked);
         _micDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MicDeviceId = Pick(_micDevice, _inputs, S.MicDeviceId));
         _monitorDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MonitorDeviceId = Pick(_monitorDevice, _outputs, S.MonitorDeviceId));
@@ -280,6 +283,10 @@ internal sealed class EffectsPage : ScrollPage
             : L.F("{0} · {1} Hz · 周期 {2:F1} ms", mic.DeviceName, mic.DeviceRate, mic.PeriodMs) +
               (mic.LowLatency ? L.T("（低延迟模式）") : "");
         _micStatus.Role = mic?.Error != null ? TextRole.Critical : TextRole.Secondary;
+        // Refused by the privacy settings: the way to them, and what to do afterwards.
+        bool denied = mic?.AccessDenied == true;
+        if (denied) _micStatus.Text = L.T("Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。");
+        _micPrivacy.Collapsed = !denied;
 
         var lines = new List<string>();
         if (mic != null && S.Destination != MicDestination.Monitor)
