@@ -6,7 +6,7 @@
   Writes <OutDir>\HomePodCast-<Version>-x64.msix, unsigned (the Store signs what it publishes):
     1. publishes the app self-contained for win-x64 into packaging\msix\obj\layout. The Store doesn't install the
        .NET Desktop Runtime, so the package carries it (the MSI and the zip stay framework-dependent). The build
-       goes to packaging\msix\obj\bin and obj\obj, so app\ and src\obj are left alone;
+       goes to packaging\msix\obj\bin, so app\ is left alone; its intermediates go to src\obj's win-x64 subfolder;
     2. adds the logos (Assets\, made by tools\make_icon.py --msix) and LICENSE, and writes AppxManifest.xml from
        the template next to this script with the identity, display names and version filled in;
     3. makepri indexes the logos (scale- and targetsize-qualified files) into resources.pri (priconfig.xml), so
@@ -98,7 +98,9 @@ $publishArgs = @(
     '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true'
     "-p:Version=$Version"
     "-p:OutputPath=$(Join-Path $work 'bin')\"
-    "-p:BaseIntermediateOutputPath=$(Join-Path $work 'obj')\"
+    # Intermediates stay in src\obj (a win-x64 subfolder of their own). Moving BaseIntermediateOutputPath out of src
+    # let the default compile glob pick up src\obj's generated AssemblyInfo files from an earlier build (CI: duplicate
+    # attribute errors right after the framework-dependent build).
     '-o', $layout
 )
 dotnet @publishArgs
