@@ -53,7 +53,7 @@ public static class StereoPairs
     internal const long FlagSilentPrimary = 1 << 12;
     internal const long FlagTightSyncIsGroupLeader = 1 << 13;
     internal const long FlagTightSyncBuddyNotReachable = 1 << 14;
-    internal const long FlagReceiverSessionIsActive = 1 << 17;
+    internal const long FlagReceiverSessionIsActive = StatusFlags.ReceiverSessionIsActive;
 
     public static bool IsPairId(string? id) => id != null && id.StartsWith(IdPrefix, StringComparison.OrdinalIgnoreCase);
 
@@ -183,12 +183,7 @@ public static class StereoPairs
                $"pgid={Txt("pgid")} pgcgl={Txt("pgcgl")} gpn={Txt("gpn")} tsm={Txt("tsm")} psi={Txt("psi")} osvers={Txt("osvers")}";
     }
 
-    internal static long Flags(AirPlayDevice d)
-    {
-        var s = d.Txt.GetValueOrDefault("flags") ?? "";
-        if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) s = s[2..];
-        return long.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v) ? v : 0;
-    }
+    internal static long Flags(AirPlayDevice d) => StatusFlags.FromTxt(d.Txt) ?? 0;
 
     private static string Key(string deviceId) => deviceId.Replace(":", "").Replace("-", "").ToUpperInvariant();
 }

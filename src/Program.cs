@@ -214,7 +214,11 @@ public static class Program
         var reply = rtsp.Rtsp("GET", "/info");
         Console.WriteLine($"{host}: {reply.StartLine}");
         if (reply.IsSuccess && reply.Body.Length > 0)
-            foreach (var line in InfoDump.Lines(Protocol.BPlist.ReadDict(reply.Body))) Console.WriteLine("  " + line);
+        {
+            var info = Protocol.BPlist.ReadDict(reply.Body);
+            foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
+            Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info)); // bit 17: another sender's (or our) session is active
+        }
         return 0;
     }
 
