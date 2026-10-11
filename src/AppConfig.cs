@@ -129,6 +129,23 @@ public sealed class AppConfig
     /// <summary>Its name when it was chosen, shown while the device is unplugged or uninstalled.</summary>
     public string? CaptureDeviceName { get; set; }
 
+    // ---- Updates (Update/*, UI/TrayApp.Update.cs): the only request outside the local network, to api.github.com ----
+
+    /// <summary>Check for a new version about 30 s after startup and every 24 h. Off by default: then only 「检查更新」 asks.</summary>
+    public bool AutoUpdateCheck { get; set; }
+
+    /// <summary>正式版 or 测试版; null = by the running version (a prerelease build: 测试版).</summary>
+    public Update.UpdateChannel? UpdateChannel { get; set; }
+
+    /// <summary>The version the user chose 「跳过此版本」 for: not offered again (a newer one is).</summary>
+    public string? UpdateSkipped { get; set; }
+
+    /// <summary>The last successful check (UTC); automatic checks wait 24 h from it, also across restarts.</summary>
+    public DateTime? UpdateLastCheck { get; set; }
+
+    /// <summary>The version an automatic check already showed a tray balloon for (once per version).</summary>
+    public string? UpdateNotified { get; set; }
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

@@ -25,7 +25,9 @@ internal sealed partial class TrayApp : ApplicationContext
 
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
     /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null)
+    /// <param name="updatedFrom">The version before an update (<c>--updated-from=</c>, passed by the update helper).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
+        string? updatedFrom = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -55,6 +57,7 @@ internal sealed partial class TrayApp : ApplicationContext
             if (Config.Host != host) { Config.Host = host; Config.Save(); }
         }, null);
         InitFirewall();
+        InitUpdate(updatedFrom);
         try
         {
             _api = new LocalApi(Config.LocalApiPort, () =>
@@ -352,6 +355,7 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         if (_hintShown) return;
         _hintShown = true;
+        _balloonClick = null;
         _tray.ShowBalloonTip(3000, L.T("HomePod 音响"), L.T("已最小化到托盘，声音会继续推送。右键托盘图标可以退出。"), ToolTipIcon.Info);
     }
 
@@ -417,6 +421,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeFirewall();
+        DisposeUpdate();
         DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();
