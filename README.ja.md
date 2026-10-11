@@ -164,6 +164,8 @@ UI の文字列は簡体字中国語で `L.T("…")` / `L.F("…{0}", x)` の中
 
 CI からは HomePod に接続できないため、`dev` を `main` にマージする前に実機で音ズレ測定を行います。
 
+リリースの手順（ベータ版、テスト済みベータ版の正式版への昇格、公開前に CI が確認すること）は [docs/RELEASING.md](docs/RELEASING.md)（英語と簡体字中国語）を参照してください。
+
 ## コード署名
 
 現在の配布ファイルにはまだデジタル署名がないため、インストーラーや exe を初めて実行するときに Windows SmartScreen の警告が出ることがあります（「詳細情報」→「実行」）。配布ファイルはすべて、このリポジトリの公開ソースコードから GitHub Actions で自動ビルドしています。[Releases](https://github.com/qiyinxi/HomePodCast/releases) ページからのみダウンロードしてください。

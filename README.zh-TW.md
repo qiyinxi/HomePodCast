@@ -164,6 +164,8 @@ MSI 安裝程式由 `installer\build.ps1` 以 WiX Toolset v5（本機 dotnet 工
 
 CI 無法連到 HomePod，所以 `dev` 合併到 `main` 之前，要在實機上做一次影音同步測試。
 
+發佈流程（測試版、測試過的測試版轉正、CI 發佈前檢查什麼）見 [docs/RELEASING.md](docs/RELEASING.md)（英文與簡體中文）。
+
 ## 程式碼簽章
 
 目前發佈的程式還沒有數位簽章，第一次執行安裝程式或 exe 時 Windows SmartScreen 可能會攔截（按「其他資訊」→「仍要執行」）。所有發佈檔案都由 GitHub Actions 從本儲存庫的公開原始碼自動建置，請只從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 頁面下載。
