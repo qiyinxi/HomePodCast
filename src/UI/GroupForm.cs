@@ -267,7 +267,8 @@ internal sealed class GroupForm : FluentDialog
         }
     }
 
-    private static string PlayLayout(AppConfig cfg) => GroupPlan.FromConfig(cfg) is { } p
+    /// <summary>What a group plays with (members, pair, split/swap, offsets): a change needs a reconnect.</summary>
+    internal static string PlayLayout(AppConfig cfg) => GroupPlan.FromConfig(cfg) is { } p
         ? $"{p.Kind}|{p.PairTsid}|{p.PairLeaderOnly}|{string.Join(",", p.Members.Select(m => m.DeviceId))}|{p.SplitChannels}|{p.SwapChannels}|" +
           string.Join(",", p.VolumeOffsets.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}"))
         : "single";

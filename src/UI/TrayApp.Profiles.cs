@@ -54,6 +54,8 @@ internal sealed partial class TrayApp
         _form.Flush();
         SavePendingVolume();
         _form.CancelPendingLatency();
+        string? selectionBefore = OwnSession.KeyOf(Config);
+        string connectionBefore = ConnectionSignature(Config);
         Fx.MicOn = false;
         UsageProfiles.Apply(Config, s);
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
@@ -68,10 +70,26 @@ internal sealed partial class TrayApp
         _followLink?.CapChanged();
         _form.ReloadConfiguration();
         KickPlayers();
-        if (_wantConnected && Config.DeviceId != null) Connect();
-        else if (_wantConnected) Disconnect();
+        string? selection = OwnSession.KeyOf(Config);
+        if (_wantConnected && selection == null) Disconnect();
+        else if (_wantConnected && ConnectionSignature(Config) != connectionBefore)
+            Connect(ProfileConnectTrigger(selection == selectionBefore, Controller.State is StreamState.Streaming or StreamState.Retrying));
         RaiseStateChanged();
         Log.Info("usage profile applied");
         return true;
     }
+
+    /// <summary>
+    /// What a connection is made with: a profile that changes none of it (only effects, night mode, routing, the
+    /// capture device, the cap: all applied live) must not cut the sound for a reconnect.
+    /// </summary>
+    internal static string ConnectionSignature(AppConfig cfg) =>
+        $"{OwnSession.KeyOf(cfg)}|{cfg.LatencyMs}|{cfg.FifoTargetMs}|{GroupForm.PlayLayout(cfg)}";
+
+    /// <summary>
+    /// The same speaker or group while our session is live: our own reconnect (never held back, never asks). Another
+    /// speaker or group, or nothing live: like picking a speaker in the list, never taken over without a click.
+    /// </summary>
+    internal static ConnectTrigger ProfileConnectTrigger(bool sameSelection, bool live) =>
+        sameSelection && live ? ConnectTrigger.Reconnect : ConnectTrigger.Automatic;
 }
