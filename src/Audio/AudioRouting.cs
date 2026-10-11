@@ -64,7 +64,13 @@ public readonly record struct ProcessEntry(uint Pid, uint ParentPid, string Key)
 /// <summary>One process-loopback capture: the tree under <paramref name="RootPid"/>.</summary>
 public sealed record RouteTarget(uint RootPid, string Key, bool Compensate)
 {
+    /// <summary>The app's independent HomePod level when the plan was made (the capture reads the live one).</summary>
     public int? SendVolumePercent { get; init; }
+
+    /// <summary>Captured and checked the same way: the same app, destination, and independent level on or off (at any level).</summary>
+    public bool SameCapture(RouteTarget other) =>
+        RootPid == other.RootPid && Key == other.Key && Compensate == other.Compensate &&
+        SendVolumePercent.HasValue == other.SendVolumePercent.HasValue;
 }
 
 /// <summary>A session to silence locally, and the capture (target root) that carries it to the speaker.</summary>
@@ -78,9 +84,18 @@ public sealed record RoutePlan(bool Endpoint, IReadOnlyList<RouteTarget> Targets
     /// <summary>Sessions contributing to a target with an independent send level (read-only monitoring).</summary>
     public IReadOnlyList<Silence> SendSessions { get; init; } = [];
 
-    public bool SameAs(RoutePlan other) =>
-        Endpoint == other.Endpoint && Targets.SequenceEqual(other.Targets) && Silenced.SequenceEqual(other.Silenced) &&
-        SendSessions.SequenceEqual(other.SendSessions);
+    /// <summary>
+    /// The same capture, silencing and checks. An independent HomePod level that only moved is not a change: the
+    /// capture applies it live, without a plan-change log line or re-opening anything.
+    /// </summary>
+    public bool SameAs(RoutePlan other)
+    {
+        if (Endpoint != other.Endpoint || Targets.Count != other.Targets.Count || !Silenced.SequenceEqual(other.Silenced) ||
+            !SendSessions.SequenceEqual(other.SendSessions)) return false;
+        for (int i = 0; i < Targets.Count; i++)
+            if (!Targets[i].SameCapture(other.Targets[i])) return false;
+        return true;
+    }
 }
 
 public static class RoutePlanner
