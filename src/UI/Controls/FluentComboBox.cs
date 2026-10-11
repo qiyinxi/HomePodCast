@@ -250,8 +250,12 @@ internal sealed class FluentMenuRenderer : ToolStripRenderer
 
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
-        e.TextColor = e.Item.Enabled ? P.Text : P.TextDisabled;
-        base.OnRenderItemText(e);
+        // Centred in the item's full height here: the ToolStrip's own text rectangle sat about 5 px (96-DPI) above the
+        // centre at 150 % (2026-10-11, every entry of the theme list; the first one touched the top edge), while the
+        // highlight and the accent pill, drawn from the item's bounds, were centred.
+        var r = new Rectangle(e.TextRectangle.X, 0, e.TextRectangle.Width, e.Item.Height);
+        var flags = (e.TextFormat & ~(TextFormatFlags.Top | TextFormatFlags.Bottom)) | TextFormatFlags.VerticalCenter;
+        TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, r, e.Item.Enabled ? P.Text : P.TextDisabled, flags);
     }
 
     protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
