@@ -207,7 +207,20 @@ function Wait-PrCheck([int] $number) {
     Write-Info "waiting for the checks of PR #${number}: https://github.com/$Repo/pull/$number/checks"
     & gh pr checks $number @R --watch --interval 30 | Out-Host
     if ($LASTEXITCODE) { throw "a check of PR #$number failed: https://github.com/$Repo/pull/$number/checks. Nothing was merged; if it was flaky infrastructure, re-run it and run this again" }
-    Write-Info 'the PR checks passed'
+    # gh pr checks can call it passed before GitHub lists every run of a required check (Release 0.2.2: a second
+    # build of PR #13 was still pending and the merge was refused), so merge only once GitHub says the PR is clean.
+    $deadline = (Get-Date).AddMinutes(20)
+    while ($true) {
+        $state = (Invoke-GhJson pr view $number @R --json mergeStateStatus).mergeStateStatus
+        if ($state -in 'CLEAN', 'HAS_HOOKS') { break }
+        if ($state -in 'DIRTY', 'BEHIND', 'UNSTABLE') { throw "PR #$number can't be merged ($state): https://github.com/$Repo/pull/$number. Nothing was merged" }
+        if ((Get-Date) -gt $deadline) { throw "PR #$number is still $state after 20 minutes: https://github.com/$Repo/pull/$number/checks. Nothing was merged" }
+        Write-Info "GitHub says PR #$number is $($state.ToLower()); waiting for its checks again..."
+        Start-Sleep -Seconds 15
+        & gh pr checks $number @R --watch --interval 30 | Out-Host
+        if ($LASTEXITCODE) { throw "a check of PR #$number failed: https://github.com/$Repo/pull/$number/checks. Nothing was merged; if it was flaky infrastructure, re-run it and run this again" }
+    }
+    Write-Info 'the PR checks passed and GitHub says it can be merged'
 }
 
 # The notes file: there, not empty, and English first (a warning only).
