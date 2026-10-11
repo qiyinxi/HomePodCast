@@ -35,6 +35,9 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _movieHint = Ui.Note();
     private int _lagMs;
     private readonly LatencyTuner _tuner;
+    private readonly FluentComboBox _profiles = new() { MinWidth = 140, AccessibleName = L.T("使用配置"), Placeholder = L.T("选择配置…") };
+    private readonly FluentButton _profileApply = new(L.T("应用"));
+    private string[] _profileIds = [];
     private readonly TimerDebounce _sliderWait = new(1000), _sceneWait = new(1000);
 
     // volume
@@ -72,6 +75,7 @@ internal sealed class HomePage : ScrollPage
     private readonly Card _updateBanner;
 
     private StreamState _lastState = StreamState.Idle;
+    private readonly FluentButton _markGlitch = new(L.T("刚才卡了"), ButtonKind.Subtle) { Enabled = false }; // only while streaming
     private DateTime _streamingSince;
     private long _underrunsAtStart;
     private bool _loading;
@@ -89,7 +93,13 @@ internal sealed class HomePage : ScrollPage
         var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330 };
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
-        var statsHeader = Ui.Section(L.T("推流状态"));
+        var statsTitle = Ui.Section(L.T("推流状态"));
+        var mark = _markGlitch;
+        var report = new FluentButton(L.T("导出诊断"), ButtonKind.Subtle);
+        var statsHeader = Ui.Row(8, statsTitle, statsTitle, mark, report);
+        mark.Click += (_, _) => _app.MarkAudibleGlitch();
+        report.Click += (_, _) => _app.ExportDiagnostics(FindForm());
+        _tips.SetToolTip(mark, L.T("记录听到卡顿的时间，便于对照日志。"));
         _netLine = Ui.Row(8, _netStatus, new GlyphLabel(Glyph.Wifi), _netStatus);
         _netLine.Collapsed = true;
         _netHint = BuildNetworkHint();
@@ -150,7 +160,17 @@ internal sealed class HomePage : ScrollPage
         _latency.AccessibleName = L.T("延迟");
         var number = Ui.Row(12, _latencyHint, _latencyValue, _latencyHint);
         var slider = Ui.Row(4, _latency, minus, _latency, plus);
-        var card = Ui.Card(Ui.Header(L.T("场景")), _scenes, number, _lag, slider, _movieHint);
+        var manage = new FluentButton(L.T("管理配置"), ButtonKind.Subtle);
+        var profiles = Ui.Row(8, _profiles, _profiles, _profileApply, manage);
+        var card = Ui.Card(Ui.Header(L.T("场景")), _scenes, profiles, number, _lag, slider, _movieHint);
+        manage.Click += (_, _) => _app.ShowProfiles(FindForm()!);
+        _profileApply.Click += (_, _) =>
+        {
+            if (_profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _profileIds.Length)
+                _app.ApplyUsageProfile(_profileIds[_profiles.SelectedIndex], FindForm());
+        };
+        _profiles.SelectedIndexChanged += (_, _) => _profileApply.Enabled = _profiles.SelectedIndex >= 0;
+        ShowProfiles();
         card.Gap = 10;
 
         _scenes.SelectionChangeCommitted += (_, _) =>
@@ -257,6 +277,45 @@ internal sealed class HomePage : ScrollPage
     /// <summary>The latency shown here: the scene's, or the slider's while it waits to reconnect.</summary>
     public int LatencyMs => _tuner.Value;
 
+    public void FlushLatency() => _tuner.FlushPending();
+    public void CancelPendingLatency() => _tuner.ReloadFromConfig();
+    public void FlushPendingVolume()
+    {
+        if (!_volumeWait.Enabled) return;
+        _volumeWait.Stop();
+        _app.SetVolume(_volume.Value);
+    }
+
+    /// <summary>
+    /// The profile picker after a profile was applied (here or in the dialog), saved, renamed or deleted: the one applied
+    /// last, or the placeholder 「选择配置…」 with 应用 off until one is picked.
+    /// </summary>
+    public void ShowProfiles()
+    {
+        var profiles = _app.Config.UsageProfiles;
+        _profileIds = profiles.Select(p => p.Id).ToArray();
+        _profiles.Items.Clear();
+        _profiles.Items.AddRange(profiles.Select(p => p.Name));
+        _profiles.SelectedIndex = UsageProfiles.PickerIndex(profiles, _app.Config.LastUsageProfileId);
+        _profiles.Enabled = _profileIds.Length > 0;
+        _profileApply.Enabled = _profiles.SelectedIndex >= 0;
+    }
+
+    public void ReloadConfiguration()
+    {
+        UpdateFloor();
+        _tuner.ReloadFromConfig();
+        var cfg = _app.Config;
+        if (cfg.DeviceId != null && !_devices.Any(d => StreamController.Normalize(d.DeviceId).Equals(
+            StreamController.Normalize(cfg.DeviceId), StringComparison.OrdinalIgnoreCase)))
+            _devices.Add(new AirPlayDevice(cfg.DeviceName ?? "?", cfg.DeviceId,
+                System.Net.IPAddress.TryParse(cfg.Host, out var address) ? address : System.Net.IPAddress.None,
+                7000, "", new Dictionary<string, string>()));
+        SetDevices(_devices.ToList());
+        LoadFromConfig();
+        ShowProfiles();
+    }
+
     // ---------------------------------------------------------------- state
 
     private void LoadFromConfig()
@@ -296,7 +355,7 @@ internal sealed class HomePage : ScrollPage
         bool live = c.State == StreamState.Streaming && !_tuner.Pending && ms == cfg.LatencyMs;
         int effective = live ? c.EffectiveLatencyMs : c.SafeLatency(ms);
         int captureExtra = c.Capture?.ExtraLatencyMs ?? (_app.Routing.Active ? Audio.RoutedCapture.RoutedExtraLatencyMs : 0);
-        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs);
+        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs, _app.CurrentCalibrationContext);
         _lag.Text = L.F("声音比画面晚约 {0} ms", _lagMs);
         ShowPlayers();
         _loading = loading;
@@ -377,6 +436,7 @@ internal sealed class HomePage : ScrollPage
             _underrunsAtStart = c.Fifo.Underruns;
         }
         _lastState = c.State;
+        _markGlitch.Enabled = c.State == StreamState.Streaming; // a marker without a stream has nothing to compare with
 
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;

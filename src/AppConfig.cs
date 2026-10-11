@@ -13,6 +13,15 @@ public sealed class AppConfig
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;
     public int? MeasuredAvOffsetMs { get; set; }
+    public Dictionary<string, AvCalibration> SyncCalibrations { get; set; } = [];
+    public List<UsageProfile> UsageProfiles { get; set; } = [];
+
+    /// <summary>
+    /// The profile applied last, which 首页's picker shows (UsageProfiles.PickerIndex); null: none yet, or it was deleted.
+    /// Never part of a profile itself.
+    /// </summary>
+    public string? LastUsageProfileId { get; set; }
+
     public int? ArrivalToRenderMs { get; set; }
 
     /// <summary>
@@ -114,6 +123,13 @@ public sealed class AppConfig
 
     /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
+    public Dictionary<string, int> AppSendVolumes { get; set; } = [];
+
+    /// <summary>
+    /// The level each app's independent HomePod volume had when it was turned off (same keys): offered again when it
+    /// is turned back on, but never above the app's Windows level then (MixerPage.SeedSendPercent).
+    /// </summary>
+    public Dictionary<string, int> AppSendVolumesOff { get; set; } = [];
 
     /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
     public bool RoutingNoticeAccepted { get; set; }
@@ -192,6 +208,12 @@ public sealed class AppConfig
                 if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
                 cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
                 cfg.ForwardVolumeKeys = null;
+                cfg.AppRoutes ??= [];
+                cfg.AppSendVolumes ??= [];
+                cfg.AppSendVolumesOff ??= [];
+                cfg.Effects ??= new();
+                AvCalibrations.Normalize(cfg);
+                HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }
         }

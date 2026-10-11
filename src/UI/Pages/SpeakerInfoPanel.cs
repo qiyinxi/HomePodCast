@@ -51,6 +51,15 @@ internal sealed class SpeakerInfoPanel : StackPanel
 
     public void PageHidden() => _shown = false;
 
+    /// <summary>
+    /// The selection may have changed while the page is shown (a profile applied from 设置 → 使用配置): the cards follow at
+    /// once and a speaker not read yet is read. While hidden, nothing: <see cref="PageShown"/> does it.
+    /// </summary>
+    public void SelectionChanged()
+    {
+        if (_shown) Refresh(force: false);
+    }
+
     /// <summary>Shows what is known and reads every selected speaker whose /info is missing, failed or older than 30 s.</summary>
     private void Refresh(bool force)
     {

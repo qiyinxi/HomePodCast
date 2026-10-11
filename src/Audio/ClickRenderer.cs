@@ -12,13 +12,19 @@ public sealed class ClickRenderer : IDisposable
 {
     private const long BufferDuration = 100_000; // 10 ms
     private readonly Thread _thread;
+    private readonly string? _endpointId;
     private volatile bool _stop;
 
     /// <summary>Raised from the render thread with the QPC time at which a click starts playing.</summary>
     public event Action<long>? ClickScheduled;
 
-    public ClickRenderer()
+    /// <summary>Raised when the selected endpoint disappears or its render stream cannot start.</summary>
+    public event Action<string>? Failed;
+
+    /// <param name="endpointId">Exact render endpoint to exercise; null follows the Windows default.</param>
+    public ClickRenderer(string? endpointId = null)
     {
+        _endpointId = endpointId;
         _thread = new Thread(Run) { IsBackground = true, Name = "Click renderer", Priority = ThreadPriority.Highest };
     }
 
@@ -35,7 +41,8 @@ public sealed class ClickRenderer : IDisposable
         using var ready = new AutoResetEvent(false);
         try
         {
-            CoreAudio.Check(enumerator.GetDefaultAudioEndpoint(EDataFlow.Render, ERole.Console, out device), "device");
+            device = AudioEndpoints.Open(enumerator, EDataFlow.Render, _endpointId)
+                ?? throw new InvalidOperationException("The selected sync-test output device is unavailable.");
             CoreAudio.Check(device.Activate(ref CoreAudio.IidAudioClient, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj), "activate");
             client = (IAudioClient)obj;
             CoreAudio.Check(client.GetMixFormat(out mix), "mix");
@@ -90,6 +97,7 @@ public sealed class ClickRenderer : IDisposable
         catch (Exception ex) when (!_stop)
         {
             Log.Warn($"click renderer: {ex}");
+            Failed?.Invoke(ex.Message);
         }
         catch (Exception)
         {

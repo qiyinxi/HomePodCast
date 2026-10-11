@@ -22,7 +22,7 @@ internal sealed partial class TrayApp
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
     public int VideoDelayMs => Controller.State == StreamState.Streaming
         ? LatencyTuner.SoundLagMs(Controller.EffectiveLatencyMs, Config, Controller.Capture?.ExtraLatencyMs ?? 0,
-            Controller.Fifo.TargetMs)
+            Controller.Fifo.TargetMs, CurrentCalibrationContext)
         : 0;
 
     private PlayerSyncInput PlayerInput() =>

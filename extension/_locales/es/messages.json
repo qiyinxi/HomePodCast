@@ -39,5 +39,42 @@
   "videosDrm": { "message": "protegido contra copia (DRM), no se puede retrasar" },
   "videosFullscreen": { "message": "no se puede retrasar mientras el propio elemento de vídeo está en pantalla completa" },
   "videosPlayerUnsupported": { "message": "el reproductor de esta página no admite retardo de imagen" },
-  "videosNotDelayed": { "message": "sin retardo" }
+  "videosNotDelayed": { "message": "sin retardo" },
+  "syncFullscreen": {
+    "message": "Pantalla completa sincronizada"
+  },
+  "syncExitFullscreen": {
+    "message": "Salir de pantalla completa"
+  },
+  "syncFullscreenTitle": {
+    "message": "Mantener el vídeo y el audio del HomePod sincronizados en pantalla completa."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Mayús+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Retardo de imagen $DELAY$ ms · Ajuste del sitio $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "La pantalla completa no está disponible. Sal del modo actual o permite la pantalla completa para este reproductor e inténtalo de nuevo."
+  },
+  "syncPopupHint": {
+    "message": "Mueve el puntero sobre un vídeo (o pulsa Alt) para ver «Pantalla completa sincronizada». En pantalla completa, Alt+←/→ ajusta 5 ms; añade Mayús para 20 ms. Los cambios se guardan para este sitio."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Ajustar el desfase del sitio en $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

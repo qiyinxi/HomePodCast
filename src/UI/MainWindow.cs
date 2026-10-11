@@ -243,7 +243,26 @@ internal sealed class MainWindow : Form, ISurface
     }
 
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
-    public void Flush() => _effects.Flush();
+    public void Flush()
+    {
+        _home.FlushPendingVolume();
+        _mixer.FlushPendingVolume();
+        _effects.Flush();
+        _settings.FlushPendingSettings();
+    }
+
+    public void FlushLatency() => _home.FlushLatency();
+    public void CancelPendingLatency() => _home.CancelPendingLatency();
+    public void ShowProfiles() => _home.ShowProfiles();
+    public void ReloadConfiguration()
+    {
+        _home.ReloadConfiguration();
+        _mixer.AudioDevicesChanged();
+        _mixer.UpdateState();
+        _effects.ReloadConfiguration();
+        _settings.ReloadConfiguration();
+        ShowSoundOptions();
+    }
 }
 
 /// <summary>A themed window around a single page (<c>gui --effects</c>).</summary>

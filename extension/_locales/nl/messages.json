@@ -39,5 +39,42 @@
   "videosDrm": { "message": "kopieerbeveiligd (DRM), kan niet worden vertraagd" },
   "videosFullscreen": { "message": "kan niet worden vertraagd zolang het video-element zelf schermvullend is" },
   "videosPlayerUnsupported": { "message": "de speler op deze pagina ondersteunt geen beeldvertraging" },
-  "videosNotDelayed": { "message": "niet vertraagd" }
+  "videosNotDelayed": { "message": "niet vertraagd" },
+  "syncFullscreen": {
+    "message": "Gesynchroniseerd volledig scherm"
+  },
+  "syncExitFullscreen": {
+    "message": "Volledig scherm afsluiten"
+  },
+  "syncFullscreenTitle": {
+    "message": "Houd video en HomePod-audio ook op volledig scherm synchroon."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Shift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Beeldvertraging $DELAY$ ms · Websitecorrectie $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Volledig scherm is niet beschikbaar. Sluit het huidige volledige scherm of sta het voor deze speler toe en probeer opnieuw."
+  },
+  "syncPopupHint": {
+    "message": "Beweeg de aanwijzer over een video (of druk op Alt) om “Gesynchroniseerd volledig scherm” te tonen. Op volledig scherm past Alt+←/→ met 5 ms aan; voeg Shift toe voor 20 ms. Wijzigingen worden voor deze website opgeslagen."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Pas de websitecorrectie aan met $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

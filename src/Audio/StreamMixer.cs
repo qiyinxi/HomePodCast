@@ -11,6 +11,16 @@ public interface IMixSource
 }
 
 /// <summary>
+/// How one captured packet is scaled. <see cref="Gain"/> applies to this packet exactly: it undoes something only
+/// this packet's audio carries (the -100 dB of a "HomePod only" app, see <see cref="SessionAttenuation"/>), so it is
+/// never spread over other packets. <see cref="Level"/> is a volume (an independent HomePod level and its
+/// normalization): it moves linearly from the previous packet's level across this packet, so a change never steps
+/// (clicks). <see cref="Snap"/> applies a lower level at once instead: the audio is already louder than the
+/// previous level allows (a ramp from it would overshoot). A higher level always ramps.
+/// </summary>
+public readonly record struct PacketGain(float Gain, float Level, bool Snap = false);
+
+/// <summary>
 /// Sums capture streams that run off the same audio-engine clock (several process-loopback clients,
 /// or just the endpoint loopback) at a common rate. Inputs are drained once per capture cycle, then
 /// <see cref="Mix"/> emits what every live input has delivered, so packets stay aligned even when one
@@ -25,6 +35,7 @@ public sealed class StreamMixer(int maxLagFrames)
         public int Frames;
         public int IdleCycles;
         public bool Pushed;
+        public float Level = float.NaN; // the last packet's PacketGain.Level (NaN: none yet, the first one is not ramped)
     }
 
     private readonly Dictionary<int, Input> _inputs = [];
@@ -46,17 +57,43 @@ public sealed class StreamMixer(int maxLagFrames)
     public int Pending(int id) => _inputs.TryGetValue(id, out var i) ? i.Frames : 0;
 
     /// <summary>Queue interleaved stereo frames for an input, scaled by <paramref name="gain"/>.</summary>
-    public void Push(int id, ReadOnlySpan<float> stereo, float gain = 1f)
+    public void Push(int id, ReadOnlySpan<float> stereo, float gain = 1f) => Push(id, stereo, new PacketGain(gain, 1f));
+
+    /// <summary>
+    /// Queue interleaved stereo frames for an input, scaled by <paramref name="packet"/>: its gain as is, its level
+    /// ramped linearly per frame from the input's previous level (see <see cref="PacketGain"/>). No allocation
+    /// once the input's buffer is large enough.
+    /// </summary>
+    public void Push(int id, ReadOnlySpan<float> stereo, PacketGain packet)
     {
         var input = _inputs[id];
         input.Pushed = true;
         int frames = stereo.Length / 2;
         if (frames == 0) return;
+        float to = packet.Level;
+        float from = float.IsNaN(input.Level) || packet.Snap && to < input.Level ? to : input.Level;
+        input.Level = to;
         int need = (input.Frames + frames) * 2;
         if (input.Buffer.Length < need) Array.Resize(ref input.Buffer, Math.Max(need, input.Buffer.Length * 2));
         var dst = input.Buffer.AsSpan(input.Frames * 2, frames * 2);
-        if (gain == 1f) stereo[..(frames * 2)].CopyTo(dst);
-        else for (int i = 0; i < dst.Length; i++) dst[i] = stereo[i] * gain;
+        var src = stereo[..(frames * 2)];
+        if (from == to)
+        {
+            float gain = packet.Gain * to;
+            if (gain == 1f) src.CopyTo(dst);
+            else for (int i = 0; i < dst.Length; i++) dst[i] = src[i] * gain;
+        }
+        else
+        {
+            // The level reaches this packet's value on its last frame: no step between packets.
+            float step = (to - from) / frames;
+            for (int f = 0; f < frames; f++)
+            {
+                float gain = packet.Gain * (f == frames - 1 ? to : from + step * (f + 1));
+                dst[2 * f] = src[2 * f] * gain;
+                dst[2 * f + 1] = src[2 * f + 1] * gain;
+            }
+        }
         input.Frames += frames;
     }
 

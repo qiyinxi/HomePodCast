@@ -230,9 +230,19 @@ function render() {
 
 // ---------- 交互 ----------
 
+// As in the page: while streaming, the offset stops where it stops changing the picture delay (0 or MAX_DELAY_MS).
+function offsetBounds() {
+  const s = state.status;
+  const base = s && s.running !== false && s.streaming ? Math.round(Number(s.videoDelayMs)) : NaN;
+  if (!Number.isFinite(base)) return [-OFFSET_LIMIT, OFFSET_LIMIT];
+  const lo = clamp(-base, -OFFSET_LIMIT, OFFSET_LIMIT);
+  return [lo, clamp(MAX_DELAY_MS - base, lo, OFFSET_LIMIT)];
+}
+
 function step(delta) {
   if (!state.host) return;
-  const next = clamp(state.offset + delta, -OFFSET_LIMIT, OFFSET_LIMIT);
+  const [lo, hi] = offsetBounds();
+  const next = clamp(state.offset + delta, lo, hi);
   if (next === state.offset) return;
   state.offset = next;
   saveSite();

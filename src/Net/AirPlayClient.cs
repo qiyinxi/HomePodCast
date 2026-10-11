@@ -103,7 +103,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         try
         {
             client.StreamTarget = await client.NegotiateAsync(options, ct) with { Channels = channels };
-            Log.Info($"group member {client.Name} ({host}): {channels}, /info keys: {string.Join(',', client.Info.Keys)}");
+            Log.Info($"group member {Log.Name(client.Name)} ({host}): {channels}, /info keys: {string.Join(',', client.Info.Keys)}");
             client.StartFeedback();
             return client;
         }
@@ -138,7 +138,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         var info = _rtsp.Rtsp("GET", "/info");
         if (info.IsSuccess && info.Body.Length > 0)
             Info = BPlist.ReadDict(info.Body);
-        Log.Info($"connected to {Info.GetValueOrDefault("name")} ({Info.GetValueOrDefault("model")}, " +
+        Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 
         var shared = PairTransient();
@@ -368,7 +368,17 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     }
 }
 
-public class AirPlayException(string message) : Exception(message);
+public class AirPlayException(string message) : Exception(message)
+{
+    /// <summary>
+    /// The message for the log when the user's <see cref="Exception.Message"/> names a speaker: the same with the names
+    /// marked by <see cref="Log.Name"/>, so that a diagnostic report leaves them out (Message never has the markers).
+    /// </summary>
+    public string? LogMessage { get; init; }
+
+    /// <summary>What the log says about <paramref name="ex"/>.</summary>
+    public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;
+}
 
 /// <param name="network">
 /// The network the speaker is reached through: when it is Public and the firewall doesn't let us in there (it reads

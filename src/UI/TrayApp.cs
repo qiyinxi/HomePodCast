@@ -71,7 +71,7 @@ internal sealed partial class TrayApp : ApplicationContext
                     device = Config.DeviceName,
                     latencyMs = Controller.EffectiveLatencyMs,
                     videoDelayMs = VideoDelayMs,
-                    videoDelaySource = "estimate",
+                    videoDelaySource = HasCurrentCalibration ? "calibrated" : "estimate",
                 };
             });
         }
@@ -279,7 +279,17 @@ internal sealed partial class TrayApp : ApplicationContext
             MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
             return;
         }
-        using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
+        if (!TryGetCalibrationSnapshot(out var snapshot))
+        {
+            MessageBox.Show(owner, L.T("无法播放测试音，请检查所选音源后重新测试。"), L.T("音画同步测试"));
+            return;
+        }
+        using var testRoute = Routing.BeginSyncTestRoute();
+        int predicted = LatencyTuner.SoundLagMs(snapshot.EffectiveLatencyMs, Config, snapshot.CaptureExtraMs,
+            snapshot.FifoTargetMs, snapshot.Context);
+        var expectedSender = Controller.ActiveSender;
+        using var test = new SyncTestForm(predicted, snapshot.Context.CaptureEndpointId, HasCurrentCalibration,
+            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.ActiveSender, expectedSender));
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
         var sender = Controller.ActiveSender;
@@ -301,15 +311,35 @@ internal sealed partial class TrayApp : ApplicationContext
             };
         }
 
-        var result = test.ShowDialog(owner);
-        if (sender != null) sender.OnsetSent = null;
-        if (local.Count > 0)
-            Log.Info($"probe summary: local pipeline median {local.Order().ElementAt(local.Count / 2):F1} ms over {local.Count} clicks");
-        if (result == DialogResult.OK)
+        DialogResult result;
+        try { result = test.ShowDialog(owner); }
+        finally { if (sender != null) sender.OnsetSent = null; }
+        double[] localTimes;
+        lock (local) localTimes = local.ToArray();
+        if (localTimes.Length > 0)
+            Log.Info($"probe summary: local pipeline median {localTimes.Order().ElementAt(localTimes.Length / 2):F1} ms over {localTimes.Length} clicks");
+        if (result == DialogResult.Retry && test.RequestedAction == SyncTestAction.Reset)
         {
-            Config.MeasuredAvOffsetMs = test.OffsetMs;
-            Config.Save();
-            Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            ResetSyncCalibration(snapshot.Context);
+        }
+        else if (result == DialogResult.OK)
+        {
+            bool current = test.CanUseMeasurement && IsCalibrationSnapshotCurrent(snapshot);
+            if (current)
+            {
+                Config.MeasuredAvOffsetMs = test.OffsetMs;
+                Config.Save();
+                Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            }
+            if (test.RequestedAction == SyncTestAction.Apply)
+            {
+                // Say what actually happened: the path may have changed after the click, or the click never reached the stream.
+                var outcome = !current ? SyncCalibrationOutcome.PathChanged
+                    : localTimes.Length == 0 ? SyncCalibrationOutcome.NoTestSound
+                    : ApplySyncCalibration(snapshot, test.OffsetMs);
+                if (outcome != SyncCalibrationOutcome.Applied) Log.Warn($"sync calibration not saved: {outcome}");
+                if (SyncCalibrationMessage(outcome) is { } message) MessageBox.Show(owner, message, L.T("音画同步测试"));
+            }
         }
     }
 

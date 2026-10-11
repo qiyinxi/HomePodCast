@@ -36,7 +36,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
 - Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
-- Never cuts off another device unasked: while an iPhone or a Mac plays to the HomePod, Connect asks first, and an automatic connect waits until the speaker is free
+- Never cuts off another device unasked: while an iPhone or a Mac plays to the HomePod, Connect asks first, and an automatic connect waits until the speaker is free (so does a playback profile that switches to it)
 - Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
 - Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
@@ -47,6 +47,8 @@ If you try it on other hardware, please open an issue with the device model, its
 - Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
 - Update check (off by default, see [Updates](#updates)); with the MSI, a new version installs in one click after its SHA-256 is verified
 - Interface in English, Simplified Chinese, Traditional Chinese and Japanese
+
+Playback profiles, per-speaker/source A/V calibration, independent per-app HomePod volume, redacted diagnostic reports, and synchronized browser fullscreen with ±5/±20 ms controls are also available. See [Playback profiles, calibration and diagnostics](docs/PLAYBACK_FEATURES.md#english) for their controls and limitations. The browser extension adds each site's own offset on top of the calibration: if you had already compensated per site, reset those site offsets after calibrating.
 
 ## Usage
 

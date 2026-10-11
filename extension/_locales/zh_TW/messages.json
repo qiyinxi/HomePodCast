@@ -39,5 +39,42 @@
   "videosDrm": { "message": "受版權保護（DRM），無法延遲" },
   "videosFullscreen": { "message": "影片元素單獨全螢幕時無法延遲" },
   "videosPlayerUnsupported": { "message": "此頁面的播放器不支援畫面延遲" },
-  "videosNotDelayed": { "message": "未延遲" }
+  "videosNotDelayed": { "message": "未延遲" },
+  "syncFullscreen": {
+    "message": "同步全螢幕"
+  },
+  "syncExitFullscreen": {
+    "message": "離開全螢幕"
+  },
+  "syncFullscreenTitle": {
+    "message": "在全螢幕時保持影片畫面與 HomePod 音訊同步。"
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→：±5 ms · Alt+Shift+←/→：±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "畫面延遲 $DELAY$ ms · 網站偏移 $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "無法進入全螢幕。請離開目前的全螢幕或允許此播放器使用全螢幕，然後再試一次。"
+  },
+  "syncPopupHint": {
+    "message": "滑鼠移到影片上（或按 Alt）會出現「同步全螢幕」。全螢幕時按 Alt+←/→ 微調 5 ms，加 Shift 微調 20 ms。調整會儲存到目前網站。"
+  },
+  "syncAdjustmentLabel": {
+    "message": "網站偏移調整 $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

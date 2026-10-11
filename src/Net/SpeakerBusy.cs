@@ -8,7 +8,7 @@ public sealed record BusyTarget(string DeviceId, string Name, IPAddress? Address
 /// <summary>
 /// The "receiver session is active" flag of every speaker a connection would use: Busy if any member is, else Unknown
 /// if any member could not be read, else Free. <see cref="BusyNames"/> are the busy members' own names; <see cref="Detail"/>
-/// is for the log.
+/// is for the log (names marked by <see cref="Log.Name"/>).
 /// </summary>
 public sealed record BusyReading(SpeakerBusy State, IReadOnlyList<string> BusyNames, string Detail)
 {
@@ -27,7 +27,7 @@ public sealed record BusyReading(SpeakerBusy State, IReadOnlyList<string> BusyNa
     public static Member Of(BusyTarget target, SpeakerInfoEntry entry)
     {
         string name = entry.Info?.GetValueOrDefault("name") as string is { Length: > 0 } n ? n : target.Name;
-        string where = $"{name} {target.Address?.ToString() ?? "-"}";
+        string where = $"{Log.Name(name)} {target.Address?.ToString() ?? "-"}";
         if (entry.State != SpeakerInfoState.Ready || entry.Info == null)
             return new Member(name, SpeakerBusy.Unknown, $"{where} unreadable ({entry.Error ?? "no answer"})");
         var flags = StatusFlags.FromInfo(entry.Info) ?? StatusFlags.FromTxt(TxtRecord.FromInfo(entry.Info));

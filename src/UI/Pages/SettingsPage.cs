@@ -89,6 +89,12 @@ internal sealed class SettingsPage : ScrollPage
             L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
 
         var tools = Ui.Section(L.T("工具"));
+        var profiles = new FluentButton(L.T("管理配置"));
+        var profilesRow = new SettingRow(Glyph.Settings, L.T("使用配置"),
+            L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), profiles);
+        var diagnostic = new FluentButton(L.T("导出诊断"));
+        var diagnosticRow = new SettingRow(Glyph.Info, L.T("诊断报告"),
+            L.T("导出脱敏日志、设备和网络统计；不包含配置文件、密码或录音，也不会上传。"), diagnostic);
         var group = new FluentButton(L.T("打开"));
         var groupRow = new SettingRow(Glyph.Devices, L.T("多音箱（实验性）"),
             L.T("立体声对、多房间同步、分声道和每台音箱的音量偏移。"), group);
@@ -114,11 +120,11 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow, logsRow,
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow, logsRow,
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
@@ -183,6 +189,8 @@ internal sealed class SettingsPage : ScrollPage
         _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
+        profiles.Click += (_, _) => _app.ShowProfiles(FindForm()!);
+        diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
         link.Click += (_, _) => OpenRepository();
         _check.Click += (_, _) => _app.CheckForUpdates();
@@ -205,6 +213,19 @@ internal sealed class SettingsPage : ScrollPage
 
     /// <summary>The cap was changed here (the volume sliders follow).</summary>
     public event Action? CapChanged;
+    /// <summary>A profile was applied: everything here, and 音箱信息 for the speaker it may have switched to.</summary>
+    public void ReloadConfiguration()
+    {
+        _capWait.Stop();
+        Load();
+        _speakerInfo?.SelectionChanged();
+    }
+    public void FlushPendingSettings()
+    {
+        if (!_capWait.Enabled) return;
+        _capWait.Stop();
+        _app.SetVolumeCap(_cap.Value);
+    }
 
     private const string AutostartText = "登录 Windows 后在托盘里启动。";
 

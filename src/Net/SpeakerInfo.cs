@@ -222,7 +222,7 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
             _ = reading.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // given up on below
             var info = await reading.WaitAsync(Timeout);
             entry = new SpeakerInfoEntry(SpeakerInfoState.Ready, info, UtcNow(), null);
-            if (log) Log.Info($"speaker info: {label} {address} read in {sw.ElapsedMilliseconds} ms, {DescribeFlags(info)}");
+            if (log) Log.Info($"speaker info: {Log.Name(label)} {address} read in {sw.ElapsedMilliseconds} ms, {DescribeFlags(info)}");
         }
         catch (Exception ex)
         {
@@ -230,7 +230,7 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
                 ? $"no answer in {Timeout.TotalSeconds.ToString("0.#", CultureInfo.InvariantCulture)} s"
                 : ex.Message;
             entry = new SpeakerInfoEntry(SpeakerInfoState.Failed, previous?.Info, previous?.ReadUtc, error);
-            if (log) Log.Info($"speaker info: {label} {address?.ToString() ?? "-"} unreadable ({error})");
+            if (log) Log.Info($"speaker info: {Log.Name(label)} {address?.ToString() ?? "-"} unreadable ({error})");
         }
         lock (_lock)
         {
