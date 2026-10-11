@@ -371,5 +371,10 @@
   "这台电脑正在推送": "Denne pc streamer til den",
   "其他设备正在推送（比如 iPhone 或 Mac）": "En anden enhed afspiller på den (f.eks. en iPhone eller Mac)",
   "空闲": "Ledig",
+  "连接音箱": "Opret forbindelse til højttaleren",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} afspiller lyd fra en anden enhed (f.eks. en iPhone eller Mac). Når du opretter forbindelse, skifter den til lyden fra denne pc.",
+  "仍然连接": "Opret forbindelse alligevel",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} bruges af en anden enhed; forbinder, så snart den er ledig",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} har muligvis stadig denne pc's sidste forbindelse; forbinder, så snart den slutter (højst {1} s mere)",
   "{0}（会定期变化）": "{0} (skifter med jævne mellemrum)"
 }

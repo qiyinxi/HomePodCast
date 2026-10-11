@@ -371,5 +371,10 @@
   "这台电脑正在推送": "Deze pc streamt ernaar",
   "其他设备正在推送（比如 iPhone 或 Mac）": "Een ander apparaat speelt erop af (bijvoorbeeld een iPhone of Mac)",
   "空闲": "Vrij",
+  "连接音箱": "Verbinden met de speaker",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} speelt geluid af van een ander apparaat (bijvoorbeeld een iPhone of Mac). Na het verbinden hoor je het geluid van deze pc.",
+  "仍然连接": "Toch verbinden",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} wordt door een ander apparaat gebruikt; verbindt zodra hij vrij is",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} heeft misschien nog de vorige verbinding van deze pc; verbindt zodra die eindigt (hooguit nog {1} s)",
   "{0}（会定期变化）": "{0} (verandert af en toe)"
 }

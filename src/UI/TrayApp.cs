@@ -81,6 +81,7 @@ internal sealed partial class TrayApp : ApplicationContext
         }
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
+        InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
@@ -119,7 +120,7 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
-            if (Config.AutoConnect) Connect();
+            if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
         }
         RefreshDevices();
     }
@@ -153,7 +154,8 @@ internal sealed partial class TrayApp : ApplicationContext
     /// </summary>
     private readonly LatestRequestQueue _connection = new("connection");
 
-    public void Connect()
+    /// <param name="trigger">Why: what a speaker busy with another sender means for this connection (TakeoverPolicy).</param>
+    public void Connect(ConnectTrigger trigger)
     {
         if (Config.DeviceId == null)
         {
@@ -169,10 +171,10 @@ internal sealed partial class TrayApp : ApplicationContext
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
         {
-            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf));
+            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf, trigger));
             return;
         }
-        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf));
+        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf, trigger));
     }
 
     public void Disconnect()
@@ -181,9 +183,10 @@ internal sealed partial class TrayApp : ApplicationContext
         _connection.Post(Controller.Stop);
     }
 
-    public void ToggleConnection()
+    /// <summary>连接 / 断开 (首页, the tray flyout). 连接 asks first when another device is playing to the speaker.</summary>
+    public void ToggleConnection(IWin32Window? owner = null)
     {
-        if (Controller.State == StreamState.Idle) Connect();
+        if (Controller.State == StreamState.Idle) ConnectManual(owner);
         else Disconnect();
     }
 
@@ -195,7 +198,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.Host = device.Address.ToString();
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
-        if (_wantConnected) Connect();
+        if (_wantConnected) Connect(ConnectTrigger.Automatic); // another speaker: never taken over without a click
     }
 
     public void SetLatency(int ms)
@@ -204,7 +207,7 @@ internal sealed partial class TrayApp : ApplicationContext
         if (Config.LatencyMs == ms) return;
         Config.LatencyMs = ms;
         Config.Save();
-        if (_wantConnected) Connect(); // latency is negotiated at SETUP, so reconnect
+        if (_wantConnected) Connect(ConnectTrigger.Reconnect); // latency is negotiated at SETUP, so reconnect
     }
 
     /// <summary>A volume chosen in the app (a page slider's debounce, the tray flyout): saved, sent, and Windows follows (跟随 Windows).</summary>
@@ -255,7 +258,7 @@ internal sealed partial class TrayApp : ApplicationContext
             if (Config.DeviceId == null && found.FirstOrDefault(d => d.Model.StartsWith("AudioAccessory")) is { } homepod)
             {
                 SelectDevice(homepod);
-                if (Config.AutoConnect) Connect();
+                if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
                 _form.SetDevices(found);
             }
         }
@@ -362,17 +365,19 @@ internal sealed partial class TrayApp : ApplicationContext
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
+        // Our session ends with the sleep: after a long one the speaker's flag is no longer ours (TrayApp.Takeover.cs).
+        if (e.Mode == PowerModes.Suspend) OnSuspending();
         if (e.Mode == PowerModes.Resume)
             _ui.Post(async _ =>
             {
                 await Task.Delay(3000); // let Wi-Fi come back
-                if (_wantConnected) Connect();
+                if (_wantConnected) Connect(ConnectTrigger.Reconnect);
             }, null);
     }
 
     private void KickIfWanted()
     {
-        if (_wantConnected && Controller.State is StreamState.Retrying) Connect();
+        if (_wantConnected && Controller.State is StreamState.Retrying) Connect(ConnectTrigger.Reconnect);
     }
 
     private void OnControllerChanged()
@@ -431,6 +436,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // A Start still running would otherwise begin a stream after the Stop below (it never faults).
         connecting.Wait(TimeSpan.FromSeconds(10));
         Controller.Dispose();
+        DisposeTakeover(); // saves how our session ended (cleanly, by us)
         _tray.Dispose();
         ExitThread();
     }

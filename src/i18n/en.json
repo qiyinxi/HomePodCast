@@ -371,5 +371,10 @@
   "这台电脑正在推送": "This PC is streaming to it",
   "其他设备正在推送（比如 iPhone 或 Mac）": "Another device is playing to it (an iPhone or a Mac, for example)",
   "空闲": "Idle",
+  "连接音箱": "Connect to the speaker",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} is playing sound from another device (an iPhone or a Mac, for example). Connecting switches it to this PC's sound.",
+  "仍然连接": "Connect anyway",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} is in use by another device; connecting as soon as it's free",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} may still hold this PC's last connection; connecting as soon as it ends (at most {1} s more)",
   "{0}（会定期变化）": "{0} (changes from time to time)"
 }

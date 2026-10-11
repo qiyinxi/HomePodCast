@@ -109,7 +109,7 @@ internal sealed partial class TrayApp
         if (Firewall.RequestRule())
         {
             Log.Info("firewall rule added");
-            if (_wantConnected) Connect();
+            if (_wantConnected) Connect(ConnectTrigger.Reconnect);
         }
         else
         {
@@ -168,7 +168,7 @@ internal sealed partial class TrayApp
                 if (_quitting || !_wantConnected || Controller.State is StreamState.Streaming or StreamState.Idle) return;
                 if (Controller.State == StreamState.Retrying)
                 {
-                    Connect();
+                    Connect(ConnectTrigger.Reconnect);
                     return;
                 }
                 // Connecting: an attempt begun before the change may still fail; look again next time.

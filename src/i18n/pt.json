@@ -371,5 +371,10 @@
   "这台电脑正在推送": "Este PC está a transmitir para ela",
   "其他设备正在推送（比如 iPhone 或 Mac）": "Outro dispositivo está a transmitir para ela (um iPhone ou um Mac, por exemplo)",
   "空闲": "Livre",
+  "连接音箱": "Ligar à coluna",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} está a reproduzir o som de outro dispositivo (um iPhone ou um Mac, por exemplo). Ao ligar, passa a reproduzir o som deste PC.",
+  "仍然连接": "Ligar mesmo assim",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} está a ser usada por outro dispositivo; liga-se assim que ficar livre",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} pode ainda manter a última ligação deste PC; liga-se assim que terminar (no máximo mais {1} s)",
   "{0}（会定期变化）": "{0} (muda de tempos a tempos)"
 }

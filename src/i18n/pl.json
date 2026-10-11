@@ -371,5 +371,10 @@
   "这台电脑正在推送": "Ten komputer przesyła do niego dźwięk",
   "其他设备正在推送（比如 iPhone 或 Mac）": "Inne urządzenie odtwarza na nim dźwięk (np. iPhone lub Mac)",
   "空闲": "Wolny",
+  "连接音箱": "Połącz z głośnikiem",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} odtwarza dźwięk z innego urządzenia (np. z iPhone'a lub Maca). Po połączeniu zacznie odtwarzać dźwięk z tego komputera.",
+  "仍然连接": "Połącz mimo to",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} jest używany przez inne urządzenie; połączenie, gdy tylko będzie wolny",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} może jeszcze utrzymywać ostatnie połączenie tego komputera; połączenie, gdy tylko się zakończy (najwyżej jeszcze {1} s)",
   "{0}（会定期变化）": "{0} (co jakiś czas się zmienia)"
 }

@@ -23,15 +23,35 @@ public sealed partial class StreamController
     /// <summary>The sender of whatever is streaming (one speaker or a group), for stats and the sync probe.</summary>
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
 
+    /// <summary>One StartGroup's connection: why it connects, the selection's key, and whether it has streamed yet.</summary>
+    private sealed class GroupRun(ConnectTrigger trigger, string key)
+    {
+        public ConnectTrigger Trigger { get; } = trigger;
+        public string Key { get; } = key;
+        public volatile bool Streamed;
+    }
+
     /// <param name="volumeAsOf">As for <see cref="Start"/>: a volume set after the request was made is kept.</param>
-    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null)
+    /// <param name="trigger">As for <see cref="Start"/>; every member is checked.</param>
+    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null, ConnectTrigger trigger = ConnectTrigger.Manual)
     {
         lock (_lifecycle)
         {
             Stop();
             var cts = new CancellationTokenSource();
-            var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, ct), Set);
+            var run = new GroupRun(trigger, OwnSession.KeyOf(plan));
+            var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct), Set);
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
+            runner.Connected += _ =>
+            {
+                run.Streamed = true;
+                OwnSession.Began(run.Key, UtcNow());
+            };
+            runner.StreamEnded += (lostReason, stopped) =>
+            {
+                if (lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget(); // another sender took a member over
+                else OwnSession.Ended(UtcNow(), clean: stopped);
+            };
             runner.Connected += OnGroupConnected;
             lock (_lock)
             {
@@ -46,9 +66,11 @@ public sealed partial class StreamController
         }
     }
 
-    private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, CancellationToken ct)
+    private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
+        await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
+            members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct);
         EnsureCapture(ct);
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);

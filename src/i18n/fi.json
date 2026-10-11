@@ -371,5 +371,10 @@
   "这台电脑正在推送": "Tämä tietokone suoratoistaa siihen",
   "其他设备正在推送（比如 iPhone 或 Mac）": "Toinen laite toistaa siihen (esimerkiksi iPhone tai Mac)",
   "空闲": "Vapaa",
+  "连接音箱": "Yhdistä kaiuttimeen",
+  "{0}正在播放其他设备推送的声音（比如 iPhone 或 Mac）。连接后会换成这台电脑的声音。": "{0} toistaa toisen laitteen ääntä (esimerkiksi iPhonen tai Macin). Kun yhdistät, se vaihtaa tämän tietokoneen ääneen.",
+  "仍然连接": "Yhdistä silti",
+  "{0}正在被其他设备使用，空闲后自动连接": "{0} on toisen laitteen käytössä; yhdistetään, kun se vapautuu",
+  "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} saattaa yhä pitää tämän tietokoneen edellistä yhteyttä; yhdistetään, kun se päättyy (enintään {1} s)",
   "{0}（会定期变化）": "{0} (vaihtuu ajoittain)"
 }

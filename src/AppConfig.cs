@@ -146,6 +146,15 @@ public sealed class AppConfig
     /// <summary>The version an automatic check already showed a tray balloon for (once per version).</summary>
     public string? UpdateNotified { get; set; }
 
+    // ---- Busy speakers (TakeoverPolicy, UI/TrayApp.Takeover.cs) ----
+
+    /// <summary>
+    /// This PC's last session: which selection, when it was last known alive, whether we ended it ourselves. After a crash
+    /// the speaker may still show it as active for a while, and the next start must not take it for another sender's.
+    /// Saved while streaming about once a minute, and when a session starts or ends.
+    /// </summary>
+    public OwnSessionRecord? LastOwnSession { get; set; }
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the

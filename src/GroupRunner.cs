@@ -30,6 +30,12 @@ internal sealed class GroupRunner(
     /// </summary>
     public event Action<SpeakerGroup>? Connected;
 
+    /// <summary>
+    /// Raised on the loop when a group that streamed has ended: the speaker's lost reason (null when it ended otherwise),
+    /// and whether it was stopped (cancelled, so its members get a TEARDOWN).
+    /// </summary>
+    public event Action<string?, bool>? StreamEnded;
+
     /// <summary>Runs until cancelled; returns true if it gave up because another sender took a speaker over.</summary>
     public async Task<bool> RunAsync(CancellationToken ct)
     {
@@ -66,6 +72,7 @@ internal sealed class GroupRunner(
             }
             finally
             {
+                if (streamed) StreamEnded?.Invoke(lostReason, ct.IsCancellationRequested);
                 TearDown();
             }
 
