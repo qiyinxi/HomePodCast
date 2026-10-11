@@ -336,5 +336,7 @@
   "更新已取消，仍在使用当前版本。": "The update was canceled; the current version is still in use.",
   "更新没有完成（{0}），仍在使用 {1}。可以在发布页下载安装包手动安装。": "The update didn't finish ({0}); still using {1}. You can download the installer from the release page and install it yourself.",
   "更新没有完成，详情见「设置」→「软件更新」。": "The update didn't finish. See Settings → Updates for details.",
-  "Microsoft Store 版由 Microsoft Store 负责更新。": "The Microsoft Store version is updated by the Microsoft Store."
+  "Microsoft Store 版由 Microsoft Store 负责更新。": "The Microsoft Store version is updated by the Microsoft Store.",
+  "HomePodCast 安装时已经在 Windows 防火墙里添加了放行规则（专用网络），但音箱的连接还是到不了本程序。\n\n可能是其他防火墙或安全软件拦截了 HomePodCast，也可能是 Windows 防火墙里另有一条阻止它的规则，或者安装时添加的规则被删掉了。\n\n请在安全软件里放行 HomePodCast。Microsoft Store 版的程序路径每次更新都会变，按路径放行的话，每次更新后要重新放行。规则被删掉时，从 Microsoft Store 重新安装 HomePodCast 就会加回来。": "When HomePodCast was installed, it added rules to Windows Firewall that allow it on private networks, but the speaker's connections still don't reach this program.\n\nAnother firewall or security program may be blocking HomePodCast, another Windows Firewall rule may be blocking it, or the rules added at installation may have been deleted.\n\nAllow HomePodCast in that security program. The Microsoft Store version's program path changes with every update, so if you allow it by path, you have to allow it again after each update. If the rules were deleted, reinstalling HomePodCast from the Microsoft Store adds them back.",
+  "音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接": "The speaker's clock-sync requests never reached this program; a firewall or security program may be blocking incoming connections to HomePodCast"
 }
