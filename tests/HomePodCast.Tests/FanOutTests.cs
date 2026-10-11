@@ -111,9 +111,11 @@ public class FanOutTests
             Assert.ThrowsAny<CryptographicException>(() => FakeReceiver.Decrypt(x, b.Key));
         }
 
-        // Cadence: packets are 7.98 ms apart, and each one reaches both speakers back-to-back.
-        double span = MediaClock.ToMs(pa[n - 1].Qpc - pa[0].Qpc);
-        Assert.InRange(span, (n - 1) * PacketMs - 25, (n - 1) * PacketMs + 25);
+        // Cadence: packets are 7.98 ms apart, and each one reaches both speakers back-to-back. The median gap, not the
+        // first-to-last span: on a busy CI runner the receiving thread picked up one end late (2026-10-11: span out of
+        // its ±25 ms with no packet skipped), which says nothing about the sender.
+        var steps = Enumerable.Range(1, n - 1).Select(k => MediaClock.ToMs(pa[k].Qpc - pa[k - 1].Qpc)).Order().ToList();
+        Assert.InRange(steps[steps.Count / 2], PacketMs - 1.5, PacketMs + 1.5);
         var gaps = Enumerable.Range(0, n).Select(k => Math.Abs(MediaClock.ToMs(pb[k].Qpc - pa[k].Qpc))).Order().ToList();
         Assert.True(gaps[n / 2] < 3.0, $"median A/B gap {gaps[n / 2]:F2} ms");
         Assert.Equal(sender.PacketsSent, sender.Streams[0].PacketsSent);
