@@ -6,11 +6,14 @@ public enum PingTarget { Speaker, Router }
 /// <summary>The Wi-Fi hop the trouble most likely comes from.</summary>
 public enum NetworkHop
 {
-    /// <summary>The router is not watched (it does not answer ping), so the two hops can't be told apart.</summary>
+    /// <summary>
+    /// The router is not watched (it does not answer ping) and the PC is not known to be wired, so the two hops can't be
+    /// told apart.
+    /// </summary>
     Unknown,
-    /// <summary>Router → HomePod: the speaker's round trip spiked while the router answered as usual.</summary>
+    /// <summary>Router → HomePod: the speaker's round trip spiked while the router answered as usual, or the PC is wired.</summary>
     Speaker,
-    /// <summary>PC → router: the router spiked at the same time as the speaker.</summary>
+    /// <summary>PC → router: the router spiked at the same time as the speaker, and the PC is not wired.</summary>
     Pc,
 }
 
@@ -45,7 +48,9 @@ public sealed record NetworkVerdict(int Episodes, int Threats, bool Threatened, 
 /// protocol working, not a threat.</item>
 /// <item>A hint is due at <see cref="ThreatEpisodes"/> threats in the window, or at any resend miss.</item>
 /// <item>A threat with a router spike within <see cref="SameTimeMs"/> is the PC's Wi-Fi (both pings cross it);
-/// otherwise the HomePod's. The majority decides; a tie blames the HomePod (Wi-Fi 4 on the HomePod 2).</item>
+/// otherwise the HomePod's. The majority decides; a tie blames the HomePod (Wi-Fi 4 on the HomePod 2). A wired PC has
+/// no Wi-Fi hop of its own: everything is the HomePod's, and router spikes only mean the router answered its own pings
+/// late (seen 2026-10-10 with the PC on Ethernet and the HomePod on a crowded 2.4 GHz band).</item>
 /// <item>Suggestion: the latency + <see cref="SmallStepMs"/> when every threat was a spike at most that far over its
 /// threshold, else + <see cref="LargeStepMs"/>; rounded up to 5 ms and capped at <see cref="MaxSuggestedMs"/>.</item>
 /// </list>
@@ -132,7 +137,8 @@ public sealed class NetworkHealth
     /// <param name="latencyMs">The latency the connection actually uses.</param>
     /// <param name="arrivalToRenderMs">The speaker's own processing time.</param>
     /// <param name="routerWatched">The router answers pings, so the hop can be told.</param>
-    public NetworkVerdict Assess(long nowMs, int latencyMs, int arrivalToRenderMs, bool routerWatched)
+    /// <param name="pcWired">The PC reaches the speaker over a cable: the only Wi-Fi hop is the HomePod's.</param>
+    public NetworkVerdict Assess(long nowMs, int latencyMs, int arrivalToRenderMs, bool routerWatched, bool pcWired = false)
     {
         int margin = latencyMs - arrivalToRenderMs - ReserveMs;
         long from = nowMs - WindowMs;
@@ -182,7 +188,7 @@ public sealed class NetworkHealth
         }
 
         bool threatened = threats >= ThreatEpisodes || missed;
-        var hop = !routerWatched ? NetworkHop.Unknown : onPc > onSpeaker ? NetworkHop.Pc : NetworkHop.Speaker;
+        var hop = HopOf(routerWatched, pcWired, onPc, onSpeaker);
         int? suggested = null;
         if (threatened)
         {
@@ -191,6 +197,16 @@ public sealed class NetworkHealth
         }
         return new NetworkVerdict(episodes, threats, threatened, hop, margin, suggested);
     }
+
+    /// <summary>
+    /// Which hop to blame for the threats: a wired PC has no Wi-Fi of its own, so it is always the HomePod's (a router
+    /// spike then only means the router answered its own ping late); otherwise the majority of the router-backed
+    /// (<paramref name="onPc"/>) and the quiet-router threats, a tie blaming the HomePod; unknown while the router isn't watched.
+    /// </summary>
+    internal static NetworkHop HopOf(bool routerWatched, bool pcWired, int onPc, int onSpeaker) =>
+        pcWired ? NetworkHop.Speaker
+        : !routerWatched ? NetworkHop.Unknown
+        : onPc > onSpeaker ? NetworkHop.Pc : NetworkHop.Speaker;
 
     internal static int RoundUpTo5(int ms) => (ms + 4) / 5 * 5;
 

@@ -46,11 +46,14 @@ public sealed record NetworkProfile(string? Interface, AdapterKind Kind, string?
         _ => AdapterKind.Other,
     };
 
+    /// <summary>The adapter kind for the log: Wi-Fi, Ethernet or other.</summary>
+    internal static string KindName(AdapterKind kind) =>
+        kind switch { AdapterKind.WiFi => "Wi-Fi", AdapterKind.Ethernet => "Ethernet", _ => "other" };
+
     /// <summary>For the log: <c>以太网 (Ethernet), profile "ASUS_D0" is Public</c>.</summary>
     public override string ToString()
     {
-        string kind = Kind switch { AdapterKind.WiFi => "Wi-Fi", AdapterKind.Ethernet => "Ethernet", _ => "other" };
-        string where = $"{Interface ?? "?"} ({kind})";
+        string where = $"{Interface ?? "?"} ({KindName(Kind)})";
         if (Category == NetworkCategory.Unknown) return $"{where}, profile unknown";
         return Name == null ? $"{where}, profile is {Category}" : $"{where}, profile \"{Name}\" is {Category}";
     }

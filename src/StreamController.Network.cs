@@ -27,13 +27,23 @@ public sealed partial class StreamController
     public bool RouterWatched => Volatile.Read(ref _healthFeed)?.Net?.WatchesRouter ?? false;
 
     /// <summary>
-    /// A new connection streams: start over, and feed its ping spikes (<paramref name="net"/>; null in tests) and its
-    /// sender's resend requests and misses into <see cref="Health"/> until disposed.
+    /// The network this PC reaches the current speaker through (its adapter: Ethernet or Wi-Fi), looked up once per
+    /// connection in the background; null until known, and while not streaming to a single speaker.
     /// </summary>
-    internal IDisposable FeedHealth(NetworkWatch? net, Func<RtpSender?> sender)
+    public NetworkProfile? PcNetwork => Volatile.Read(ref _healthFeed)?.PcNetwork;
+
+    /// <summary>The PC reaches the speaker over a cable: the only Wi-Fi hop is the router's to the speaker.</summary>
+    public bool PcWired => PcNetwork?.Kind == AdapterKind.Ethernet;
+
+    /// <summary>
+    /// A new connection streams: start over, and feed its ping spikes (<paramref name="net"/>; null in tests) and its
+    /// sender's resend requests and misses into <see cref="Health"/> until disposed. <paramref name="pcNetwork"/> (null in
+    /// tests) looks up <see cref="PcNetwork"/>, on the thread pool: it does COM work.
+    /// </summary>
+    internal IDisposable FeedHealth(NetworkWatch? net, Func<RtpSender?> sender, Func<NetworkProfile>? pcNetwork = null)
     {
         Health.Reset();
-        var feed = new HealthFeed(this, net, sender);
+        var feed = new HealthFeed(this, net, sender, pcNetwork);
         Volatile.Write(ref _healthFeed, feed);
         return feed;
     }
@@ -47,10 +57,13 @@ public sealed partial class StreamController
         private RtpSender? _seen;
         private long _requests, _misses;
         private bool _disposed;
+        private volatile NetworkProfile? _pcNetwork;
 
         public NetworkWatch? Net { get; }
 
-        public HealthFeed(StreamController owner, NetworkWatch? net, Func<RtpSender?> sender)
+        public NetworkProfile? PcNetwork => _pcNetwork;
+
+        public HealthFeed(StreamController owner, NetworkWatch? net, Func<RtpSender?> sender, Func<NetworkProfile>? pcNetwork)
         {
             _owner = owner;
             _sender = sender;
@@ -58,6 +71,21 @@ public sealed partial class StreamController
             if (sender() is { } s) (_seen, _requests, _misses) = (s, s.RetransmitRequests, s.RetransmitMisses); // from now on
             if (net != null) net.Spike += OnSpike;
             _timer = new System.Threading.Timer(_ => Sample(), null, ResendSampleMs, ResendSampleMs);
+            if (pcNetwork != null) _ = Task.Run(() => LookUp(pcNetwork));
+        }
+
+        private void LookUp(Func<NetworkProfile> pcNetwork)
+        {
+            try
+            {
+                var profile = pcNetwork();
+                _pcNetwork = profile;
+                Log.Info($"network: this PC reaches the speaker through {profile}");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"network: the PC's adapter is unknown ({ex.Message})");
+            }
         }
 
         private void OnSpike(PingTarget target, long rttMs) => _owner.Health.AddPing(target, HealthClockMs(), rttMs);

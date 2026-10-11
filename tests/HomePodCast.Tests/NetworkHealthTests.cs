@@ -1,5 +1,6 @@
 using HomePodCast.Audio;
 using HomePodCast.Net;
+using HomePodCast.UI.Pages;
 
 namespace HomePodCast.Tests;
 
@@ -231,6 +232,33 @@ public class NetworkHealthTests
     }
 
     [Fact]
+    public void A_wired_pc_puts_every_threat_on_the_homepods_hop()
+    {
+        // 2026-10-10: the PC on Ethernet, the HomePod on a crowded 2.4 GHz band. A router spike next to each speaker spike
+        // only means the router answered its own ping late: a wired PC has no Wi-Fi hop to blame.
+        var h = Every100s(70);
+        foreach (long at in new[] { 100_200L, 200_300, 300_100 }) h.AddPing(PingTarget.Router, at, 45);
+        Assert.Equal(NetworkHop.Pc, h.Assess(400 * S, 120, A2R, routerWatched: true).Hop); // Wi-Fi or unknown adapter: as before
+
+        var wired = h.Assess(400 * S, 120, A2R, routerWatched: true, pcWired: true);
+        Assert.True(wired.Threatened);
+        Assert.Equal(NetworkHop.Speaker, wired.Hop);
+        Assert.Equal(130, wired.SuggestedMs); // only the hop changes
+        Assert.Equal(NetworkHop.Speaker, h.Assess(400 * S, 120, A2R, routerWatched: false, pcWired: true).Hop); // not "unknown" either
+    }
+
+    [Theory]
+    // routerWatched, pcWired, threats with a router spike, threats without, hop
+    [InlineData(false, false, 0, 3, NetworkHop.Unknown)]
+    [InlineData(true, false, 2, 1, NetworkHop.Pc)]
+    [InlineData(true, false, 1, 1, NetworkHop.Speaker)] // a tie blames the HomePod
+    [InlineData(true, false, 0, 3, NetworkHop.Speaker)]
+    [InlineData(true, true, 3, 0, NetworkHop.Speaker)]
+    [InlineData(false, true, 0, 3, NetworkHop.Speaker)]
+    public void Hop_rules(bool routerWatched, bool pcWired, int onPc, int onSpeaker, NetworkHop hop) =>
+        Assert.Equal(hop, NetworkHealth.HopOf(routerWatched, pcWired, onPc, onSpeaker));
+
+    [Fact]
     public void Router_spikes_alone_are_not_jitter()
     {
         // Routers answer pings to themselves at low priority; the audio never waits for that.
@@ -372,6 +400,84 @@ public class NetworkHealthFeedTests
             var v = await Until(v => v.Episodes > 0);
             Assert.Equal(1, v.Episodes);
             Assert.True(v.Threatened);
+        }
+    }
+
+    [Fact]
+    public async Task The_pcs_adapter_is_looked_up_once_per_connection_in_the_background()
+    {
+        using var c = new StreamController();
+        Assert.Null(c.PcNetwork);
+        int lookups = 0;
+        var wired = new NetworkProfile("以太网", AdapterKind.Ethernet, "ASUS_D0", NetworkCategory.Private);
+        using (c.FeedHealth(null, () => null, () =>
+               {
+                   Interlocked.Increment(ref lookups);
+                   return wired;
+               }))
+        {
+            for (int i = 0; i < 200 && c.PcNetwork == null; i++) await Task.Delay(25);
+            Assert.Equal(wired, c.PcNetwork);
+            Assert.True(c.PcWired);
+            await Task.Delay(300); // the resend sampler ticks; nothing looks the adapter up again
+        }
+        Assert.Equal(1, lookups);
+        Assert.Null(c.PcNetwork); // not streaming: unknown again
+        Assert.False(c.PcWired);
+
+        using (c.FeedHealth(null, () => null, () => wired with { Kind = AdapterKind.WiFi, Interface = "WLAN" }))
+        {
+            for (int i = 0; i < 200 && c.PcNetwork == null; i++) await Task.Delay(25);
+            Assert.False(c.PcWired);
+        }
+        using (c.FeedHealth(null, () => null)) Assert.False(c.PcWired); // not looked up (tests): the rules as before
+    }
+}
+
+/// <summary>首页's network hint: it names the band, and a wired PC never hears about its own Wi-Fi.</summary>
+public class HomeNetworkTextTests
+{
+    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(3, 3, true, hop, 30, suggestedMs);
+
+    [Fact]
+    public void The_homepods_hop_leads_with_the_band_and_placement_comes_second()
+    {
+        var capped = HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null));
+        Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 3 次）", capped);
+        Assert.Contains("2.4G", capped);
+        Assert.True(capped.IndexOf("5G", StringComparison.Ordinal) < capped.IndexOf("摆放位置", StringComparison.Ordinal));
+
+        var suggested = HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, 135));
+        Assert.Contains("建议把延迟调到 135\u00A0ms", suggested); // the suggestion stays, the band is a short addition
+        Assert.EndsWith("改连 5G 更管用", suggested);
+
+        // Either hop: the band is still worth a look.
+        Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Unknown, 135)));
+        Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Unknown, null)));
+        // The PC's own Wi-Fi: its own advice, unchanged.
+        Assert.EndsWith("试试关掉无线网卡的节能，或改用网线", HomePage.NetworkHintText(Threatened(NetworkHop.Pc, null)));
+    }
+
+    [Theory]
+    [InlineData(120, 80)]  // 推荐: a suggestion (135 ms)
+    [InlineData(200, 250)] // at the cap: no suggestion
+    public void A_wired_pc_never_hears_about_its_own_wifi(int latency, int spike)
+    {
+        // A router spike next to every speaker spike: on Wi-Fi that is the PC's hop, wired it never is.
+        var h = new NetworkHealth();
+        foreach (long at in new[] { 100_000L, 200_000, 300_000 })
+        {
+            h.AddPing(PingTarget.Speaker, at, spike);
+            h.AddPing(PingTarget.Router, at + 100, 50);
+        }
+        Assert.StartsWith("电脑这边", HomePage.NetworkHintText(h.Assess(400_000, latency, 85, routerWatched: true)));
+        foreach (bool routerWatched in new[] { true, false })
+        {
+            var text = HomePage.NetworkHintText(h.Assess(400_000, latency, 85, routerWatched, pcWired: true));
+            Assert.StartsWith("HomePod 那边", text);
+            Assert.DoesNotContain("电脑这边", text);
+            Assert.DoesNotContain("无线网卡", text);
+            Assert.DoesNotContain("网线", text);
         }
     }
 }

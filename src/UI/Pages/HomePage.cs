@@ -415,7 +415,8 @@ internal sealed class HomePage : ScrollPage
         var c = _app.Controller;
         bool live = streaming && c.HealthWatched;
         int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
-        var v = live ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched)
+        var v = live
+            ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
             : DemoVerdict(arrivalToRender);
 
         bool show = v is { Threatened: true } && c.Health.Session != _appliedSession;
@@ -435,23 +436,37 @@ internal sealed class HomePage : ScrollPage
             return;
         }
 
-        int n = v!.Episodes;
-        _netHintText.Text = ((v.Hop, v.SuggestedMs) switch
-        {
-            (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
-            (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
-            (_, { } ms) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
-            (NetworkHop.Speaker, null) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试把 HomePod 放到能看见路由器的地方", n),
-            (NetworkHop.Pc, null) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线", n),
-            (_, null) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试改善 Wi-Fi 信号", n),
-        }).Replace(" ms", "\u00A0ms"); // "135 ms" stays on one line
-        _netApply.Collapsed = v.SuggestedMs is null;
+        _netHintText.Text = NetworkHintText(v!);
+        _netApply.Collapsed = v!.SuggestedMs is null;
         if (live && !_hintLogged)
         {
             _hintLogged = true;
-            Log.Info($"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v.Threats} of {n} episodes in 10 min " +
-                     $"beyond its {v.MarginMs} ms margin, hop: {v.Hop}); suggesting {v.SuggestedMs?.ToString() ?? "-"} ms");
+            string pc = c.PcNetwork is { } p ? NetworkProfile.KindName(p.Kind) : "unknown";
+            Log.Info($"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v.Threats} of {v.Episodes} episodes in " +
+                     $"10 min beyond its {v.MarginMs} ms margin, hop: {v.Hop}, PC on {pc}); suggesting {v.SuggestedMs?.ToString() ?? "-"} ms");
         }
+    }
+
+    /// <summary>
+    /// The hint for a threatened verdict. On the HomePod's hop (always, with a wired PC) it leads with the band: on
+    /// 2026-10-10 the HomePod sat 50 cm from the router on a crowded 2.4 GHz band (the router's one name for both bands
+    /// put it there): ping median 21 ms, 4% lost, stutters even at 500 ms, and moving it changed nothing; on 5 GHz, 2 ms
+    /// and nothing lost. The app can't see the band, hence "if".
+    /// </summary>
+    internal static string NetworkHintText(NetworkVerdict v)
+    {
+        int n = v.Episodes;
+        return ((v.Hop, v.SuggestedMs) switch
+        {
+            (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms。" +
+                                                 "HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
+            (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
+            (_, { } ms) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms。HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
+            (NetworkHop.Speaker, null) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了：" +
+                                              "HomePod 如果连在 2.4G 上（路由器开了双频合一时常见），改连 5G 最管用，其次才是摆放位置", n),
+            (NetworkHop.Pc, null) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线", n),
+            (_, null) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了：HomePod 如果连在 2.4G 上，改连 5G 最管用，其次再改善 Wi-Fi 信号", n),
+        }).Replace(" ms", "\u00A0ms").Replace(" GHz", "\u00A0GHz"); // "135 ms" and "5 GHz" stay on one line
     }
 
 #if DEBUG
