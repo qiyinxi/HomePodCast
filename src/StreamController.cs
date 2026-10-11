@@ -69,7 +69,9 @@ public sealed partial class StreamController : IDisposable
     /// <see cref="VolumeChanges"/> when the start was requested: a volume set after that (the request waited in a
     /// queue behind a slow Stop) is kept instead of <paramref name="volume"/>. Null: always use <paramref name="volume"/>.
     /// </param>
-    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null)
+    /// <param name="trigger">Why it connects: what a speaker busy with another sender means for it (<see cref="TakeoverPolicy"/>).</param>
+    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null,
+        ConnectTrigger trigger = ConnectTrigger.Manual)
     {
         lock (_lifecycle)
         {
@@ -78,7 +80,7 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, cts.Token));
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, cts.Token));
             }
         }
     }
@@ -105,6 +107,7 @@ public sealed partial class StreamController : IDisposable
             TearDown();
             TearDownGroup();
             DisposeCapture();
+            _waitingForSpeaker = false;
             Set(StreamState.Idle, L.T("未连接"));
         }
     }
@@ -149,21 +152,27 @@ public sealed partial class StreamController : IDisposable
         }
     }
 
-    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, CancellationToken ct)
+    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, ConnectTrigger trigger,
+        CancellationToken ct)
     {
         int attempt = 0;
+        bool streamed = false;
+        string key = OwnSession.KeyOf(deviceId);
         TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();
             string? lostReason = null;
             AirPlayClient? mine = null;
+            bool live = false;
             try
             {
                 Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
                 var address = await ResolveAsync(deviceId, host, ct);
                 host = address.ToString();
                 HostResolved?.Invoke(host);
+                await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct);
+                started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
                 EnsureCapture(ct);
 
@@ -195,6 +204,8 @@ public sealed partial class StreamController : IDisposable
                 }
                 Volume ??= client.InitialVolumeDb is { } db ? VolumeLimit.Clamp(AirPlayClient.DbToPercent(db), VolumeCapPercent) : null;
                 attempt = 0;
+                OwnSession.Began(key, UtcNow()); // before the change is announced: the UI saves it
+                live = streamed = true;
                 Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
 
                 using (var net = new NetworkWatch(address))
@@ -218,6 +229,9 @@ public sealed partial class StreamController : IDisposable
             }
             finally
             {
+                // Ended by the speaker itself: another sender took over, so a set flag is not ours. Stopped by us: TEARDOWN.
+                if (live && lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget();
+                else if (live) OwnSession.Ended(UtcNow(), clean: ct.IsCancellationRequested);
                 // Only this loop's own session (Stop may already have taken and disposed it).
                 if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }

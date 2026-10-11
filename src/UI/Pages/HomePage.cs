@@ -366,14 +366,7 @@ internal sealed class HomePage : ScrollPage
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
     }
 
-    internal static string FriendlyModel(string model) => model switch
-    {
-        _ when model.StartsWith("AudioAccessory6") => L.T("HomePod 第二代"),
-        _ when model.StartsWith("AudioAccessory5") => "HomePod mini",
-        _ when model.StartsWith("AudioAccessory1") => "HomePod",
-        _ when model.StartsWith("AppleTV") => "Apple TV",
-        _ => model,
-    };
+    internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
 
     public void UpdateState()
     {

@@ -32,7 +32,8 @@ internal sealed class GroupForm : FluentDialog
         if (form.ShowDialog(owner) != DialogResult.OK) return;
         app.Config.Save();
         // Reconnect only if what plays actually changed; a single speaker is never interrupted for nothing.
-        if (PlayLayout(app.Config) != before && app.Controller.State != StreamState.Idle) app.Connect();
+        if (PlayLayout(app.Config) != before && (app.Controller.State != StreamState.Idle || app.Controller.WaitingForSpeaker))
+            app.Connect(ConnectTrigger.Reconnect);
     }
 
     /// <summary>Edits <paramref name="config"/> in place when OK is pressed; the caller saves it.</summary>
