@@ -43,6 +43,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
 - Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
+- Update check (off by default, see [Updates](#updates)); with the MSI, a new version installs in one click after its SHA-256 is verified
 - Interface in English, Simplified Chinese, Traditional Chinese and Japanese
 
 ## Usage
@@ -106,6 +107,16 @@ Settings → Keyboard volume keys decides what volume up, volume down and mute d
 
 If the PC has no usable output device (no sound driver, or the device is disabled or unplugged), "HomePod follows the Windows volume" and "Only while Windows is muted" also take the keys over while streaming, until a device is back. The keys still change Windows while a program running as administrator is in front, and with remotes or mice whose software sends media commands instead of key presses; "HomePod follows the Windows volume" picks those changes up.
 
+## Updates
+
+HomePodCast can look for a newer version among this repository's GitHub releases: Settings → Updates → **Check for updates**. This is the only request it ever makes outside your local network, and only when you ask for it: automatic checking is **off** by default. Turn on "Check for updates automatically" to check about 30 seconds after startup and every 24 hours (development builds never check by themselves). The request is one HTTPS GET of `api.github.com/repos/qiyinxi/HomePodCast/releases` with `HomePodCast/<version>` as its User-Agent: no account, and nothing about your PC or speaker is sent. Each request is written to the log.
+
+- **Update channel**: Stable offers stable releases only; Beta offers betas too, whichever is newest. A beta that is newer than the latest stable release stays until the next stable release (never a downgrade).
+- When an automatic check finds a new version, a tray notification appears once and Home shows a banner with **Update**, **Release notes** and **Skip this version**. A manual check answers in Settings.
+- **Nothing is installed without a click.** With the MSI, **Update** asks first, then downloads the new MSI and checks it against the SHA-256 that GitHub lists for the file (if it doesn't match, or GitHub lists none, the file is deleted and nothing is installed). HomePodCast then exits (streaming stops for about a minute) and runs the installer, for which Windows asks for administrator permission. Afterwards HomePodCast starts again and tells you the version it was updated to; if you decline the prompt, the old version starts again.
+- The portable zip never updates itself: **Update** opens the release page.
+- The Microsoft Store version is updated by the Store and never checks GitHub itself.
+
 ## FAQ
 
 ### The sound stutters now and then
@@ -161,7 +172,9 @@ Releases are not code-signed yet, so Windows SmartScreen may warn the first time
 
 This program will not transfer any information to other networked systems unless specifically
 requested by the user or the person installing or operating it. It talks only to the AirPlay speakers
-on the local network that the user selects, and its status endpoint listens on 127.0.0.1 only.
+on the local network that the user selects, and its status endpoint listens on 127.0.0.1 only. The only
+request outside the local network is the update check (see [Updates](#updates)), made only when the user
+clicks "Check for updates" or turns on automatic checks.
 
 ## Acknowledgements
 
