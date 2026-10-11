@@ -24,15 +24,15 @@ Windows session mute or zero volume still silences the HomePod. Below 1% Windows
 
 ### Report a stutter
 
-Select **Home → Mark a stutter** when you hear one. It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
+Select **Home → Mark a stutter** when you hear one (the button works while streaming). It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
 
-**Export diagnostics** is available on Home and in Settings. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available. It excludes configuration, credentials and audio. Known device/network names, addresses, identifiers and paths are masked; historical speaker connection records are removed structurally. Nothing is uploaded. Review the contents before sharing.
+**Export diagnostics** is available on Home and in Settings. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
 
 ### Synchronized browser fullscreen
 
-The extension shows **Sync fullscreen** on supported active video players. Click this instead of entering native video-element fullscreen; it makes the existing player container fullscreen so the delayed picture remains visible. The site's controls stay available, and exiting restores the prior layout. Browser/iframe fullscreen permission is still required.
+The extension's controls appear at the top right of a supported video while you move the pointer over it (or press Alt), and hide again about 2.5 seconds later; they never appear by themselves when a video goes fullscreen. **Sync fullscreen** makes the site's player fullscreen instead of the bare video element: the outermost element around the video that has the video's size (or letterboxes it), such as YouTube's player or bilibili's video area. The delayed picture stays visible together with the site's controls, captions and danmaku, and exiting restores the prior layout. Where no element frames the video, its parent element is used, and site controls outside it are not shown. Browser/iframe fullscreen permission is still required.
 
-While that player is fullscreen, use its ±5/±20 ms controls, or **Alt+Left/Right** (5 ms) and **Alt+Shift+Left/Right** (20 ms). The inline notice shows the resulting delay and saved site offset. Shortcuts ignore editable fields. Site offsets remain bounded to ±500 ms and the total video delay to 2000 ms. Native video fullscreen and picture-in-picture still cannot show the extension's delayed canvas.
+While a player is fullscreen, through Sync fullscreen or the site's own fullscreen button, use the ±5/±20 ms controls, or **Alt+Left/Right** (5 ms) and **Alt+Shift+Left/Right** (20 ms); the shortcuts also work while the controls are hidden. The inline notice shows the resulting delay and saved site offset. Shortcuts ignore editable fields. Site offsets remain bounded to ±500 ms and the total video delay to 2000 ms; while streaming, the offset also stops where it no longer changes the delay (a picture delay of 0 or 2000 ms). Native video fullscreen and picture-in-picture still cannot show the extension's delayed canvas.
 
 ## 简体中文
 
@@ -58,12 +58,12 @@ Windows 音频会话静音或音量为 0 时，HomePod 也没有声音。Windows
 
 ### 记录卡顿并导出报告
 
-听到卡顿时点 **首页 → 刚才卡了**，记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
+听到卡顿时点 **首页 → 刚才卡了**（推流时可用），记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
 
-首页和设置里均有 **导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB），不包含配置文件、密码或录音。已知设备／网络名称、地址、标识和路径会隐藏，历史音箱连接记录会按结构移除；不会上传。分享前可以检查内容。
+首页和设置里均有 **导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB）；读不了的日志会略过，报告里的 README 会写明。不包含配置文件、密码或录音。脱敏是尽力而为：日志写音箱和组成员名称时会做标记，导出时移除；旧版本日志里的名称按这些日志行的格式移除；当前设置里的名称和标识、地址、设备 ID 和路径会隐藏，统计数字保留。不会上传。分享前请检查内容。
 
 ### 浏览器同步全屏
 
-插件会在支持的活动视频上显示 **同步全屏**。使用这个按钮，让播放器容器全屏，延迟画面和原有控制栏一起保留；退出时恢复原来的布局。浏览器或 iframe 仍需允许全屏。
+鼠标在支持的视频上移动（或按 Alt）时，视频右上角会出现插件的按钮，约 2.5 秒后自动隐藏；视频进入全屏时按钮不会自己出现。**同步全屏** 让网站的播放器全屏，而不是单独的视频元素：也就是包住视频、和视频一样大（或给视频加黑边）的最外层元素，比如 YouTube 的播放器、bilibili 的视频区域。延迟画面和网站自己的控制栏、字幕、弹幕一起保留，退出时恢复原来的布局。找不到这样的元素时，让视频的父元素全屏，网站放在它外面的控制栏不会显示。浏览器或 iframe 仍需允许全屏。
 
-全屏中可用画面上的 ±5／±20 ms 按钮，或 **Alt+左／右**（5 ms）、**Alt+Shift+左／右**（20 ms），画面会提示最终延迟和已保存的网站偏移。输入框内不会拦截按键。网站偏移范围仍为 ±500 ms，总画面延迟最多 2000 ms；视频元素原生全屏和画中画仍无法显示插件的延迟画布。
+播放器全屏时（用「同步全屏」或网站自己的全屏按钮都可以），可用 ±5／±20 ms 按钮，或 **Alt+左／右**（5 ms）、**Alt+Shift+左／右**（20 ms）；按钮隐藏时快捷键照样有效。画面会提示最终延迟和已保存的网站偏移。输入框内不会拦截按键。网站偏移范围仍为 ±500 ms，总画面延迟最多 2000 ms；推流时，偏移只调到画面延迟为 0 或 2000 ms 为止（再调已不改变画面）。视频元素原生全屏和画中画仍无法显示插件的延迟画布。

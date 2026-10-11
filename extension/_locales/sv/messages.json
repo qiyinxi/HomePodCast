@@ -154,7 +154,7 @@
     "message": "Helskärm är inte tillgängligt. Avsluta aktuell helskärm eller tillåt helskärm för spelaren och försök igen."
   },
   "syncPopupHint": {
-    "message": "Använd ”Synkroniserad helskärm” på videon. I helskärm justerar Alt+←/→ med 5 ms; lägg till Skift för 20 ms. Ändringarna sparas för webbplatsen."
+    "message": "Flytta pekaren över en video (eller tryck på Alt) för att visa ”Synkroniserad helskärm”. I helskärm justerar Alt+←/→ med 5 ms; lägg till Skift för 20 ms. Ändringarna sparas för webbplatsen."
   },
   "syncAdjustmentLabel": {
     "message": "Justera webbplatsförskjutningen med $DELTA$ ms",

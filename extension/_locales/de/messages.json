@@ -67,7 +67,7 @@
     "message": "Vollbild ist nicht verfügbar. Beende das aktuelle Vollbild oder erlaube Vollbild für diesen Player und versuche es erneut."
   },
   "syncPopupHint": {
-    "message": "Nutze „Synchronisiertes Vollbild“ am Video. Im Vollbild passt Alt+←/→ um 5 ms an, mit Umschalt um 20 ms. Änderungen werden für diese Website gespeichert."
+    "message": "Bewege den Mauszeiger über ein Video (oder drücke Alt), um „Synchronisiertes Vollbild“ anzuzeigen. Im Vollbild passt Alt+←/→ um 5 ms an, mit Umschalt um 20 ms. Änderungen werden für diese Website gespeichert."
   },
   "syncAdjustmentLabel": {
     "message": "Website-Offset um $DELTA$ ms anpassen",

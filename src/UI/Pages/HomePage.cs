@@ -75,6 +75,7 @@ internal sealed class HomePage : ScrollPage
     private readonly Card _updateBanner;
 
     private StreamState _lastState = StreamState.Idle;
+    private readonly FluentButton _markGlitch = new(L.T("刚才卡了"), ButtonKind.Subtle) { Enabled = false }; // only while streaming
     private DateTime _streamingSince;
     private long _underrunsAtStart;
     private bool _loading;
@@ -93,7 +94,7 @@ internal sealed class HomePage : ScrollPage
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
         var statsTitle = Ui.Section(L.T("推流状态"));
-        var mark = new FluentButton(L.T("刚才卡了"), ButtonKind.Subtle);
+        var mark = _markGlitch;
         var report = new FluentButton(L.T("导出诊断"), ButtonKind.Subtle);
         var statsHeader = Ui.Row(8, statsTitle, statsTitle, mark, report);
         mark.Click += (_, _) => _app.MarkAudibleGlitch();
@@ -435,6 +436,7 @@ internal sealed class HomePage : ScrollPage
             _underrunsAtStart = c.Fifo.Underruns;
         }
         _lastState = c.State;
+        _markGlitch.Enabled = c.State == StreamState.Streaming; // a marker without a stream has nothing to compare with
 
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;

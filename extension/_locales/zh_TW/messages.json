@@ -67,7 +67,7 @@
     "message": "無法進入全螢幕。請離開目前的全螢幕或允許此播放器使用全螢幕，然後再試一次。"
   },
   "syncPopupHint": {
-    "message": "點擊影片上的「同步全螢幕」。全螢幕時按 Alt+←/→ 微調 5 ms，加 Shift 微調 20 ms。調整會儲存到目前網站。"
+    "message": "滑鼠移到影片上（或按 Alt）會出現「同步全螢幕」。全螢幕時按 Alt+←/→ 微調 5 ms，加 Shift 微調 20 ms。調整會儲存到目前網站。"
   },
   "syncAdjustmentLabel": {
     "message": "網站偏移調整 $DELTA$ ms",

@@ -72,12 +72,15 @@ public sealed record GroupPlan(
         if (!LeaderOnly)
         {
             if (found.Count != 2)
-                throw new AirPlayException(L.F("立体声对「{0}」需要两只音箱都在线（现在找到 {1} 只）", Name, found.Count));
+                throw new AirPlayException(L.F("立体声对「{0}」需要两只音箱都在线（现在找到 {1} 只）", Name, found.Count))
+                {
+                    LogMessage = $"stereo pair {Log.Name(Name)}: both speakers must be online (found {found.Count})",
+                };
             return found;
         }
         if (found.Count == 0) throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
         if (StereoPairs.Leader(found) is { } leader) return [leader];
-        Log.Warn($"pair {PairTsid}: no single member has the tight-sync leader bit; using {found[0].Name}");
+        Log.Warn($"pair {PairTsid}: no single member has the tight-sync leader bit; using {Log.Name(found[0].Name)}");
         return [found[0]];
     }
 

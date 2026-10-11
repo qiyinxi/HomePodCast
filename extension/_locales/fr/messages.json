@@ -67,7 +67,7 @@
     "message": "Le plein écran est indisponible. Quittez le plein écran actuel ou autorisez-le pour ce lecteur, puis réessayez."
   },
   "syncPopupHint": {
-    "message": "Utilisez « Plein écran synchronisé » sur la vidéo. En plein écran, Alt+←/→ ajuste de 5 ms ; ajoutez Maj pour 20 ms. Les réglages sont enregistrés pour ce site."
+    "message": "Passez le pointeur sur une vidéo (ou appuyez sur Alt) pour afficher « Plein écran synchronisé ». En plein écran, Alt+←/→ ajuste de 5 ms ; ajoutez Maj pour 20 ms. Les réglages sont enregistrés pour ce site."
   },
   "syncAdjustmentLabel": {
     "message": "Ajuster le décalage du site de $DELTA$ ms",

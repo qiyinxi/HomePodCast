@@ -154,7 +154,7 @@
     "message": "Fullskjerm er ikke tilgjengelig. Avslutt gjeldende fullskjerm eller tillat fullskjerm for spilleren, og prøv igjen."
   },
   "syncPopupHint": {
-    "message": "Bruk «Synkronisert fullskjerm» på videoen. I fullskjerm justerer Alt+←/→ med 5 ms; legg til Shift for 20 ms. Endringene lagres for nettstedet."
+    "message": "Beveg pekeren over en video (eller trykk Alt) for å vise «Synkronisert fullskjerm». I fullskjerm justerer Alt+←/→ med 5 ms; legg til Shift for 20 ms. Endringene lagres for nettstedet."
   },
   "syncAdjustmentLabel": {
     "message": "Juster nettstedsforskyvningen med $DELTA$ ms",

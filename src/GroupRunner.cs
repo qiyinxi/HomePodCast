@@ -67,7 +67,7 @@ internal sealed class GroupRunner(
             catch (Exception ex)
             {
                 lostText = Describe(ex);
-                Log.Warn($"group: {lostText}");
+                Log.Warn($"group failed: {DescribeForLog(ex)}");
                 if (Find<FirewallBlockedException>(ex) != null) FirewallBlocked?.Invoke();
             }
             finally
@@ -100,6 +100,14 @@ internal sealed class GroupRunner(
     {
         GroupMemberException g => L.F("{0}：{1}", g.Member, Describe(g.InnerException!)),
         AirPlayException => ex.Message,
+        _ => $"{ex.GetType().Name}: {ex.Message}",
+    };
+
+    /// <summary><see cref="Describe"/> for the log: speaker names marked (Log.Name), so a diagnostic report leaves them out.</summary>
+    internal static string DescribeForLog(Exception ex) => ex switch
+    {
+        GroupMemberException g => $"{Log.Name(g.Member)}: {DescribeForLog(g.InnerException!)}",
+        AirPlayException => AirPlayException.ForLog(ex),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 

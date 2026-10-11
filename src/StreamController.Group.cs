@@ -121,7 +121,10 @@ public sealed partial class StreamController
             {
                 IPAddress address;
                 try { address = await ResolveAsync(m.DeviceId, m.Host, ct); }
-                catch (AirPlayException ex) { throw new AirPlayException(L.F("{0}：{1}", m.Name, ex.Message)); }
+                catch (AirPlayException ex)
+                {
+                    throw new AirPlayException(L.F("{0}：{1}", m.Name, ex.Message)) { LogMessage = $"{Log.Name(m.Name)}: {AirPlayException.ForLog(ex)}" };
+                }
                 list.Add(new ResolvedMember(m.DeviceId, $"{m.Name} {address}", address, 7000));
             }
             return list;
@@ -137,7 +140,7 @@ public sealed partial class StreamController
         var targets = plan.PairTargets(devices);
         var leader = StereoPairs.Leader(StereoPairs.Members(devices, plan.PairTsid!));
         Log.Info($"pair {plan.PairTsid}: {(plan.PairLeaderOnly ? "leader only" : "both members")}, " +
-                 string.Join(", ", targets.Select(d => $"{d.Name} {d.Address}{(d == leader ? " (leader)" : "")}")));
+                 string.Join(", ", targets.Select(d => $"{Log.Name(d.Name)} {d.Address}{(d == leader ? " (leader)" : "")}")));
         var members = targets.Select(d => new ResolvedMember(d.DeviceId, $"{d.Name} {d.Address}", d.Address, d.Port)).ToList();
         _lastPair = (key, members);
         return members;
