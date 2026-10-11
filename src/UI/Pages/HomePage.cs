@@ -64,6 +64,13 @@ internal sealed class HomePage : ScrollPage
     private bool _hintLogged;
     private string? _dropoutTip;
 
+    // update: a banner above the cards when an automatic check found a new version (a manual one answers in 设置)
+    private readonly TextBlock _updateText = new("", TextStyle.Body, TextRole.Accent, wrap: true);
+    private readonly FluentButton _updateInstall = new(L.T("更新"), ButtonKind.Primary) { MinWidth = 72 };
+    private readonly FluentButton _updateNotes = new(L.T("查看说明"), ButtonKind.Secondary, Glyph.OpenInNew);
+    private readonly FluentButton _updateSkip = new(L.T("跳过此版本"), ButtonKind.Subtle);
+    private readonly Card _updateBanner;
+
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
     private long _underrunsAtStart;
@@ -86,7 +93,8 @@ internal sealed class HomePage : ScrollPage
         _netLine = Ui.Row(8, _netStatus, new GlyphLabel(Glyph.Wifi), _netStatus);
         _netLine.Collapsed = true;
         _netHint = BuildNetworkHint();
-        Content.Controls.AddRange([columns, statsHeader, tiles, _netLine, _netHint]);
+        _updateBanner = BuildUpdateBanner();
+        Content.Controls.AddRange([_updateBanner, columns, statsHeader, tiles, _netLine, _netHint]);
         Content.GapBefore[statsHeader] = 20;
 
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
@@ -104,6 +112,7 @@ internal sealed class HomePage : ScrollPage
         };
         _statsTimer.Tick += (_, _) => UpdateStats();
         LoadFromConfig();
+        ShowUpdate();
     }
 
     // ---------------------------------------------------------------- layout
@@ -196,6 +205,36 @@ internal sealed class HomePage : ScrollPage
         _tips.SetToolTip(_netApply, L.T("切换到「自定义」场景，用建议的延迟重新连接"));
         _netApply.Click += (_, _) => ApplyNetworkSuggestion();
         return card;
+    }
+
+    /// <summary>The new-version banner (an automatic check found one): 更新 / 查看说明 / 跳过此版本; collapsed otherwise.</summary>
+    private Card BuildUpdateBanner()
+    {
+        var icon = new GlyphLabel(Glyph.Download, accent: true);
+        var card = Ui.Card(Ui.Row(12, _updateText, icon, _updateText), Ui.Row(8, null, _updateInstall, _updateNotes, _updateSkip));
+        card.Collapsed = true;
+        _updateInstall.Click += (_, _) =>
+        {
+            if (_app.UpdateState.Downloading) _app.CancelUpdateDownload();
+            else _app.InstallUpdate(FindForm());
+        };
+        _updateNotes.Click += (_, _) => _app.ShowReleaseNotes();
+        _updateSkip.Click += (_, _) => _app.SkipUpdate();
+        return card;
+    }
+
+    /// <summary>The banner follows the update state (found, downloading, failed); gone once installed, skipped or none.</summary>
+    public void ShowUpdate()
+    {
+        var u = _app.UpdateState;
+        _updateBanner.Collapsed = !u.Banner;
+        if (!u.Banner) return;
+        _updateText.Text = u.Status;
+        _updateText.Role = u.Role == TextRole.Secondary ? TextRole.Primary : u.Role;
+        _updateInstall.Text = u.Downloading ? L.T("取消") : L.T("更新");
+        _updateInstall.Kind = u.Downloading ? ButtonKind.Secondary : ButtonKind.Primary;
+        _updateInstall.Enabled = !u.Checking;
+        _updateSkip.Enabled = !u.Downloading && !u.Checking;
     }
 
     /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
@@ -579,12 +618,13 @@ internal sealed class HomePage : ScrollPage
         base.Dispose(disposing);
     }
 
-    /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning).</summary>
-    private sealed class GlyphLabel(string glyph, bool caution = false) : FluentControl
+    /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning, the update banner's).</summary>
+    private sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));
 
         protected override void OnPaint(PaintEventArgs e) =>
-            Shapes.Glyph(e.Graphics, glyph, Theme.IconFont(16, DeviceDpi), ClientRectangle, caution ? P.Caution : P.TextSecondary);
+            Shapes.Glyph(e.Graphics, glyph, Theme.IconFont(16, DeviceDpi), ClientRectangle,
+                caution ? P.Caution : accent ? P.AccentText : P.TextSecondary);
     }
 }

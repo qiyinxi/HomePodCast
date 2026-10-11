@@ -56,7 +56,8 @@ public static class Program
         // Only the running instance opens the log: it keeps the file open for writing, so a second launch opening it
         // first threw, exited with 1 and never showed the window.
         Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
-        Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
+        var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
+        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : ""));
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
         // tray). Not after crashes, hangs or reboots, and never for test copies.
@@ -70,7 +71,7 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom));
         if (UI.LanguageMenu.RestartRequested)
         {
             Log.Info("restarting to apply the UI language");
