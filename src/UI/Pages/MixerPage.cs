@@ -77,7 +77,7 @@ internal sealed class MixerPage : ScrollPage
                 Ui.Row(0, null, appVolume)));
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
-        var note = Ui.Note(L.T("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，可分别调节音箱和本机；这会启用按程序分流，增加约 35 ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序的多个声音会话音量不一致时，会暂时按 Windows 音量推送。关闭独立音量可恢复跟随 Windows。"));
+        var note = Ui.Note(L.F("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，音箱音量由 HomePod 滑块决定；开启时不会超过它现在的 Windows 音量，音箱不会突然变响。送到「两者」的程序可以分别调节音箱和本机；送到「HomePod」的程序本机已静音，Windows 音量不再改变音箱音量；送到「本机」的程序不推送。独立音量会启用按程序分流，推送的声音多约 {0} ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × HomePod 音量。关闭独立音量可恢复跟随 Windows。", RoutedCapture.RoutedExtraLatencyMs));
         Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
@@ -236,13 +236,26 @@ internal sealed class MixerPage : ScrollPage
 
     public void ShowSoundOptions() => ShowMaster();
 
-    /// <summary>Save the old speaker's pending slider choice before switching a complete profile.</summary>
+    /// <summary>Save the old speaker's pending slider choice (and apps' HomePod levels) before switching a complete profile.</summary>
     public void FlushPendingVolume()
     {
+        foreach (var row in _byKey.Values) row.FlushSend();
         if (!_masterWait.Enabled) return;
         _masterWait.Stop();
         _app.SetVolume(_master.Value);
         VolumeApplied?.Invoke(_master.Value);
+    }
+
+    /// <summary>
+    /// The HomePod level an app's independent volume starts at when it is turned on: the level it had when it was
+    /// last turned off, but never above the app's Windows level now (rounded down to whole percent), so turning it
+    /// on never makes the HomePod louder; without a remembered level exactly what the HomePod already plays. The
+    /// user raises it with the slider.
+    /// </summary>
+    internal static int SeedSendPercent(int? remembered, float windowsLevel)
+    {
+        int windows = float.IsFinite(windowsLevel) ? (int)Math.Floor(Math.Clamp(windowsLevel, 0f, 1f) * 100 + 0.001) : 0;
+        return remembered is { } r ? Math.Min(Math.Clamp(r, 0, 100), windows) : windows;
     }
 
     public void CancelPendingVolume() => _masterWait.Stop();
@@ -464,6 +477,7 @@ internal sealed class MixerPage : ScrollPage
         private readonly FluentSlider _send = Ui.Slider(0, 100, 1, 5);
         private readonly TextBlock _sendValue = new("", TextStyle.Body, TextRole.Secondary) { Align = HorizontalAlignment.Right };
         private readonly TextBlock _sendStatus = new("", TextStyle.Caption, TextRole.Caution, wrap: true);
+        private readonly TimerDebounce _sendWait = new(150); // the HomePod level is live at once; saved when the slider rests
         private readonly FluentButton _mute;
 
         public AppRow(AppAudio app, MixerPage page)
@@ -478,17 +492,18 @@ internal sealed class MixerPage : ScrollPage
             _slider.PreferredLength = 150;
             _send.AccessibleName = L.F("{0} HomePod 音量", app.Name);
             _send.PreferredLength = 150;
-            _send.Value = page._app.Routing.GetSendVolume(app.ExeKey) ?? 100;
             _independent.Enabled = AppRouting.Supported && !app.IsSystemSounds && app.ExeKey.Length > 0;
             _route = RouteCell();
             Controls.AddRange([_icon, _name, _meter, _route, _localLabel, _slider, _value, _mute,
                 _sendLabel, _independent, _send, _sendValue, _sendStatus]);
             _page._tips.SetToolTip(_independent, L.T("独立控制此程序在 HomePod 上的音量"));
-            _page._tips.SetToolTip(_send, L.T("Windows 静音或音量为 0 时，HomePod 也没有声音。多个会话的 Windows 音量不一致时，独立音量暂不生效。"));
+            _page._tips.SetToolTip(_send, L.T("Windows 静音或音量为 0 时，HomePod 也没有声音。几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × 这里的音量。"));
 
             try { _slider.Value = (int)Math.Round(app.Volume * 100); } catch { }
             _value.Text = _slider.Value.ToString();
             ShowMute(SafeMuted());
+            var routing = page._app.Routing;
+            _send.Value = routing.GetSendVolume(app.ExeKey) ?? SeedSendPercent(routing.LastSendVolume(app.ExeKey), _slider.Value / 100f);
 
             _slider.Scroll += (_, _) =>
             {
@@ -504,25 +519,43 @@ internal sealed class MixerPage : ScrollPage
             _independent.Toggled += (_, _) =>
             {
                 var routing = _page._app.Routing;
-                var sends = new Dictionary<string, int>(routing.Rules.SendVolumes);
                 string key = RouteRules.KeyFor(_app.ExeKey);
-                if (_independent.Checked) sends[key] = _send.Value;
+                // From what the HomePod plays now: never above the app's Windows level, so nothing gets louder.
+                int? level = _independent.Checked ? SeedSendPercent(routing.LastSendVolume(key), WindowsLevel()) : null;
+                var sends = new Dictionary<string, int>(routing.Rules.SendVolumes);
+                if (level is { } l) sends[key] = l;
                 else sends.Remove(key);
                 if (!_page.ConfirmRouting(routing.Rules with { SendVolumes = sends }))
                 {
                     _page.SyncRoutes();
                     return;
                 }
-                routing.SetSendVolume(key, _independent.Checked ? _send.Value : null);
+                _sendWait.Stop(); // turning it on or off saves (and remembers) the level anyway
+                routing.SetSendVolume(key, level);
                 _page.SyncRoutes();
             };
             _send.Scroll += (_, _) =>
             {
                 if (!_independent.Checked) return;
-                _page._app.Routing.SetSendVolume(_app.ExeKey, _send.Value);
+                _page._app.Routing.PreviewSendVolume(_app.ExeKey, _send.Value); // the capture follows the drag
                 _sendValue.Text = _send.Value.ToString();
-                _page.SyncRoutes();
+                _sendWait.Restart();
             };
+            _sendWait.Tick += FlushSend;
+        }
+
+        /// <summary>Save (and log) a HomePod level the slider set, if it has not been yet.</summary>
+        public void FlushSend()
+        {
+            if (!_sendWait.Enabled) return;
+            _sendWait.Stop();
+            _page._app.Routing.CommitSendVolume(_app.ExeKey);
+        }
+
+        /// <summary>The app's Windows level now (the last one shown if it cannot be read).</summary>
+        private float WindowsLevel()
+        {
+            try { return _app.Volume; } catch { return _slider.Value / 100f; }
         }
 
         private bool SafeMuted()
@@ -578,18 +611,22 @@ internal sealed class MixerPage : ScrollPage
 
         public void SyncRoute(AppRouting routing)
         {
-            bool independent = routing.GetSendVolume(_app.ExeKey) is { };
+            string key = RouteRules.KeyFor(_app.ExeKey);
+            int? level = routing.GetSendVolume(key);
+            bool independent = level is { };
+            bool sent = routing.Rules.For(key) != AudioRoute.Local;
             _independent.Checked = independent;
-            _send.Enabled = independent && _independent.Enabled && routing.Rules.For(RouteRules.KeyFor(_app.ExeKey)) != AudioRoute.Local;
-            if (!_send.IsDragging) _send.Value = routing.GetSendVolume(_app.ExeKey) ?? 100;
+            _send.Enabled = independent && _independent.Enabled && sent;
+            // Off: where turning it on would start (see SeedSendPercent).
+            if (!_send.IsDragging && !_sendWait.Enabled)
+                _send.Value = level ?? SeedSendPercent(routing.LastSendVolume(key), _slider.Value / 100f);
             _sendValue.Text = independent ? _send.Value.ToString() : "—";
-            _sendStatus.Text = independent && routing.Active && _page._app.Controller.State == StreamState.Streaming &&
-                               routing.Rules.For(RouteRules.KeyFor(_app.ExeKey)) != AudioRoute.Local
-                ? routing.SendStatus(_app.ExeKey) switch
+            _sendStatus.Text = independent && sent && routing.Active && _page._app.Controller.State == StreamState.Streaming
+                ? routing.SendStatus(key) switch
                 {
                     SendVolumeStatus.MutedOrZero => L.T("Windows 已静音或音量为 0，HomePod 没有声音。"),
-                    SendVolumeStatus.DifferentSessionLevels => L.T("此程序的声音会话音量不同，暂时跟随 Windows 音量。"),
-                    SendVolumeStatus.BelowMinimum => L.T("Windows 音量低于 1%，暂时跟随 Windows 音量。"),
+                    SendVolumeStatus.DifferentSessionLevels => L.T("此程序几个声音会话的 Windows 音量不一致：音箱暂为 Windows 音量 × HomePod 音量，比设定的小。"),
+                    SendVolumeStatus.BelowMinimum => L.T("Windows 音量低于 1%：音箱暂为 Windows 音量 × HomePod 音量，几乎听不到。"),
                     _ => "",
                 } : "";
             if (_route is Segmented seg)
@@ -631,6 +668,8 @@ internal sealed class MixerPage : ScrollPage
         {
             if (disposing)
             {
+                FlushSend(); // the rows go when the page is left: a level still waiting is saved now
+                _sendWait.Dispose();
                 // The page's tooltip would otherwise keep every row ever shown.
                 _page._tips.SetToolTip(_mute, null);
                 _page._tips.SetToolTip(_route, null);

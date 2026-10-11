@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HomePodCast.Audio;
+using HomePodCast.UI.Pages;
 
 namespace HomePodCast.Tests;
 
@@ -392,6 +393,24 @@ public class SendVolumeTests
         Assert.Empty(JsonSerializer.Deserialize<AppConfig>("{}")!.AppSendVolumesOff);
         routing.SetSendVolume("game", 25); // on again (MixerPage.SeedSendPercent picked the level)
         Assert.Null(routing.LastSendVolume("game"));
+    }
+
+    [Theory]
+    [InlineData(null, 0.2f, 20)]          // exactly what the HomePod already plays: Windows 20 % x 1/20 % x 20 %
+    [InlineData(null, 0.206f, 20)]        // rounded down, never above
+    [InlineData(null, 1f, 100)]
+    [InlineData(null, 0.005f, 0)]
+    [InlineData(null, 0f, 0)]
+    [InlineData(null, float.NaN, 0)]      // not known: nothing louder
+    [InlineData(10, 0.2f, 10)]            // the level it had when turned off
+    [InlineData(60, 0.2f, 20)]            // ... but never above the Windows level now
+    [InlineData(150, 0.5f, 50)]
+    [InlineData(-5, 0.5f, 0)]
+    public void Turning_the_own_volume_on_never_makes_the_homepod_louder(int? remembered, float windows, int expected)
+    {
+        int seed = MixerPage.SeedSendPercent(remembered, windows);
+        Assert.Equal(expected, seed);
+        if (float.IsFinite(windows)) Assert.True(seed / 100f <= windows + 1e-6f);
     }
 
     [Fact]
