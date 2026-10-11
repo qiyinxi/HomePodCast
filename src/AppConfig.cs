@@ -125,6 +125,12 @@ public sealed class AppConfig
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
     public Dictionary<string, int> AppSendVolumes { get; set; } = [];
 
+    /// <summary>
+    /// The level each app's independent HomePod volume had when it was turned off (same keys): offered again when it
+    /// is turned back on, but never above the app's Windows level then (MixerPage.SeedSendPercent).
+    /// </summary>
+    public Dictionary<string, int> AppSendVolumesOff { get; set; } = [];
+
     /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
     public bool RoutingNoticeAccepted { get; set; }
 
@@ -204,6 +210,7 @@ public sealed class AppConfig
                 cfg.ForwardVolumeKeys = null;
                 cfg.AppRoutes ??= [];
                 cfg.AppSendVolumes ??= [];
+                cfg.AppSendVolumesOff ??= [];
                 cfg.Effects ??= new();
                 AvCalibrations.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);

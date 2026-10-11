@@ -13,7 +13,9 @@ namespace HomePodCast.Audio;
 /// raised in the Windows mixer or by the app is reported at once (IAudioSessionEvents): that closes the
 /// compensation gate on the reporting thread, before the louder audio reaches the capture ~35-50 ms
 /// later, and wakes the router to silence the session again right away. As a backstop for a session
-/// whose events fail, it also re-reads those volumes (and the default output) every timer tick.
+/// whose events fail, it also re-reads those volumes (and the default output) every timer tick. The
+/// sessions of apps with an independent HomePod level are watched the same way (and never written for
+/// it): their levels and mutes feed the normalization (<see cref="SendVolumeGain"/>) and the mixer's status.
 /// </summary>
 internal sealed class SessionRouter : IDisposable
 {
@@ -41,6 +43,8 @@ internal sealed class SessionRouter : IDisposable
     private readonly HashSet<uint> _unverified = [];
     private readonly Dictionary<string, Tracked> _silenced = [];   // by session instance id
     private readonly Dictionary<string, Tracked> _sendOnly = [];   // monitored, never written/restored
+    private readonly List<SessionLevel> _levels = [];              // reused by every check (no allocation per tick)
+    private readonly List<Silence> _tracked = [];                  // (pid, root) of every tracked session, per check
     private readonly object _lock = new();
     private volatile bool _stop;
     private volatile bool _refresh = true;
@@ -95,20 +99,35 @@ internal sealed class SessionRouter : IDisposable
     /// <summary>The gate itself (tests).</summary>
     internal CompensationGate Gate => _gate;
 
+    /// <summary>The independent-send normalizer itself (tests).</summary>
+    internal SendVolumeGain SendGain => _sendGain;
+
+    /// <summary>Put a plan in place without enumerating sessions (tests).</summary>
+    internal void UsePlan(RoutePlan plan) => _plan = plan;
+
     /// <summary>
-    /// A silenced session of <paramref name="root"/> reported a new volume (IAudioSessionEvents, any thread). Raised
-    /// to an audible level by someone else: compensation stops now, while that louder audio is still ~35-50 ms away
-    /// from the capture, and the router silences the session again at once instead of at its next check. Our own
-    /// changes (<paramref name="context"/>) and levels that stay attenuated or at 0 change nothing.
+    /// A tracked session of <paramref name="root"/> reported a new volume (IAudioSessionEvents, any thread). For a
+    /// target with an independent HomePod level, the inverse covers the reported level (and the old one, still on
+    /// its way to the capture) until a check has read it: never louder for either. A silenced session raised to an
+    /// audible level by someone else: compensation stops now, while that louder audio is still ~35-50 ms away from
+    /// the capture, and the router silences the session again at once instead of at its next check. Our own
+    /// changes (<paramref name="context"/>) and levels that stay attenuated or at 0 change nothing there.
     /// </summary>
     internal void OnSessionVolume(uint root, float volume, Guid context, long now)
     {
-        var target = _plan.Targets.FirstOrDefault(t => t.RootPid == root);
-        if (target?.SendVolumePercent != null)
-            _sendGain.Changed(root, now); // even a mute or our own local-volume change invalidates the inverse
+        var target = TargetOf(_plan, root);
+        if (target?.SendVolumePercent != null) _sendGain.Changed(root, now, SessionAttenuation.ToLogical(volume));
         if (context == _context || !SessionAttenuation.IsAudible(volume) || target is { Compensate: false }) return;
         _gate.Silenced(root, now);
         _wake.Set(); // straight to CheckVolumes (no full refresh)
+    }
+
+    private static RouteTarget? TargetOf(RoutePlan plan, uint root)
+    {
+        var targets = plan.Targets;
+        for (int i = 0; i < targets.Count; i++)
+            if (targets[i].RootPid == root) return targets[i];
+        return null;
     }
 
     private void Run()
@@ -168,8 +187,12 @@ internal sealed class SessionRouter : IDisposable
                 _plan = plan;
                 Log.Info(plan.Endpoint ? "routing: whole output" :
                     $"routing: capture {(plan.Targets.Count == 0 ? "nothing" : string.Join(", ", plan.Targets.Select(t =>
-                        $"{t.Key}#{t.RootPid}{(t.Compensate ? " (HomePod only)" : "")}")))}");
+                        $"{t.Key}#{t.RootPid}{(t.Compensate ? " (HomePod only)" : "")}{(t.SendVolumePercent != null ? " (own HomePod volume)" : "")}")))}");
                 PlanChanged?.Invoke();
+            }
+            else if (!plan.Targets.SequenceEqual(_plan.Targets))
+            {
+                _plan = plan; // only an independent HomePod level moved: the capture already reads it live
             }
             Apply(plan, sessions, first, kept);
         }
@@ -186,6 +209,7 @@ internal sealed class SessionRouter : IDisposable
     {
         var want = plan.Silenced.Where(s => _isCapturing(s.TargetRoot)).ToDictionary(s => s.SessionPid, s => s.TargetRoot);
         var sendWant = plan.SendSessions.Where(s => _isCapturing(s.TargetRoot)).ToDictionary(s => s.SessionPid, s => s.TargetRoot);
+        var sendRoots = plan.Targets.Where(t => t.SendVolumePercent != null).Select(t => t.RootPid).ToHashSet();
         long now = Stopwatch.GetTimestamp();
         var changed = new HashSet<uint>();
         lock (_lock)
@@ -212,6 +236,8 @@ internal sealed class SessionRouter : IDisposable
                         _silenced[s.InstanceId] = t = new Tracked { Session = s.Session, Pid = s.Pid, Root = root };
                         kept.Add(s.Session);
                         Watch(t);
+                        // A session joining a send target: its audio may already be on its way at its own level.
+                        if (sendRoots.Contains(root)) _sendGain.Changed(root, now, SessionAttenuation.ToLogical(raw));
                     }
                     t.Root = root;
                     t.Seen = true;
@@ -233,7 +259,7 @@ internal sealed class SessionRouter : IDisposable
                         _sendOnly[s.InstanceId] = monitored = new Tracked { Session = s.Session, Pid = s.Pid, Root = sendRoot };
                         kept.Add(s.Session);
                         Watch(monitored);
-                        _sendGain.Changed(sendRoot, now);
+                        _sendGain.Changed(sendRoot, now, SessionAttenuation.ToLogical(raw));
                     }
                     monitored.Root = sendRoot;
                     monitored.Seen = true;
@@ -248,7 +274,7 @@ internal sealed class SessionRouter : IDisposable
             }
             foreach (var (id, t) in _sendOnly.Where(kv => !kv.Value.Seen).ToList())
             {
-                _sendGain.Changed(t.Root, now);
+                // An ended session raises no level; the next check re-evaluates the rest (and covers what it played at).
                 ReleaseTracked(t);
                 _sendOnly.Remove(id);
             }
@@ -264,7 +290,8 @@ internal sealed class SessionRouter : IDisposable
         foreach (var root in _gate.Roots.Where(r => !plan.Targets.Any(t => t.Compensate && t.RootPid == r)))
             _gate.Close(root);
         SessionAttenuation.SilencedPids = want.Keys.ToHashSet();
-        _sendGain.KeepOnly(plan.Targets.Where(t => t.SendVolumePercent != null).Select(t => t.RootPid).ToHashSet());
+        _sendGain.KeepOnly(sendRoots);
+        _routing.KeepSendStatus(plan.Targets); // apps whose sessions ended, or whose own level was turned off
     }
 
     /// <summary>
@@ -314,39 +341,77 @@ internal sealed class SessionRouter : IDisposable
             }
             foreach (var t in _silenced.Values)
                 if (!_unverified.Contains(t.Root)) _gate.Verified(t.Root, now);
-            foreach (var target in _plan.Targets.Where(t => t.SendVolumePercent != null))
-            {
-                var levels = new List<float>();
-                bool valid = !_unverified.Contains(target.RootPid);
-                var status = SendVolumeStatus.Waiting;
-                foreach (var t in _silenced.Values.Concat(_sendOnly.Values).Where(t => t.Root == target.RootPid))
-                {
-                    try
-                    {
-                        if (t.Volume.GetMasterVolume(out float raw) < 0 || t.Volume.GetMute(out bool mute) < 0)
-                        {
-                            valid = false;
-                            break;
-                        }
-                        if (mute || raw == 0)
-                        {
-                            valid = false;
-                            status = SendVolumeStatus.MutedOrZero;
-                            break;
-                        }
-                        levels.Add(SessionAttenuation.ToLogical(raw));
-                    }
-                    catch { valid = false; break; }
-                }
-                float? common = valid ? SendVolumeGain.CommonLevel(levels) : null;
-                _sendGain.Verify(target.RootPid, common, now);
-                if (valid && levels.Count > 0)
-                    status = common != null ? SendVolumeStatus.Available
-                        : levels.Any(v => v < 0.01f) ? SendVolumeStatus.BelowMinimum : SendVolumeStatus.DifferentSessionLevels;
-                _routing.ReportSendStatus(target.Key, status);
-            }
+            CheckSendLevels(_plan, now);
             return true;
         }
+    }
+
+    /// <summary>
+    /// Under the lock, every tick: read the level and mute of every tracked session of each target with an
+    /// independent HomePod level and hand the result to the normalizer and the mixer's status. A target counts as
+    /// unread (nothing divided out) while one of its silenced sessions was just found raised or could not be read,
+    /// or while a session the plan sends through it is not tracked (not reached yet, or its volume unreadable when
+    /// the plan was applied). Reuses its lists: no allocation per tick.
+    /// </summary>
+    private void CheckSendLevels(RoutePlan plan, long now)
+    {
+        _tracked.Clear();
+        foreach (var t in _silenced.Values) _tracked.Add(new Silence(t.Pid, t.Root));
+        foreach (var t in _sendOnly.Values) _tracked.Add(new Silence(t.Pid, t.Root));
+        var targets = plan.Targets;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            var target = targets[i];
+            if (target.SendVolumePercent == null) continue;
+            uint root = target.RootPid;
+            _levels.Clear();
+            bool complete = !_unverified.Contains(root) && Covers(plan.SendSessions, root, CollectionsMarshal.AsSpan(_tracked)) &&
+                            ReadLevels(_silenced, root) && ReadLevels(_sendOnly, root);
+            var check = SendVolumeGain.Evaluate(CollectionsMarshal.AsSpan(_levels), complete);
+            _sendGain.Verify(root, check, now);
+            _routing.ReportSendStatus(target.Key, check.Status);
+        }
+    }
+
+    /// <summary>Add the level and mute of each session of <paramref name="root"/> to the check; false when one cannot be read.</summary>
+    private bool ReadLevels(Dictionary<string, Tracked> sessions, uint root)
+    {
+        foreach (var t in sessions.Values)
+        {
+            if (t.Root != root) continue;
+            try
+            {
+                if (t.Volume.GetMasterVolume(out float raw) < 0 || t.Volume.GetMute(out bool muted) < 0) return false;
+                _levels.Add(new SessionLevel(SessionAttenuation.ToLogical(raw), muted));
+            }
+            catch (Exception ex)
+            {
+                Log.Debug($"routing: send volume check: {ex.Message}");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Whether every session the plan sends through <paramref name="root"/> is among the tracked sessions (pid and root).
+    /// A session that is not tracked could play at any level, so nothing may be divided out until it is.
+    /// </summary>
+    internal static bool Covers(IReadOnlyList<Silence> sends, uint root, ReadOnlySpan<Silence> tracked)
+    {
+        for (int i = 0; i < sends.Count; i++)
+        {
+            if (sends[i].TargetRoot != root) continue;
+            bool found = false;
+            foreach (var t in tracked)
+                if (t.SessionPid == sends[i].SessionPid && t.TargetRoot == root)
+                {
+                    found = true;
+                    break;
+                }
+            if (!found) return false;
+        }
+        return true;
     }
 
     /// <summary>The device whose sessions are planned: the chosen capture device, or the default output.</summary>
@@ -407,6 +472,7 @@ internal sealed class SessionRouter : IDisposable
             _sendOnly.Clear();
             _gate.CloseAll();
             _sendGain.Clear();
+            _routing.ClearSendStatus();
         }
     }
 

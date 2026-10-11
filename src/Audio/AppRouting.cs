@@ -83,21 +83,83 @@ public sealed class AppRouting
     /// <summary>Null follows Windows; an explicit level independently sets this app's HomePod copy.</summary>
     public int? GetSendVolume(string key) => _rules.SendVolumes.TryGetValue(RouteRules.KeyFor(key), out var v) ? v : null;
 
+    /// <summary>The level the app's independent HomePod volume had when it was last turned off, if any.</summary>
+    public int? LastSendVolume(string key) =>
+        _config.AppSendVolumesOff.TryGetValue(RouteRules.KeyFor(key), out var v) ? Math.Clamp(v, 0, 100) : null;
+
     internal SendVolumeStatus SendStatus(string key) => _sendStates.GetValueOrDefault(RouteRules.KeyFor(key));
     internal void ReportSendStatus(string key, SendVolumeStatus status) => _sendStates[key] = status;
 
+    /// <summary>Forget the status of apps that are no longer sent with their own level (sessions ended, or turned off).</summary>
+    internal void KeepSendStatus(IReadOnlyList<RouteTarget> targets)
+    {
+        foreach (var key in _sendStates.Keys)
+            if (!targets.Any(t => t.SendVolumePercent != null && t.Key == key)) _sendStates.TryRemove(key, out _);
+    }
+
+    internal void ClearSendStatus() => _sendStates.Clear();
+
+    /// <summary>
+    /// Turn the app's independent HomePod volume on at <paramref name="percent"/> or off (null: follow Windows again,
+    /// remembering the level for the next time), or move it. Turning it on or off changes what is captured: saved,
+    /// logged and <see cref="Changed"/>. Moving it only changes a level the capture reads live: saved and logged, no
+    /// new plan and no device check.
+    /// </summary>
     public void SetSendVolume(string key, int? percent)
     {
         key = RouteRules.KeyFor(key);
         if (key.Length == 0) return;
+        bool on = _config.AppSendVolumes.TryGetValue(key, out var old);
         if (percent is { } p)
         {
             p = Math.Clamp(p, 0, 100);
-            if (_config.AppSendVolumes.TryGetValue(key, out var old) && old == p) return;
+            if (on && old == p) return;
             _config.AppSendVolumes[key] = p;
+            if (on)
+            {
+                _rules = Build();
+                SaveSendVolume(key, p);
+                return;
+            }
+            _config.AppSendVolumesOff.Remove(key);
+            Log.Info($"routing: {key} own HomePod volume on at {p}%");
         }
-        else if (!_config.AppSendVolumes.Remove(key)) return;
+        else
+        {
+            if (!on) return;
+            _config.AppSendVolumes.Remove(key);
+            _config.AppSendVolumesOff[key] = old;
+            Log.Info($"routing: {key} own HomePod volume off (was {old}%), following Windows");
+        }
         Commit();
+    }
+
+    /// <summary>
+    /// While the HomePod slider moves: the capture uses the app's new level at once (in memory only: no save, no log,
+    /// no new plan, no device check). <see cref="CommitSendVolume"/> saves it once the slider rests. Only for an app
+    /// whose independent HomePod volume is on.
+    /// </summary>
+    public void PreviewSendVolume(string key, int percent)
+    {
+        key = RouteRules.KeyFor(key);
+        if (!_config.AppSendVolumes.TryGetValue(key, out var old)) return;
+        percent = Math.Clamp(percent, 0, 100);
+        if (old == percent) return;
+        _config.AppSendVolumes[key] = percent;
+        _rules = Build();
+    }
+
+    /// <summary>Save and log the level <see cref="PreviewSendVolume"/> put in place.</summary>
+    public void CommitSendVolume(string key)
+    {
+        key = RouteRules.KeyFor(key);
+        if (_config.AppSendVolumes.TryGetValue(key, out var level)) SaveSendVolume(key, level);
+    }
+
+    private void SaveSendVolume(string key, int level)
+    {
+        try { _save(); } catch (Exception ex) { Log.Warn($"routing: config not saved: {ex.Message}"); }
+        Log.Info($"routing: {key} HomePod volume {level}%");
     }
 
     /// <summary>Re-read a configuration applied by a profile; the caller has already saved it.</summary>
