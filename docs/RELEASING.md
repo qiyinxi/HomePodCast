@@ -1,0 +1,235 @@
+# Releasing HomePodCast
+
+[English](#english) | [简体中文](#简体中文)
+
+## English
+
+### The rules
+
+| Branch / tag | What it is |
+| --- | --- |
+| `dev` | Day-to-day work. Every push runs CI. |
+| `vX.Y.Z-beta.N` | A beta: a tag on a `dev` commit whose CI has passed. CI publishes it as a GitHub prerelease. |
+| `release/X.Y.Z` | The promotion branch: exactly the commit of the beta that becomes `vX.Y.Z`. |
+| `main` | Only code verified on a real HomePod. It changes only through the release PR `release/X.Y.Z` → `main`. |
+| `vX.Y.Z` | A stable release: a tag on main's merge commit "Release X.Y.Z". CI publishes it as a GitHub release. |
+
+1. **CI passes before a release is tagged.** A tag goes only on a commit whose branch CI run (a push to `dev`, `main` or `release/**`) has already succeeded.
+2. **A stable release is the promotion (转正) of a tested beta.** `vX.Y.Z` is built from exactly the source of a `vX.Y.Z-beta.N` that was published as a prerelease and passed `docs/device-test-checklist.zh-CN.md` on the real HomePod. Promotion adds no code; a fix goes into a new beta first. The binaries are built again, since the version is compiled in, but from an identical source tree.
+3. **Release notes are English first, then 简体中文.**
+4. **A pushed tag is never moved or deleted.** A tag whose build failed keeps its number; the next beta takes the next one.
+5. **Approval:** any 0.x release, beta or stable, may be published without asking. A 1.0.0 or later release needs the maintainer's OK first.
+
+Both flows below are done by `tools/release.ps1` (PowerShell 7, git and an authenticated `gh`; run it from the repository, any worktree). CI enforces rules 1 and 2 for every pushed tag on its own (see [What CI enforces](#what-ci-enforces)), so a tag made by hand can't get around them either. `./tools/release.ps1 -Status` shows where things stand: the version on `dev`, the latest tags, whether `dev`'s CI is green and which betas can be promoted.
+
+The version is `<Version>` in `src/HomePodCast.csproj`. It is set on `dev` in a commit of its own, "Version X.Y.Z", after the previous stable release; every beta and the stable release of X.Y.Z are built from it.
+
+### Making a beta
+
+1. Commit on `dev` and push: `git push origin dev`.
+2. Write the release notes into a Markdown file (see [Release notes](#release-notes)); the file isn't committed.
+3. Dry run: `./tools/release.ps1 -Beta -NotesFile <notes.md> -WhatIf`
+4. `./tools/release.ps1 -Beta -NotesFile <notes.md>`
+
+The script:
+
+- refuses unless the checkout is on `dev`, clean (an untracked `icon/` aside) and equal to `origin/dev`, `vX.Y.Z` doesn't exist yet and HEAD has no release tag;
+- takes N = 1 + the highest `vX.Y.Z-beta.N` here or on origin, counting tags whose build failed;
+- waits for `dev`'s CI run on HEAD (`gh run watch`) and refuses if it failed or doesn't exist;
+- creates the annotated tag `vX.Y.Z-beta.N` ("HomePodCast X.Y.Z beta N") and pushes it;
+- waits for the tag build, checks that the release is a prerelease with the `.msi` and the `-win-x64.zip`, and applies the notes (`gh release edit --notes-file`).
+
+It warns when `main` is not an ancestor of `dev`: such a beta can't be promoted (see below). Without `-NotesFile` the release keeps GitHub's generated notes; apply real ones later with `gh release edit vX.Y.Z-beta.N --notes-file <notes.md>`.
+
+Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md`.
+
+### Promoting a beta to a stable release
+
+Only a beta that passed the device checklist. `-Status` lists the promotable ones.
+
+1. `./tools/release.ps1 -Status`
+2. Write the notes of the stable release (everything since the previous stable release, not only since the last beta).
+3. Dry run: `./tools/release.ps1 -Promote vX.Y.Z-beta.N -NotesFile <notes.md> -WhatIf`
+4. Run it without `-WhatIf`, preferably from a clean `dev` checkout equal to `origin/dev` (then it also does the last step itself).
+
+The script:
+
+- checks that the beta's prerelease is published and its tag build passed, `vX.Y.Z` doesn't exist, `<Version>` at the beta's commit is X.Y.Z, and `main` is an ancestor of the beta (so the merge adds nothing to the beta's files, and the branch is up to date with `main`, which `main`'s branch protection requires);
+- pushes `release/X.Y.Z` at the beta's commit and waits for its CI;
+- opens the PR `release/X.Y.Z` → `main` "Release X.Y.Z" (which beta, its release, the device checklist) and waits for its checks;
+- merges it with a merge commit whose message is "Release X.Y.Z" (`gh pr merge --merge --subject "Release X.Y.Z" --body "Release X.Y.Z" --match-head-commit <beta>`, the same message as `4aae077` "Release 0.2.1");
+- checks that the merge commit's tree is the beta's tree, and refuses to tag it otherwise;
+- waits for `main`'s CI on the merge commit, then tags it `vX.Y.Z` ("HomePodCast X.Y.Z") and pushes the tag;
+- waits for the tag build, checks that the release is not a prerelease and has the `.msi` and the `-win-x64.zip`, and applies the notes;
+- merges `main` back into `dev` and pushes `dev` (see below). From any other checkout it prints the commands instead:
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+
+Afterwards set the next version on `dev` ("Version X.Y.Z+1" or the next minor) before the next beta; `-Beta` refuses a version that is already released.
+
+**Why `main` goes back into `dev`.** A fast-forward isn't possible: the release merge commit is on `main` only. Without it in `dev`, the next release branch would not be up to date with `main`, which `main`'s branch protection requires before a merge, and updating it would add a commit that no beta was built from. The merge back changes no files (the merge commit's tree is the beta's, and `dev` contains the beta), so it only puts the merge commit into `dev`'s history and keeps `main` an ancestor of `dev`. Before this process the same thing happened implicitly: a feature branch made from `main` brought "Release 0.2.1" into `dev`.
+
+If the script stops on the way (a check failed and was re-run, the network, Ctrl+C), run the same command again: it picks up an existing `release/X.Y.Z` at the beta's commit and an open or merged PR. If it stopped after pushing `vX.Y.Z`, finish by hand: `gh run watch` the tag build, `gh release edit vX.Y.Z --notes-file <notes.md>`, and merge `main` into `dev` as above.
+
+### What CI enforces
+
+For every pushed `v*` tag, the first step of `.github/workflows/build.yml` after the checkout, "Release checks" (`tools/release-checks.ps1`), fails the build, so nothing is published, unless:
+
+1. the tag is `vX.Y.Z`, `vX.Y.Z-beta.N` or `vX.Y.Z-rc.N` and X.Y.Z is `<Version>` in `src/HomePodCast.csproj` at the tagged commit;
+2. the tagged commit already has a successful run of this workflow from a push to `dev`, `main` or `release/**` (the tag build itself doesn't count);
+3. for a stable tag: the commit is on `main`, and a `vX.Y.Z-beta.N` (or `-rc.N`) tag points to a commit with the same source tree and is published (not a draft) as a GitHub prerelease. The log names the matching beta.
+
+The messages it fails with:
+
+- `Tag 'x' is not vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N (N from 1, no leading zeros). …`
+- `Tag vX.Y.Z-beta.N is version X.Y.Z, but src/HomePodCast.csproj at <sha> says <Version>…</Version>. Change the version on dev in a commit of its own ('Version X.Y.Z'), push it, wait for its CI to pass, then tag that commit.`
+- `Commit <sha> has no successful run of build.yml from a push to dev, main or release/**. Branch runs of this commit: dev run <id> failure. Push the branch, wait for its CI to pass, then tag. If that branch run was still going, re-run this tag build once it has passed; if it failed, fix the code on dev and release the next beta number (never move or delete a pushed tag).`
+- `Stable tag vX.Y.Z is on commit <sha>, which is not on main. A stable release is tagged on the merge commit that tools/release.ps1 -Promote makes on main (release/X.Y.Z -> main), after main's CI for it has passed.`
+- `Stable tag vX.Y.Z: no published vX.Y.Z-beta.N prerelease has the same source tree as <sha> (tree …). Checked: …. A stable release is a promotion of a tested beta: release this source as a beta first (tools/release.ps1 -Beta), test it, then promote it (tools/release.ps1 -Promote vX.Y.Z-beta.N).`
+
+Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
+
+The checks read everything through the GitHub API, so they run locally too, read-only:
+`./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
+
+Tags made before these rules aren't checked again: re-running one of their workflow runs uses the workflow file of their own commit. By rule 3, `v0.2.1` (no beta) and `v0.2.0` (changes after beta 8) would not pass today; that is expected, and the rule stays strict for every new tag.
+
+### Release notes
+
+- English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
+- A beta: what changed since the previous beta, what to test, known problems.
+- A stable release: everything since the previous stable release, what was verified on the real HomePod, known problems.
+- Mention updates when they matter: the MSI updates itself from 设置 → 软件更新; the portable zip and the Store version don't.
+
+```markdown
+## Highlights
+- …
+
+## Fixes
+- …
+
+## Known issues
+- …
+
+## 简体中文
+
+### 亮点
+- …
+
+### 修复
+- …
+
+### 已知问题
+- …
+```
+
+### When a tag build fails
+
+The tag stays: never move or delete a pushed tag, not even one whose build failed. Find the run with `gh run list --branch <tag>`.
+
+- **"Release checks" failed because the tag was pushed before the branch CI had finished**: when the branch run passes, re-run the tag build (`gh run rerun <run id>`); it then publishes normally, and the number isn't lost. If the branch run failed, fix it on `dev` and make the next beta.
+- **Flaky infrastructure** (a runner or network hiccup, a NuGet outage, a timing test on a busy runner): `gh run rerun <run id> --failed`. Since `release.ps1` stopped at the failure, check the release and apply the notes by hand afterwards (`gh release view <tag>`, `gh release edit <tag> --notes-file <notes.md>`).
+- **The code is broken**: fix it on `dev`, push, wait for CI, and make the next beta (`-Beta` takes the next number). The failed tag keeps its number without a release; that's what happened to `v0.2.2-beta.2` and `beta.3` on 2026-10-11 (tagged before `dev`'s CI had finished, which then failed); `beta.4` was the first good one.
+- **A stable tag build fails**: its source is a beta whose build passed, so it is almost always infrastructure: re-run the failed jobs. Should the code really be at fault, `vX.Y.Z` is spent: fix it on `dev`, set the next patch version, and release that as a beta, then promote it.
+
+## 简体中文
+
+### 规则
+
+| 分支 / 标签 | 含义 |
+| --- | --- |
+| `dev` | 日常开发。每次推送都跑 CI。 |
+| `vX.Y.Z-beta.N` | 测试版：打在 CI 已经通过的 `dev` 提交上的标签。CI 把它发布成 GitHub 预发布版本。 |
+| `release/X.Y.Z` | 转正分支：正好是要转正成 `vX.Y.Z` 的那个测试版的提交。 |
+| `main` | 只放在真实 HomePod 上验证过的代码。只通过发布 PR `release/X.Y.Z` → `main` 改变。 |
+| `vX.Y.Z` | 正式版：打在 main 的合并提交 "Release X.Y.Z" 上的标签。CI 把它发布成 GitHub 正式版本。 |
+
+1. **先过 CI，再打发布标签。** 标签只能打在分支 CI（推送到 `dev`、`main` 或 `release/**` 时跑的那次）已经成功的提交上。
+2. **正式版是已测试测试版的转正。** `vX.Y.Z` 必须正好用某个 `vX.Y.Z-beta.N` 的源码构建，而这个测试版已经作为预发布版本发布，并在真实 HomePod 上过了 `docs/device-test-checklist.zh-CN.md`。转正时不加任何代码；修复要先进新的测试版。安装包会重新构建（版本号编译在程序里），但源码树完全相同。
+3. **发布说明先英文，后简体中文。**
+4. **推送过的标签永远不移动、不删除。** 构建失败的标签也占着它的编号，下一个测试版用下一个编号。
+5. **批准：** 0.x 的版本（测试版或正式版）可以直接发布；1.0.0 及以后的版本要先经维护者同意。
+
+下面两个流程都由 `tools/release.ps1` 完成（需要 PowerShell 7、git 和已登录的 `gh`；在仓库里运行，任何工作树都行）。CI 对每个推送的标签另外强制执行第 1、2 条（见「[CI 强制检查什么](#ci-强制检查什么)」），所以手动打的标签也绕不过去。`./tools/release.ps1 -Status` 显示当前情况：`dev` 上的版本、最新的标签、`dev` 的 CI 是否通过、哪些测试版可以转正。
+
+版本号是 `src/HomePodCast.csproj` 里的 `<Version>`。上一个正式版发布后，在 `dev` 上用一个单独的提交 "Version X.Y.Z" 设置；X.Y.Z 的所有测试版和正式版都用它构建。
+
+### 发测试版
+
+1. 在 `dev` 上提交并推送：`git push origin dev`。
+2. 把发布说明写进一个 Markdown 文件（见「[发布说明](#发布说明)」），这个文件不提交。
+3. 演练：`./tools/release.ps1 -Beta -NotesFile <说明.md> -WhatIf`
+4. `./tools/release.ps1 -Beta -NotesFile <说明.md>`
+
+脚本会：
+
+- 在这些情况下拒绝：当前不在 `dev`、工作区不干净（未跟踪的 `icon/` 除外）、和 `origin/dev` 不一致、`vX.Y.Z` 已经存在、HEAD 已经有发布标签；
+- 取 N = 本地或 origin 上最大的 `vX.Y.Z-beta.N` + 1，构建失败的标签也算；
+- 等 HEAD 在 `dev` 上的 CI（`gh run watch`），失败或不存在就拒绝；
+- 创建附注标签 `vX.Y.Z-beta.N`（"HomePodCast X.Y.Z beta N"）并推送；
+- 等标签构建完成，检查发布是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明（`gh release edit --notes-file`）。
+
+如果 `main` 不是 `dev` 的祖先，脚本会警告：这样的测试版不能转正（见下文）。不给 `-NotesFile` 时，发布页保留 GitHub 自动生成的说明，之后用 `gh release edit vX.Y.Z-beta.N --notes-file <说明.md>` 换成正式的。
+
+然后用 `docs/device-test-checklist.zh-CN.md` 在真实 HomePod 上测试这个测试版。
+
+### 测试版转正
+
+只转正过了实机测试清单的测试版。`-Status` 会列出可以转正的。
+
+1. `./tools/release.ps1 -Status`
+2. 写正式版的发布说明（上一个正式版以来的全部变化，而不只是上一个测试版以来的）。
+3. 演练：`./tools/release.ps1 -Promote vX.Y.Z-beta.N -NotesFile <说明.md> -WhatIf`
+4. 去掉 `-WhatIf` 运行，最好在一个干净、和 `origin/dev` 一致的 `dev` 检出里运行（这样最后一步也由脚本完成）。
+
+脚本会：
+
+- 检查：这个测试版的预发布版本已发布、标签构建通过；`vX.Y.Z` 还不存在；测试版提交里的 `<Version>` 是 X.Y.Z；`main` 是这个测试版的祖先（这样合并不会给测试版的文件加任何东西，分支也和 `main` 保持最新，这是 `main` 的分支保护要求的）；
+- 在测试版的提交上推送 `release/X.Y.Z`，等它的 CI；
+- 开 PR `release/X.Y.Z` → `main`，标题 "Release X.Y.Z"（写明是哪个测试版、它的发布页、实机测试清单），等检查通过；
+- 用合并提交合并，提交信息是 "Release X.Y.Z"（`gh pr merge --merge --subject "Release X.Y.Z" --body "Release X.Y.Z" --match-head-commit <测试版>`，和 `4aae077` "Release 0.2.1" 一样）；
+- 检查合并提交的树和测试版的树相同，不同就拒绝打标签；
+- 等 `main` 上这个合并提交的 CI，然后打标签 `vX.Y.Z`（"HomePodCast X.Y.Z"）并推送；
+- 等标签构建完成，检查发布不是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明；
+- 把 `main` 合并回 `dev` 并推送 `dev`（原因见下）。在其他检出里运行时，脚本改为打印这些命令：
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+
+之后在 `dev` 上设置下一个版本号（"Version X.Y.Z+1" 或下一个次版本），再发下一个测试版；`-Beta` 会拒绝已经发布过的版本号。
+
+**为什么要把 `main` 合并回 `dev`。** 不能快进：发布用的合并提交只在 `main` 上。`dev` 里没有它的话，下一个 release 分支就不是基于最新的 `main`，而 `main` 的分支保护要求合并前分支是最新的；更新分支又会多出一个没有任何测试版用它构建过的提交。合并回去不改任何文件（合并提交的树就是测试版的树，而 `dev` 包含这个测试版），只是把合并提交放进 `dev` 的历史，让 `main` 始终是 `dev` 的祖先。在有这个流程之前，这件事是隐式发生的：一个从 `main` 拉出的功能分支把 "Release 0.2.1" 带进了 `dev`。
+
+如果脚本中途停下（某项检查失败后重跑、网络问题、Ctrl+C），再运行一次同样的命令即可：它会接着用已在测试版提交上的 `release/X.Y.Z` 和已经打开或已合并的 PR。如果是在推送 `vX.Y.Z` 之后停下的，就手动收尾：`gh run watch` 标签构建，`gh release edit vX.Y.Z --notes-file <说明.md>`，再按上面的命令把 `main` 合并回 `dev`。
+
+### CI 强制检查什么
+
+每推送一个 `v*` 标签，`.github/workflows/build.yml` 在检出代码后的第一步「Release checks」（`tools/release-checks.ps1`）会让构建失败、什么都不发布，除非：
+
+1. 标签是 `vX.Y.Z`、`vX.Y.Z-beta.N` 或 `vX.Y.Z-rc.N`，并且 X.Y.Z 等于该提交里 `src/HomePodCast.csproj` 的 `<Version>`；
+2. 这个提交已经有一次这个工作流的成功运行，来自推送到 `dev`、`main` 或 `release/**`（标签构建本身不算）；
+3. 正式版标签还要求：提交在 `main` 上，并且有一个 `vX.Y.Z-beta.N`（或 `-rc.N`）标签指向源码树相同的提交，而且它已作为 GitHub 预发布版本发布（不是草稿）。日志里会写出匹配的是哪个测试版。
+
+失败时的提示就是上面英文部分列出的那几条（CI 日志是英文的）。
+
+分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
+
+这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
+`./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。
+
+有这些规则之前打的标签不会再被检查：重跑它们的工作流时，用的是它们自己提交里的工作流文件。按第 3 条，`v0.2.1`（没有测试版）和 `v0.2.0`（beta 8 之后还有改动）今天都过不了；这是预期的，规则对每个新标签都严格执行。
+
+### 发布说明
+
+- 先英文，然后在 `## 简体中文` 标题下写同样内容的中文。说明文件里没有中文或以中文开头时，`release.ps1` 会警告。
+- 测试版：和上一个测试版相比改了什么、要测什么、已知问题。
+- 正式版：上一个正式版以来的全部变化、在真实 HomePod 上验证了什么、已知问题。
+- 需要时说明更新方式：MSI 安装版可以在 设置 → 软件更新 里自己更新；便携版 zip 和商店版不会。
+
+模板见英文部分。
+
+### 标签构建失败时
+
+标签保留：推送过的标签永远不移动、不删除，构建失败的也一样。用 `gh run list --branch <标签>` 找到那次运行。
+
+- **「Release checks」失败，因为标签在分支 CI 跑完之前就推送了**：分支那次运行通过后，重跑标签构建（`gh run rerun <运行 id>`），它会正常发布，编号不会浪费。如果分支那次运行失败了，就在 `dev` 上修好，发下一个测试版。
+- **基础设施偶发问题**（运行器或网络抖动、NuGet 故障、繁忙运行器上的计时测试）：`gh run rerun <运行 id> --failed`。因为 `release.ps1` 在失败处已经停下，之后要手动检查发布并应用说明（`gh release view <标签>`、`gh release edit <标签> --notes-file <说明.md>`）。
+- **代码有问题**：在 `dev` 上修好、推送、等 CI，然后发下一个测试版（`-Beta` 会自动用下一个编号）。失败的标签占着编号，没有发布页；2026-10-11 的 `v0.2.2-beta.2` 和 `beta.3` 就是这样（在 `dev` 的 CI 跑完之前打了标签，而那次 CI 失败了），`beta.4` 才是第一个好的。
+- **正式版标签构建失败**：它的源码就是一个构建通过的测试版，所以几乎一定是基础设施问题：重跑失败的作业。万一真是代码问题，`vX.Y.Z` 这个号就用掉了：在 `dev` 上修好，设置下一个补丁版本号，先作为测试版发布，再转正。
