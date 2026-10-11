@@ -418,5 +418,8 @@
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} heeft misschien nog de vorige verbinding van deze pc; verbindt zodra die eindigt (hooguit nog {1} s)",
   "{0}（会定期变化）": "{0} (verandert af en toe)",
   "选择配置…": "Kies een profiel…",
-  "已经有名为「{0}」的配置，请换一个名称。": "Er bestaat al een profiel met de naam \"{0}\". Kies een andere naam."
+  "已经有名为「{0}」的配置，请换一个名称。": "Er bestaat al een profiel met de naam \"{0}\". Kies een andere naam.",
+  "估算值超出了滑块的范围，请先拖动滑块对准，再应用。": "De schatting valt buiten het bereik van de schuifregelaar. Verschuif de regelaar tot flits en klik samenvallen en pas daarna toe.",
+  "测试期间连接、音源或延迟发生了变化，这次的结果没有保存，请重新测试。": "De verbinding, audiobron of vertraging is tijdens de test gewijzigd, dus dit resultaat is niet opgeslagen. Test opnieuw.",
+  "这次的结果和估算相差太大，没有保存，请重新测试。": "Dit resultaat wijkt te veel af van de schatting en is niet opgeslagen. Test opnieuw."
 }

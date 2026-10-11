@@ -418,5 +418,8 @@
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} hat vielleicht noch die letzte Verbindung dieses PCs; Verbindung, sobald sie endet (höchstens noch {1} s)",
   "{0}（会定期变化）": "{0} (ändert sich von Zeit zu Zeit)",
   "选择配置…": "Profil auswählen…",
-  "已经有名为「{0}」的配置，请换一个名称。": "Es gibt bereits ein Profil mit dem Namen \"{0}\". Bitte einen anderen Namen wählen."
+  "已经有名为「{0}」的配置，请换一个名称。": "Es gibt bereits ein Profil mit dem Namen \"{0}\". Bitte einen anderen Namen wählen.",
+  "估算值超出了滑块的范围，请先拖动滑块对准，再应用。": "Der Schätzwert liegt außerhalb des Schieberegler-Bereichs. Den Regler verschieben, bis Blitz und Klick zusammenfallen, dann anwenden.",
+  "测试期间连接、音源或延迟发生了变化，这次的结果没有保存，请重新测试。": "Verbindung, Audioquelle oder Latenz haben sich während des Tests geändert; das Ergebnis wurde nicht gespeichert. Bitte den Test wiederholen.",
+  "这次的结果和估算相差太大，没有保存，请重新测试。": "Das Ergebnis weicht zu stark vom Schätzwert ab und wurde nicht gespeichert. Bitte den Test wiederholen."
 }
