@@ -318,7 +318,7 @@
   "正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。": "Stabil bietet nur stabile Versionen an. Beta bietet auch Betaversionen an (neue Funktionen früher, eventuell weniger stabil); angeboten wird jeweils die neueste.",
   "渠道已更改，点「检查更新」查看这个渠道的最新版本": "Kanal geändert. \"Nach Updates suchen\" zeigt die neueste Version dieses Kanals",
   "自动检查更新": "Automatisch nach Updates suchen",
-  "启动后约 30 秒和之后每 24 小时向 GitHub 查询一次新版本。关闭时只有点「检查更新」才会联网查询。": "Fragt etwa 30 Sekunden nach dem Start und danach alle 24 Stunden bei GitHub nach einer neuen Version. Ist dies aus, geht HomePodCast dafür nur bei \"Nach Updates suchen\" ins Internet.",
+  "有新版本时弹出通知提醒你，不会自动安装。启动约 30 秒后检查一次，之后每天一次；关闭时只在你点「检查更新」时联网。": "Meldet neue Versionen per Benachrichtigung und installiert nie von selbst. Prüft etwa 30 Sekunden nach dem Start, danach einmal täglich. Ist dies aus, geht HomePodCast nur bei \"Nach Updates suchen\" online.",
   "这是开发版本（{0}），不会自动检查更新；「检查更新」仍然可以用。": "Dies ist eine Entwicklungsversion ({0}), die nie selbst nach Updates sucht; \"Nach Updates suchen\" funktioniert trotzdem.",
   "「更新」会下载安装包、用 GitHub 提供的 SHA-256 校验，然后退出 HomePodCast 安装（Windows 会请求管理员权限），装好后自动重新启动。": "\"Aktualisieren\" lädt das Installationspaket herunter, prüft es mit dem SHA-256-Wert von GitHub, beendet HomePodCast und installiert es (Windows fragt nach Administratorrechten). Danach startet HomePodCast automatisch neu.",
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Portable Version: \"Aktualisieren\" öffnet die Release-Seite. Dort die neue ZIP-Datei herunterladen, entpacken und die alten Dateien ersetzen.",

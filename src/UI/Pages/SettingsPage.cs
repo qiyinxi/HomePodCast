@@ -257,7 +257,7 @@ internal sealed class SettingsPage : ScrollPage
         }
         else
         {
-            autoDesc.Text = L.T("启动后约 30 秒和之后每 24 小时向 GitHub 查询一次新版本。关闭时只有点「检查更新」才会联网查询。");
+            autoDesc.Text = L.T("有新版本时弹出通知提醒你，不会自动安装。启动约 30 秒后检查一次，之后每天一次；关闭时只在你点「检查更新」时联网。");
             autoDesc.Role = TextRole.Secondary;
         }
     }
