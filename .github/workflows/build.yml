@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # the release checks of tag builds look up this workflow's branch runs
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,6 +27,16 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+
+      # Tag builds only, before anything slow (docs/RELEASING.md): the tag is vX.Y.Z, -beta.N or -rc.N of the csproj
+      # <Version>; its commit has already passed this workflow on a push to dev, main or release/**; and a stable tag
+      # is on main with exactly the source tree of a published beta. Everything is read through the GitHub API.
+      - name: Release checks
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/release-checks.ps1 -Tag $env:GITHUB_REF_NAME -Sha $env:GITHUB_SHA -Repo $env:GITHUB_REPOSITORY -ExcludeRunId $env:GITHUB_RUN_ID
 
       - uses: actions/setup-dotnet@v6
         with:
