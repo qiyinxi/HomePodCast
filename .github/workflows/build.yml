@@ -42,7 +42,8 @@ jobs:
         shell: pwsh
         run: |
           # tag v1.2.3 -> 1.2.3; PR -> 0.2.0-pr.<n>.<run>; branch -> 0.2.0-<branch>.<run>
-          # (the MSI gets a numeric version from this: 1.2.3, or 0.2.0.<run> for anything with a suffix; see installer/build.ps1)
+          # (the MSI gets a numeric version from this: 1.2.3, or 0.2.0.<run> for anything with a suffix; see installer/build.ps1.
+          # The MSIX gets X.Y.Z.0 either way; see packaging/msix/build.ps1)
           $v = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') }
                elseif ('${{ github.event_name }}' -eq 'pull_request') { '0.2.0-pr.${{ github.event.number }}.${{ github.run_number }}' }
                else { '0.2.0-' + ('${{ github.ref_name }}' -replace '[^A-Za-z0-9]', '-') + '.${{ github.run_number }}' }
@@ -139,6 +140,30 @@ jobs:
             publish/*.msi
           if-no-files-found: error
 
+      # Microsoft Store package (packaging/msix/README.md): self-contained, since the Store doesn't install the .NET
+      # runtime, and unsigned, since the Store signs what it publishes. It is a workflow artifact only and never goes
+      # on a GitHub release: an unsigned MSIX doesn't install anywhere else. build.ps1's defaults are the identity
+      # Partner Center assigned to the reserved name; the repository variables override them when set.
+      - name: Build MSIX
+        shell: pwsh
+        env:
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $identity = @{}
+          if ($env:MSIX_IDENTITY_NAME) { $identity.IdentityName = $env:MSIX_IDENTITY_NAME }
+          if ($env:MSIX_PUBLISHER) { $identity.Publisher = $env:MSIX_PUBLISHER }
+          if ($env:MSIX_PUBLISHER_DISPLAY_NAME) { $identity.PublisherDisplayName = $env:MSIX_PUBLISHER_DISPLAY_NAME }
+          ./packaging/msix/build.ps1 -Version '${{ steps.ver.outputs.version }}' @identity
+
+      - name: Upload MSIX
+        uses: actions/upload-artifact@v7
+        with:
+          name: msix
+          path: publish/*.msix
+          if-no-files-found: error
+
   release:
     needs: build
     if: github.ref_type == 'tag'
@@ -159,3 +184,48 @@ jobs:
             packages/*.msi
           generate_release_notes: true
           prerelease: ${{ contains(needs.build.outputs.version, '-') }}
+
+  # Microsoft Store submission of the MSIX for stable tags (no '-' in the version); beta tags stay on GitHub.
+  # Dormant: enable it once all of this exists (packaging/msix/README.md has the steps):
+  #   - HomePodCast is live in the Store from a first submission made by hand in Partner Center (listing,
+  #     screenshots, age rating, privacy policy URL): msstore can only update a published app;
+  #   - a Microsoft Entra app registration, added in Partner Center (Account settings > User management >
+  #     Microsoft Entra applications) with the Manager role, with a client secret;
+  #   - repository secrets PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET
+  #     and PARTNER_CENTER_SELLER_ID;
+  #   - a version of 1.0.0 or later: the Store refuses package versions whose first field is 0 (hence the
+  #     startsWith condition; the MSIX of a 0.x tag stays a workflow artifact).
+  # The product id is public (it's in the Store URL), so it is a plain value; the repository variable
+  # MSSTORE_PRODUCT_ID overrides it. msstore publish uploads the package to a new submission (copied from the last
+  # published one) and commits it to certification; add --noCommit to review it in Partner Center first.
+  # The action was called microsoft/setup-msstore-cli before; it installs the Microsoft Store Developer CLI.
+  # store:
+  #   needs: [build, release]
+  #   if: github.ref_type == 'tag' && !contains(needs.build.outputs.version, '-') && !startsWith(needs.build.outputs.version, '0.')
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/download-artifact@v7
+  #       with:
+  #         name: msix
+  #         path: msix
+  #
+  #     - uses: microsoft/microsoft-store-apppublisher@v1.4
+  #
+  #     - name: Sign in to Partner Center
+  #       shell: pwsh
+  #       env:
+  #         TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+  #         SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+  #         CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+  #         CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+  #       run: msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+  #
+  #     - name: Submit to the Microsoft Store
+  #       shell: pwsh
+  #       env:
+  #         PRODUCT_ID: ${{ vars.MSSTORE_PRODUCT_ID || '9N9FTNR9HBG2' }}
+  #       run: |
+  #         $msix = @(Get-ChildItem msix -Filter *.msix)
+  #         if ($msix.Count -ne 1) { throw "expected one .msix, found $($msix.Count)" }
+  #         msstore publish $msix[0].FullName -id $env:PRODUCT_ID
+  #         if ($LASTEXITCODE) { throw 'msstore publish failed' }
