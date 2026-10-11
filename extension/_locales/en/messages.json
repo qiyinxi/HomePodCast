@@ -155,7 +155,7 @@
     "message": "Fullscreen is unavailable. Exit the current fullscreen view or allow fullscreen for this player, then try again."
   },
   "syncPopupHint": {
-    "message": "Use “Sync fullscreen” on the video. In fullscreen, Alt+←/→ adjusts by 5 ms; add Shift for 20 ms. Changes are saved for this site."
+    "message": "Move the pointer over a video (or press Alt) to show “Sync fullscreen”. In fullscreen, Alt+←/→ adjusts by 5 ms; add Shift for 20 ms. Changes are saved for this site."
   },
   "syncAdjustmentLabel": {
     "message": "Adjust site offset by $DELTA$ ms",

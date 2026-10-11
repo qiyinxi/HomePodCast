@@ -67,7 +67,7 @@
     "message": "Volledig scherm is niet beschikbaar. Sluit het huidige volledige scherm of sta het voor deze speler toe en probeer opnieuw."
   },
   "syncPopupHint": {
-    "message": "Gebruik “Gesynchroniseerd volledig scherm” op de video. Op volledig scherm past Alt+←/→ met 5 ms aan; voeg Shift toe voor 20 ms. Wijzigingen worden voor deze website opgeslagen."
+    "message": "Beweeg de aanwijzer over een video (of druk op Alt) om “Gesynchroniseerd volledig scherm” te tonen. Op volledig scherm past Alt+←/→ met 5 ms aan; voeg Shift toe voor 20 ms. Wijzigingen worden voor deze website opgeslagen."
   },
   "syncAdjustmentLabel": {
     "message": "Pas de websitecorrectie aan met $DELTA$ ms",

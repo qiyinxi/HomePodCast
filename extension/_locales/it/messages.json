@@ -67,7 +67,7 @@
     "message": "Lo schermo intero non è disponibile. Esci dalla modalità attuale o consenti lo schermo intero per questo lettore e riprova."
   },
   "syncPopupHint": {
-    "message": "Usa “Schermo intero sincronizzato” sul video. A schermo intero, Alt+←/→ regola di 5 ms; aggiungi Maiusc per 20 ms. Le modifiche vengono salvate per questo sito."
+    "message": "Passa il puntatore su un video (o premi Alt) per mostrare “Schermo intero sincronizzato”. A schermo intero, Alt+←/→ regola di 5 ms; aggiungi Maiusc per 20 ms. Le modifiche vengono salvate per questo sito."
   },
   "syncAdjustmentLabel": {
     "message": "Regola la correzione del sito di $DELTA$ ms",

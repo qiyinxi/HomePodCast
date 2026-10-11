@@ -154,7 +154,7 @@
     "message": "Koko näyttö ei ole käytettävissä. Poistu nykyisestä koko näytön tilasta tai salli se soittimelle ja yritä uudelleen."
   },
   "syncPopupHint": {
-    "message": "Valitse videon ”Synkronoitu koko näyttö”. Koko näytössä Alt+←/→ säätää 5 ms; lisää Vaihto säätääksesi 20 ms. Muutokset tallennetaan sivustolle."
+    "message": "Vie osoitin videon päälle (tai paina Alt), niin ”Synkronoitu koko näyttö” tulee näkyviin. Koko näytössä Alt+←/→ säätää 5 ms; lisää Vaihto säätääksesi 20 ms. Muutokset tallennetaan sivustolle."
   },
   "syncAdjustmentLabel": {
     "message": "Säädä sivuston viivettä $DELTA$ ms",

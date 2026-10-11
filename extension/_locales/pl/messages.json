@@ -154,7 +154,7 @@
     "message": "Pełny ekran jest niedostępny. Zamknij obecny pełny ekran lub zezwól na niego dla tego odtwarzacza i spróbuj ponownie."
   },
   "syncPopupHint": {
-    "message": "Użyj przycisku „Zsynchronizowany pełny ekran” na wideo. Na pełnym ekranie Alt+←/→ zmienia korektę o 5 ms, a z klawiszem Shift o 20 ms. Zmiany są zapisywane dla tej witryny."
+    "message": "Najedź wskaźnikiem na wideo (lub naciśnij Alt), aby pokazać przycisk „Zsynchronizowany pełny ekran”. Na pełnym ekranie Alt+←/→ zmienia korektę o 5 ms, a z klawiszem Shift o 20 ms. Zmiany są zapisywane dla tej witryny."
   },
   "syncAdjustmentLabel": {
     "message": "Zmień korektę witryny o $DELTA$ ms",

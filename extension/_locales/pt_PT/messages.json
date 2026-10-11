@@ -154,7 +154,7 @@
     "message": "O ecrã inteiro não está disponível. Saia do modo atual ou permita o ecrã inteiro neste leitor e tente novamente."
   },
   "syncPopupHint": {
-    "message": "Use «Ecrã inteiro sincronizado» no vídeo. Em ecrã inteiro, Alt+←/→ ajusta 5 ms; adicione Shift para 20 ms. As alterações são guardadas para este site."
+    "message": "Mova o ponteiro sobre um vídeo (ou prima Alt) para mostrar «Ecrã inteiro sincronizado». Em ecrã inteiro, Alt+←/→ ajusta 5 ms; adicione Shift para 20 ms. As alterações são guardadas para este site."
   },
   "syncAdjustmentLabel": {
     "message": "Ajustar a correção do site em $DELTA$ ms",
