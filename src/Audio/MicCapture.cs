@@ -43,6 +43,28 @@ public sealed class MicCapture : ITapSource, IDisposable
     public bool Running { get; private set; }
     public string? Error { get; private set; }
 
+    /// <summary>
+    /// Windows' privacy settings refuse the microphone to this app: capture stopped and is not retried (turning the mic
+    /// off and on again tries once more). <see cref="Error"/> says so.
+    /// </summary>
+    public bool AccessDenied { get; private set; }
+
+    /// <summary>What <see cref="Error"/> says when <see cref="AccessDenied"/>.</summary>
+    public const string AccessDeniedText = "Windows 的隐私设置不允许 HomePodCast 使用麦克风";
+
+    /// <summary>The Settings page with the microphone switches (Privacy &amp; security → Microphone).</summary>
+    public const string PrivacySettingsUri = "ms-settings:privacy-microphone";
+
+    /// <summary>
+    /// The failure means Windows refuses the microphone, not that the device has a problem: E_ACCESSDENIED, which
+    /// WASAPI returns for capture (activating or initializing the audio client) while "Microphone access", "Let desktop
+    /// apps access your microphone" or the Store version's own switch is off, and ERROR_ACCESS_DISABLED_BY_POLICY.
+    /// Retrying won't help until the user changes the setting.
+    /// </summary>
+    internal static bool IsAccessDenied(int hresult) => hresult is E_AccessDenied or E_AccessDisabledByPolicy;
+
+    private const int E_AccessDenied = unchecked((int)0x80070005), E_AccessDisabledByPolicy = unchecked((int)0x800704EC);
+
     /// <summary>Input level after gain, before the gate (decaying peak, 0..1).</summary>
     public float Peak { get; private set; }
 
@@ -97,6 +119,16 @@ public sealed class MicCapture : ITapSource, IDisposable
             try
             {
                 CaptureOnce();
+            }
+            catch (Exception ex) when (!_stop && IsAccessDenied(ex.HResult))
+            {
+                // The privacy settings: every retry would fail the same way, with a warning every 2 s.
+                AccessDenied = true;
+                Error = L.T(AccessDeniedText);
+                Running = false;
+                Log.Warn($"mic: Windows refuses the microphone (0x{ex.HResult:X8}: {ex.Message}); see Settings → Privacy & security → " +
+                         "Microphone. Not retried until the mic is turned on again");
+                break;
             }
             catch (Exception ex) when (!_stop)
             {

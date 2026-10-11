@@ -654,7 +654,7 @@ public class UpdateInstallerTests(ITestOutputHelper output)
         var locations = UpdateInstaller.InstallLocations().ToList();
         output.WriteLine($"installed: {(locations.Count == 0 ? "none" : string.Join(", ", locations))}");
         Assert.False(UpdateInstaller.IsMsiInstall(Path.Combine(Path.GetTempPath(), "HomePodCast.exe")));
-        Assert.False(UpdateInstaller.IsStorePackage()); // the test host is no MSIX package
+        Assert.False(AppEnvironment.IsPackaged); // the test host is no MSIX package
     }
 
     [Fact]

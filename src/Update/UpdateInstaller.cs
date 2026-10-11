@@ -24,21 +24,6 @@ internal static partial class UpdateInstaller
     /// <summary>How long the helper waits for the app to finish quitting before it gives up (and installs nothing).</summary>
     private const int QuitTimeoutMs = 120_000;
 
-    /// <summary>
-    /// Running from an MSIX package: the Microsoft Store version (packaging/msix). The Store updates it, and Store policy
-    /// wants the app's own update check off, so it never asks GitHub (its package has no internetClient capability).
-    /// </summary>
-    public static bool IsStorePackage()
-    {
-        uint length = 0;
-        return GetCurrentPackageFullName(ref length, IntPtr.Zero) != AppModelErrorNoPackage;
-    }
-
-    private const int AppModelErrorNoPackage = 15700;
-
-    [LibraryImport("kernel32.dll")]
-    private static partial int GetCurrentPackageFullName(ref uint length, IntPtr packageFullName);
-
     /// <summary>The running exe was installed by our MSI (any version), from the folder Windows Installer has for it.</summary>
     public static bool IsMsiInstall(string exePath)
     {

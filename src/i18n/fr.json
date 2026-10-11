@@ -336,5 +336,20 @@
   "更新已取消，仍在使用当前版本。": "La mise à jour a été annulée ; la version actuelle reste utilisée.",
   "更新没有完成（{0}），仍在使用 {1}。可以在发布页下载安装包手动安装。": "La mise à jour n'a pas abouti ({0}) ; {1} reste utilisée. Vous pouvez télécharger le programme d'installation sur la page de la version et l'installer vous-même.",
   "更新没有完成，详情见「设置」→「软件更新」。": "La mise à jour n'a pas abouti. Détails dans Paramètres → Mises à jour.",
-  "Microsoft Store 版由 Microsoft Store 负责更新。": "La version Microsoft Store est mise à jour par le Microsoft Store."
+  "Microsoft Store 版由 Microsoft Store 负责更新。": "La version Microsoft Store est mise à jour par le Microsoft Store.",
+  "HomePodCast 安装时已经在 Windows 防火墙里添加了放行规则（专用网络），但音箱的连接还是到不了本程序。\n\n可能是其他防火墙或安全软件拦截了 HomePodCast，也可能是 Windows 防火墙里另有一条阻止它的规则，或者安装时添加的规则被删掉了。\n\n请在安全软件里放行 HomePodCast。Microsoft Store 版的程序路径每次更新都会变，按路径放行的话，每次更新后要重新放行。规则被删掉时，从 Microsoft Store 重新安装 HomePodCast 就会加回来。": "À son installation, HomePodCast a ajouté au Pare-feu Windows des règles qui l'autorisent sur les réseaux privés, mais les connexions de l'enceinte n'arrivent toujours pas à ce programme.\n\nUn autre pare-feu ou logiciel de sécurité bloque peut-être HomePodCast, une autre règle du Pare-feu Windows le bloque, ou les règles ajoutées à l'installation ont été supprimées.\n\nAutorisez HomePodCast dans ce logiciel de sécurité. Le chemin du programme de la version Microsoft Store change à chaque mise à jour : si vous l'autorisez par son chemin, il faudra recommencer après chaque mise à jour. Si les règles ont été supprimées, réinstaller HomePodCast depuis le Microsoft Store les ajoute de nouveau.",
+  "音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接": "Les demandes de synchronisation d'horloge de l'enceinte n'arrivent pas à ce programme ; un pare-feu ou un logiciel de sécurité bloque peut-être les connexions entrantes vers HomePodCast",
+  "读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。": "Impossible de savoir si HomePodCast démarre avec Windows. Vous pouvez aussi l'activer ou le désactiver dans Paramètres Windows → Applications → Démarrage.",
+  "已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。": "Désactivé dans la page \"Démarrage\" des Paramètres Windows ; il ne peut être réactivé que là.",
+  "开机启动由组织的策略管理。": "Le démarrage avec Windows est géré par la stratégie de votre organisation.",
+  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "Le démarrage de HomePodCast avec Windows a été désactivé dans les Paramètres Windows et ne peut être réactivé que là.\n\nCliquez sur \"Oui\" pour ouvrir la page \"Démarrage\" des Paramètres Windows, puis activez HomePodCast.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风": "Les paramètres de confidentialité de Windows n'autorisent pas HomePodCast à utiliser le microphone",
+  "打开麦克风隐私设置": "Ouvrir les paramètres de confidentialité du microphone",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Les paramètres de confidentialité de Windows n'autorisent pas HomePodCast à utiliser le microphone. Après l'avoir autorisé, désactivez puis réactivez le microphone.",
+  "无法使用麦克风": "Microphone indisponible",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Les paramètres de confidentialité de Windows n'autorisent pas HomePodCast à utiliser le microphone.\n\nDans Paramètres Windows → Confidentialité et sécurité → Microphone, activez \"Accès au microphone\" et HomePodCast dans la liste des applications, puis désactivez et réactivez le microphone.\n\nCliquez sur \"Oui\" pour ouvrir les Paramètres Windows.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Les paramètres de confidentialité de Windows n'autorisent pas HomePodCast à utiliser le microphone.\n\nDans Paramètres Windows → Confidentialité et sécurité → Microphone, activez \"Accès au microphone\" et \"Autoriser les applications de bureau à accéder à votre microphone\", puis désactivez et réactivez le microphone.\n\nCliquez sur \"Oui\" pour ouvrir les Paramètres Windows.",
+  "打开日志文件夹": "Ouvrir le dossier des journaux",
+  "日志": "Journal",
+  "报告问题时请附上这个文件夹里的 {0}：\n{1}": "Pour signaler un problème, joignez {0} de ce dossier :\n{1}"
 }

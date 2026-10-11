@@ -336,5 +336,20 @@
   "更新已取消，仍在使用当前版本。": "The update was canceled; the current version is still in use.",
   "更新没有完成（{0}），仍在使用 {1}。可以在发布页下载安装包手动安装。": "The update didn't finish ({0}); still using {1}. You can download the installer from the release page and install it yourself.",
   "更新没有完成，详情见「设置」→「软件更新」。": "The update didn't finish. See Settings → Updates for details.",
-  "Microsoft Store 版由 Microsoft Store 负责更新。": "The Microsoft Store version is updated by the Microsoft Store."
+  "Microsoft Store 版由 Microsoft Store 负责更新。": "The Microsoft Store version is updated by the Microsoft Store.",
+  "HomePodCast 安装时已经在 Windows 防火墙里添加了放行规则（专用网络），但音箱的连接还是到不了本程序。\n\n可能是其他防火墙或安全软件拦截了 HomePodCast，也可能是 Windows 防火墙里另有一条阻止它的规则，或者安装时添加的规则被删掉了。\n\n请在安全软件里放行 HomePodCast。Microsoft Store 版的程序路径每次更新都会变，按路径放行的话，每次更新后要重新放行。规则被删掉时，从 Microsoft Store 重新安装 HomePodCast 就会加回来。": "When HomePodCast was installed, it added rules to Windows Firewall that allow it on private networks, but the speaker's connections still don't reach this program.\n\nAnother firewall or security program may be blocking HomePodCast, another Windows Firewall rule may be blocking it, or the rules added at installation may have been deleted.\n\nAllow HomePodCast in that security program. The Microsoft Store version's program path changes with every update, so if you allow it by path, you have to allow it again after each update. If the rules were deleted, reinstalling HomePodCast from the Microsoft Store adds them back.",
+  "音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接": "The speaker's clock-sync requests never reached this program; a firewall or security program may be blocking incoming connections to HomePodCast",
+  "读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。": "Couldn't read whether HomePodCast starts with Windows. You can also turn it on or off in Windows Settings → Apps → Startup.",
+  "已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。": "Turned off on the Startup page of Windows Settings; it can only be turned on again there.",
+  "开机启动由组织的策略管理。": "Starting with Windows is managed by your organization's policy.",
+  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "Starting HomePodCast with Windows was turned off in Windows Settings and can only be turned on again there.\n\nClick Yes to open the Startup page of Windows Settings, then turn on HomePodCast.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风": "Windows privacy settings don't allow HomePodCast to use the microphone",
+  "打开麦克风隐私设置": "Open microphone privacy settings",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Windows privacy settings don't allow HomePodCast to use the microphone. Once you allow it, turn the microphone off and on again.",
+  "无法使用麦克风": "Can't use the microphone",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows privacy settings don't allow HomePodCast to use the microphone.\n\nIn Windows Settings → Privacy & security → Microphone, turn on \"Microphone access\" and HomePodCast in the list of apps, then turn the microphone off and on again.\n\nClick Yes to open Windows Settings.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows privacy settings don't allow HomePodCast to use the microphone.\n\nIn Windows Settings → Privacy & security → Microphone, turn on \"Microphone access\" and \"Let desktop apps access your microphone\", then turn the microphone off and on again.\n\nClick Yes to open Windows Settings.",
+  "打开日志文件夹": "Open log folder",
+  "日志": "Log",
+  "报告问题时请附上这个文件夹里的 {0}：\n{1}": "When you report a problem, please attach {0} from this folder:\n{1}"
 }

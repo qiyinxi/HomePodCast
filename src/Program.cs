@@ -55,9 +55,17 @@ public static class Program
 
         // Only the running instance opens the log: it keeps the file open for writing, so a second launch opening it
         // first threw, exited with 1 and never showed the window.
-        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
+        Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName));
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
-        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : ""));
+        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
+                 (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
+        // The Store version's startup task passes --tray (packaging/msix/AppxManifest.xml); if Windows didn't, the
+        // activation kind still says it was the startup task.
+        if (!startHidden && Autostart.StartedByStartupTask())
+        {
+            Log.Info("started by the startup task: into the tray");
+            startHidden = true;
+        }
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
         // tray). Not after crashes, hangs or reboots, and never for test copies.
@@ -74,11 +82,13 @@ public static class Program
         Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom));
         if (UI.LanguageMenu.RestartRequested)
         {
-            Log.Info("restarting to apply the UI language");
+            // The Store version starts again through its package (Explorer), so the new copy has package identity too.
+            var (file, arguments) = AppEnvironment.Relaunch;
+            Log.Info("restarting to apply the UI language" + (AppEnvironment.IsPackaged ? $": {file} {arguments}" : ""));
             Log.CloseFile(); // the new copy opens the same log file
             single.ReleaseMutex();
             single.Dispose(); // ...and must be able to create the single-instance mutex
-            Process.Start(Environment.ProcessPath!);
+            Process.Start(file, arguments);
         }
         return 0;
     }

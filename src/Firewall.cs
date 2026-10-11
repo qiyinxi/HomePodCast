@@ -9,6 +9,10 @@ namespace HomePodCast;
 /// explicitly approves via UAC. The MSI adds the same rule as "HomePodCast (installer)" (installer\HomePodCast.wxs);
 /// rules are matched by program path, not by name, so either one counts. Both rules are for Private networks only:
 /// on a Public network they don't apply (see <see cref="NetworkProfile"/>).
+/// The Microsoft Store version never adds a rule: its package brings two (packaging/msix/AppxManifest.xml, TCP and UDP,
+/// Private networks), which Windows creates at install for the exe's path in the package's folder under WindowsApps
+/// (a new folder for every version) and removes at uninstall. A rule may also name the package by its SID
+/// (INetFwRule3.LocalAppPackageId); both count.
 /// </summary>
 public static class Firewall
 {
@@ -17,12 +21,35 @@ public static class Firewall
 
     public static bool HasInboundAllowRule() => Inspect().PrivateRule;
 
+    /// <summary>
+    /// A rule with this program (<paramref name="ruleApplication"/>) and package (<paramref name="rulePackageSid"/>) is
+    /// for this exe: the same path (case-insensitive), or, for the Store version (<paramref name="packageSid"/> set),
+    /// the path with its environment variables expanded or the package's SID.
+    /// </summary>
+    internal static bool IsForThisApp(string? ruleApplication, string? rulePackageSid, string exe, string? packageSid)
+    {
+        if (ruleApplication != null && string.Equals(ruleApplication, exe, StringComparison.OrdinalIgnoreCase)) return true;
+        if (packageSid == null) return false;
+        if (ruleApplication != null && ruleApplication.Contains('%') &&
+            string.Equals(Environment.ExpandEnvironmentVariables(ruleApplication), exe, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return !string.IsNullOrEmpty(rulePackageSid) && string.Equals(rulePackageSid, packageSid, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A rule's LocalAppPackageId (INetFwRule3), or null if it has none or can't say.</summary>
+    private static string? PackageSidOf(object rule)
+    {
+        try { return (string?)((dynamic)rule).LocalAppPackageId; }
+        catch (Exception) { return null; }
+    }
+
     /// <summary>What Windows Firewall lets in for this exe. Enumerates every rule (COM): call it off the UI thread if you can.</summary>
     public static FirewallRules Inspect()
     {
         try
         {
             var exe = Environment.ProcessPath ?? "";
+            var packageSid = AppEnvironment.IsPackaged ? AppEnvironment.PackageSid ?? "" : null;
             var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
             if (policyType == null) return FirewallRules.Unknown;
             dynamic policy = Activator.CreateInstance(policyType)!;
@@ -31,8 +58,16 @@ public static class Firewall
             {
                 string? app = rule.ApplicationName;
                 // NET_FW_RULE_DIR_IN = 1; NET_FW_ACTION_BLOCK = 0, NET_FW_ACTION_ALLOW = 1
-                if (app == null || !string.Equals(app, exe, StringComparison.OrdinalIgnoreCase) || !rule.Enabled || rule.Direction != 1)
-                    continue;
+                if (packageSid == null)
+                {
+                    if (app == null || !string.Equals(app, exe, StringComparison.OrdinalIgnoreCase) || !rule.Enabled || rule.Direction != 1)
+                        continue;
+                }
+                else if (!rule.Enabled || rule.Direction != 1 ||
+                         !(IsForThisApp(app, null, exe, packageSid) || IsForThisApp(null, PackageSidOf((object)rule), exe, packageSid)))
+                {
+                    continue; // the package's SID is only read for rules whose path isn't ours
+                }
                 int profiles = rule.Profiles, action = rule.Action;
                 if (action == 1)
                 {
@@ -72,9 +107,14 @@ public static class Firewall
         }
     }
 
-    /// <summary>Ask (via UAC) to add a Private-profile, local-subnet-only inbound rule for this exe.</summary>
+    /// <summary>Ask (via UAC) to add a Private-profile, local-subnet-only inbound rule for this exe. Never for the Store version.</summary>
     public static bool RequestRule()
     {
+        if (AppEnvironment.IsPackaged)
+        {
+            Log.Warn("firewall: the Microsoft Store version never adds a rule (its package brings them)");
+            return false;
+        }
         try
         {
             using var p = Process.Start(new ProcessStartInfo("powershell.exe", RuleArguments(Environment.ProcessPath!))

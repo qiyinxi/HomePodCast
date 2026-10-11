@@ -336,5 +336,20 @@
   "更新已取消，仍在使用当前版本。": "Opdateringen blev annulleret; den nuværende version bruges stadig.",
   "更新没有完成（{0}），仍在使用 {1}。可以在发布页下载安装包手动安装。": "Opdateringen blev ikke gennemført ({0}); {1} bruges stadig. Du kan hente installationspakken fra udgivelsessiden og installere den selv.",
   "更新没有完成，详情见「设置」→「软件更新」。": "Opdateringen blev ikke gennemført. Se detaljer under Indstillinger → Opdateringer.",
-  "Microsoft Store 版由 Microsoft Store 负责更新。": "Microsoft Store-versionen opdateres via Microsoft Store."
+  "Microsoft Store 版由 Microsoft Store 负责更新。": "Microsoft Store-versionen opdateres via Microsoft Store.",
+  "HomePodCast 安装时已经在 Windows 防火墙里添加了放行规则（专用网络），但音箱的连接还是到不了本程序。\n\n可能是其他防火墙或安全软件拦截了 HomePodCast，也可能是 Windows 防火墙里另有一条阻止它的规则，或者安装时添加的规则被删掉了。\n\n请在安全软件里放行 HomePodCast。Microsoft Store 版的程序路径每次更新都会变，按路径放行的话，每次更新后要重新放行。规则被删掉时，从 Microsoft Store 重新安装 HomePodCast 就会加回来。": "Da HomePodCast blev installeret, tilføjede det regler i Windows Firewall, der tillader det på private netværk, men højttalerens forbindelser når stadig ikke frem til programmet.\n\nMåske blokerer en anden firewall eller et sikkerhedsprogram HomePodCast, en anden regel i Windows Firewall blokerer det, eller også er reglerne fra installationen blevet slettet.\n\nTillad HomePodCast i sikkerhedsprogrammet. Programstien for Microsoft Store-versionen ændrer sig ved hver opdatering: Hvis du tillader det efter sti, skal du tillade det igen efter hver opdatering. Hvis reglerne er blevet slettet, tilføjer en geninstallation af HomePodCast fra Microsoft Store dem igen.",
+  "音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接": "Højttalerens anmodninger om ursynkronisering nåede aldrig frem til programmet; måske blokerer en firewall eller et sikkerhedsprogram indgående forbindelser til HomePodCast",
+  "读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。": "Det kunne ikke læses, om HomePodCast starter sammen med Windows. Du kan også slå det til eller fra under Windows-indstillinger → Apps → Start.",
+  "已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。": "Slået fra på siden \"Start\" i Windows-indstillinger; det kan kun slås til igen der.",
+  "开机启动由组织的策略管理。": "Start sammen med Windows styres af din organisations politik.",
+  "HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。": "Start af HomePodCast sammen med Windows er slået fra i Windows-indstillinger og kan kun slås til igen der.\n\nKlik på Ja for at åbne siden \"Start\" i Windows-indstillinger, og slå HomePodCast til.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风": "Windows' indstillinger for beskyttelse af personlige oplysninger tillader ikke, at HomePodCast bruger mikrofonen",
+  "打开麦克风隐私设置": "Åbn indstillinger for mikrofonadgang",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Windows' indstillinger for beskyttelse af personlige oplysninger tillader ikke, at HomePodCast bruger mikrofonen. Slå mikrofonen fra og til igen, når du har tilladt det.",
+  "无法使用麦克风": "Mikrofonen kan ikke bruges",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows' indstillinger for beskyttelse af personlige oplysninger tillader ikke, at HomePodCast bruger mikrofonen.\n\nSlå \"Mikrofonadgang\" og HomePodCast på listen over apps til under Windows-indstillinger → Beskyttelse af personlige oplysninger og sikkerhed → Mikrofon, og slå derefter mikrofonen fra og til igen.\n\nKlik på Ja for at åbne Windows-indstillinger.",
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windows' indstillinger for beskyttelse af personlige oplysninger tillader ikke, at HomePodCast bruger mikrofonen.\n\nSlå \"Mikrofonadgang\" og \"Giv skrivebordsapps adgang til din mikrofon\" til under Windows-indstillinger → Beskyttelse af personlige oplysninger og sikkerhed → Mikrofon, og slå derefter mikrofonen fra og til igen.\n\nKlik på Ja for at åbne Windows-indstillinger.",
+  "打开日志文件夹": "Åbn logmappen",
+  "日志": "Log",
+  "报告问题时请附上这个文件夹里的 {0}：\n{1}": "Vedhæft {0} fra denne mappe, når du rapporterer et problem:\n{1}"
 }

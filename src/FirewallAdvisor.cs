@@ -23,7 +23,7 @@ public enum FirewallPrompt
     /// <summary>The speaker's network is Public, where our rule (Private only) doesn't apply: change it in Settings.</summary>
     PublicNetwork,
 
-    /// <summary>There is no rule for this exe yet: offer to add one (UAC).</summary>
+    /// <summary>There is no rule for this exe yet: offer to add one (UAC). Never for the Store version.</summary>
     AddRule,
 
     /// <summary>Blocked although the firewall lets us in: another firewall, a security program or a block rule.</summary>
@@ -35,7 +35,8 @@ public enum FirewallPrompt
 /// run (the Public network one once per network), never two at a time. The firewall and the network are read through
 /// the two functions given (Firewall.Inspect, NetworkProfile.ForSpeaker; tests pass their own).
 /// </summary>
-internal sealed class FirewallAdvisor(Func<FirewallRules> rules, Func<IPAddress?, NetworkProfile> network)
+/// <param name="packaged">The Microsoft Store version (AppEnvironment.IsPackaged): its package brings the rules.</param>
+internal sealed class FirewallAdvisor(Func<FirewallRules> rules, Func<IPAddress?, NetworkProfile> network, bool packaged = false)
 {
     private readonly HashSet<string> _shown = new(StringComparer.Ordinal);
     private string? _lastLog;
@@ -44,9 +45,13 @@ internal sealed class FirewallAdvisor(Func<FirewallRules> rules, Func<IPAddress?
     /// What to show for <paramref name="category"/>, the category of the speaker's network.
     /// Startup: as before, offer the rule if it's missing. NetworkChanged: only the Public network warning.
     /// Blocked: the cause, if it can be told; never a second copy of a rule that is already there.
+    /// <paramref name="packaged"/> (the Store version): the manifest's rules (Private networks) come with the package and
+    /// count as there even when no rule could be matched to the exe, so the rule is never offered; the Public network
+    /// warning stays, and a block on a Private network is somebody else's.
     /// </summary>
-    internal static FirewallPrompt Decide(FirewallTrigger trigger, FirewallRules rules, NetworkCategory category)
+    internal static FirewallPrompt Decide(FirewallTrigger trigger, FirewallRules rules, NetworkCategory category, bool packaged = false)
     {
+        if (packaged) rules = rules with { PrivateRule = true };
         // Our rule only applies on Private networks: on a Public one that is the thing to fix, whatever else is true.
         if (category == NetworkCategory.Public && !rules.PublicAllowed) return FirewallPrompt.PublicNetwork;
         if (trigger == FirewallTrigger.NetworkChanged || !rules.Known) return FirewallPrompt.None;
@@ -80,7 +85,7 @@ internal sealed class FirewallAdvisor(Func<FirewallRules> rules, Func<IPAddress?
             Log.Warn($"firewall check failed: {ex.Message}");
             fw = FirewallRules.Unknown;
         }
-        var prompt = Decide(trigger, fw, net.Category);
+        var prompt = Decide(trigger, fw, net.Category, packaged);
         LogChecked(speaker, net, fw, prompt);
         return (prompt, net);
     }
@@ -100,6 +105,8 @@ internal sealed class FirewallAdvisor(Func<FirewallRules> rules, Func<IPAddress?
                 : "; blocked although a firewall rule allows HomePodCast.exe: another firewall or security program may be blocking it";
         else
             warn = false;
+        if (packaged && fw is { Known: true, PrivateRule: false })
+            line += "; no rule of the package found for this exe (by path or package SID): the manifest's rules are assumed";
         if (Interlocked.Exchange(ref _lastLog, line) == line) return;
         if (warn) Log.Warn(line);
         else Log.Info(line);
