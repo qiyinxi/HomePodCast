@@ -49,7 +49,7 @@ internal static class GroupCli
         var sw = Stopwatch.StartNew();
         using var group = await SpeakerGroup.ConnectAsync(setups, fifo, volume, CancellationToken.None);
         Log.Info($"group streaming after {sw.ElapsedMilliseconds} ms setup; " + string.Join(", ", group.Members.Select((m, i) =>
-            $"{setups[i].Label}: {m!.Name} a2r={m.ArrivalToRenderMs}ms {group.Sender!.Streams[i].Channels}")));
+            $"{setups[i].Label}: {Log.Name(m!.Name)} a2r={m.ArrivalToRenderMs}ms {group.Sender!.Streams[i].Channels}")));
 
         var s = group.Sender!;
         for (int t = 1; t <= seconds && !group.Lost.IsCompleted; t++)
@@ -82,7 +82,7 @@ internal static class GroupCli
             : pairs.Count == 1 && StereoPairs.TryGetTsid(pairs[0].DeviceId, out var only) ? only
             : throw new ArgumentException($"--pair: {pairs.Count} stereo pairs found; give the tsid (see scan)");
         var targets = (plan with { PairTsid = tsid, Name = tsid }).PairTargets(devices);
-        Log.Info($"pair {tsid}: connecting {string.Join(", ", targets.Select(d => $"{d.Name} {d.Address}"))}" +
+        Log.Info($"pair {tsid}: connecting {string.Join(", ", targets.Select(d => $"{Log.Name(d.Name)} {d.Address}"))}" +
                  (plan.PairLeaderOnly ? " (leader only)" : ""));
         return targets.Select(d => d.Address).ToList();
     }

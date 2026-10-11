@@ -46,6 +46,7 @@ internal sealed class SpeakerGroup : IDisposable
     private readonly IGroupMember?[] _members;
     private readonly AudioFifo _fifo;
     private readonly TaskCompletionSource<string> _lost = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private string? _lostForLog;
     private Exception? _firstError;
     private int _firstErrorIndex;
     private RtpSender? _sender;
@@ -108,7 +109,7 @@ internal sealed class SpeakerGroup : IDisposable
             await group.EachAsync((m, i) => m.SetVolumePercent(
                 MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), ct);
 
-            Log.Info($"group streaming: {string.Join(" + ", setups.Select((s, i) => $"{s.Label} [{sender.Streams[i].Channels}]"))}, " +
+            Log.Info($"group streaming: {string.Join(" + ", setups.Select((s, i) => $"{MemberForLog(s, i)} [{sender.Streams[i].Channels}]"))}, " +
                      $"rtpBase={sender.RtpBase} latency={sender.LatencyFrames} frames");
             return group;
         }
@@ -177,14 +178,15 @@ internal sealed class SpeakerGroup : IDisposable
         {
             if (_lost.Task.IsCompleted) return;
             LostReason = reason;
-            Log.Warn($"group: {_setups[index].Label} lost ({reason}); reconnecting all speakers");
+            _lostForLog = $"{MemberForLog(_setups[index], index)} lost ({reason})";
+            Log.Warn($"group: {_lostForLog}; reconnecting all speakers");
             _lost.TrySetResult(L.F("{0}：{1}", _setups[index].Label, reason));
         }
     }
 
     private void ThrowIfLost()
     {
-        if (_lost.Task.IsCompleted) throw new AirPlayException(_lost.Task.Result);
+        if (_lost.Task.IsCompleted) throw new AirPlayException(_lost.Task.Result) { LogMessage = _lostForLog };
     }
 
     /// <summary>Linked volume: each speaker gets the shared volume plus its own offset, never above the cap.</summary>
@@ -196,7 +198,7 @@ internal sealed class SpeakerGroup : IDisposable
         {
             if (_members[i] is not { } m) continue;
             try { m.SetVolumePercent(MemberVolume(master, _setups[i].VolumeOffset, cap)); }
-            catch (Exception ex) { Log.Warn($"group volume, {_setups[i].Label}: {ex.Message}"); }
+            catch (Exception ex) { Log.Warn($"group volume, {MemberForLog(_setups[i], i)}: {ex.Message}"); }
         }
     }
 
@@ -211,11 +213,14 @@ internal sealed class SpeakerGroup : IDisposable
     {
         if (_sender is not { } s) return;
         var legs = string.Join(" | ", s.Streams.Select((st, i) =>
-            $"{_setups[i].Label}: sent={st.PacketsSent} rtx={st.Retransmitted}/{st.RetransmitRequests} rtxMiss={st.RetransmitMisses}"));
+            $"{MemberForLog(_setups[i], i)}: sent={st.PacketsSent} rtx={st.Retransmitted}/{st.RetransmitRequests} rtxMiss={st.RetransmitMisses}"));
         Log.Info($"group stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms underruns={_fifo.Underruns} " +
                  $"overflows={_fifo.Overflows} sent={s.PacketsSent} late={s.LateWakeups} maxLate={s.MaxLateMs:F1}ms " +
                  $"skipped={s.SkippedPackets} | {legs}");
     }
+
+    /// <summary>A member in the log: its number in the group (which stays in a diagnostic report) and its marked label.</summary>
+    internal static string MemberForLog(MemberSetup setup, int index) => $"#{index + 1} {Log.Name(setup.Label)}";
 
     public void Dispose()
     {

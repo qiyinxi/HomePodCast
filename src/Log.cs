@@ -28,6 +28,24 @@ public static class Log
         }
     }
 
+    /// <summary>Start and end of a <see cref="Name"/> in a log line (the console shows the name without them).</summary>
+    public const char NameStart = '‹', NameEnd = '›';
+
+    /// <summary>
+    /// A speaker, group member or device name for a log line, marked so that the diagnostic export removes it whatever it
+    /// is (DiagnosticReports.Redact): every log line that names one goes through here.
+    /// </summary>
+    public static string Name(object? name)
+    {
+        // A marker or a line break inside the name would end the marked span early.
+        string text = (name?.ToString() ?? "").Replace(NameStart, '<').Replace(NameEnd, '>').Replace('\r', ' ').Replace('\n', ' ');
+        return $"{NameStart}{text}{NameEnd}";
+    }
+
+    /// <summary>A log line without the <see cref="Name"/> markers.</summary>
+    internal static string Plain(string line) =>
+        line.IndexOf(NameStart) < 0 && line.IndexOf(NameEnd) < 0 ? line : line.Replace(NameStart.ToString(), "").Replace(NameEnd.ToString(), "");
+
     public static void Info(string msg) => Write("INFO", msg);
     public static void Warn(string msg) => Write("WARN", msg);
     public static void Error(string msg) => Write("ERROR", msg);
@@ -45,7 +63,7 @@ public static class Log
         var line = $"{DateTime.Now:HH:mm:ss.fff} {level,-5} {msg}";
         lock (Lock)
         {
-            if (ToConsole) Console.WriteLine(line);
+            if (ToConsole) Console.WriteLine(Plain(line));
             _file?.WriteLine(line);
         }
         Written?.Invoke(line);
