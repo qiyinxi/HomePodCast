@@ -43,7 +43,6 @@ public static class Program
     private static int RunGui(bool startHidden, bool openMixer, bool openFlyout, string? testOsd)
     {
         Log.ToConsole = false;
-        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
 
         var suffix = AppConfig.Profile is { } p ? "." + p : "";
         using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
@@ -54,6 +53,9 @@ public static class Program
             return 0;
         }
 
+        // Only the running instance opens the log: it keeps the file open for writing, so a second launch opening it
+        // first threw, exited with 1 and never showed the window.
+        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
         Log.Info($"HomePodCast {typeof(Program).Assembly.GetName().Version} starting");
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
