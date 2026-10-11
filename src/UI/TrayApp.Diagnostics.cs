@@ -30,6 +30,28 @@ internal sealed partial class TrayApp
             FileName = $"HomePodCast-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip", OverwritePrompt = true,
         };
         if (picker.ShowDialog(owner) != DialogResult.OK) return;
+        try // async void: nothing may escape
+        {
+            var (snapshot, identifiers) = DiagnosticInputs();
+            string destination = picker.FileName;
+            string log = Path.Combine(AppConfig.Directory, AppConfig.LogFileName);
+            await Task.Run(() => DiagnosticReports.Export(destination, snapshot, identifiers, log, log + ".old"));
+            if (!_quitting) MessageBox.Show(owner, L.T("诊断报告已保存。分享前可以检查其中的内容。"), L.T("导出诊断报告"));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"diagnostic export failed: {ex.Message}");
+            if (!_quitting) MessageBox.Show(owner, L.T("导出失败，请检查保存位置后重试。"), L.T("导出诊断报告"));
+        }
+    }
+
+    /// <summary>
+    /// The report's measurements, and the names and ids the settings know (the speakers, the capture, mic and monitor
+    /// devices, the network, the PC) for the redaction to look for besides what the log marked. Profile names are not
+    /// among them: they are the user's labels for setups, not names of devices or places.
+    /// </summary>
+    private (DiagnosticSnapshot Snapshot, List<string?> Identifiers) DiagnosticInputs()
+    {
         var c = Controller;
         var sender = c.ActiveSender;
         var capture = c.Capture;
@@ -48,29 +70,21 @@ internal sealed partial class TrayApp
             capture?.NoOutputDevice ?? false, verdict, _glitchMarkers.ToArray());
         var identifiers = new List<string?>
         {
-            Config.DeviceId, Config.DeviceName, Config.Host, Config.MultiRoomDeviceId, Config.MultiRoomDeviceName,
-            Config.MultiRoomHost, Config.CaptureDeviceId, Config.CaptureDeviceName, capture?.DeviceName, capture?.EndpointId,
-            Config.Effects.MicDeviceId, Config.Effects.MonitorDeviceId, network?.Name, network?.Interface,
-            info?.GetValueOrDefault("name")?.ToString(),
+            Config.DeviceName, Config.Host, Config.MultiRoomDeviceName, Config.MultiRoomHost, Config.CaptureDeviceId,
+            Config.CaptureDeviceName, capture?.DeviceName, capture?.EndpointId, Config.Effects.MicDeviceId,
+            Config.Effects.MonitorDeviceId, network?.Name, network?.Interface, info?.GetValueOrDefault("name")?.ToString(),
             Environment.UserName, Environment.MachineName, AppConfig.Directory,
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         };
-        foreach (var profile in Config.UsageProfiles)
-            identifiers.AddRange([profile.Name, profile.Settings.DeviceId, profile.Settings.DeviceName, profile.Settings.Host,
-                profile.Settings.CaptureDeviceId, profile.Settings.CaptureDeviceName, profile.Settings.MultiRoomDeviceId,
-                profile.Settings.MultiRoomDeviceName, profile.Settings.MultiRoomHost, profile.Settings.Effects.MicDeviceId,
-                profile.Settings.Effects.MonitorDeviceId]);
-        try
+        identifiers.AddRange(DiagnosticReports.IdForms(Config.DeviceId));
+        identifiers.AddRange(DiagnosticReports.IdForms(Config.MultiRoomDeviceId));
+        foreach (var s in Config.UsageProfiles.Select(p => p.Settings))
         {
-            string destination = picker.FileName;
-            string log = Path.Combine(AppConfig.Directory, "homepodcast.log");
-            await Task.Run(() => DiagnosticReports.Export(destination, snapshot, identifiers, log, log + ".old"));
-            if (!_quitting) MessageBox.Show(owner, L.T("诊断报告已保存。分享前可以检查其中的内容。"), L.T("导出诊断报告"));
+            identifiers.AddRange([s.DeviceName, s.Host, s.CaptureDeviceId, s.CaptureDeviceName, s.MultiRoomDeviceName,
+                s.MultiRoomHost, s.Effects.MicDeviceId, s.Effects.MonitorDeviceId]);
+            identifiers.AddRange(DiagnosticReports.IdForms(s.DeviceId));
+            identifiers.AddRange(DiagnosticReports.IdForms(s.MultiRoomDeviceId));
         }
-        catch (Exception ex)
-        {
-            Log.Warn($"diagnostic export failed: {ex.Message}");
-            if (!_quitting) MessageBox.Show(owner, L.T("导出失败，请检查保存位置后重试。"), L.T("导出诊断报告"));
-        }
+        return (snapshot, identifiers);
     }
 }
