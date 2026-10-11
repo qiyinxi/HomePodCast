@@ -126,5 +126,42 @@
   },
   "videosNotDelayed": {
     "message": "sem atraso"
+  },
+  "syncFullscreen": {
+    "message": "Ecrã inteiro sincronizado"
+  },
+  "syncExitFullscreen": {
+    "message": "Sair do ecrã inteiro"
+  },
+  "syncFullscreenTitle": {
+    "message": "Manter o vídeo e o áudio do HomePod sincronizados em ecrã inteiro."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Shift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Atraso de imagem $DELAY$ ms · Ajuste do site $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "O ecrã inteiro não está disponível. Saia do modo atual ou permita o ecrã inteiro neste leitor e tente novamente."
+  },
+  "syncPopupHint": {
+    "message": "Use «Ecrã inteiro sincronizado» no vídeo. Em ecrã inteiro, Alt+←/→ ajusta 5 ms; adicione Shift para 20 ms. As alterações são guardadas para este site."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Ajustar a correção do site em $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
   }
 }

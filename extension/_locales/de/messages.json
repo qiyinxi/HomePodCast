@@ -39,5 +39,42 @@
   "videosDrm": { "message": "kopiergeschützt (DRM), nicht verzögerbar" },
   "videosFullscreen": { "message": "nicht verzögerbar, solange das Videoelement selbst im Vollbild ist" },
   "videosPlayerUnsupported": { "message": "der Player dieser Seite unterstützt keine Bildverzögerung" },
-  "videosNotDelayed": { "message": "nicht verzögert" }
+  "videosNotDelayed": { "message": "nicht verzögert" },
+  "syncFullscreen": {
+    "message": "Synchronisiertes Vollbild"
+  },
+  "syncExitFullscreen": {
+    "message": "Vollbild beenden"
+  },
+  "syncFullscreenTitle": {
+    "message": "Video und HomePod-Audio auch im Vollbild synchron halten."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Umschalt+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Bildverzögerung $DELAY$ ms · Website-Offset $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Vollbild ist nicht verfügbar. Beende das aktuelle Vollbild oder erlaube Vollbild für diesen Player und versuche es erneut."
+  },
+  "syncPopupHint": {
+    "message": "Nutze „Synchronisiertes Vollbild“ am Video. Im Vollbild passt Alt+←/→ um 5 ms an, mit Umschalt um 20 ms. Änderungen werden für diese Website gespeichert."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Website-Offset um $DELTA$ ms anpassen",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

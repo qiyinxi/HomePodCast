@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HomePodCast synchronized fullscreen demo</title>
+  <style>
+    body { margin: 32px; font: 14px/1.5 system-ui, sans-serif; background: #f4f4f6; color: #242428; }
+    main { max-width: 960px; margin: auto; }
+    .player { width: min(720px, 100%); background: #000; }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; }
+    button, input { font: inherit; margin: 6px; }
+    pre { white-space: pre-wrap; padding: 12px; background: #fff; border-radius: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Synchronized fullscreen demo</h1>
+  <p>This generated video uses the real delay engine with a simulated streaming app (141 ms).
+    Click “Sync fullscreen” on the video, then try the ±5 / ±20 ms buttons and Alt+←/→ (add Shift for 20 ms).
+    Escape restores the player. Settings are saved locally for this demo.</p>
+  <div class="player"><video id="video" muted autoplay controls playsinline></video></div>
+  <button id="native" type="button">Native video fullscreen (delay stops)</button>
+  <label>Typing shortcut suppression <input placeholder="Alt+arrows leave editors alone"></label>
+  <pre id="stats"></pre>
+</main>
+<script>
+(async () => {
+  const messages = await fetch('../_locales/en/messages.json').then((r) => r.json());
+  const changes = [];
+  const storageKey = 'hpc-sync-controls-demo';
+  let data = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  const save = (items, removed) => {
+    const changed = {};
+    if (removed) for (const key of items) { changed[key] = { oldValue: data[key] }; delete data[key]; }
+    else for (const [key, value] of Object.entries(items)) { changed[key] = { oldValue: data[key], newValue: value }; data[key] = value; }
+    localStorage.setItem(storageKey, JSON.stringify(data));
+    for (const callback of changes) callback(changed, 'sync');
+  };
+  globalThis.chrome = {
+    i18n: { getMessage: (key, subs = []) => {
+      const message = messages[key];
+      return message ? message.message.replace(/\$([A-Z]+)\$/g, (_, name) => subs[Number(message.placeholders[name.toLowerCase()].content.slice(1)) - 1]) : '';
+    } },
+    storage: { sync: { get: (_keys, callback) => callback(data), set: (items, callback) => { save(items, false); callback?.(); },
+      remove: (keys, callback) => { save(Array.isArray(keys) ? keys : [keys], true); callback?.(); } }, onChanged: { addListener: (callback) => changes.push(callback) } },
+    runtime: { id: 'demo', onMessage: { addListener() {} }, sendMessage: (_message, callback) => callback({ running: true, streaming: true, videoDelayMs: 141 }) },
+  };
+  const source = document.createElement('canvas'); source.width = 1280; source.height = 720;
+  const context = source.getContext('2d'); let frame = 0;
+  const draw = () => {
+    context.fillStyle = '#14314a'; context.fillRect(0, 0, 1280, 720);
+    context.fillStyle = '#79c6ff'; context.fillRect((frame * 8) % 1280, 0, 12, 720);
+    context.fillStyle = '#fff'; context.font = '44px system-ui';
+    context.fillText(`Frame ${frame++}`, 48, 80); context.fillText('HomePodCast video synchronization', 48, 365);
+    requestAnimationFrame(draw);
+  };
+  draw();
+  const video = document.getElementById('video'); video.srcObject = source.captureStream(60);
+  document.getElementById('native').onclick = () => video.requestFullscreen();
+  for (const name of ['delay-engine', 'sync-controls', 'content']) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script'); script.src = `../src/${name}.js`; script.onload = resolve; script.onerror = reject; document.body.appendChild(script);
+    });
+  }
+  setInterval(() => {
+    document.getElementById('stats').textContent = JSON.stringify(globalThis.__hpcContentDebug.stats(), null, 2);
+  }, 500);
+})();
+</script>
+</body>
+</html>

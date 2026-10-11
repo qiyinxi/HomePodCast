@@ -126,5 +126,42 @@
   },
   "videosNotDelayed": {
     "message": "ikke forsinket"
+  },
+  "syncFullscreen": {
+    "message": "Synkroniseret fuldskærm"
+  },
+  "syncExitFullscreen": {
+    "message": "Afslut fuldskærm"
+  },
+  "syncFullscreenTitle": {
+    "message": "Hold video og HomePod-lyd synkroniseret i fuldskærm."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Skift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Billedforsinkelse $DELAY$ ms · Webstedsjustering $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Fuldskærm er ikke tilgængelig. Afslut den aktuelle fuldskærm, eller tillad fuldskærm for afspilleren, og prøv igen."
+  },
+  "syncPopupHint": {
+    "message": "Brug “Synkroniseret fuldskærm” på videoen. I fuldskærm justerer Alt+←/→ med 5 ms; tilføj Skift for 20 ms. Ændringer gemmes for webstedet."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Juster webstedsforskydningen med $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
   }
 }

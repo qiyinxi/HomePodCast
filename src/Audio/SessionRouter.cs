@@ -37,8 +37,10 @@ internal sealed class SessionRouter : IDisposable
     private readonly ManualResetEventSlim _firstPlan = new();
     private readonly Thread _thread;
     private readonly CompensationGate _gate = new(ConfirmDelay, VerifyWindow);
+    private readonly SendVolumeGain _sendGain = new(ConfirmDelay, VerifyWindow);
     private readonly HashSet<uint> _unverified = [];
     private readonly Dictionary<string, Tracked> _silenced = [];   // by session instance id
+    private readonly Dictionary<string, Tracked> _sendOnly = [];   // monitored, never written/restored
     private readonly object _lock = new();
     private volatile bool _stop;
     private volatile bool _refresh = true;
@@ -88,6 +90,8 @@ internal sealed class SessionRouter : IDisposable
     /// </summary>
     public bool IsConfirmed(uint root, long now) => _gate.IsOpen(root, now);
 
+    public float SendNormalization(uint root, long now) => _sendGain.For(root, now);
+
     /// <summary>The gate itself (tests).</summary>
     internal CompensationGate Gate => _gate;
 
@@ -99,7 +103,10 @@ internal sealed class SessionRouter : IDisposable
     /// </summary>
     internal void OnSessionVolume(uint root, float volume, Guid context, long now)
     {
-        if (context == _context || !SessionAttenuation.IsAudible(volume)) return;
+        var target = _plan.Targets.FirstOrDefault(t => t.RootPid == root);
+        if (target?.SendVolumePercent != null)
+            _sendGain.Changed(root, now); // even a mute or our own local-volume change invalidates the inverse
+        if (context == _context || !SessionAttenuation.IsAudible(volume) || target is { Compensate: false }) return;
         _gate.Silenced(root, now);
         _wake.Set(); // straight to CheckVolumes (no full refresh)
     }
@@ -178,12 +185,14 @@ internal sealed class SessionRouter : IDisposable
     private void Apply(RoutePlan plan, List<SessionInfo> sessions, bool first, HashSet<object> kept)
     {
         var want = plan.Silenced.Where(s => _isCapturing(s.TargetRoot)).ToDictionary(s => s.SessionPid, s => s.TargetRoot);
+        var sendWant = plan.SendSessions.Where(s => _isCapturing(s.TargetRoot)).ToDictionary(s => s.SessionPid, s => s.TargetRoot);
         long now = Stopwatch.GetTimestamp();
         var changed = new HashSet<uint>();
         lock (_lock)
         {
             if (_stop) return; // exiting: RestoreAll has run or is about to; silence nothing again
             foreach (var t in _silenced.Values) t.Seen = false;
+            foreach (var t in _sendOnly.Values) t.Seen = false;
             foreach (var s in sessions)
             {
                 if (s.IsSystem) continue;
@@ -191,6 +200,7 @@ internal sealed class SessionRouter : IDisposable
                 if (volume.GetMasterVolume(out float raw) < 0) continue;
                 if (want.TryGetValue(s.Pid, out uint root))
                 {
+                    if (_sendOnly.Remove(s.InstanceId, out var monitored)) ReleaseTracked(monitored);
                     if (!SessionAttenuation.IsAttenuated(raw) && raw > 0)
                     {
                         volume.SetMasterVolume(SessionAttenuation.Attenuated(raw), ref _context);
@@ -215,6 +225,19 @@ internal sealed class SessionRouter : IDisposable
                 {
                     Restore(volume, s.Pid); // left over from a run that did not exit cleanly
                 }
+
+                if (!want.ContainsKey(s.Pid) && sendWant.TryGetValue(s.Pid, out uint sendRoot))
+                {
+                    if (!_sendOnly.TryGetValue(s.InstanceId, out var monitored))
+                    {
+                        _sendOnly[s.InstanceId] = monitored = new Tracked { Session = s.Session, Pid = s.Pid, Root = sendRoot };
+                        kept.Add(s.Session);
+                        Watch(monitored);
+                        _sendGain.Changed(sendRoot, now);
+                    }
+                    monitored.Root = sendRoot;
+                    monitored.Seen = true;
+                }
             }
             foreach (var (id, t) in _silenced.Where(kv => !kv.Value.Seen).ToList())
             {
@@ -222,6 +245,12 @@ internal sealed class SessionRouter : IDisposable
                 try { Restore(t.Volume, t.Pid); } catch { }
                 ReleaseTracked(t);
                 _silenced.Remove(id);
+            }
+            foreach (var (id, t) in _sendOnly.Where(kv => !kv.Value.Seen).ToList())
+            {
+                _sendGain.Changed(t.Root, now);
+                ReleaseTracked(t);
+                _sendOnly.Remove(id);
             }
         }
 
@@ -235,6 +264,7 @@ internal sealed class SessionRouter : IDisposable
         foreach (var root in _gate.Roots.Where(r => !plan.Targets.Any(t => t.Compensate && t.RootPid == r)))
             _gate.Close(root);
         SessionAttenuation.SilencedPids = want.Keys.ToHashSet();
+        _sendGain.KeepOnly(plan.Targets.Where(t => t.SendVolumePercent != null).Select(t => t.RootPid).ToHashSet());
     }
 
     /// <summary>
@@ -248,13 +278,14 @@ internal sealed class SessionRouter : IDisposable
         long now = Stopwatch.GetTimestamp();
         lock (_lock)
         {
-            if (_silenced.Count == 0 || _stop) return false;
+            if (_silenced.Count == 0 && _sendOnly.Count == 0 || _stop) return false;
 
             // The apps' audio moves to the new device, where their sessions are not silenced yet (a new default
             // output while following it, or another capture device chosen).
             if (managerDevice != null && CapturedDeviceId(devices) is { } id && !CaptureEndpoint.Same(id, managerDevice))
             {
                 _gate.CloseAll();
+                _sendGain.Clear();
                 Poke();
                 return true;
             }
@@ -264,7 +295,12 @@ internal sealed class SessionRouter : IDisposable
             {
                 try
                 {
-                    if (t.Volume.GetMasterVolume(out float raw) < 0 || SessionAttenuation.IsAttenuated(raw) || raw == 0) continue;
+                    if (t.Volume.GetMasterVolume(out float raw) < 0)
+                    {
+                        _unverified.Add(t.Root);
+                        continue;
+                    }
+                    if (SessionAttenuation.IsAttenuated(raw) || raw == 0) continue;
                     _unverified.Add(t.Root);
                     _gate.Silenced(t.Root, now);
                     t.Volume.SetMasterVolume(SessionAttenuation.Attenuated(raw), ref _context);
@@ -278,6 +314,37 @@ internal sealed class SessionRouter : IDisposable
             }
             foreach (var t in _silenced.Values)
                 if (!_unverified.Contains(t.Root)) _gate.Verified(t.Root, now);
+            foreach (var target in _plan.Targets.Where(t => t.SendVolumePercent != null))
+            {
+                var levels = new List<float>();
+                bool valid = !_unverified.Contains(target.RootPid);
+                var status = SendVolumeStatus.Waiting;
+                foreach (var t in _silenced.Values.Concat(_sendOnly.Values).Where(t => t.Root == target.RootPid))
+                {
+                    try
+                    {
+                        if (t.Volume.GetMasterVolume(out float raw) < 0 || t.Volume.GetMute(out bool mute) < 0)
+                        {
+                            valid = false;
+                            break;
+                        }
+                        if (mute || raw == 0)
+                        {
+                            valid = false;
+                            status = SendVolumeStatus.MutedOrZero;
+                            break;
+                        }
+                        levels.Add(SessionAttenuation.ToLogical(raw));
+                    }
+                    catch { valid = false; break; }
+                }
+                float? common = valid ? SendVolumeGain.CommonLevel(levels) : null;
+                _sendGain.Verify(target.RootPid, common, now);
+                if (valid && levels.Count > 0)
+                    status = common != null ? SendVolumeStatus.Available
+                        : levels.Any(v => v < 0.01f) ? SendVolumeStatus.BelowMinimum : SendVolumeStatus.DifferentSessionLevels;
+                _routing.ReportSendStatus(target.Key, status);
+            }
             return true;
         }
     }
@@ -336,7 +403,10 @@ internal sealed class SessionRouter : IDisposable
                 ReleaseTracked(t);
             }
             _silenced.Clear();
+            foreach (var t in _sendOnly.Values) ReleaseTracked(t);
+            _sendOnly.Clear();
             _gate.CloseAll();
+            _sendGain.Clear();
         }
     }
 
@@ -359,7 +429,11 @@ internal sealed class SessionRouter : IDisposable
             device.GetId(out var id);
             if (manager == null || id != managerDevice)
             {
-                if (managerDevice != null) _gate.CloseAll(); // nothing on the new device is silenced yet
+                if (managerDevice != null)
+                {
+                    _gate.CloseAll(); // nothing on the new device is silenced yet
+                    _sendGain.Clear();
+                }
                 Unregister(ref manager, notifier);
                 var iid = typeof(IAudioSessionManager2).GUID;
                 CoreAudio.Check(device.Activate(ref iid, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj), "session manager");

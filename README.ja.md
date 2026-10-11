@@ -48,6 +48,8 @@ HomePodCast は個人プロジェクトで、実機テストは次の 1 組だ�
 
 ## 使い方
 
+再生プロファイル、スピーカーと音源ごとの実測補正、アプリ別の HomePod 独立音量、個人情報を除去した診断レポート、ブラウザーの同期全画面と ±5／±20 ms 調整にも対応しています。操作と制限は[プロファイル・補正・診断（英語／簡体字中国語）](docs/PLAYBACK_FEATURES.md)をご覧ください。
+
 1. [.NET 10 デスクトップ ランタイム](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）をインストールします。
 2. [Releases](https://github.com/qiyinxi/HomePodCast/releases) から HomePodCast をダウンロードします。パッケージは 2 種類あります。
    - **インストーラー（推奨）`HomePodCast-<バージョン>-x64.msi`**：インストール先を選べます（既定は `C:\Program Files\HomePodCast`）。スタート メニューのショートカットと必要なファイアウォール規則が自動で追加されます。アップグレードは新しい MSI を実行するだけです。アンインストールは「設定 → アプリ」から行います。「Windows 起動時に自動起動」をオンにしていた場合は、先にアプリでオフにしてください。

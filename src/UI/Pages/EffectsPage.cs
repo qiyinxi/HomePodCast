@@ -229,6 +229,13 @@ internal sealed class EffectsPage : ScrollPage
         UpdateStatus();
     }
 
+    public void ReloadConfiguration()
+    {
+        _saveDebounce.Stop();
+        LoadDevices();
+        LoadFromSettings();
+    }
+
     private static int Percent(double v) => Math.Clamp((int)Math.Round(v * 100), 0, 100);
 
     private void ShowValues()

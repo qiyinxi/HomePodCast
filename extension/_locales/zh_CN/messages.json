@@ -39,5 +39,42 @@
   "videosDrm": { "message": "受版权保护（DRM），无法延迟" },
   "videosFullscreen": { "message": "视频元素单独全屏时无法延迟" },
   "videosPlayerUnsupported": { "message": "此页面的播放器不支持画面延迟" },
-  "videosNotDelayed": { "message": "未延迟" }
+  "videosNotDelayed": { "message": "未延迟" },
+  "syncFullscreen": {
+    "message": "同步全屏"
+  },
+  "syncExitFullscreen": {
+    "message": "退出全屏"
+  },
+  "syncFullscreenTitle": {
+    "message": "在全屏时保持视频画面与 HomePod 音频同步。"
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→：±5 ms · Alt+Shift+←/→：±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "画面延迟 $DELAY$ ms · 网站偏移 $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "无法进入全屏。请退出当前全屏或允许此播放器全屏，然后重试。"
+  },
+  "syncPopupHint": {
+    "message": "点击视频上的“同步全屏”。全屏时按 Alt+←/→ 微调 5 ms，加 Shift 微调 20 ms。调整会保存到当前网站。"
+  },
+  "syncAdjustmentLabel": {
+    "message": "网站偏移调整 $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

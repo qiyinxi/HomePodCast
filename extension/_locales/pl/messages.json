@@ -126,5 +126,42 @@
   },
   "videosNotDelayed": {
     "message": "bez opóźnienia"
+  },
+  "syncFullscreen": {
+    "message": "Zsynchronizowany pełny ekran"
+  },
+  "syncExitFullscreen": {
+    "message": "Zamknij pełny ekran"
+  },
+  "syncFullscreenTitle": {
+    "message": "Zachowaj synchronizację wideo i dźwięku HomePoda na pełnym ekranie."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Shift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Opóźnienie obrazu $DELAY$ ms · Korekta witryny $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Pełny ekran jest niedostępny. Zamknij obecny pełny ekran lub zezwól na niego dla tego odtwarzacza i spróbuj ponownie."
+  },
+  "syncPopupHint": {
+    "message": "Użyj przycisku „Zsynchronizowany pełny ekran” na wideo. Na pełnym ekranie Alt+←/→ zmienia korektę o 5 ms, a z klawiszem Shift o 20 ms. Zmiany są zapisywane dla tej witryny."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Zmień korektę witryny o $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
   }
 }

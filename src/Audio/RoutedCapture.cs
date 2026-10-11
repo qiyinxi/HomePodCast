@@ -384,11 +384,14 @@ public sealed class RoutedCapture : ICaptureSource
     /// </summary>
     private float Gain(Client c, uint root, ReadOnlySpan<float> samples, long now)
     {
-        if (!c.Target.Compensate) return 1f;
-        bool confirmed = now >= c.HoldUntil && _router.IsConfirmed(root, now);
-        if (!confirmed) return 1f;
+        float send = c.Target.SendVolumePercent is { } percent ? percent / 100f : 1f;
+        if (send == 0) return 0;
+        float normalization = c.Target.SendVolumePercent != null ? _router.SendNormalization(root, now) : 1f;
         float peak = 0;
         foreach (var s in samples) peak = Math.Max(peak, Math.Abs(s));
+        if (!c.Target.Compensate) return send * SendVolumeGain.Guard(normalization, peak);
+        bool confirmed = now >= c.HoldUntil && _router.IsConfirmed(root, now);
+        if (!confirmed) return send;
         float gain = SessionAttenuation.CompensationGain(true, true, peak);
         if (gain == 1f)
         {
@@ -400,7 +403,8 @@ public sealed class RoutedCapture : ICaptureSource
             }
             _router.Poke();
         }
-        return gain;
+        // Independent send compensation is only added after the original attenuation guard succeeded.
+        return send * gain * (gain == 1f ? 1f : SendVolumeGain.Guard(normalization, peak * gain));
     }
 
     private static int MixRate(IMMDevice device)

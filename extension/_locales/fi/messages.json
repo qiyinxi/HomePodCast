@@ -126,5 +126,42 @@
   },
   "videosNotDelayed": {
     "message": "ei viivettä"
+  },
+  "syncFullscreen": {
+    "message": "Synkronoitu koko näyttö"
+  },
+  "syncExitFullscreen": {
+    "message": "Poistu koko näytöstä"
+  },
+  "syncFullscreenTitle": {
+    "message": "Pidä video ja HomePod-ääni synkronoituina koko näytössä."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Vaihto+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Kuvan viive $DELAY$ ms · Sivuston säätö $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Koko näyttö ei ole käytettävissä. Poistu nykyisestä koko näytön tilasta tai salli se soittimelle ja yritä uudelleen."
+  },
+  "syncPopupHint": {
+    "message": "Valitse videon ”Synkronoitu koko näyttö”. Koko näytössä Alt+←/→ säätää 5 ms; lisää Vaihto säätääksesi 20 ms. Muutokset tallennetaan sivustolle."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Säädä sivuston viivettä $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
   }
 }

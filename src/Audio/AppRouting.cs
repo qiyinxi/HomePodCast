@@ -13,6 +13,8 @@ public sealed class AppRouting
     private readonly Action _save;
     private volatile RouteRules _rules;
     private volatile string? _captureDeviceId;
+    private int _syncTestRoutes;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendVolumeStatus> _sendStates = new();
 
     public AppRouting(AppConfig config, Action? save = null)
     {
@@ -78,6 +80,59 @@ public sealed class AppRouting
         Commit();
     }
 
+    /// <summary>Null follows Windows; an explicit level independently sets this app's HomePod copy.</summary>
+    public int? GetSendVolume(string key) => _rules.SendVolumes.TryGetValue(RouteRules.KeyFor(key), out var v) ? v : null;
+
+    internal SendVolumeStatus SendStatus(string key) => _sendStates.GetValueOrDefault(RouteRules.KeyFor(key));
+    internal void ReportSendStatus(string key, SendVolumeStatus status) => _sendStates[key] = status;
+
+    public void SetSendVolume(string key, int? percent)
+    {
+        key = RouteRules.KeyFor(key);
+        if (key.Length == 0) return;
+        if (percent is { } p)
+        {
+            p = Math.Clamp(p, 0, 100);
+            if (_config.AppSendVolumes.TryGetValue(key, out var old) && old == p) return;
+            _config.AppSendVolumes[key] = p;
+        }
+        else if (!_config.AppSendVolumes.Remove(key)) return;
+        Commit();
+    }
+
+    /// <summary>Re-read a configuration applied by a profile; the caller has already saved it.</summary>
+    public void Reload()
+    {
+        _sendStates.Clear();
+        _captureDeviceId = Normalize(_config.CaptureDeviceId);
+        _rules = Build();
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Route the app's calibration clicks during an already routed capture without changing its mode or
+    /// saving a rule. Restores the current configuration when disposed, including edits made during the test.
+    /// </summary>
+    public IDisposable BeginSyncTestRoute()
+    {
+        if (!Active) return new Scope(null);
+        _syncTestRoutes++;
+        _rules = Build();
+        Changed?.Invoke();
+        return new Scope(() =>
+        {
+            _syncTestRoutes--;
+            _rules = Build();
+            Changed?.Invoke();
+        });
+    }
+
+    private sealed class Scope(Action? end) : IDisposable
+    {
+        private Action? _end = end;
+        public void Dispose() => Interlocked.Exchange(ref _end, null)?.Invoke();
+    }
+
     private void Commit()
     {
         _rules = Build();
@@ -92,7 +147,16 @@ public sealed class AppRouting
         var apps = new Dictionary<string, AudioRoute>();
         foreach (var (key, route) in _config.AppRoutes)
             if (RouteRules.KeyFor(key ?? "") is { Length: > 0 } k && Enum.IsDefined(route)) apps[k] = route;
-        return new RouteRules(_config.RouteDefault, apps);
+        var sends = new Dictionary<string, int>();
+        foreach (var (key, level) in _config.AppSendVolumes)
+            if (RouteRules.KeyFor(key ?? "") is { Length: > 0 } k) sends[k] = Math.Clamp(level, 0, 100);
+        if (_syncTestRoutes > 0)
+        {
+            string own = RouteRules.KeyFor(System.Diagnostics.Process.GetCurrentProcess().ProcessName);
+            apps[own] = AudioRoute.HomePod;
+            sends.Remove(own);
+        }
+        return new RouteRules(_config.RouteDefault, apps) { SendVolumes = sends, ForceRouting = _syncTestRoutes > 0 };
     }
 
     /// <summary>Whether the default output is muted or at 0 % (nothing is heard on this PC).</summary>

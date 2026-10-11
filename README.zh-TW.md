@@ -48,6 +48,8 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 
 ## 使用方式
 
+整套使用設定檔、依音箱與音源儲存的實測校準、程式的 HomePod 獨立音量、去識別化診斷報告，以及瀏覽器同步全屏和 ±5／±20 ms 微調，詳見[使用設定檔、校準與診斷（英文／簡體中文）](docs/PLAYBACK_FEATURES.md)。
+
 1. 安裝 [.NET 10 桌面執行階段](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）。
 2. 從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下載 HomePodCast，有兩種套件：
    - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。

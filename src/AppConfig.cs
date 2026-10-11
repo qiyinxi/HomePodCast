@@ -13,6 +13,8 @@ public sealed class AppConfig
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;
     public int? MeasuredAvOffsetMs { get; set; }
+    public Dictionary<string, AvCalibration> SyncCalibrations { get; set; } = [];
+    public List<UsageProfile> UsageProfiles { get; set; } = [];
     public int? ArrivalToRenderMs { get; set; }
 
     /// <summary>
@@ -114,6 +116,7 @@ public sealed class AppConfig
 
     /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
+    public Dictionary<string, int> AppSendVolumes { get; set; } = [];
 
     /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
     public bool RoutingNoticeAccepted { get; set; }
@@ -180,6 +183,11 @@ public sealed class AppConfig
                 if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
                 cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
                 cfg.ForwardVolumeKeys = null;
+                cfg.AppRoutes ??= [];
+                cfg.AppSendVolumes ??= [];
+                cfg.Effects ??= new();
+                AvCalibrations.Normalize(cfg);
+                HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }
         }

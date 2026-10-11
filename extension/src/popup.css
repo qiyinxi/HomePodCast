@@ -213,3 +213,4 @@ button:disabled, input:disabled { opacity: 0.45; cursor: default; }
   font-size: 12px;
   padding: 0 2px;
 }
+.fullscreenHint { margin: 0; }

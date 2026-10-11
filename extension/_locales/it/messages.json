@@ -39,5 +39,42 @@
   "videosDrm": { "message": "protetto da copia (DRM), non si può ritardare" },
   "videosFullscreen": { "message": "non si può ritardare mentre l'elemento video stesso è a schermo intero" },
   "videosPlayerUnsupported": { "message": "il lettore di questa pagina non supporta il ritardo dell'immagine" },
-  "videosNotDelayed": { "message": "non ritardato" }
+  "videosNotDelayed": { "message": "non ritardato" },
+  "syncFullscreen": {
+    "message": "Schermo intero sincronizzato"
+  },
+  "syncExitFullscreen": {
+    "message": "Esci da schermo intero"
+  },
+  "syncFullscreenTitle": {
+    "message": "Mantieni video e audio HomePod sincronizzati a schermo intero."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Maiusc+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Ritardo immagine $DELAY$ ms · Correzione sito $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Lo schermo intero non è disponibile. Esci dalla modalità attuale o consenti lo schermo intero per questo lettore e riprova."
+  },
+  "syncPopupHint": {
+    "message": "Usa “Schermo intero sincronizzato” sul video. A schermo intero, Alt+←/→ regola di 5 ms; aggiungi Maiusc per 20 ms. Le modifiche vengono salvate per questo sito."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Regola la correzione del sito di $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

@@ -70,14 +70,14 @@ internal sealed class MixerPage : ScrollPage
                 Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。"))),
             Ui.Stack(4,
                 new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
-                Ui.Note(L.F("只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),
+                Ui.Note(L.F("单独设置程序去处或 HomePod 音量，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」、关闭 HomePod 独立音量，并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),
             Ui.Stack(4,
                 new TextBlock(L.T("按声卡分流（没有额外延迟）"), TextStyle.BodyStrong),
                 Ui.Note(L.F("在 Windows 的应用音量设置（或程序自己的设置）里，把要推送的程序的输出设为一个你不用来听的设备，再在上面的「采集设备」里选它；语音聊天等其他程序照常在耳机里播放。整个设备一次抓取，不像按程序分流那样多约 {0} ms。需要一个空闲的或虚拟的声卡，比如 VB-CABLE、网易 UU 加速器的虚拟声卡、Steam Streaming Speakers，或不带喇叭的 HDMI 显示器；HomePodCast 没法自己装虚拟声卡（那是要微软签名的内核驱动）。有些游戏只在启动时选择输出设备，改完要重启游戏。", RoutedCapture.RoutedExtraLatencyMs)),
                 Ui.Row(0, null, appVolume)));
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
-        var note = Ui.Note(L.T("和 Windows 音量合成器是同一套设置，系统会记住每个程序的音量。"));
+        var note = Ui.Note(L.T("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，可分别调节音箱和本机；这会启用按程序分流，增加约 35 ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序的多个声音会话音量不一致时，会暂时按 Windows 音量推送。关闭独立音量可恢复跟随 Windows。"));
         Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
@@ -235,6 +235,17 @@ internal sealed class MixerPage : ScrollPage
     }
 
     public void ShowSoundOptions() => ShowMaster();
+
+    /// <summary>Save the old speaker's pending slider choice before switching a complete profile.</summary>
+    public void FlushPendingVolume()
+    {
+        if (!_masterWait.Enabled) return;
+        _masterWait.Stop();
+        _app.SetVolume(_master.Value);
+        VolumeApplied?.Invoke(_master.Value);
+    }
+
+    public void CancelPendingVolume() => _masterWait.Stop();
 
     // ---------------------------------------------------------------- lifetime
 
@@ -394,7 +405,7 @@ internal sealed class MixerPage : ScrollPage
         if (_app.Config.RoutingNoticeAccepted || _app.Routing.Active || !AppRouting.Supported || !next.NeedsRouting)
             return true;
         var answer = MessageBox.Show(FindForm(),
-            L.F("给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？", RoutedCapture.RoutedExtraLatencyMs),
+            L.F("给程序单独设置去处或 HomePod 音量后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？", RoutedCapture.RoutedExtraLatencyMs),
             L.T("按程序分流会增加延迟"), MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes) return false;
         _app.Config.RoutingNoticeAccepted = true;
@@ -434,8 +445,8 @@ internal sealed class MixerPage : ScrollPage
     }
 
     /// <summary>
-    /// One app: icon, name with its level meter, destination, volume and mute. One line when there is room,
-    /// otherwise destination and volume move to a second line.
+    /// One app: icon, name with its level meter and destination, then labeled Windows and HomePod controls.
+    /// Narrow rows place destination on its own line. Independent send limits appear below its controls.
     /// </summary>
     private sealed class AppRow : Card
     {
@@ -447,6 +458,12 @@ internal sealed class MixerPage : ScrollPage
         private readonly Control _route;
         private readonly FluentSlider _slider = Ui.Slider(0, 100, 1, 5);
         private readonly TextBlock _value = new("", TextStyle.Body, TextRole.Secondary) { Align = HorizontalAlignment.Right };
+        private readonly TextBlock _localLabel = new(L.T("Windows 音量"), TextStyle.Caption, TextRole.Secondary);
+        private readonly TextBlock _sendLabel = new("HomePod", TextStyle.Caption, TextRole.Secondary);
+        private readonly ToggleSwitch _independent = new() { AccessibleName = L.T("HomePod 独立音量") };
+        private readonly FluentSlider _send = Ui.Slider(0, 100, 1, 5);
+        private readonly TextBlock _sendValue = new("", TextStyle.Body, TextRole.Secondary) { Align = HorizontalAlignment.Right };
+        private readonly TextBlock _sendStatus = new("", TextStyle.Caption, TextRole.Caution, wrap: true);
         private readonly FluentButton _mute;
 
         public AppRow(AppAudio app, MixerPage page)
@@ -457,10 +474,17 @@ internal sealed class MixerPage : ScrollPage
             _icon = new AppIconBox(app.Icon);
             _name = new TextBlock(app.Name);
             _mute = new FluentButton("", ButtonKind.Subtle, Glyph.Volume) { AccessibleName = L.F("{0} 静音", app.Name) };
-            _slider.AccessibleName = L.F("{0} 音量", app.Name);
+            _slider.AccessibleName = L.F("{0} Windows 音量", app.Name);
             _slider.PreferredLength = 150;
+            _send.AccessibleName = L.F("{0} HomePod 音量", app.Name);
+            _send.PreferredLength = 150;
+            _send.Value = page._app.Routing.GetSendVolume(app.ExeKey) ?? 100;
+            _independent.Enabled = AppRouting.Supported && !app.IsSystemSounds && app.ExeKey.Length > 0;
             _route = RouteCell();
-            Controls.AddRange([_icon, _name, _meter, _route, _slider, _value, _mute]);
+            Controls.AddRange([_icon, _name, _meter, _route, _localLabel, _slider, _value, _mute,
+                _sendLabel, _independent, _send, _sendValue, _sendStatus]);
+            _page._tips.SetToolTip(_independent, L.T("独立控制此程序在 HomePod 上的音量"));
+            _page._tips.SetToolTip(_send, L.T("Windows 静音或音量为 0 时，HomePod 也没有声音。多个会话的 Windows 音量不一致时，独立音量暂不生效。"));
 
             try { _slider.Value = (int)Math.Round(app.Volume * 100); } catch { }
             _value.Text = _slider.Value.ToString();
@@ -476,6 +500,28 @@ internal sealed class MixerPage : ScrollPage
                 bool muted = !SafeMuted();
                 try { _app.Muted = muted; } catch (Exception ex) { Log.Warn($"mixer: {ex.Message}"); }
                 ShowMute(SafeMuted());
+            };
+            _independent.Toggled += (_, _) =>
+            {
+                var routing = _page._app.Routing;
+                var sends = new Dictionary<string, int>(routing.Rules.SendVolumes);
+                string key = RouteRules.KeyFor(_app.ExeKey);
+                if (_independent.Checked) sends[key] = _send.Value;
+                else sends.Remove(key);
+                if (!_page.ConfirmRouting(routing.Rules with { SendVolumes = sends }))
+                {
+                    _page.SyncRoutes();
+                    return;
+                }
+                routing.SetSendVolume(key, _independent.Checked ? _send.Value : null);
+                _page.SyncRoutes();
+            };
+            _send.Scroll += (_, _) =>
+            {
+                if (!_independent.Checked) return;
+                _page._app.Routing.SetSendVolume(_app.ExeKey, _send.Value);
+                _sendValue.Text = _send.Value.ToString();
+                _page.SyncRoutes();
             };
         }
 
@@ -532,6 +578,20 @@ internal sealed class MixerPage : ScrollPage
 
         public void SyncRoute(AppRouting routing)
         {
+            bool independent = routing.GetSendVolume(_app.ExeKey) is { };
+            _independent.Checked = independent;
+            _send.Enabled = independent && _independent.Enabled && routing.Rules.For(RouteRules.KeyFor(_app.ExeKey)) != AudioRoute.Local;
+            if (!_send.IsDragging) _send.Value = routing.GetSendVolume(_app.ExeKey) ?? 100;
+            _sendValue.Text = independent ? _send.Value.ToString() : "—";
+            _sendStatus.Text = independent && routing.Active && _page._app.Controller.State == StreamState.Streaming &&
+                               routing.Rules.For(RouteRules.KeyFor(_app.ExeKey)) != AudioRoute.Local
+                ? routing.SendStatus(_app.ExeKey) switch
+                {
+                    SendVolumeStatus.MutedOrZero => L.T("Windows 已静音或音量为 0，HomePod 没有声音。"),
+                    SendVolumeStatus.DifferentSessionLevels => L.T("此程序的声音会话音量不同，暂时跟随 Windows 音量。"),
+                    SendVolumeStatus.BelowMinimum => L.T("Windows 音量低于 1%，暂时跟随 Windows 音量。"),
+                    _ => "",
+                } : "";
             if (_route is Segmented seg)
             {
                 seg.SelectedIndex = routing.Get(_app.ExeKey) is { } own ? Array.IndexOf(Routes, own) + 1 : 0;
@@ -574,6 +634,8 @@ internal sealed class MixerPage : ScrollPage
                 // The page's tooltip would otherwise keep every row ever shown.
                 _page._tips.SetToolTip(_mute, null);
                 _page._tips.SetToolTip(_route, null);
+                _page._tips.SetToolTip(_independent, null);
+                _page._tips.SetToolTip(_send, null);
             }
             base.Dispose(disposing);
         }
@@ -585,60 +647,53 @@ internal sealed class MixerPage : ScrollPage
             int icon = Dp(24), gap = Dp(12), small = Dp(6);
             // Same column for every row (system sounds show a note there), so the sliders line up.
             int routeW = Math.Max(WidthFor(_route), Segmented.PreferredWidthFor(RouteItems, compact: true, equal: false, DeviceDpi));
-            int sliderW = Dp(150), valueW = Dp(34), muteW = Dp(32);
+            int valueW = Dp(34), muteW = Dp(32);
             int nameH = HeightFor(_name, 100), meterH = Dp(6);
             int nameBlock = nameH + Dp(4) + meterH;
-            int rest = gap + routeW + gap + sliderW + small + valueW + small + muteW;
+            int rest = gap + routeW + small + muteW;
             int nameW = inner - icon - gap - rest;
             int rowH = Math.Max(Dp(36), nameBlock);
 
-            if (nameW >= Dp(130))
-            {
-                if (apply)
-                {
-                    int x = padX;
-                    int cy = padY + rowH / 2;
-                    Place(_icon, x, cy - icon / 2, icon, icon);
-                    x += icon + gap;
-                    Place(_name, x, cy - nameBlock / 2, nameW, nameH);
-                    Place(_meter, x, cy - nameBlock / 2 + nameH + Dp(4), Math.Min(nameW, Dp(160)), meterH);
-                    x += nameW + gap;
-                    int rh = HeightFor(_route, routeW);
-                    Place(_route, x, cy - rh / 2, routeW, rh);
-                    x += routeW + gap;
-                    Place(_slider, x, cy - Dp(16), sliderW, Dp(32));
-                    x += sliderW + small;
-                    int vh = HeightFor(_value, valueW);
-                    Place(_value, x, cy - vh / 2, valueW, vh);
-                    x += valueW + small;
-                    Place(_mute, x, cy - muteW / 2, muteW, muteW);
-                }
-                return padY * 2 + rowH;
-            }
-
-            // Two lines: name and mute on top, destination and volume below.
-            int line2 = Dp(34);
+            bool routeOnHeader = nameW >= Dp(130);
             if (apply)
             {
-                int x = padX, cy = padY + rowH / 2;
-                Place(_icon, x, cy - icon / 2, icon, icon);
-                int textX = x + icon + gap;
-                int textW = inner - icon - gap - small - muteW;
+                int cy = padY + rowH / 2, textX = padX + icon + gap;
+                int textW = routeOnHeader ? nameW : inner - icon - gap - small - muteW;
+                Place(_icon, padX, cy - icon / 2, icon, icon);
                 Place(_name, textX, cy - nameBlock / 2, textW, nameH);
                 Place(_meter, textX, cy - nameBlock / 2 + nameH + Dp(4), Math.Min(textW, Dp(160)), meterH);
                 Place(_mute, padX + inner - muteW, cy - muteW / 2, muteW, muteW);
-
-                int y2 = padY + rowH + Dp(6), cy2 = y2 + line2 / 2;
-                int rw = Math.Min(routeW, inner - icon - gap);
-                int rh = HeightFor(_route, rw);
-                Place(_route, textX, cy2 - rh / 2, rw, rh);
-                int sx = textX + rw + gap;
-                int sw = Math.Max(Dp(60), padX + inner - valueW - small - sx);
-                Place(_slider, sx, cy2 - Dp(16), sw, Dp(32));
-                int vh = HeightFor(_value, valueW);
-                Place(_value, padX + inner - valueW, cy2 - vh / 2, valueW, vh);
+                if (routeOnHeader)
+                    Place(_route, padX + inner - muteW - small - routeW, cy - HeightFor(_route, routeW) / 2,
+                        routeW, HeightFor(_route, routeW));
             }
-            return padY * 2 + rowH + Dp(6) + line2;
+            int y = padY + rowH + small;
+            if (!routeOnHeader)
+            {
+                int rw = Math.Min(routeW, inner), rh = HeightFor(_route, rw);
+                if (apply) Place(_route, padX, y, rw, rh);
+                y += rh + small;
+            }
+            int line = Dp(32);
+            int labelW = Math.Min(Dp(120), Math.Max(Dp(80), inner / 4));
+            int toggleW = Dp(44);
+            int sliderX = padX + labelW + small;
+            int valueX = padX + inner - valueW;
+            if (apply)
+            {
+                Place(_localLabel, padX, y + (line - HeightFor(_localLabel, labelW)) / 2, labelW, HeightFor(_localLabel, labelW));
+                Place(_slider, sliderX, y, Math.Max(Dp(40), valueX - small - sliderX), line);
+                Place(_value, valueX, y + (line - HeightFor(_value, valueW)) / 2, valueW, HeightFor(_value, valueW));
+                int sendY = y + line + small, sendX = sliderX + toggleW + small;
+                Place(_sendLabel, padX, sendY + (line - HeightFor(_sendLabel, labelW)) / 2, labelW, HeightFor(_sendLabel, labelW));
+                Place(_independent, sliderX, sendY + (line - Dp(24)) / 2, toggleW, Dp(24));
+                Place(_send, sendX, sendY, Math.Max(Dp(40), valueX - small - sendX), line);
+                Place(_sendValue, valueX, sendY + (line - HeightFor(_sendValue, valueW)) / 2, valueW, HeightFor(_sendValue, valueW));
+            }
+            int end = y + line * 2 + small;
+            int statusH = HeightFor(_sendStatus, inner);
+            if (apply) Place(_sendStatus, padX, end, inner, statusH);
+            return end + statusH + padY;
         }
     }
 }
