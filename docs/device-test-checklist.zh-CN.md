@@ -21,7 +21,7 @@
 ## 二、长时间游戏
 
 - [x] 「游戏」场景玩 30 分钟：有没有断音、爆音、卡顿？结束后把 `%APPDATA%\HomePodCast\homepodcast.log` 发我（用户日常用安装版打游戏，2026-10-08 反馈没有大问题）
-- [ ] 听到卡顿时记下时间（精确到分钟）和当时在做什么。beta.5 起日志会记录 Wi-Fi 抖动（`network: ping ...`），能对上是不是网络的问题。日志请先复制到「下载」或项目文件夹再发，Claude 读不到 `AppData` 里的真实文件
+- [ ] 听到卡顿时记下时间（精确到分钟）和当时在做什么。beta.5 起日志会记录 Wi-Fi 抖动（`network: ping ...`），能对上是不是网络的问题。日志请先复制到「下载」或项目文件夹再发，Claude 读不到 `AppData` 里的真实文件。「设置 → 工具 → 日志 → 打开日志文件夹」会直接打开日志所在的文件夹（Microsoft Store 版的日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）
 - [ ] 首页「推流状态」下面的网络一行：平时是「网络：稳定」；卡顿后有没有变成「网络：最近 10 分钟抖动 N 次」
 - [ ] 如果出现黄色提示（「HomePod 那边 / 电脑这边的 Wi-Fi 最近不太稳……建议把延迟调到 … ms」）：截图，记下当时的时间。点「应用」：场景切到「自定义」、延迟变成建议值、重连一次，提示消失；之后卡顿是否变少。不点就不会改延迟
 - [ ] 卡顿时先确认 HomePod 连在 5G 上：路由器开着双频合一（Smart Connect）时，它可能被分到拥挤的 2.4G（2026-10-10 新家：2.4G 上 ping 中位 21 ms、丢 4%，200 和 500 ms 都卡；关掉双频合一、换到 5G 后 2 ms、0 丢包）
@@ -117,6 +117,36 @@
 7. - [ ] 音量：在本程序里调音量，两只是否一起变；iPhone 控制中心里这对音箱的音量是否跟着变
 8. - [ ] 默认模式连续放 30 分钟：两只有没有慢慢不同步、断开、单只没声
 9. - [ ] 推流时用 iPhone 抢这对音箱：电脑端两路都退出、不抢回
+
+## 十一、Microsoft Store 版（MSIX，1.0.0 上架前）
+
+Claude 只能打包、不能安装和运行打包版，下面都要实机测。打包版和 MSI / 便携版共用单实例锁，测之前先在托盘里退出已经开着的 HomePodCast。
+
+准备（不需要管理员权限）：
+
+1. 设置 → 系统 → 开发者选项：打开「开发人员模式」。
+2. 在仓库根目录运行 `./packaging/msix/build.ps1 -Version 1.0.0-local.1`，再运行 `Add-AppxPackage -Register packaging\msix\obj\layout\AppxManifest.xml`（未签名的包只能这样注册）。
+3. 从开始菜单启动 HomePodCast。测完卸载：`Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`。
+
+- [ ] 日志的启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`（「设置 → 工具 → 日志 → 打开日志文件夹」）
+- [ ] 防火墙：第一次启动**没有**「需要防火墙放行」，也没有 UAC。PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*WindowsApps*HomePodCast*' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled` 列出两条（TCP、UDP）入站、Private、已启用的规则
+- [ ] 连接 HomePod 推流 1 分钟（音量不超过 25%）：有声音、不弹防火墙提示；日志里没有 `no rule of the package found`
+- [ ] 混音器里给一个程序设「本机」、另一个设「HomePod」：分流照常生效（按程序分流在包里也能用）
+- [ ] 麦克风：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
+- [ ] 麦克风被拒：Windows 设置 → 隐私和安全性 → 麦克风，在应用列表里关掉 HomePodCast，回到程序把麦克风关掉再打开：只弹一次「无法使用麦克风」（点「是」打开麦克风隐私设置页面），页面上麦克风下面是红字和「打开麦克风隐私设置」链接；日志里只有一行 `mic: Windows refuses the microphone (0x80070005 ...)`，没有每 2 秒一行的 `retrying`。重新允许后把麦克风关掉再打开，恢复正常
+- [ ] 麦克风被拒时，混音器的按程序分流是否还正常（记下来：如果日志里出现 0x80070005，说明进程回环采集也受麦克风权限管）
+- [ ] MSI 版也测一次麦克风被拒：关掉「允许桌面应用访问你的麦克风」，弹窗里说的是这个开关
+- [ ] 开机自动启动：「设置 → 开机自动启动」默认是关的；打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的，日志有 `autostart: startup task enable requested, now Enabled`
+- [ ] 注销再登录（或重启）：HomePodCast 在托盘里启动，不弹主窗口。日志里如果有 `started by the startup task: into the tray`，说明 Windows 没传 `--tray`、靠的是启动方式判断，告诉我
+- [ ] 在 Windows 设置 → 应用 → 启动 里关掉 HomePodCast，回到程序的设置页：开关变成关，下面写「已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。」；再在程序里打开它：弹窗问要不要打开 Windows 设置的「启动」页面
+- [ ] 在程序里关掉开机自动启动：Windows 设置的「启动」页面里也变成关
+- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）
+- [ ] 「设置 → 工具 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）
+- [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查；日志有 `update: Microsoft Store package: never contacts GitHub`
+- [ ] 打包版开着时再启动 MSI 版：只会把打包版的窗口叫出来
+- [ ] 卸载后：Windows 防火墙里那两条规则、「启动」页面里的 HomePodCast、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了
+
+上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart）。
 
 ## 测试记录
 

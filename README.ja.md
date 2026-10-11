@@ -28,7 +28,7 @@ HomePodCast は個人プロジェクトで、実機テストは次の 1 組だ�
 - **ステレオペアとマルチルーム**：プロトコルの調査に基づいて実装し、シミュレートしたスピーカーでのみテスト
 - 物理的なサウンドカードやヘッドセット、ほかの Windows バージョン、PC が有線か Wi‑Fi かによる違い
 
-ほかの機器で試した場合は、機種、ソフトウェアのバージョン、音切れせずに使える最小の遅延設定、ログ（`%APPDATA%\HomePodCast\homepodcast.log`）を添えて issue でお知らせください。
+ほかの機器で試した場合は、機種、ソフトウェアのバージョン、音切れせずに使える最小の遅延設定、ログ（`homepodcast.log`。「設定 → ツール → ログ → ログ フォルダーを開く」で表示できます。場所は `%APPDATA%\HomePodCast`、Microsoft Store 版は `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）を添えて issue でお知らせください。
 
 ## 機能
 
@@ -53,7 +53,7 @@ HomePodCast は個人プロジェクトで、実機テストは次の 1 組だ�
    - **インストーラー（推奨）`HomePodCast-<バージョン>-x64.msi`**：インストール先を選べます（既定は `C:\Program Files\HomePodCast`）。スタート メニューのショートカットと必要なファイアウォール規則が自動で追加されます。アップグレードは新しい MSI を実行するだけです。アンインストールは「設定 → アプリ」から行います。「Windows 起動時に自動起動」をオンにしていた場合は、先にアプリでオフにしてください。
    - **ポータブル版 `HomePodCast-<バージョン>-win-x64.zip`**：任意の場所に展開して `HomePodCast.exe` を起動します。初回はファイアウォール規則の追加を求められます。
 
-   ファイアウォール規則はローカル ネットワークのみを許可し、プライベート ネットワークでのみ有効です。HomePod が時刻同期と再送要求のために PC へ接続してくるため必要です。Windows がネットワークをパブリック ネットワークに分類している場合（Wi-Fi から有線 LAN に切り替えた後など）は規則が適用されません。HomePodCast がそれを知らせて Windows の設定を開けるので、「ネットワーク プロファイルの種類」を「プライベート ネットワーク」に変更してください（信頼できる自宅のネットワークの場合のみ）。どちらのパッケージも設定は `%APPDATA%\HomePodCast` に保存されます。
+   ファイアウォール規則はローカル ネットワークのみを許可し、プライベート ネットワークでのみ有効です。HomePod が時刻同期と再送要求のために PC へ接続してくるため必要です。Windows がネットワークをパブリック ネットワークに分類している場合（Wi-Fi から有線 LAN に切り替えた後など）は規則が適用されません。HomePodCast がそれを知らせて Windows の設定を開けるので、「ネットワーク プロファイルの種類」を「プライベート ネットワーク」に変更してください（信頼できる自宅のネットワークの場合のみ）。どちらのパッケージも設定とログは `%APPDATA%\HomePodCast` に保存されます。Microsoft Store 版が書き込むファイルはアプリ専用の保存場所 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast` に置かれ、アンインストール時に Windows が削除します。どの版でも「設定 → ツール → ログ → ログ フォルダーを開く」で正しいフォルダーが開きます。
 3. HomePod が自動で見つかり、接続されます。音声はシステム音量より前の段階で取り込むので、Windows の音量で送信する音が変わることはありません。HomePod には独自の音量がありますが、既定では Windows の音量がそのまま HomePod の音量になります。両方は常にそろい（接続時は小さいほうに合わせます）、Windows をミュートすると HomePod もミュートされます。既定の出力が PC のスピーカーで、HomePod だけで聴きたい場合は、「設定 → キーボードの音量キー」で「送信中は HomePod を操作」を選び、Windows をミュートしてください（[キーボードの音量キー](#キーボードの音量キー)を参照）。
 
 表示言語は Windows の表示言語に従います（翻訳のない言語の場合は英語）。変更するには、設定ページの「言語 / Language」を使うか、`%APPDATA%\HomePodCast\config.json` の `"Language"` を言語コード（`"zh-CN"`、または `src/i18n` のファイル名。例：`"ja"`、`"en"`、`"de"`）か `"auto"` にします。
@@ -132,7 +132,7 @@ HomePodCast は、このリポジトリの GitHub Releases で新しいバージ
 5. HomePod の置き場所：ルーターを見通せる場所に置き、棚の中には入れないでください。
 6. 遅延を 10〜15 ms 増やす：「シーン」で「カスタム」を選んで調整するか、ホーム ページに提案が出たら「適用」を押します。ホーム ページの「送信の状態」の下に直近 10 分間のネットワークの揺らぎの回数が表示され、余裕を食いつぶすほどになると、どちらの Wi‑Fi 区間が原因か（PC が有線 LAN なら必ず HomePod 側）、どの遅延にすればよいかを表示します。アプリが自分で遅延を変えることはありません。「音切れ」の欄はこの接続中の音切れの回数です：PC 側で実測したものに、余裕を食いつぶしたネットワークの揺らぎ（HomePod の音が途切れた可能性が高いもの）を加えます。HomePod は遅れて届いたパケットを報告しないため、後者は推定で、数字に「≈」が付きます。欄にマウスを置くと内訳が表示されます。
 
-**ログの読み方**（`%APPDATA%\HomePodCast\homepodcast.log`）：送信中は 100 ms ごとに HomePod とルーターに ping を送り、往復が 30 ms を超えるか応答がないと `network: ping to the speaker took 48 ms`（ルーターは `the router`、応答なしは `lost`）と記録します。毎分の `stats:` 行には `rtx=再送/要求`、`rtxMiss=`（再送が間に合わなかったパケット）、`ping=中央値/p99/最大 lost=損失/送信 router=…` があります。
+**ログの読み方**（`%APPDATA%\HomePodCast\homepodcast.log`、Microsoft Store 版は `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`。「設定 → ツール → ログ → ログ フォルダーを開く」で直接開けます）：送信中は 100 ms ごとに HomePod とルーターに ping を送り、往復が 30 ms を超えるか応答がないと `network: ping to the speaker took 48 ms`（ルーターは `the router`、応答なしは `lost`）と記録します。毎分の `stats:` 行には `rtx=再送/要求`、`rtxMiss=`（再送が間に合わなかったパケット）、`ping=中央値/p99/最大 lost=損失/送信 router=…` があります。
 
 - スピーカーの ping だけが急増し、ルーターは正常：ルーター → HomePod の区間が原因です。4 と 5 を参照してください。
 - 両方が同時に急増：PC 側の Wi‑Fi が原因です。1〜3 を参照してください。PC が有線 LAN なら原因はやはり HomePod 側の区間で（ルーターが自分宛ての ping に遅れて応答しただけ）、提案もそう表示します。
