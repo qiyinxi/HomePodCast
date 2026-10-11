@@ -59,6 +59,13 @@ public static class Program
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
         Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
                  (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
+        // The Store version's startup task passes --tray (packaging/msix/AppxManifest.xml); if Windows didn't, the
+        // activation kind still says it was the startup task.
+        if (!startHidden && Autostart.StartedByStartupTask())
+        {
+            Log.Info("started by the startup task: into the tray");
+            startHidden = true;
+        }
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
         // tray). Not after crashes, hangs or reboots, and never for test copies.

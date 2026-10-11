@@ -21,6 +21,7 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentComboBox _language = new();
     private readonly FluentComboBox _theme = new();
     private readonly ToggleSwitch _autostart = new();
+    private readonly SettingRow _autostartRow;
     private readonly ToggleSwitch _autoconnect = new();
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
@@ -60,7 +61,7 @@ internal sealed class SettingsPage : ScrollPage
         var language = new SettingRow(Glyph.Globe, L.Language == "en" ? L.T("语言") : L.T("语言") + " / Language",
             L.T("切换后重新启动 HomePodCast 生效。"), _language);
         var theme = new SettingRow(Glyph.Appearance, L.T("外观"), L.T("浅色或深色；默认跟随 Windows。"), _theme);
-        var autostart = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T("登录 Windows 后在托盘里启动。"), _autostart);
+        var autostart = _autostartRow = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T(AutostartText), _autostart);
         var autoconnect = new SettingRow(Glyph.Sync, L.T("启动后自动连接"), L.T("启动时连接上次用的音箱。"), _autoconnect);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
@@ -133,6 +134,11 @@ internal sealed class SettingsPage : ScrollPage
         };
         _autostart.Toggled += (_, _) =>
         {
+            if (Autostart.Method == AutostartMethod.StartupTask)
+            {
+                SetStartupTask(_autostart.Checked);
+                return;
+            }
             try { Autostart.Enabled = _autostart.Checked; }
             catch (Exception ex) { MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast"); }
             _autostart.Checked = SafeAutostart();
@@ -194,9 +200,104 @@ internal sealed class SettingsPage : ScrollPage
     /// <summary>The cap was changed here (the volume sliders follow).</summary>
     public event Action? CapChanged;
 
+    private const string AutostartText = "登录 Windows 后在托盘里启动。";
+
     private static bool SafeAutostart()
     {
         try { return Autostart.Enabled; } catch { return false; }
+    }
+
+    /// <summary>The switch shows the autostart state: the Run value, or (the Store version) the startup task, read off the UI thread.</summary>
+    private void ShowAutostart()
+    {
+        if (Autostart.Method == AutostartMethod.StartupTask) ShowStartupTask();
+        else _autostart.Checked = SafeAutostart();
+    }
+
+    /// <summary>Counts the reads and switches of the startup task: an answer that a later one overtook is not shown.</summary>
+    private int _startupTaskRequest;
+
+    /// <summary>A switch of the startup task is under way (the switch is disabled meanwhile, and nothing is read).</summary>
+    private bool _settingStartupTask;
+
+    private async void ShowStartupTask()
+    {
+        if (_settingStartupTask) return;
+        int request = ++_startupTaskRequest;
+        try
+        {
+            var state = await Task.Run(() => StartupTaskApi.GetState(AppEnvironment.StartupTaskId));
+            if (!IsDisposed && request == _startupTaskRequest) ShowStartupTask(Autostart.ViewOf(state));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: the startup task can't be read: {ex.Message}");
+            if (IsDisposed || request != _startupTaskRequest) return;
+            _autostart.Checked = false;
+            ShowAutostartNote(L.T("读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。"), TextRole.Caution);
+        }
+    }
+
+    private void ShowStartupTask(AutostartView view)
+    {
+        _autostart.Checked = view.On;
+        _autostart.Enabled = view.CanChange;
+        switch (view.Note)
+        {
+            case AutostartNote.OffInWindows:
+                ShowAutostartNote(L.T("已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。"), TextRole.Caution);
+                break;
+            case AutostartNote.Policy:
+                ShowAutostartNote(L.T("开机启动由组织的策略管理。"), TextRole.Caution);
+                break;
+            default:
+                ShowAutostartNote(L.T(AutostartText), TextRole.Secondary);
+                break;
+        }
+    }
+
+    private void ShowAutostartNote(string text, TextRole role)
+    {
+        _autostartRow.DescriptionText.Text = text;
+        _autostartRow.DescriptionText.Role = role;
+    }
+
+    /// <summary>
+    /// The Store version's switch: asks Windows to turn the startup task on or off (off the UI thread). Turned off in
+    /// Windows' own settings, it can only be turned on there again: offer to open the page.
+    /// </summary>
+    private async void SetStartupTask(bool on)
+    {
+        _settingStartupTask = true;
+        ++_startupTaskRequest; // a read still under way is out of date
+        _autostart.Enabled = false;
+        StartupTaskState state;
+        try
+        {
+            state = await Task.Run(() => on
+                ? StartupTaskApi.RequestEnable(AppEnvironment.StartupTaskId)
+                : StartupTaskApi.Disable(AppEnvironment.StartupTaskId));
+            Log.Info($"autostart: startup task {(on ? "enable requested" : "disabled")}, now {state}");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: switching the startup task {(on ? "on" : "off")} failed: {ex.Message}");
+            _settingStartupTask = false;
+            if (IsDisposed) return;
+            _autostart.Enabled = true;
+            _autostart.Checked = !on;
+            MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast");
+            return;
+        }
+        _settingStartupTask = false;
+        if (IsDisposed) return;
+        var view = Autostart.ViewOf(state);
+        ShowStartupTask(view);
+        if (on && !view.On && view.Note == AutostartNote.OffInWindows &&
+            MessageBox.Show(FindForm(),
+                L.T("HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。"),
+                L.T("开机自动启动"), MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+            AppEnvironment.OpenUri("ms-settings:startupapps");
     }
 
     private void Load()
@@ -205,7 +306,7 @@ internal sealed class SettingsPage : ScrollPage
         string current = LanguageMenu.Normalize(cfg.Language);
         _language.SelectedIndex = current == L.Auto ? 0 : Array.FindIndex(LanguageMenu.Choices, c => c.Value == current) + 1;
         _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(cfg.Theme));
-        _autostart.Checked = SafeAutostart();
+        ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
@@ -377,7 +478,7 @@ internal sealed class SettingsPage : ScrollPage
 
     public override void PageShown()
     {
-        _autostart.Checked = SafeAutostart();
+        ShowAutostart(); // the Store version's startup task may have been switched in Windows' settings meanwhile
         ShowSoundOptions();
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);

@@ -8,15 +8,17 @@
   runFullTrust). It does not run in an AppContainer, so the network capabilities below are declarative only (the
   Store lists them on the product page); they don't grant or block anything. What does apply to a packaged
   full-trust app: package identity, the microphone privacy switch, file system and registry write virtualization
-  (%APPDATA%, HKCU), and the extensions declared here (the firewall rules).
+  (%APPDATA%, HKCU), and the extensions declared here (the startup task and the firewall rules). The app asks
+  src\AppEnvironment.cs whether it runs packaged and adapts (firewall prompts, autostart, restart, log folder).
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap desktop desktop2 rescap">
+  IgnorableNamespaces="uap uap10 desktop desktop2 rescap">
 
   <!-- Name and Publisher are the ones Partner Center assigned to the reserved name (Product identity); build.ps1
        has them as defaults. The Store requires the fourth version field to be 0 and the first one to be at least 1. -->
@@ -77,16 +79,21 @@
         </uap:DefaultTile>
       </uap:VisualElements>
       <!--
-        Autostart for the packaged app, once the app uses the StartupTask API (Windows.ApplicationModel.StartupTask)
-        instead of the HKCU Run value, which a packaged app writes into its private registry hive where Windows never
-        reads it. Not declared yet: declaring it adds a "HomePodCast" switch to Settings > Apps > Startup that would
-        start the app without its tray switch, i.e. with its window open.
+        Autostart (设置 → 开机自动启动). The HKCU Run value the unpackaged app writes doesn't work here: a package writes
+        HKCU into its private hive, where Windows never looks for Run values. Instead this startup task, off until the
+        user turns it on (the app's switch calls the StartupTask API with this TaskId, src\StartupTask.cs; Settings >
+        Apps > Startup and Task Manager list it too). At sign-in Windows starts the app with the command line in
+        uap10:Parameters (Windows 10 2004+), the tray switch, so it starts in the tray as it does from the Run value;
+        should Windows not pass it, the app sees the startup task activation (AppInstance) and starts in the tray
+        anyway. Declared on the app itself rather than on a hidden second application, so that the window opened from
+        the tray keeps HomePodCast's own taskbar entry and notification identity.
+      -->
       <Extensions>
-        <desktop:Extension Category="windows.startupTask" Executable="HomePodCast.exe" EntryPoint="Windows.FullTrustApplication">
+        <desktop:Extension Category="windows.startupTask" Executable="HomePodCast.exe" EntryPoint="Windows.FullTrustApplication"
+          uap10:Parameters="--tray">
           <desktop:StartupTask TaskId="HomePodCastStartup" Enabled="false" DisplayName="__DISPLAY_NAME__" />
         </desktop:Extension>
       </Extensions>
-      -->
     </Application>
   </Applications>
 
