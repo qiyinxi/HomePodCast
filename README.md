@@ -117,13 +117,14 @@ If the PC has no usable output device (no sound driver, or the device is disable
 1. Connect the PC with a network cable if you can: two wireless hops become one.
 2. Windows' power saving for the wireless adapter: Control Panel → Power Options → Change plan settings → Change advanced power settings → Wireless Adapter Settings → Power Saving Mode: Maximum Performance, both on battery and plugged in.
 3. Device Manager → Network adapters → your wireless adapter → Properties → Advanced: set Roaming Aggressiveness to the lowest value; if they are there, also set MIMO Power Save Mode to No SMPS and turn Packet Coalescing off. The names vary by adapter.
-4. Where the HomePod stands: in line of sight of the router, not inside a cabinet.
-5. Raise the latency by 10–15 ms: choose Custom under Scene, or press Apply when the Home page suggests it. Below Stream status, the Home page shows how many network hiccups the last 10 minutes had; when they really eat into the margin, a hint says which Wi-Fi hop is to blame and which latency to try. The app never changes the latency by itself.
+4. The HomePod's band: the HomePod (2nd generation) can use 2.4 GHz or 5 GHz, and when the router gives both bands one name (Smart Connect, band steering) it may end up on 2.4 GHz, which is crowded wherever many networks are nearby. Give the 5 GHz band a name of its own (turn Smart Connect off), connect the iPhone to it, and move the HomePod to that network in the Home app. Measured 2026-10-10 in a dense building with thin walls, the HomePod 50 cm from the router: on 2.4 GHz a ping median of 21 ms, p99 about 110 ms and 4% lost, with stutters even at 500 ms; on 5 GHz 2 ms, at most 12 ms, nothing lost. This helps more than placement.
+5. Where the HomePod stands: in line of sight of the router, not inside a cabinet.
+6. Raise the latency by 10–15 ms: choose Custom under Scene, or press Apply when the Home page suggests it. Below Stream status, the Home page shows how many network hiccups the last 10 minutes had; when they really eat into the margin, a hint says which Wi-Fi hop is to blame (with the PC on a cable, always the HomePod's) and which latency to try. The app never changes the latency by itself. The Dropouts tile counts this connection's gaps: the ones measured on the PC plus the hiccups that ate the margin, which the HomePod likely played as gaps. The HomePod never reports late packets, so that part is an estimate and the number gets a "≈"; hover over the tile to see both parts.
 
 **Reading the log** (`%APPDATA%\HomePodCast\homepodcast.log`): while streaming, the HomePod and the router are pinged every 100 ms, and a round trip over 30 ms or a missing answer is logged as `network: ping to the speaker took 48 ms` (`the router` for the router, `lost` for no answer). The `stats:` line every minute has `rtx=resent/requested`, `rtxMiss=` (packets asked for too late to resend) and `ping=median/p99/max lost=lost/sent router=…`.
 
-- Only the speaker's ping spikes while the router's stays normal: it's the router → HomePod hop; see step 4.
-- Both spike at the same time: it's the PC's own Wi-Fi; see steps 1–3.
+- Only the speaker's ping spikes while the router's stays normal: it's the router → HomePod hop; see steps 4 and 5.
+- Both spike at the same time: it's the PC's own Wi-Fi; see steps 1–3. With the PC on a cable it's still the HomePod's hop (the router only answered its own pings late), and the hint says so.
 - Only the router is slow: routers often answer pings to themselves last; the sound is not affected.
 
 ## Building
