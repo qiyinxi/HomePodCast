@@ -447,7 +447,9 @@ internal sealed class HomePage : ScrollPage
         }
 
         _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}" : null);
-        _speakerDelay.SetValue(c.ArrivalToRenderMs?.ToString());
+        // Like the other tiles, only while streaming: the value saved from the last connection still sets the latency
+        // floor and the estimates, but shown while disconnected it looked like a live reading.
+        _speakerDelay.SetValue(streaming ? c.ArrivalToRenderMs?.ToString() : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
         _dropouts.SetValue(streaming ? dropouts : null);
         SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
