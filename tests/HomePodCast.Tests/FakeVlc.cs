@@ -18,6 +18,9 @@ internal sealed class FakeVlc : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly string _password;
 
+    // A request to this fake once took over the app's 2 s on a busy CI runner; no test here is about that limit.
+    static FakeVlc() => VlcEndpoint.RequestTimeout = TimeSpan.FromSeconds(15);
+
     public FakeVlc(string password, double delaySeconds = 0, bool playing = true)
     {
         _password = password;
