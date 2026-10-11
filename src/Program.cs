@@ -55,9 +55,10 @@ public static class Program
 
         // Only the running instance opens the log: it keeps the file open for writing, so a second launch opening it
         // first threw, exited with 1 and never showed the window.
-        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
+        Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName));
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
-        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : ""));
+        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
+                 (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
         // tray). Not after crashes, hangs or reboots, and never for test copies.

@@ -162,6 +162,9 @@ public sealed class AppConfig
 
     private static string FilePath => Path.Combine(Directory, "config.json");
 
+    /// <summary>The log's file name in <see cref="Directory"/> (Program.RunGui opens it; 设置 → 工具 → 日志 shows its folder).</summary>
+    public const string LogFileName = "homepodcast.log";
+
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,

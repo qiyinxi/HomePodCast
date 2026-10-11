@@ -48,7 +48,9 @@ internal sealed partial class TrayApp
     /// <param name="updatedFrom">--updated-from=: the helper started us after installing (or trying to install) an update.</param>
     private void InitUpdate(string? updatedFrom)
     {
-        _store = UpdateInstaller.IsStorePackage();
+        // The Microsoft Store version (AppEnvironment.IsPackaged): the Store updates it, and Store policy wants the app's
+        // own update check off, so it never asks GitHub (its package has no internetClient capability).
+        _store = AppEnvironment.IsPackaged;
         _noAutomaticUpdates = _store ? "Microsoft Store package" : ReleaseVersion.WhyNotAutomatic(ReleaseVersion.CurrentText, AppConfig.Profile, DebugBuild);
         _updateStatus = _store ? L.T("Microsoft Store 版由 Microsoft Store 负责更新。") : LastCheckText();
         _tray.BalloonTipClicked += (_, _) =>
