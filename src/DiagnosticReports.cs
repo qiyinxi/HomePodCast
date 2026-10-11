@@ -102,8 +102,7 @@ public static class DiagnosticReports
 
     private static string RedactLine(string line, List<Regex> literals)
     {
-        if (line.IndexOf(Log.NameStart) >= 0 || line.IndexOf(Log.NameEnd) >= 0) line = Marked.Replace(line, "[name]");
-        else line = RedactUnmarked(line);
+        line = line.IndexOf(Log.NameStart) >= 0 ? Marked.Replace(line, "[name]") : RedactUnmarked(line);
         line = Calibration.Replace(line, "$1 [context redacted]");
         line = Paths.Replace(line, "[path]");
         line = Quoted.Replace(line, "\"[redacted]\"");
@@ -138,7 +137,7 @@ public static class DiagnosticReports
 
     // Latin, Greek, Cyrillic and the like: a name there is a word of its own. Chinese and Japanese text runs names into
     // the words around them, so no boundary is asked for there.
-    private static bool Spaced(char c) => c == '_' || (c < '⺀' && char.IsLetterOrDigit(c));
+    private static bool Spaced(char c) => c == '_' || (c < 0x2E80 && char.IsLetterOrDigit(c)); // U+2E80: CJK radicals on
 
     /// <summary>A speaker id as the log may also write it: as given, without separators in upper case, and a pair's tsid.</summary>
     public static IEnumerable<string> IdForms(string? id)
