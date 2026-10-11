@@ -326,6 +326,32 @@ public class SpeakerInfoTests
         Assert.DoesNotContain("卧室", Texts(panel));
     });
 
+    [Fact]
+    public void A_selection_changed_by_a_profile_is_shown_and_read_at_once_but_only_while_the_page_is_shown() => OnSta(() =>
+    {
+        var cache = new SpeakerInfoCache(new FakeInfo().Read);
+        var study = IPAddress.Parse("192.168.50.99");
+        List<SelectedSpeaker> speakers = [new("02:BB", "书房", study, null)];
+        using var panel = new UI.Pages.SpeakerInfoPanel(cache, () => speakers, () => false, () => null);
+
+        panel.SelectionChanged(); // hidden: PageShown shows and reads it
+        Assert.Null(cache.Get("02:BB"));
+        Assert.DoesNotContain("书房", Texts(panel));
+
+        panel.PageShown();
+        Assert.Contains("书房", Texts(panel));
+        speakers = [new("02:DC:8E:68:21:FB", "卧室", Bedroom, null)]; // a profile switched speaker while 设置 is shown
+        panel.SelectionChanged();
+        Assert.Contains("卧室", Texts(panel));
+        Assert.DoesNotContain("书房", Texts(panel));
+        Assert.NotNull(cache.Get("02:DC:8E:68:21:FB")); // its /info is being read
+
+        panel.PageHidden();
+        speakers = [new("02:BB", "书房", study, null)];
+        panel.SelectionChanged();
+        Assert.Contains("卧室", Texts(panel));
+    });
+
     /// <summary>Every non-empty text of the panel's text blocks (hidden lines have none).</summary>
     private static List<string> Texts(Control root) =>
         root.Controls.Cast<Control>().SelectMany(c => (c is UI.Controls.TextBlock { Text.Length: > 0 } t ? [t.Text] : Array.Empty<string>()).Concat(Texts(c))).ToList();
