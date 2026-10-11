@@ -192,6 +192,13 @@ function Wait-RunSuccess($run, [string] $what, [string] $hint) {
     $run
 }
 
+# The highest N among the vX.Y.Z-beta.N tags given; 0 when there are none (a version's first beta: Measure-Object
+# returns nothing for no input, and StrictMode refuses .Maximum on it).
+function Get-HighestBeta([object[]] $betas) {
+    if (-not $betas -or $betas.Count -eq 0) { return 0 }
+    [int]($betas | Measure-Object N -Maximum).Maximum
+}
+
 # Waits until a PR's checks have finished; throws when one failed.
 function Wait-PrCheck([int] $number) {
     $deadline = (Get-Date).AddMinutes(3)
@@ -319,7 +326,7 @@ function Show-Status {
 
     Write-Step 'Next'
     $betas = @($tags | Where-Object { $_.Version -eq $version -and $_.Pre -eq 'beta' })
-    $next = "v$version-beta.$(1 + [int](($betas | Measure-Object N -Maximum).Maximum ?? 0))"
+    $next = "v$version-beta.$(1 + (Get-HighestBeta $betas))"
     if (@($tags | Where-Object { $_.Stable -and $_.Version -eq $version })) {
         Write-Info "v$version is released: change <Version> in $Csproj on dev (a commit 'Version X.Y.Z') before the next beta"
     }
@@ -355,7 +362,7 @@ function Invoke-Beta {
     $onHead = @($tags | Where-Object Sha -eq $head | ForEach-Object Name)
     if ($onHead) { throw "HEAD is already tagged $($onHead -join ', '). Tags are never moved or doubled: if a tag build failed on flaky infrastructure, re-run its failed jobs (gh run rerun <run id> --failed); a new beta needs new commits on dev" }
     $betas = @($tags | Where-Object { $_.Version -eq $version -and $_.Pre -eq 'beta' })
-    $n = 1 + [int](($betas | Measure-Object N -Maximum).Maximum ?? 0)
+    $n = 1 + (Get-HighestBeta $betas)
     $tag = "v$version-beta.$n"
     Write-Info "next beta: $tag$(if ($betas) { " (after $(($betas | ForEach-Object Name) -join ', '))" })"
     $main = Get-RevParse "$Remote/main"
