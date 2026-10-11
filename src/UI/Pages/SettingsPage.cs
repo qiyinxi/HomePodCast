@@ -122,6 +122,7 @@ internal sealed class SettingsPage : ScrollPage
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
+        AddSpeakerInfo(before: updates);
 
         _language.SelectionChangeCommitted += (_, _) =>
         {
@@ -488,6 +489,7 @@ internal sealed class SettingsPage : ScrollPage
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
+        _speakerInfo?.PageShown();
     }
 
     /// <summary>A password typed but not saved is not kept once the page is left.</summary>
@@ -495,6 +497,25 @@ internal sealed class SettingsPage : ScrollPage
     {
         _vlcPassword.Clear();
         ShowVlcPasswordButtons();
+        _speakerInfo?.PageHidden();
+    }
+
+    // ---------------------------------------------------------------- 音箱信息 (SpeakerInfoPanel.cs)
+
+    private SpeakerInfoPanel? _speakerInfo;
+
+    /// <summary>The 音箱信息 section, just above <paramref name="before"/>: the selected speakers' details, read when shown.</summary>
+    private void AddSpeakerInfo(Control before)
+    {
+        var header = Ui.Section(L.T("音箱信息"));
+        _speakerInfo = new SpeakerInfoPanel(_app);
+        int at = Content.Controls.GetChildIndex(before);
+        Content.Controls.Add(header);
+        Content.Controls.Add(_speakerInfo);
+        Content.Controls.SetChildIndex(header, at);
+        Content.Controls.SetChildIndex(_speakerInfo, at + 1);
+        Content.GapBefore[header] = 20;
+        Content.GapBefore[_speakerInfo] = 4;
     }
 
     protected override void Dispose(bool disposing)

@@ -242,6 +242,7 @@ internal sealed partial class TrayApp : ApplicationContext
         try
         {
             var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            LastScan = found; // TXT records and pair members for 设置 → 音箱信息
             found = StereoPairs.Merge(found); // a stereo pair shows as one entry (experimental)
             // Keep the configured speaker in the list even if it didn't answer this time.
             if (Config.DeviceId != null && !found.Any(d =>
