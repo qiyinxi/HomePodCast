@@ -95,6 +95,10 @@ internal sealed class SettingsPage : ScrollPage
         var sync = new FluentButton(L.T("开始"));
         var syncRow = new SettingRow(Glyph.Gauge, L.T("音画同步测试"),
             L.T("听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。"), sync);
+        // The folder Explorer has to open: for the Store version, the package's own storage (AppEnvironment.LogFolder).
+        var logs = new FluentButton(L.T("打开日志文件夹"), ButtonKind.Secondary, Glyph.Folder);
+        var logsRow = new SettingRow(Glyph.Folder, L.T("日志"),
+            L.F("报告问题时请附上这个文件夹里的 {0}：\n{1}", AppConfig.LogFileName, AppEnvironment.LogFolder), logs);
 
         // Not "更新": that is the button's text, and other languages need two words (Updates / Update).
         var updates = Ui.Section(L.T("软件更新"));
@@ -110,11 +114,11 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow,
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow,
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
@@ -143,6 +147,7 @@ internal sealed class SettingsPage : ScrollPage
             catch (Exception ex) { MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast"); }
             _autostart.Checked = SafeAutostart();
         };
+        logs.Click += (_, _) => AppEnvironment.OpenLogFolder();
         _autoconnect.Toggled += (_, _) =>
         {
             _app.Config.AutoConnect = _autoconnect.Checked;

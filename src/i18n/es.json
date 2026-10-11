@@ -348,5 +348,8 @@
   "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "La configuración de privacidad de Windows no permite que HomePodCast use el micrófono. Cuando lo permitas, apaga el micrófono y vuelve a encenderlo.",
   "无法使用麦克风": "No se puede usar el micrófono",
   "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "La configuración de privacidad de Windows no permite que HomePodCast use el micrófono.\n\nEn Configuración de Windows → Privacidad y seguridad → Micrófono, activa \"Acceso al micrófono\" y HomePodCast en la lista de aplicaciones; después apaga el micrófono y vuelve a encenderlo.\n\nHaz clic en \"Sí\" para abrir Configuración de Windows.",
-  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "La configuración de privacidad de Windows no permite que HomePodCast use el micrófono.\n\nEn Configuración de Windows → Privacidad y seguridad → Micrófono, activa \"Acceso al micrófono\" y \"Permitir que las aplicaciones de escritorio accedan al micrófono\"; después apaga el micrófono y vuelve a encenderlo.\n\nHaz clic en \"Sí\" para abrir Configuración de Windows."
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "La configuración de privacidad de Windows no permite que HomePodCast use el micrófono.\n\nEn Configuración de Windows → Privacidad y seguridad → Micrófono, activa \"Acceso al micrófono\" y \"Permitir que las aplicaciones de escritorio accedan al micrófono\"; después apaga el micrófono y vuelve a encenderlo.\n\nHaz clic en \"Sí\" para abrir Configuración de Windows.",
+  "打开日志文件夹": "Abrir carpeta de registros",
+  "日志": "Registro",
+  "报告问题时请附上这个文件夹里的 {0}：\n{1}": "Si informas de un problema, adjunta {0} de esta carpeta:\n{1}"
 }

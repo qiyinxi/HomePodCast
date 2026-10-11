@@ -348,5 +348,8 @@
   "Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。": "Windowsin tietosuoja-asetukset eivät salli HomePodCastin käyttää mikrofonia. Kun olet sallinut sen, kytke mikrofoni pois ja takaisin päälle.",
   "无法使用麦克风": "Mikrofonia ei voi käyttää",
   "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”，并在应用列表里打开 HomePodCast，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windowsin tietosuoja-asetukset eivät salli HomePodCastin käyttää mikrofonia.\n\nOta kohdassa Windowsin asetukset → Tietosuoja ja suojaus → Mikrofoni käyttöön \"Mikrofonin käyttöoikeus\" ja sovellusluettelosta HomePodCast, ja kytke sitten mikrofoni pois ja takaisin päälle.\n\nValitse Kyllä, niin Windowsin asetukset avautuvat.",
-  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windowsin tietosuoja-asetukset eivät salli HomePodCastin käyttää mikrofonia.\n\nOta kohdassa Windowsin asetukset → Tietosuoja ja suojaus → Mikrofoni käyttöön \"Mikrofonin käyttöoikeus\" ja \"Salli työpöytäsovellusten käyttää mikrofonia\", ja kytke sitten mikrofoni pois ja takaisin päälle.\n\nValitse Kyllä, niin Windowsin asetukset avautuvat."
+  "Windows 的隐私设置不允许 HomePodCast 使用麦克风。\n\n请在 Windows 设置 → 隐私和安全性 → 麦克风 里打开“麦克风访问权限”和“允许桌面应用访问你的麦克风”，然后把麦克风关掉再打开。\n\n点「是」打开 Windows 设置。": "Windowsin tietosuoja-asetukset eivät salli HomePodCastin käyttää mikrofonia.\n\nOta kohdassa Windowsin asetukset → Tietosuoja ja suojaus → Mikrofoni käyttöön \"Mikrofonin käyttöoikeus\" ja \"Salli työpöytäsovellusten käyttää mikrofonia\", ja kytke sitten mikrofoni pois ja takaisin päälle.\n\nValitse Kyllä, niin Windowsin asetukset avautuvat.",
+  "打开日志文件夹": "Avaa lokikansio",
+  "日志": "Loki",
+  "报告问题时请附上这个文件夹里的 {0}：\n{1}": "Kun ilmoitat ongelmasta, liitä mukaan tämän kansion {0}:\n{1}"
 }
