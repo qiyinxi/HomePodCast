@@ -12,7 +12,7 @@ The app saves a correction to its estimate for this speaker (or speaker group), 
 
 Choose your speaker, capture device, app destinations and independent send volumes, effects, volume cap, keyboard volume mode and night mode. Open **Home → Manage profiles** or **Settings → Playback profiles**, name the profile and select **Save current settings**. Up to 32 profiles can be stored. Selecting a saved profile lets you rename/overwrite it with current settings or delete it.
 
-Home's profile picker and **Apply** button restore the whole set in one action, with at most one speaker reconnect. The microphone is switched off on application. Current loudness is never restored from a profile or raised by applying one; startup, language, update preferences, passwords and calibrations remain separate. A missing capture endpoint keeps capture paused, as with a manual device selection.
+Home's profile picker and **Apply** button restore the whole set in one action, with at most one speaker reconnect. The microphone is switched off on application. Profiles store a volume cap rather than playback loudness: the current saved volume can only be lowered to the cap; a different speaker uses its own volume subject to that cap. Startup, language, update preferences, passwords and calibrations remain separate. A missing capture endpoint keeps capture paused, as with a manual device selection.
 
 ### Independent app volumes
 
@@ -44,7 +44,7 @@ While that player is fullscreen, use its ±5/±20 ms controls, or **Alt+Left/Rig
 
 设置好音箱、采集设备、程序去处和独立音量、音效、音量上限、键盘音量模式、夜间模式，打开 **首页 → 管理配置** 或 **设置 → 使用配置**，命名后点 **保存当前设置**。最多保存 32 个。选择已有配置后可以改名并用当前设置覆盖，也可以删除。
 
-首页选择配置后点 **应用**，整套设置一次应用，最多重连一次。应用后麦克风关闭；配置不保存或提高当前播放音量。开机启动、语言、更新偏好、密码和校准单独保留。采集设备不可用时继续暂停采集，与手动选择设备的行为一致。
+首页选择配置后点 **应用**，整套设置一次应用，最多重连一次。应用后麦克风关闭；配置保存音量上限，不保存播放音量：当前保存的音量只会降低到上限，换音箱时使用新音箱自己的音量并受上限限制。开机启动、语言、更新偏好、密码和校准单独保留。采集设备不可用时继续暂停采集，与手动选择设备的行为一致。
 
 ### 分别控制程序的两路音量
 

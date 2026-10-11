@@ -341,4 +341,5 @@ internal static class Glyph
     public const string UpdateRestore = "";
     public const string Recent = "";
     public const string Flag = "";
+    public const string Folder = "";
 }

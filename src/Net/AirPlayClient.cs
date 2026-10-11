@@ -374,10 +374,14 @@ public class AirPlayException(string message) : Exception(message);
 /// The network the speaker is reached through: when it is Public and the firewall doesn't let us in there (it reads
 /// the rules), the message says so, which is what the main window and the tray show.
 /// </param>
-public sealed class FirewallBlockedException(NetworkProfile? network = null) : AirPlayException(Describe(network))
+public sealed class FirewallBlockedException(NetworkProfile? network = null) : AirPlayException(Describe(network, AppEnvironment.IsPackaged))
 {
-    private static string Describe(NetworkProfile? network) =>
+    /// <param name="packaged">The Store version: its package brings the Windows Firewall rules, so on a Private network the
+    /// usual cause is another firewall or security program, and it has no exe path worth naming.</param>
+    internal static string Describe(NetworkProfile? network, bool packaged) =>
         network is { Category: NetworkCategory.Public } && !Firewall.Inspect().PublicAllowed
             ? L.F("网络「{0}」是公用网络，Windows 防火墙拦截了音箱连回本程序的连接", network.DisplayName)
-            : L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
+            : packaged
+                ? L.T("音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接")
+                : L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
 }
