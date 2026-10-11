@@ -416,5 +416,10 @@
   "仍然连接": "Koble til likevel",
   "{0}正在被其他设备使用，空闲后自动连接": "{0} brukes av en annen enhet; kobler til så snart den er ledig",
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} har kanskje fortsatt denne PC-ens siste tilkobling; kobler til så snart den avsluttes (høyst {1} s til)",
-  "{0}（会定期变化）": "{0} (endres med jevne mellomrom)"
+  "{0}（会定期变化）": "{0} (endres med jevne mellomrom)",
+  "选择配置…": "Velg en profil…",
+  "已经有名为「{0}」的配置，请换一个名称。": "Det finnes allerede en profil som heter \"{0}\". Velg et annet navn.",
+  "估算值超出了滑块的范围，请先拖动滑块对准，再应用。": "Anslaget ligger utenfor glidebryterens område. Flytt glidebryteren til blink og klikk faller sammen, og bruk deretter.",
+  "测试期间连接、音源或延迟发生了变化，这次的结果没有保存，请重新测试。": "Tilkoblingen, lydkilden eller forsinkelsen endret seg under testen, så resultatet ble ikke lagret. Test på nytt.",
+  "这次的结果和估算相差太大，没有保存，请重新测试。": "Resultatet avviker for mye fra anslaget og ble ikke lagret. Test på nytt."
 }

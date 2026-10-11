@@ -5,7 +5,7 @@ namespace HomePodCast.UI;
 internal sealed class ProfilesForm : FluentDialog
 {
     private readonly AppConfig _config;
-    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440 };
+    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440, Placeholder = L.T("选择配置…") };
     private readonly TextBox _name = new() { MaxLength = UsageProfiles.MaxNameLength, AccessibleName = L.T("配置名称") };
     private readonly FluentButton _apply = new(L.T("应用"), ButtonKind.Primary);
     private readonly FluentButton _delete = new(L.T("删除"), ButtonKind.Subtle);
@@ -34,6 +34,13 @@ internal sealed class ProfilesForm : FluentDialog
         save.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(_name.Text)) { _name.Focus(); return; }
+            // Two profiles of the same name can't be told apart in 首页's picker.
+            if (UsageProfiles.NameTaken(config.UsageProfiles, _name.Text, _selected))
+            {
+                MessageBox.Show(this, L.F("已经有名为「{0}」的配置，请换一个名称。", _name.Text.Trim()), L.T("使用配置"));
+                _name.Focus();
+                return;
+            }
             if (_selected != null && MessageBox.Show(this, L.T("用当前设置覆盖选中的配置吗？"), L.T("使用配置"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
             if (_selected == null && config.UsageProfiles.Count >= UsageProfiles.MaxProfiles)

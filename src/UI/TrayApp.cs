@@ -322,16 +322,23 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             ResetSyncCalibration(snapshot.Context);
         }
-        else if (result == DialogResult.OK && test.CanUseMeasurement && IsCalibrationSnapshotCurrent(snapshot))
+        else if (result == DialogResult.OK)
         {
-            Config.MeasuredAvOffsetMs = test.OffsetMs;
-            Config.Save();
-            Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            bool current = test.CanUseMeasurement && IsCalibrationSnapshotCurrent(snapshot);
+            if (current)
+            {
+                Config.MeasuredAvOffsetMs = test.OffsetMs;
+                Config.Save();
+                Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            }
             if (test.RequestedAction == SyncTestAction.Apply)
             {
-                bool captured = localTimes.Length > 0;
-                if (!captured || !ApplySyncCalibration(snapshot, test.OffsetMs))
-                    MessageBox.Show(owner, L.T("没有检测到送往音箱的测试音，请确认音源和分流设置后重新测试。"), L.T("音画同步测试"));
+                // Say what actually happened: the path may have changed after the click, or the click never reached the stream.
+                var outcome = !current ? SyncCalibrationOutcome.PathChanged
+                    : localTimes.Length == 0 ? SyncCalibrationOutcome.NoTestSound
+                    : ApplySyncCalibration(snapshot, test.OffsetMs);
+                if (outcome != SyncCalibrationOutcome.Applied) Log.Warn($"sync calibration not saved: {outcome}");
+                if (SyncCalibrationMessage(outcome) is { } message) MessageBox.Show(owner, message, L.T("音画同步测试"));
             }
         }
     }

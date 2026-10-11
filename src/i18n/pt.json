@@ -416,5 +416,10 @@
   "仍然连接": "Ligar mesmo assim",
   "{0}正在被其他设备使用，空闲后自动连接": "{0} está a ser usada por outro dispositivo; liga-se assim que ficar livre",
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} pode ainda manter a última ligação deste PC; liga-se assim que terminar (no máximo mais {1} s)",
-  "{0}（会定期变化）": "{0} (muda de tempos a tempos)"
+  "{0}（会定期变化）": "{0} (muda de tempos a tempos)",
+  "选择配置…": "Escolha um perfil…",
+  "已经有名为「{0}」的配置，请换一个名称。": "Já existe um perfil chamado \"{0}\". Escolha outro nome.",
+  "估算值超出了滑块的范围，请先拖动滑块对准，再应用。": "A estimativa está fora do intervalo do controlo deslizante. Mova o controlo até o flash e o clique coincidirem e depois aplique.",
+  "测试期间连接、音源或延迟发生了变化，这次的结果没有保存，请重新测试。": "A ligação, a fonte de áudio ou o atraso mudou durante o teste, por isso o resultado não foi guardado. Repita o teste.",
+  "这次的结果和估算相差太大，没有保存，请重新测试。": "O resultado afasta-se demasiado da estimativa e não foi guardado. Repita o teste."
 }

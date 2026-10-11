@@ -34,6 +34,7 @@ internal sealed partial class TrayApp
     public void DeleteUsageProfile(string id)
     {
         Config.UsageProfiles.RemoveAll(p => p.Id == id);
+        if (Config.LastUsageProfileId == id) Config.LastUsageProfileId = null;
         Config.Save();
         _form.ShowProfiles();
     }
@@ -57,7 +58,8 @@ internal sealed partial class TrayApp
         string? selectionBefore = OwnSession.KeyOf(Config);
         string connectionBefore = ConnectionSignature(Config);
         Fx.MicOn = false;
-        UsageProfiles.Apply(Config, s);
+        UsageProfiles.Apply(Config, s, LastScan);
+        Config.LastUsageProfileId = profile.Id; // 首页's picker shows it from now on
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.SetVolumeCap(Config.VolumeCapPercent);
         Controller.NightMode.Enabled = Config.NightMode;
@@ -70,9 +72,10 @@ internal sealed partial class TrayApp
         _followLink?.CapChanged();
         _form.ReloadConfiguration();
         KickPlayers();
+        // A profile without a speaker keeps the current one (UsageProfiles.Apply): no selection now means none before
+        // either, and nothing to connect or disconnect.
         string? selection = OwnSession.KeyOf(Config);
-        if (_wantConnected && selection == null) Disconnect();
-        else if (_wantConnected && ConnectionSignature(Config) != connectionBefore)
+        if (_wantConnected && selection != null && ConnectionSignature(Config) != connectionBefore)
             Connect(ProfileConnectTrigger(selection == selectionBefore, Controller.State is StreamState.Streaming or StreamState.Retrying));
         RaiseStateChanged();
         Log.Info("usage profile applied");

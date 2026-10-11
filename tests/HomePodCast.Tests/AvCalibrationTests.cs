@@ -175,6 +175,89 @@ public class AvCalibrationTests
         Assert.Equal(0, LatencyTuner.SoundLagMs(int.MinValue, cfg, int.MinValue));
     }
     [Fact]
+    public void A_snapshot_is_current_only_on_the_same_path_latency_capture_extra_and_fifo_target()
+    {
+        var taken = new AvCalibrationSnapshot(Endpoint, 120, 0, 16);
+        Assert.True(taken.SamePathAs(taken));
+        Assert.True(taken.SamePathAs(taken with { FifoTargetMs = 16.0004 }));
+        Assert.True(taken.SamePathAs(taken with { Context = Endpoint with { SpeakerId = "AABBCC" } })); // the same key
+        Assert.False(taken.SamePathAs(null)); // not streaming now
+        Assert.False(taken.SamePathAs(taken with { Context = Endpoint with { SpeakerId = "another-speaker" } }));
+        Assert.False(taken.SamePathAs(taken with { Context = Endpoint with { CaptureEndpointId = "output-two" } }));
+        Assert.False(taken.SamePathAs(taken with { Context = Endpoint with { PerAppRouting = true } }));
+        Assert.False(taken.SamePathAs(taken with { EffectiveLatencyMs = 121 }));
+        Assert.False(taken.SamePathAs(taken with { CaptureExtraMs = 35 }));
+        Assert.False(taken.SamePathAs(taken with { FifoTargetMs = 24 })); // a dropout raised the FIFO target
+        var nowhere = new AvCalibrationSnapshot(default, 120, 0, 16);
+        Assert.False(nowhere.SamePathAs(nowhere));
+    }
+
+    [Fact]
+    public void The_sync_test_value_counts_only_after_a_click_on_a_path_that_never_changed()
+    {
+        bool current = true;
+        var gate = new SyncMeasurementGate(() => current);
+        Assert.False(gate.CanUse); // no click yet
+        gate.ClickPlayed();
+        Assert.True(gate.CanUse);
+        current = false;
+        Assert.False(gate.CanUse);
+        current = true; // back to the same path: the measurement still spans the change
+        Assert.False(gate.CanUse);
+        Assert.True(gate.PathChanged);
+    }
+
+    [Fact]
+    public void A_test_sound_that_failed_to_play_never_counts()
+    {
+        var gate = new SyncMeasurementGate(() => true);
+        gate.ClickPlayed();
+        gate.Failed();
+        Assert.False(gate.CanUse);
+        gate.ClickPlayed();
+        Assert.False(gate.CanUse);
+    }
+
+    [Fact]
+    public void A_prediction_cut_off_at_the_end_of_the_slider_counts_only_once_the_slider_moved()
+    {
+        var gate = new SyncMeasurementGate(() => true, startClamped: true);
+        gate.ClickPlayed();
+        Assert.False(gate.CanUse); // Enter = 应用 would save the slider's end as the measurement
+        gate.SliderMoved();
+        Assert.True(gate.CanUse);
+    }
+
+    [Theory]
+    [InlineData(-5, 600)]
+    [InlineData(0, 600)]
+    [InlineData(156, 600)]
+    [InlineData(400, 600)]
+    [InlineData(401, 700)]
+    [InlineData(571, 800)] // 音乐: 500 ms + the speaker and PC share
+    [InlineData(1900, 2000)]
+    [InlineData(5000, AvCalibrations.MaxMeasuredMs)]
+    public void The_sync_slider_reaches_past_the_prediction(int predictedMs, int maximum) =>
+        Assert.Equal(maximum, SyncTestForm.SliderMaximum(predictedMs));
+
+    [Fact]
+    public void Every_prediction_that_can_be_saved_starts_inside_the_slider()
+    {
+        for (int ms = 0; ms <= AvCalibrations.MaxMeasuredMs; ms++)
+            Assert.InRange(ms, 0, SyncTestForm.SliderMaximum(ms));
+    }
+
+    [Fact]
+    public void A_calibration_that_was_not_saved_says_why()
+    {
+        Assert.Null(TrayApp.SyncCalibrationMessage(SyncCalibrationOutcome.Applied));
+        var messages = new[] { SyncCalibrationOutcome.NoTestSound, SyncCalibrationOutcome.PathChanged, SyncCalibrationOutcome.OutOfRange }
+            .Select(TrayApp.SyncCalibrationMessage).ToList();
+        Assert.All(messages, m => Assert.False(string.IsNullOrWhiteSpace(m)));
+        Assert.Equal(messages.Count, messages.Distinct().Count()); // a changed path no longer reads "no test sound detected"
+    }
+
+    [Fact]
     public void A_negative_residual_is_applied_and_compensation_never_goes_below_zero()
     {
         var cfg = new AppConfig();

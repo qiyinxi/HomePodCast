@@ -213,10 +213,12 @@ internal sealed class SettingsPage : ScrollPage
 
     /// <summary>The cap was changed here (the volume sliders follow).</summary>
     public event Action? CapChanged;
+    /// <summary>A profile was applied: everything here, and 音箱信息 for the speaker it may have switched to.</summary>
     public void ReloadConfiguration()
     {
         _capWait.Stop();
         Load();
+        _speakerInfo?.SelectionChanged();
     }
     public void FlushPendingSettings()
     {
