@@ -416,5 +416,7 @@
   "仍然连接": "Se connecter quand même",
   "{0}正在被其他设备使用，空闲后自动连接": "{0} est utilisée par un autre appareil ; connexion dès qu'elle sera libre",
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} garde peut-être encore la dernière connexion de ce PC ; connexion dès qu'elle se termine ({1} s de plus au maximum)",
-  "{0}（会定期变化）": "{0} (change de temps en temps)"
+  "{0}（会定期变化）": "{0} (change de temps en temps)",
+  "选择配置…": "Choisir un profil…",
+  "已经有名为「{0}」的配置，请换一个名称。": "Un profil nommé \"{0}\" existe déjà. Choisissez un autre nom."
 }

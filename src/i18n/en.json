@@ -416,5 +416,7 @@
   "仍然连接": "Connect anyway",
   "{0}正在被其他设备使用，空闲后自动连接": "{0} is in use by another device; connecting as soon as it's free",
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} may still hold this PC's last connection; connecting as soon as it ends (at most {1} s more)",
-  "{0}（会定期变化）": "{0} (changes from time to time)"
+  "{0}（会定期变化）": "{0} (changes from time to time)",
+  "选择配置…": "Choose a profile…",
+  "已经有名为「{0}」的配置，请换一个名称。": "There is already a profile named \"{0}\". Please choose another name."
 }

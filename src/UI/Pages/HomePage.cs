@@ -35,7 +35,7 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _movieHint = Ui.Note();
     private int _lagMs;
     private readonly LatencyTuner _tuner;
-    private readonly FluentComboBox _profiles = new() { MinWidth = 140, AccessibleName = L.T("使用配置") };
+    private readonly FluentComboBox _profiles = new() { MinWidth = 140, AccessibleName = L.T("使用配置"), Placeholder = L.T("选择配置…") };
     private readonly FluentButton _profileApply = new(L.T("应用"));
     private string[] _profileIds = [];
     private readonly TimerDebounce _sliderWait = new(1000), _sceneWait = new(1000);
@@ -168,6 +168,7 @@ internal sealed class HomePage : ScrollPage
             if (_profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _profileIds.Length)
                 _app.ApplyUsageProfile(_profileIds[_profiles.SelectedIndex], FindForm());
         };
+        _profiles.SelectedIndexChanged += (_, _) => _profileApply.Enabled = _profiles.SelectedIndex >= 0;
         ShowProfiles();
         card.Gap = 10;
 
@@ -284,16 +285,19 @@ internal sealed class HomePage : ScrollPage
         _app.SetVolume(_volume.Value);
     }
 
+    /// <summary>
+    /// The profile picker after a profile was applied (here or in the dialog), saved, renamed or deleted: the one applied
+    /// last, or the placeholder 「选择配置…」 with 应用 off until one is picked.
+    /// </summary>
     public void ShowProfiles()
     {
-        string? selected = _profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _profileIds.Length
-            ? _profileIds[_profiles.SelectedIndex] : null;
-        _profileIds = _app.Config.UsageProfiles.Select(p => p.Id).ToArray();
+        var profiles = _app.Config.UsageProfiles;
+        _profileIds = profiles.Select(p => p.Id).ToArray();
         _profiles.Items.Clear();
-        _profiles.Items.AddRange(_app.Config.UsageProfiles.Select(p => p.Name));
-        _profiles.SelectedIndex = Array.IndexOf(_profileIds, selected);
-        if (_profiles.SelectedIndex < 0 && _profileIds.Length > 0) _profiles.SelectedIndex = 0;
-        _profiles.Enabled = _profileApply.Enabled = _profileIds.Length > 0;
+        _profiles.Items.AddRange(profiles.Select(p => p.Name));
+        _profiles.SelectedIndex = UsageProfiles.PickerIndex(profiles, _app.Config.LastUsageProfileId);
+        _profiles.Enabled = _profileIds.Length > 0;
+        _profileApply.Enabled = _profiles.SelectedIndex >= 0;
     }
 
     public void ReloadConfiguration()

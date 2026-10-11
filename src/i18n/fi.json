@@ -416,5 +416,7 @@
   "仍然连接": "Yhdistä silti",
   "{0}正在被其他设备使用，空闲后自动连接": "{0} on toisen laitteen käytössä; yhdistetään, kun se vapautuu",
   "{0}可能还保留着这台电脑上次的连接，结束后自动连接（最多再等 {1} 秒）": "{0} saattaa yhä pitää tämän tietokoneen edellistä yhteyttä; yhdistetään, kun se päättyy (enintään {1} s)",
-  "{0}（会定期变化）": "{0} (vaihtuu ajoittain)"
+  "{0}（会定期变化）": "{0} (vaihtuu ajoittain)",
+  "选择配置…": "Valitse profiili…",
+  "已经有名为「{0}」的配置，请换一个名称。": "Profiili nimeltä \"{0}\" on jo olemassa. Valitse toinen nimi."
 }
