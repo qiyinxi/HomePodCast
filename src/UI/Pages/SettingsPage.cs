@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using HomePodCast.UI.Controls;
+using HomePodCast.Update;
 
 namespace HomePodCast.UI.Pages;
 
 /// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, local players in the 影视 scene
 /// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
-/// experimental multi-speaker dialog, the A/V sync test, and about.</summary>
+/// experimental multi-speaker dialog, the A/V sync test, updates (check, install, channel, automatic checks), and about.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
@@ -33,6 +34,19 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentButton _vlcSave = new(L.T("保存"));
     private readonly FluentButton _vlcClear = new(L.T("清除"), ButtonKind.Subtle);
     private readonly SettingRow _vlcPasswordRow;
+
+    // 更新: the version and the check's status, the new version's actions, the channel, automatic checks
+    private static readonly UpdateChannel[] Channels = [UpdateChannel.Stable, UpdateChannel.Beta];
+    private readonly FluentButton _check = new(L.T("检查更新"));
+    private readonly SettingRow _checkRow;
+    private readonly FluentButton _install = new(L.T("更新"), ButtonKind.Primary) { MinWidth = 72 };
+    private readonly FluentButton _notes = new(L.T("查看说明"), ButtonKind.Secondary, Glyph.OpenInNew);
+    private readonly FluentButton _skip = new(L.T("跳过此版本"), ButtonKind.Subtle);
+    private readonly SettingRow _availableRow;
+    private readonly Segmented _channel = new(L.T("正式版"), L.T("测试版"));
+    private readonly SettingRow _channelRow;
+    private readonly ToggleSwitch _autoUpdate = new();
+    private readonly SettingRow _autoUpdateRow;
 
     public SettingsPage(TrayApp app) : base(L.T("设置"))
     {
@@ -81,16 +95,26 @@ internal sealed class SettingsPage : ScrollPage
         var syncRow = new SettingRow(Glyph.Gauge, L.T("音画同步测试"),
             L.T("听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。"), sync);
 
+        // Not "更新": that is the button's text, and other languages need two words (Updates / Update).
+        var updates = Ui.Section(L.T("软件更新"));
+        _checkRow = new SettingRow(Glyph.UpdateRestore, L.F("当前版本 {0}", ReleaseVersion.CurrentText), "", _check);
+        _availableRow = new SettingRow(Glyph.Download, "", "", Ui.Row(8, null, _install, _notes, _skip)) { Collapsed = true };
+        _channelRow = new SettingRow(Glyph.Flag, L.T("更新渠道"),
+            L.T("正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。"), _channel);
+        _autoUpdateRow = new SettingRow(Glyph.Recent, L.T("自动检查更新"), "", _autoUpdate);
+
         var about = Ui.Section(L.T("关于"));
         var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow, about, aboutRow]);
-        foreach (var header in new Control[] { general, sound, players, tools, about }) Content.GapBefore[header] = 20;
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow,
+            updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
+        foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow, aboutRow })
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow,
+                     _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
@@ -149,6 +173,20 @@ internal sealed class SettingsPage : ScrollPage
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
         link.Click += (_, _) => OpenRepository();
+        _check.Click += (_, _) => _app.CheckForUpdates();
+        _install.Click += (_, _) =>
+        {
+            if (_app.UpdateState.Downloading) _app.CancelUpdateDownload();
+            else _app.InstallUpdate(FindForm());
+        };
+        _notes.Click += (_, _) => _app.ShowReleaseNotes();
+        _skip.Click += (_, _) => _app.SkipUpdate();
+        _channel.AccessibleName = L.T("更新渠道");
+        _channel.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_channel.SelectedIndex >= 0) _app.SetUpdateChannel(Channels[_channel.SelectedIndex]);
+        };
+        _autoUpdate.Toggled += (_, _) => _app.SetAutoUpdateCheck(_autoUpdate.Checked);
 
         Load();
     }
@@ -174,6 +212,54 @@ internal sealed class SettingsPage : ScrollPage
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
+        ShowUpdate();
+    }
+
+    /// <summary>
+    /// 更新: the check's status under the version, the new version's row with 更新 / 查看说明 / 跳过此版本 while there is
+    /// one (更新 turns into 取消 while it downloads), the channel, and automatic checks (or why this build has none).
+    /// </summary>
+    public void ShowUpdate()
+    {
+        var u = _app.UpdateState;
+        var status = _checkRow.DescriptionText;
+        status.Text = u.Status;
+        status.Role = u.Role;
+        _check.Enabled = !u.Checking && !u.Downloading;
+        // The Microsoft Store version: the Store updates it; nothing here contacts GitHub.
+        _check.Collapsed = _channelRow.Collapsed = _autoUpdateRow.Collapsed = u.Store;
+        if (u.Store)
+        {
+            _availableRow.Collapsed = true;
+            return;
+        }
+
+        _availableRow.Collapsed = u.Available == null;
+        if (u.Available is { } release)
+        {
+            _availableRow.TitleText.Text = L.F("新版本 {0}", release.Version);
+            _availableRow.DescriptionText.Text = u.MsiInstall == false
+                ? L.T("便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。")
+                : L.T("「更新」会下载安装包、用 GitHub 提供的 SHA-256 校验，然后退出 HomePodCast 安装（Windows 会请求管理员权限），装好后自动重新启动。");
+            _install.Text = u.Downloading ? L.T("取消") : L.T("更新");
+            _install.Kind = u.Downloading ? ButtonKind.Secondary : ButtonKind.Primary;
+            _install.Enabled = !u.Checking;
+            _skip.Enabled = !u.Downloading && !u.Checking;
+        }
+
+        _channel.SelectedIndex = Array.IndexOf(Channels, _app.UpdateChannel);
+        _autoUpdate.Checked = _app.Config.AutoUpdateCheck;
+        var autoDesc = _autoUpdateRow.DescriptionText;
+        if (_app.NoAutomaticUpdates != null)
+        {
+            autoDesc.Text = L.F("这是开发版本（{0}），不会自动检查更新；「检查更新」仍然可以用。", ReleaseVersion.CurrentText);
+            autoDesc.Role = TextRole.Caution;
+        }
+        else
+        {
+            autoDesc.Text = L.T("有新版本时弹出通知提醒你，不会自动安装。启动约 30 秒后检查一次，之后每天一次；关闭时只在你点「检查更新」时联网。");
+            autoDesc.Role = TextRole.Secondary;
+        }
     }
 
     /// <summary>Which VLC password is in use, or that VLC refused it (never the password); the buttons' state.</summary>

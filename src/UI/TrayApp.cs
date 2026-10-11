@@ -25,7 +25,9 @@ internal sealed partial class TrayApp : ApplicationContext
 
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
     /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
-    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null)
+    /// <param name="updatedFrom">The version before an update (<c>--updated-from=</c>, passed by the update helper).</param>
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
+        string? updatedFrom = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -54,7 +56,8 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             if (Config.Host != host) { Config.Host = host; Config.Save(); }
         }, null);
-        Controller.FirewallBlocked += () => _ui.Post(_ => OfferFirewallRule(), null);
+        InitFirewall();
+        InitUpdate(updatedFrom);
         try
         {
             _api = new LocalApi(Config.LocalApiPort, () =>
@@ -80,7 +83,11 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ => KickIfWanted(), null);
+        NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
+        {
+            KickIfWanted();
+            OnNetworkAddressChanged(); // a new network may be Public (TrayApp.Firewall.cs)
+        }, null);
 
         // Bring the existing window forward when a second instance is launched.
         ThreadPool.RegisterWaitForSingleObject(showSignal, (_, _) => _ui.Post(_ => ShowMain(), null), null, -1, false);
@@ -89,8 +96,8 @@ internal sealed partial class TrayApp : ApplicationContext
         if (!startHidden) ShowMain();
         if (openMixer)
         {
-            // Wait for Application.Run's loop: a Post would also be dispatched by the COM wait inside the
-            // firewall check below, and a form shown in there never gets its Shown/timer messages.
+            // Wait for Application.Run's loop: a Post would also be dispatched by any COM wait that pumps messages
+            // before it, and a form shown in there never gets its Shown/timer messages.
             void OpenMixer(object? s, EventArgs e) { Application.Idle -= OpenMixer; ShowMixer(); }
             Application.Idle += OpenMixer;
         }
@@ -105,7 +112,9 @@ internal sealed partial class TrayApp : ApplicationContext
             Application.Idle += OpenOsd;
         }
 
-        if (!Firewall.HasInboundAllowRule()) OfferFirewallRule();
+        // The firewall rules and the speaker's network are read on the thread pool (COM): no COM wait pumps messages
+        // in this constructor for them. A message, if one is needed, is posted to the UI thread.
+        CheckFirewall(FirewallTrigger.Startup);
         if (Config.DeviceId != null)
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
@@ -346,25 +355,8 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         if (_hintShown) return;
         _hintShown = true;
+        _balloonClick = null;
         _tray.ShowBalloonTip(3000, L.T("HomePod 音响"), L.T("已最小化到托盘，声音会继续推送。右键托盘图标可以退出。"), ToolTipIcon.Info);
-    }
-
-    private void OfferFirewallRule()
-    {
-        var answer = MessageBox.Show(
-            L.T("HomePod 需要连回本程序（对时和丢包重传），但 Windows 防火墙还没有放行 HomePodCast。\n\n" +
-                "点「是」会弹出管理员授权，添加一条只允许局域网、只在专用网络下生效的入站规则。"),
-            L.T("需要防火墙放行"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-        if (answer != DialogResult.Yes) return;
-        if (Firewall.RequestRule())
-        {
-            Log.Info("firewall rule added");
-            if (_wantConnected) Connect();
-        }
-        else
-        {
-            MessageBox.Show(L.T("没有添加成功（可能取消了授权）。"), L.T("需要防火墙放行"));
-        }
     }
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
@@ -428,6 +420,8 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        DisposeFirewall();
+        DisposeUpdate();
         DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();

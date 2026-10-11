@@ -7,32 +7,68 @@ namespace HomePodCast;
 /// The speaker opens connections back to us (NTP timing, retransmit requests), so the exe needs an
 /// inbound allow rule. We only check for it here; adding it is done by an elevated PowerShell the user
 /// explicitly approves via UAC. The MSI adds the same rule as "HomePodCast (installer)" (installer\HomePodCast.wxs);
-/// rules are matched by program path, not by name, so either one counts.
+/// rules are matched by program path, not by name, so either one counts. Both rules are for Private networks only:
+/// on a Public network they don't apply (see <see cref="NetworkProfile"/>).
 /// </summary>
 public static class Firewall
 {
-    public static bool HasInboundAllowRule()
+    // NET_FW_PROFILE2
+    private const int DomainProfile = 1, PrivateProfile = 2, PublicProfile = 4;
+
+    public static bool HasInboundAllowRule() => Inspect().PrivateRule;
+
+    /// <summary>What Windows Firewall lets in for this exe. Enumerates every rule (COM): call it off the UI thread if you can.</summary>
+    public static FirewallRules Inspect()
     {
         try
         {
             var exe = Environment.ProcessPath ?? "";
             var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-            if (policyType == null) return true;
+            if (policyType == null) return FirewallRules.Unknown;
             dynamic policy = Activator.CreateInstance(policyType)!;
+            bool privateRule = false, publicRule = false, blockRule = false;
             foreach (dynamic rule in policy.Rules)
             {
                 string? app = rule.ApplicationName;
-                // NET_FW_RULE_DIR_IN = 1, NET_FW_ACTION_ALLOW = 1, NET_FW_PROFILE2_PRIVATE = 2
-                if (app != null && string.Equals(app, exe, StringComparison.OrdinalIgnoreCase) &&
-                    rule.Enabled && rule.Direction == 1 && rule.Action == 1 && ((int)rule.Profiles & 2) != 0)
-                    return true;
+                // NET_FW_RULE_DIR_IN = 1; NET_FW_ACTION_BLOCK = 0, NET_FW_ACTION_ALLOW = 1
+                if (app == null || !string.Equals(app, exe, StringComparison.OrdinalIgnoreCase) || !rule.Enabled || rule.Direction != 1)
+                    continue;
+                int profiles = rule.Profiles, action = rule.Action;
+                if (action == 1)
+                {
+                    privateRule |= (profiles & PrivateProfile) != 0;
+                    publicRule |= (profiles & PublicProfile) != 0;
+                }
+                else if (action == 0 && (profiles & (PrivateProfile | PublicProfile)) != 0)
+                {
+                    blockRule = true;
+                }
             }
-            return false;
+            bool publicOff;
+            try { publicOff = !(bool)policy.FirewallEnabled[PublicProfile]; }
+            catch (Exception) { publicOff = false; }
+            return new FirewallRules(true, privateRule, publicRule || publicOff, blockRule);
         }
         catch (Exception ex)
         {
             Log.Warn($"firewall check failed: {ex.Message}");
-            return true; // don't nag if we can't tell
+            return FirewallRules.Unknown;
+        }
+    }
+
+    /// <summary>The firewall profiles active now (NET_FW_PROFILE2 bits: 1 domain, 2 private, 4 public); 0 if unknown.</summary>
+    public static int CurrentProfileTypes()
+    {
+        try
+        {
+            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+            if (policyType == null) return 0;
+            dynamic policy = Activator.CreateInstance(policyType)!;
+            return (int)policy.CurrentProfileTypes & (DomainProfile | PrivateProfile | PublicProfile);
+        }
+        catch (Exception)
+        {
+            return 0;
         }
     }
 
@@ -83,4 +119,15 @@ public static class Firewall
         }
         return sb.Append('\'').ToString();
     }
+}
+
+/// <summary>Windows Firewall's inbound rules for this exe, as far as the speaker's connections back to us go.</summary>
+/// <param name="Known">The rules could be read.</param>
+/// <param name="PrivateRule">An enabled inbound allow rule covers Private networks (ours or the installer's).</param>
+/// <param name="PublicAllowed">Inbound traffic gets through on a Public network: a rule covers Public, or the firewall is off there.</param>
+/// <param name="BlockRule">An enabled inbound block rule for this exe covers Private or Public networks (block beats allow).</param>
+public readonly record struct FirewallRules(bool Known, bool PrivateRule, bool PublicAllowed, bool BlockRule = false)
+{
+    /// <summary>Couldn't read the rules: as if ours were there (don't nag), and Public networks blocked as by default.</summary>
+    public static FirewallRules Unknown => new(false, true, false);
 }

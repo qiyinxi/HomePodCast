@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HomePodCast MSIX package manifest (template). packaging\msix\build.ps1 fills in the values marked __LIKE_THIS__
+  (Identity Name, Publisher and Version, PublisherDisplayName, DisplayName) and writes the result into the package;
+  see packaging\msix\README.md.
+
+  The app is a plain Win32 (WinForms) program: a full-trust desktop app (Windows.FullTrustApplication +
+  runFullTrust). It does not run in an AppContainer, so the network capabilities below are declarative only (the
+  Store lists them on the product page); they don't grant or block anything. What does apply to a packaged
+  full-trust app: package identity, the microphone privacy switch, file system and registry write virtualization
+  (%APPDATA%, HKCU), and the extensions declared here (the firewall rules).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop desktop2 rescap">
+
+  <!-- Name and Publisher are the ones Partner Center assigned to the reserved name (Product identity); build.ps1
+       has them as defaults. The Store requires the fourth version field to be 0 and the first one to be at least 1. -->
+  <Identity Name="__IDENTITY_NAME__" Publisher="__PUBLISHER__" Version="__VERSION__" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Streams the sound of Windows to HomePod speakers over AirPlay 2.</Description>
+  </Properties>
+
+  <!-- 19041 = Windows 10 version 2004: the first build with process loopback capture (per-app audio routing). -->
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <!--
+    The 15 UI languages the app has (src\L.cs; it picks one at runtime from the Windows display language or the
+    user's choice, whatever is declared here). The Store shows these as the app's supported languages and lists
+    them on the app overview in Partner Center, which recommends a Store listing for each; a language without a
+    listing can be removed there. The first one is the package's default language. There are no language-specific
+    resources in the package, so this list changes nothing at install or run time.
+  -->
+  <Resources>
+    <Resource Language="en-US" />
+    <Resource Language="zh-CN" />
+    <Resource Language="zh-TW" />
+    <Resource Language="ja-JP" />
+    <Resource Language="de-DE" />
+    <Resource Language="fr-FR" />
+    <Resource Language="es-ES" />
+    <Resource Language="it-IT" />
+    <Resource Language="nl-NL" />
+    <Resource Language="pl-PL" />
+    <Resource Language="pt-PT" />
+    <Resource Language="sv-SE" />
+    <Resource Language="da-DK" />
+    <Resource Language="nb-NO" />
+    <Resource Language="fi-FI" />
+  </Resources>
+
+  <Applications>
+    <Application Id="HomePodCast" Executable="HomePodCast.exe" EntryPoint="Windows.FullTrustApplication">
+      <!-- The logos are scale- and targetsize-qualified files in Assets (drawn by tools\make_icon.py, see the README),
+           found through resources.pri (build.ps1 runs makepri). The icon brings its own blue plate: no background color. -->
+      <uap:VisualElements
+        DisplayName="__DISPLAY_NAME__"
+        Description="Streams the sound of Windows to HomePod speakers over AirPlay 2."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" ShortName="__DISPLAY_NAME__">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+      </uap:VisualElements>
+      <!--
+        Autostart for the packaged app, once the app uses the StartupTask API (Windows.ApplicationModel.StartupTask)
+        instead of the HKCU Run value, which a packaged app writes into its private registry hive where Windows never
+        reads it. Not declared yet: declaring it adds a "HomePodCast" switch to Settings > Apps > Startup that would
+        start the app without its tray switch, i.e. with its window open.
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="HomePodCast.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="HomePodCastStartup" Enabled="false" DisplayName="__DISPLAY_NAME__" />
+        </desktop:Extension>
+      </Extensions>
+      -->
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Declarative for a full-trust app (see the top): AirPlay 2 to speakers on the home network, mDNS discovery,
+         and the local API for the browser extension on 127.0.0.1:47100. No internetClient: the package itself makes
+         no internet requests (add it if the Store build ever does). -->
+    <Capability Name="privateNetworkClientServer" />
+    <!-- Required for Windows.FullTrustApplication. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Enforced for packaged apps: microphone access (mic monitoring) goes through the app's own switch under
+         Settings > Privacy & security > Microphone. -->
+    <DeviceCapability Name="microphone" />
+  </Capabilities>
+
+  <Extensions>
+    <!--
+      Inbound firewall rules for the app (package-level: makeappx refuses them under <Application>). Windows creates
+      them when the package is installed and removes them with it, with no UAC prompt, unlike the rule the
+      unpackaged app asks for. Same intent as the MSI's rule (Private profile only), with two differences the
+      manifest schema forces: a rule names one protocol, so there is one for TCP and one for UDP (the MSI's rule is
+      "any protocol"), and a rule can't restrict the remote address, so there is no "local subnet only" scope.
+      What comes in unasked is UDP, on ports the app picks at run time (so no port ranges): the speaker's timing
+      requests (TimingServer) and retransmit requests (the control socket), and the unicast answers to mDNS
+      queries. RTSP and the event channel are outgoing TCP and the local API is loopback only; the TCP rule keeps
+      the MSI's any-protocol coverage.
+    -->
+    <desktop2:Extension Category="windows.firewallRules">
+      <desktop2:FirewallRules Executable="HomePodCast.exe">
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="private" />
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="private" />
+      </desktop2:FirewallRules>
+    </desktop2:Extension>
+  </Extensions>
+</Package>

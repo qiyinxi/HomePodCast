@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  makepri configuration for build.ps1: indexes the qualified logo files in Assets\ (Name.scale-200.png,
+  Name.targetsize-48_altform-unplated.png, ...) into one resources.pri, so the manifest names each logo once
+  (Assets\Name.png) and Windows picks the file that fits. This is "makepri createconfig /dq en-US /pv 10.0.0"
+  without its <packaging> section, which would split the scales into resources.scale-*.pri files for resource
+  packages (only an app bundle has those; in a single .msix those files would be ignored), and with only the
+  folder indexer, starting at Assets\ (resource names stay relative to the package root: Files/Assets/...).
+-->
+<resources targetOsVersion="10.0.0" majorVersion="1">
+  <index root="\" startIndexAt="Assets">
+    <default>
+      <qualifier name="Language" value="en-US"/>
+      <qualifier name="Contrast" value="standard"/>
+      <qualifier name="Scale" value="100"/>
+      <qualifier name="HomeRegion" value="001"/>
+      <qualifier name="TargetSize" value="256"/>
+      <qualifier name="LayoutDirection" value="LTR"/>
+      <qualifier name="Theme" value="dark"/>
+      <qualifier name="AlternateForm" value=""/>
+      <qualifier name="DXFeatureLevel" value="DX9"/>
+      <qualifier name="Configuration" value=""/>
+      <qualifier name="DeviceFamily" value="Universal"/>
+      <qualifier name="Custom" value=""/>
+    </default>
+    <indexer-config type="folder" foldernameAsQualifier="true" filenameAsQualifier="true" qualifierDelimiter="."/>
+  </index>
+</resources>
