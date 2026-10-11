@@ -158,7 +158,7 @@ Interface texts are written in Simplified Chinese inside `L.T("â€¦")` / `L.F("â€
 | Branch / tag | Purpose | Rules |
 | --- | --- | --- |
 | `dev` | Day-to-day development | Every push runs CI and produces a preview package |
-| `main` | Code verified on a real HomePod | Accepts PRs from `dev` only; CI must pass |
+| `main` | Code verified on a real HomePod | Accepts PRs from `dev` or a `release/X.Y.Z` branch only; CI must pass |
 | `vX.Y.Z` tags | Releases | Tagged on `main`; built and published as a GitHub Release automatically |
 | `release/x.y` | Patches for older versions | Branched from the matching tag only when needed |
 

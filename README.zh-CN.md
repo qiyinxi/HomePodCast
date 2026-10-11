@@ -158,7 +158,7 @@ MSI 安装包由 `installer\build.ps1` 用 WiX Toolset v5（本地 dotnet 工具
 | 分支 / 标签 | 用途 | 规则 |
 | --- | --- | --- |
 | `dev` | 日常开发 | 每次推送都会跑 CI 并产出预览包 |
-| `main` | 在真实 HomePod 上验证过的代码 | 只接受来自 `dev` 的 PR，CI 必须通过 |
+| `main` | 在真实 HomePod 上验证过的代码 | 只接受来自 `dev` 或 `release/X.Y.Z` 分支的 PR，CI 必须通过 |
 | `vX.Y.Z` 标签 | 正式版本 | 打在 `main` 上，自动构建并发布 GitHub Release |
 | `release/x.y` | 给旧版本打补丁 | 需要时才从对应标签拉出 |
 
