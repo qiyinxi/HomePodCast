@@ -157,7 +157,7 @@ internal static partial class UpdateInstaller
             $result = {Firewall.PowerShellLiteral(h.Result)}
             $exe = {Firewall.PowerShellLiteral(h.Exe)}
             $appArgs = @({string.Join(", ", args.Select(Firewall.PowerShellLiteral))})
-            """;
+            """.ReplaceLineEndings("\n"); // the same script whatever line endings the checkout gave this file (CI: CRLF)
     }
 
     /// <summary>
@@ -167,7 +167,9 @@ internal static partial class UpdateInstaller
     /// declined, or "timeout" when the app never quit, goes to the result file; then the app starts again from this
     /// non-elevated PowerShell, so it runs as the user.
     /// </summary>
-    internal static string HelperScript(Helper h) => HelperVariables(h) + "\n" + $$"""
+    internal static string HelperScript(Helper h) => HelperVariables(h) + "\n" + HelperSteps;
+
+    private static readonly string HelperSteps = $$"""
         $ErrorActionPreference = 'Stop'
         $app = Get-Process -Id $appPid -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq 'HomePodCast' }
         if ($app -and -not $app.WaitForExit({{QuitTimeoutMs}})) {
@@ -191,7 +193,7 @@ internal static partial class UpdateInstaller
         }
         Set-Content -LiteralPath $result -Value $code -Encoding UTF8
         Start-Process -FilePath $exe -ArgumentList $appArgs -WorkingDirectory $installDir
-        """;
+        """.ReplaceLineEndings("\n");
 
     /// <summary>A version as it goes on the command line: only the characters a version has.</summary>
     internal static string SafeVersion(string version) =>
