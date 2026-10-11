@@ -28,9 +28,9 @@ Select **Home → Mark a stutter** when you hear one (the button works while str
 
 ### Synchronized browser fullscreen
 
-The extension shows **Sync fullscreen** on supported active video players. Click this instead of entering native video-element fullscreen; it makes the existing player container fullscreen so the delayed picture remains visible. The site's controls stay available, and exiting restores the prior layout. Browser/iframe fullscreen permission is still required.
+The extension's controls appear at the top right of a supported video while you move the pointer over it (or press Alt), and hide again about 2.5 seconds later; they never appear by themselves when a video goes fullscreen. **Sync fullscreen** makes the site's player fullscreen instead of the bare video element: the outermost element around the video that has the video's size (or letterboxes it), such as YouTube's player or bilibili's video area. The delayed picture stays visible together with the site's controls, captions and danmaku, and exiting restores the prior layout. Where no element frames the video, its parent element is used, and site controls outside it are not shown. Browser/iframe fullscreen permission is still required.
 
-While that player is fullscreen, use its ±5/±20 ms controls, or **Alt+Left/Right** (5 ms) and **Alt+Shift+Left/Right** (20 ms). The inline notice shows the resulting delay and saved site offset. Shortcuts ignore editable fields. Site offsets remain bounded to ±500 ms and the total video delay to 2000 ms. Native video fullscreen and picture-in-picture still cannot show the extension's delayed canvas.
+While a player is fullscreen, through Sync fullscreen or the site's own fullscreen button, use the ±5/±20 ms controls, or **Alt+Left/Right** (5 ms) and **Alt+Shift+Left/Right** (20 ms); the shortcuts also work while the controls are hidden. The inline notice shows the resulting delay and saved site offset. Shortcuts ignore editable fields. Site offsets remain bounded to ±500 ms and the total video delay to 2000 ms. Native video fullscreen and picture-in-picture still cannot show the extension's delayed canvas.
 
 ## 简体中文
 
@@ -60,6 +60,6 @@ Windows 音频会话静音或音量为 0 时，HomePod 也没有声音。Windows
 
 ### 浏览器同步全屏
 
-插件会在支持的活动视频上显示 **同步全屏**。使用这个按钮，让播放器容器全屏，延迟画面和原有控制栏一起保留；退出时恢复原来的布局。浏览器或 iframe 仍需允许全屏。
+鼠标在支持的视频上移动（或按 Alt）时，视频右上角会出现插件的按钮，约 2.5 秒后自动隐藏；视频进入全屏时按钮不会自己出现。**同步全屏** 让网站的播放器全屏，而不是单独的视频元素：也就是包住视频、和视频一样大（或给视频加黑边）的最外层元素，比如 YouTube 的播放器、bilibili 的视频区域。延迟画面和网站自己的控制栏、字幕、弹幕一起保留，退出时恢复原来的布局。找不到这样的元素时，让视频的父元素全屏，网站放在它外面的控制栏不会显示。浏览器或 iframe 仍需允许全屏。
 
-全屏中可用画面上的 ±5／±20 ms 按钮，或 **Alt+左／右**（5 ms）、**Alt+Shift+左／右**（20 ms），画面会提示最终延迟和已保存的网站偏移。输入框内不会拦截按键。网站偏移范围仍为 ±500 ms，总画面延迟最多 2000 ms；视频元素原生全屏和画中画仍无法显示插件的延迟画布。
+播放器全屏时（用「同步全屏」或网站自己的全屏按钮都可以），可用 ±5／±20 ms 按钮，或 **Alt+左／右**（5 ms）、**Alt+Shift+左／右**（20 ms）；按钮隐藏时快捷键照样有效。画面会提示最终延迟和已保存的网站偏移。输入框内不会拦截按键。网站偏移范围仍为 ±500 ms，总画面延迟最多 2000 ms；视频元素原生全屏和画中画仍无法显示插件的延迟画布。
