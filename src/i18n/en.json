@@ -204,6 +204,7 @@
   "音箱从收到声音到播放需要的时间（音箱自己报告）": "How long the speaker takes from receiving audio to playing it (reported by the speaker)",
   "这次连接实际使用的延迟": "Latency actually used by this connection",
   "这次连接中电脑这边断音的次数": "Dropouts on this PC during this connection",
+  "这次连接里的断音：电脑这边 {0} 次（实测），网络 {1} 次（估计）\nWi-Fi 抖动超出延迟余量时，HomePod 可能断一下音；HomePod 不报告晚到的包，所以网络一项只能估计": "Dropouts during this connection: {0} on this PC (measured), {1} from the network (estimated)\nWhen Wi-Fi jitter exceeds the latency's margin, the HomePod may drop out briefly. It never reports late packets, so the network's count is an estimate",
   "音箱要求重发的包：已重发 / 请求": "Packets the speaker asked for again: resent / requested",
   "延迟减 1 ms": "Latency −1 ms",
   "延迟加 1 ms": "Latency +1 ms",

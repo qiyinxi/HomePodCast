@@ -259,6 +259,77 @@ public class NetworkHealthTests
         Assert.Equal(hop, NetworkHealth.HopOf(routerWatched, pcWired, onPc, onSpeaker));
 
     [Fact]
+    public void The_connections_threats_outlast_the_window()
+    {
+        // 断音 counts since the connection started; the hint and the 网络 line look at the last 10 minutes.
+        var h = Spikes((60 * S, 75), (250 * S, 90), (480 * S, 65)); // three threats at 推荐 120 ms
+        h.AddPing(PingTarget.Speaker, 900 * S, 40);              // jitter, not a threat
+        h.AddPing(PingTarget.Speaker, 1500 * S, 70);             // a fourth threat, 25 minutes in
+        var v = h.Assess(1600 * S, 120, A2R, true);
+        Assert.Equal(1, v.Episodes);
+        Assert.Equal(1, v.Threats);
+        Assert.False(v.Threatened);
+        Assert.Equal(4, v.ConnectionThreats);
+    }
+
+    [Fact]
+    public void The_connections_threats_follow_the_same_rules_as_the_window()
+    {
+        // Everything inside the window: both counts agree.
+        void Same(NetworkHealth h, long now, int latency, int arrivalToRender, int expected)
+        {
+            var v = h.Assess(now, latency, arrivalToRender, true);
+            Assert.Equal(expected, v.Threats);
+            Assert.Equal(expected, v.ConnectionThreats);
+        }
+
+        Same(Spikes((60 * S, 35), (250 * S, 48), (480 * S, 60)), 500 * S, 120, A2R, 0);                    // under twice the margin
+        Same(Spikes((10_000, 70), (10_100, 90), (10_700, 40), (11_600, 35), (12_500, 31)), 30 * S, 120, A2R, 1); // one bad second
+        Same(Spikes((10 * S, -1), (100 * S, -1), (200 * S, -1)), 300 * S, 300, A2R, 0);                     // single lost pings
+        Same(Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1)), 300 * S, 300, A2R, 2);       // lost pairs
+        Same(Spikes((100 * S, 150), (200 * S, 250), (300_000, -1), (300_100, -1)), 400 * S, 200, A2R, 2);  // 影视: 150 absorbed
+
+        var quiet = new NetworkHealth();
+        quiet.AddResends(50 * S, 1, 0);
+        quiet.AddResends(400 * S, 2, 0);
+        Same(quiet, 500 * S, 120, A2R, 0); // a resend on a quiet network is the protocol working
+
+        var late = new NetworkHealth();
+        foreach (long at in new[] { 100_000L, 200_000, 300_000 })
+        {
+            late.AddResends(at + 250, 1, 0);          // the sampler's thread got there first:
+            late.AddPing(PingTarget.Speaker, at, 45); // still one episode with its ping
+        }
+        Same(late, 400 * S, 120, A2R, 3);
+
+        var miss = new NetworkHealth();
+        miss.AddResends(50 * S, 1, 1);
+        Same(miss, 60 * S, 160, A2R, 1);
+
+        // The same events at another margin: each episode is kept as the margin it needed, so any margin can be asked.
+        var h = Every100s(61);
+        Same(h, 400 * S, 140, 70, 0);  // margin 65, threshold 130
+        Same(h, 400 * S, 140, 105, 3); // margin 30, threshold 60
+    }
+
+    [Fact]
+    public void A_long_bad_connection_is_counted_in_full()
+    {
+        // Six hours of a separate threat every 4 s and harmless jitter in between: the window lists are pruned, the
+        // connection's count is not.
+        var h = new NetworkHealth();
+        const int bursts = 6 * 3600 / 4;
+        for (int k = 0; k < bursts; k++)
+        {
+            h.AddPing(PingTarget.Speaker, k * 4 * S, 70 + k % 50);
+            h.AddPing(PingTarget.Speaker, k * 4 * S + 2 * S, 40);
+        }
+        var v = h.Assess(bursts * 4 * S, 120, A2R, true);
+        Assert.Equal(bursts, v.ConnectionThreats);
+        Assert.Equal(149, v.Threats); // the last 10 minutes: k = 5251…5399
+    }
+
+    [Fact]
     public void Router_spikes_alone_are_not_jitter()
     {
         // Routers answer pings to themselves at low priority; the audio never waits for that.
@@ -316,6 +387,7 @@ public class NetworkHealthTests
         var v = h.Assess(400 * S, 120, A2R, true);
         Assert.Equal(0, v.Episodes);
         Assert.False(v.Threatened);
+        Assert.Equal(0, v.ConnectionThreats);
     }
 
     [Fact]
@@ -434,10 +506,13 @@ public class NetworkHealthFeedTests
     }
 }
 
-/// <summary>首页's network hint: it names the band, and a wired PC never hears about its own Wi-Fi.</summary>
+/// <summary>
+/// 首页's network texts: the hint names the band, a wired PC never hears about its own Wi-Fi, and 断音 counts the
+/// network's share.
+/// </summary>
 public class HomeNetworkTextTests
 {
-    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(3, 3, true, hop, 30, suggestedMs);
+    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(3, 3, true, hop, 30, suggestedMs, 3);
 
     [Fact]
     public void The_homepods_hop_leads_with_the_band_and_placement_comes_second()
@@ -479,5 +554,40 @@ public class HomeNetworkTextTests
             Assert.DoesNotContain("无线网卡", text);
             Assert.DoesNotContain("网线", text);
         }
+    }
+
+    [Theory]
+    [InlineData(0, 0, "0")]
+    [InlineData(2, 0, "2")]
+    [InlineData(0, 3, "≈3")]
+    [InlineData(2, 3, "≈5")]
+    public void Dropouts_add_the_networks_estimate_and_say_it_is_one(long pc, int network, string shown) =>
+        Assert.Equal(shown, HomePage.DropoutValue(pc, network));
+
+    [Fact]
+    public void The_dropout_tooltip_splits_the_count_while_the_network_is_watched()
+    {
+        var tip = HomePage.DropoutTip(1, 3);
+        Assert.StartsWith("这次连接里的断音：电脑这边 1 次（实测），网络 3 次（估计）\n", tip);
+        Assert.Equal("这次连接中电脑这边断音的次数", HomePage.DropoutTip(1, null)); // a group: the network is not watched
+    }
+
+    [Fact]
+    public void Stutters_on_a_crowded_band_no_longer_show_as_0()
+    {
+        // 2026-10-10 at 200 ms: the PC's FIFO never ran dry (断音 said 0), but the speaker's pings went unanswered in
+        // pairs now and then, and spiked to ~110 ms (absorbed: the margin is 110 ms, twice that 220).
+        var h = new NetworkHealth();
+        for (long at = 15_000; at < 20 * 60 * 1000; at += 30_000)
+        {
+            h.AddPing(PingTarget.Speaker, at, -1);
+            h.AddPing(PingTarget.Speaker, at + 600, -1);
+            h.AddPing(PingTarget.Speaker, at + 12_000, 110);
+        }
+        var v = h.Assess(20 * 60 * 1000, 200, 85, routerWatched: true, pcWired: true);
+        Assert.Equal(40, v.ConnectionThreats); // one per lost pair, since the connection started
+        Assert.Equal(20, v.Threats);           // the hint's last 10 minutes
+        Assert.Equal(NetworkHop.Speaker, v.Hop);
+        Assert.Equal("≈40", HomePage.DropoutValue(0, v.ConnectionThreats));
     }
 }

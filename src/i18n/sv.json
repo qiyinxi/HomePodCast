@@ -204,6 +204,7 @@
   "音箱从收到声音到播放需要的时间（音箱自己报告）": "Hur lång tid högtalaren behöver från att ta emot ljud till att spela upp det (rapporteras av högtalaren)",
   "这次连接实际使用的延迟": "Fördröjningen som används för den här anslutningen",
   "这次连接中电脑这边断音的次数": "Avbrott på datorn under den här anslutningen",
+  "这次连接里的断音：电脑这边 {0} 次（实测），网络 {1} 次（估计）\nWi-Fi 抖动超出延迟余量时，HomePod 可能断一下音；HomePod 不报告晚到的包，所以网络一项只能估计": "Avbrott under den här anslutningen: {0} på datorn (uppmätta), {1} från nätverket (uppskattade)\nNär Wi-Fi-störningarna överstiger fördröjningens marginal kan HomePod tappa ljudet en kort stund. Den rapporterar aldrig sena paket, så nätverkets siffra är en uppskattning",
   "音箱要求重发的包：已重发 / 请求": "Paket som högtalaren bad om igen: omsända / begärda",
   "延迟减 1 ms": "Fördröjning −1 ms",
   "延迟加 1 ms": "Fördröjning +1 ms",

@@ -204,6 +204,7 @@
   "音箱从收到声音到播放需要的时间（音箱自己报告）": "Tiempo que tarda el altavoz desde que recibe el sonido hasta que lo reproduce (lo indica el altavoz)",
   "这次连接实际使用的延迟": "Latencia que usa realmente esta conexión",
   "这次连接中电脑这边断音的次数": "Cortes en este PC durante esta conexión",
+  "这次连接里的断音：电脑这边 {0} 次（实测），网络 {1} 次（估计）\nWi-Fi 抖动超出延迟余量时，HomePod 可能断一下音；HomePod 不报告晚到的包，所以网络一项只能估计": "Cortes durante esta conexión: {0} en este PC (medidos), {1} por la red (estimados)\nCuando los altibajos del Wi-Fi superan el margen de la latencia, el HomePod puede cortarse un instante. Nunca informa de los paquetes que llegan tarde, así que la cifra de la red es una estimación",
   "音箱要求重发的包：已重发 / 请求": "Paquetes que el altavoz volvió a pedir: reenviados / solicitados",
   "延迟减 1 ms": "Latencia −1 ms",
   "延迟加 1 ms": "Latencia +1 ms",

@@ -12,8 +12,8 @@ public sealed partial class StreamController
     private HealthFeed? _healthFeed;
 
     /// <summary>
-    /// The current connection's network events (10-minute window), reset on every new connection. Times are
-    /// <see cref="HealthClockMs"/>.
+    /// The current connection's network events (a 10-minute window, and the connection's threats in full), reset on
+    /// every new connection. Times are <see cref="HealthClockMs"/>.
     /// </summary>
     public NetworkHealth Health { get; } = new();
 

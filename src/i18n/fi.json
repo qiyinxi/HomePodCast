@@ -204,6 +204,7 @@
   "音箱从收到声音到播放需要的时间（音箱自己报告）": "Aika, jonka kaiutin tarvitsee äänen vastaanottamisesta sen toistamiseen (kaiuttimen ilmoittama)",
   "这次连接实际使用的延迟": "Tämän yhteyden todellinen viive",
   "这次连接中电脑这边断音的次数": "Katkokset tietokoneella tämän yhteyden aikana",
+  "这次连接里的断音：电脑这边 {0} 次（实测），网络 {1} 次（估计）\nWi-Fi 抖动超出延迟余量时，HomePod 可能断一下音；HomePod 不报告晚到的包，所以网络一项只能估计": "Katkokset tämän yhteyden aikana: tietokoneella {0} (mitattu), verkon takia {1} (arvio)\nKun Wi-Fi-häiriöt ylittävät viiveen varan, HomePodin ääni voi katketa hetkeksi. Se ei koskaan ilmoita myöhästyneistä paketeista, joten verkon luku on arvio",
   "音箱要求重发的包：已重发 / 请求": "Kaiuttimen uudelleen pyytämät paketit: lähetetty uudelleen / pyydetty",
   "延迟减 1 ms": "Viive −1 ms",
   "延迟加 1 ms": "Viive +1 ms",
