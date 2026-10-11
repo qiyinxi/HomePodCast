@@ -81,8 +81,18 @@
     }
   }
 
+  // While streaming, the offset stops where it stops changing the picture delay (0 or MAX_DELAY_MS with the app's
+  // current delay): pressing on past it would only make the way back longer.
+  function offsetBounds() {
+    const base = status && status.running !== false && status.streaming ? Math.round(Number(status.videoDelayMs)) : NaN;
+    if (!Number.isFinite(base)) return [-OFFSET_LIMIT, OFFSET_LIMIT];
+    const lo = clamp(-base, -OFFSET_LIMIT, OFFSET_LIMIT);
+    return [lo, clamp(MAX_DELAY_MS - base, lo, OFFSET_LIMIT)];
+  }
+
   function adjustOffset(delta) {
-    const next = clamp(settings.offsetMs + delta, -OFFSET_LIMIT, OFFSET_LIMIT);
+    const [lo, hi] = offsetBounds();
+    const next = clamp(settings.offsetMs + delta, lo, hi);
     if (next === settings.offsetMs) return;
     settings.offsetMs = next;
     pendingSiteSave = { enabled: settings.siteEnabled, offsetMs: next };

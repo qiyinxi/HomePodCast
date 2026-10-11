@@ -258,23 +258,24 @@ test('content controls clamp offsets, apply to every controller, debounce persis
   assert.equal(second.video.isConnected, true);
 });
 
-test('site offset persistence removes defaults, preserves bounds and respects disabled site settings', async () => {
+test('site offset persistence removes defaults, stops where the delay stops changing and respects disabled site settings', async () => {
   const h = harness({ content: true, stored: { 'example.test': { offsetMs: 5 } } }); await settled();
   h.fullscreen(h.container); h.key({ key: 'ArrowLeft' }); h.flush(250);
   assert.equal(h.data['example.test'], undefined); assert.equal(h.writes[0].remove, 'example.test');
   for (let i = 0; i < 30; i++) h.key({ key: 'ArrowLeft', shiftKey: true });
-  assert.equal(h.ctx.__hpcContentDebug.settings.offsetMs, -500);
+  assert.equal(h.ctx.__hpcContentDebug.settings.offsetMs, -141); // the app's 141 ms: any lower changes nothing
   assert.equal(h.ctx.__hpcContentDebug.desiredDelay(), 0);
-  h.flush(250); assert.equal(h.data['example.test'].offsetMs, -500);
+  h.flush(250); assert.equal(h.data['example.test'].offsetMs, -141);
+  h.key(); assert.equal(h.ctx.__hpcContentDebug.desiredDelay(), 5); // so the first step back counts at once
   const disabled = harness({ content: true, stored: { 'example.test': { enabled: false, offsetMs: 10 } } }); await settled();
   disabled.fullscreen(disabled.container); assert.equal(disabled.key().prevented, false);
   disabled.flush(250); assert.equal(disabled.writes.length, 0);
 });
 
-test('a large desktop delay plus site adjustment remains limited to 2000 ms', async () => {
+test('a large desktop delay plus site adjustment remains limited to 2000 ms, and so does the offset', async () => {
   const h = harness({ content: true, status: { streaming: true, videoDelayMs: 1999 } }); await settled();
   h.fullscreen(h.container); h.key({ shiftKey: true });
-  assert.equal(h.ctx.__hpcContentDebug.settings.offsetMs, 20);
+  assert.equal(h.ctx.__hpcContentDebug.settings.offsetMs, 1);
   assert.equal(h.ctx.__hpcContentDebug.desiredDelay(), 2000);
 });
 
