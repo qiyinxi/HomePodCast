@@ -129,7 +129,7 @@ Claude 只能打包、不能安装和运行打包版，下面都要实机测。�
 3. 从开始菜单启动 HomePodCast。测完卸载：`Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`。
 
 - [ ] 日志的启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`（「设置 → 工具 → 日志 → 打开日志文件夹」）
-- [ ] 防火墙：第一次启动**没有**「需要防火墙放行」，也没有 UAC。PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*WindowsApps*HomePodCast*' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled` 列出两条（TCP、UDP）入站、Private、已启用的规则
+- [ ] 防火墙：第一次启动**没有**「需要防火墙放行」，也没有 UAC。PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*\layout\HomePodCast.exe' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled` 列出两条（TCP、UDP）入站、Private、已启用的规则（这样注册的包从 `packaging\msix\obj\layout` 运行，规则写的是那里的 exe；从 Store 安装的在 `C:\Program Files\WindowsApps` 下）
 - [ ] 连接 HomePod 推流 1 分钟（音量不超过 25%）：有声音、不弹防火墙提示；日志里没有 `no rule of the package found`
 - [ ] 混音器里给一个程序设「本机」、另一个设「HomePod」：分流照常生效（按程序分流在包里也能用）
 - [ ] 麦克风：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
