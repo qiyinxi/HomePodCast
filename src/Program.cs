@@ -82,11 +82,13 @@ public static class Program
         Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom));
         if (UI.LanguageMenu.RestartRequested)
         {
-            Log.Info("restarting to apply the UI language");
+            // The Store version starts again through its package (Explorer), so the new copy has package identity too.
+            var (file, arguments) = AppEnvironment.Relaunch;
+            Log.Info("restarting to apply the UI language" + (AppEnvironment.IsPackaged ? $": {file} {arguments}" : ""));
             Log.CloseFile(); // the new copy opens the same log file
             single.ReleaseMutex();
             single.Dispose(); // ...and must be able to create the single-instance mutex
-            Process.Start(Environment.ProcessPath!);
+            Process.Start(file, arguments);
         }
         return 0;
     }
