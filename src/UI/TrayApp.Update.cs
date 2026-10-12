@@ -105,7 +105,7 @@ internal sealed partial class TrayApp
 
     private Task<bool> MsiInstall() => _msiInstall ??= AppConfig.Profile != null
         ? Task.FromResult(false) // a test copy never installs over the real one
-        : Task.Run(() => UpdateInstaller.IsMsiInstall(Environment.ProcessPath ?? ""));
+        : Task.Run(UpdateFlow.IsMsiInstall);
 
     // ---------------------------------------------------------------- automatic checks
 
@@ -170,12 +170,7 @@ internal sealed partial class TrayApp
             bool msi = await MsiInstall();
             Log.Info($"update: {(automatic ? "automatic" : "manual")} check (running {ReleaseVersion.CurrentText}, " +
                      $"{(msi ? "MSI install" : "portable")}): GET {GitHubReleases.ApiUrl}");
-            var json = await Task.Run(async () =>
-            {
-                using var http = GitHubReleases.CreateClient(ReleaseVersion.CurrentText, GitHubReleases.Timeout);
-                return await GitHubReleases.FetchAsync(http, CancellationToken.None);
-            });
-            var releases = GitHubReleases.Parse(json);
+            var releases = await UpdateFlow.FetchReleasesAsync(ReleaseFeed.GitHub, CancellationToken.None);
             var channel = UpdateChannel; // now: it may have been changed while the request was out
             var result = GitHubReleases.Pick(releases, channel, CurrentVersion, Config.UpdateSkipped, needMsi: msi);
             ok = true;
@@ -304,19 +299,19 @@ internal sealed partial class TrayApp
     public async void InstallUpdate(IWin32Window? owner)
     {
         if (_update is not { } release || _download != null || _checking || _quitting) return;
-        if (!await MsiInstall())
+        switch (UpdateFlow.Route(release, await MsiInstall()))
         {
-            Log.Info($"update: portable copy, so {release.Version} is not installed here: opening its release page");
-            OpenUrl(release.PageUrl);
-            SetUpdateStatus(L.T("便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。"), TextRole.Secondary);
-            return;
+            case InstallRoute.ReleasePage:
+                Log.Info($"update: portable copy, so {release.Version} is not installed here: opening its release page");
+                OpenUrl(release.PageUrl);
+                SetUpdateStatus(L.T("便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。"), TextRole.Secondary);
+                return;
+            case InstallRoute.NoChecksum:
+                Log.Warn($"update: {release.Version}: GitHub lists no SHA-256 for {release.Msi?.Name ?? "the MSI"}; not installing");
+                SetUpdateStatus(L.T("GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。"), TextRole.Critical);
+                return;
         }
-        if (release.Msi is not { Sha256: not null } asset)
-        {
-            Log.Warn($"update: {release.Version}: GitHub lists no SHA-256 for {release.Msi?.Name ?? "the MSI"}; not installing");
-            SetUpdateStatus(L.T("GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。"), TextRole.Critical);
-            return;
-        }
+        var asset = release.Msi!;
 
         var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
                        "HomePodCast 会先退出，装好后自动重新启动。", release.Version);
@@ -327,22 +322,17 @@ internal sealed partial class TrayApp
         if (answer != DialogResult.Yes || _quitting || _update != release || _download != null) return;
 
         using var cts = _download = new CancellationTokenSource();
-        string? folder = null;
+        string? folder = null; // the download's folder once it matched; removed again if the helper does not start
         try
         {
-            folder = UpdatePackage.CreateFolder();
             SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, 0), TextRole.Secondary);
             var progress = new Progress<double>(f =>
             {
                 if (_download == cts && !cts.IsCancellationRequested) SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, (int)(f * 100)), TextRole.Secondary);
             });
-            Log.Info($"update: downloading {asset.Url} ({asset.Size} bytes) to {folder}");
-            var msi = await Task.Run(async () =>
-            {
-                using var http = GitHubReleases.CreateClient(ReleaseVersion.CurrentText, TimeSpan.FromMinutes(10));
-                return await UpdatePackage.DownloadAsync(http, release, folder, progress, cts.Token);
-            }, cts.Token);
-            Log.Info($"update: {msi} matches GitHub's SHA-256 {asset.Sha256}");
+            // Removes its folder itself when the download fails, does not match or is cancelled.
+            var update = await UpdateFlow.DownloadAsync(ReleaseFeed.GitHub, release, progress, cts.Token);
+            folder = update.Folder;
             if (_quitting)
             {
                 UpdatePackage.TryDelete(folder);
@@ -352,9 +342,7 @@ internal sealed partial class TrayApp
             // Keep the channel the update came from (a beta user updated to a stable release still gets betas).
             Config.UpdateChannel ??= UpdateChannel;
             Config.Save();
-            var exe = Environment.ProcessPath!;
-            UpdateInstaller.StartHelper(new UpdateInstaller.Helper(Environment.ProcessId, msi, Path.Combine(folder, UpdatePackage.MsiLogFile),
-                Path.Combine(folder, UpdatePackage.ResultFile), exe, ReleaseVersion.CurrentText, Tray: !_form.Visible));
+            UpdateFlow.StartInstaller(update, tray: !_form.Visible);
             _installing = true;
             SetUpdateStatus(L.T("正在退出并安装更新…"), TextRole.Secondary);
             Log.Info($"update: quitting so that {release.Version} can be installed");

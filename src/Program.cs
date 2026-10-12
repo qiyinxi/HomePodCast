@@ -29,6 +29,7 @@ public static class Program
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
+                Update.UpdateSelfTest.Command => Update.UpdateSelfTest.Run(args), // CI: tools/ci/update-e2e.ps1
                 _ => Help(),
             };
         }
@@ -104,6 +105,7 @@ public static class Program
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
     }
 
