@@ -49,21 +49,29 @@ internal static class GitHubReleases
     public const string ReleasesPage = "https://github.com/qiyinxi/HomePodCast/releases";
 
     /// <summary>Only files and pages of this repository are downloaded or opened, whatever the response says.</summary>
-    private const string DownloadPrefix = ReleasesPage + "/download/", PagePrefix = ReleasesPage + "/";
+    internal const string DownloadPrefix = ReleasesPage + "/download/";
+    private const string PagePrefix = ReleasesPage + "/";
 
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
 
-    public static HttpClient CreateClient(string version, TimeSpan timeout)
+    /// <param name="followRedirects">False only for a loopback feed (<see cref="ReleaseFeed.FollowRedirects"/>).</param>
+    public static HttpClient CreateClient(string version, TimeSpan timeout, bool followRedirects = true)
     {
-        var http = new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = timeout };
+        var http = new HttpClient(new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All, AllowAutoRedirect = followRedirects })
+        {
+            Timeout = timeout,
+        };
         if (!http.DefaultRequestHeaders.UserAgent.TryParseAdd("HomePodCast/" + version)) http.DefaultRequestHeaders.UserAgent.ParseAdd("HomePodCast");
         return http;
     }
 
     /// <summary>The release list as JSON. Throws <see cref="UpdateCheckException"/> for an HTTP error (rate limit included).</summary>
-    public static async Task<string> FetchAsync(HttpClient http, CancellationToken ct)
+    public static Task<string> FetchAsync(HttpClient http, CancellationToken ct) => FetchAsync(http, ReleaseFeed.GitHub, ct);
+
+    /// <summary>The release list of <paramref name="feed"/> as JSON (the same request as GitHub's).</summary>
+    public static async Task<string> FetchAsync(HttpClient http, ReleaseFeed feed, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, ApiUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get, feed.ApiUrl);
         request.Headers.Accept.ParseAdd("application/vnd.github+json");
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         using var response = await http.SendAsync(request, ct);
@@ -82,7 +90,10 @@ internal static class GitHubReleases
     }
 
     /// <summary>The published releases in <paramref name="json"/> (drafts and tags that are no version left out).</summary>
-    public static List<Release> Parse(string json)
+    public static List<Release> Parse(string json) => Parse(json, ReleaseFeed.GitHub);
+
+    /// <summary>The same, with the MSIs that <paramref name="feed"/> downloads from (GitHub's: this repository's release files).</summary>
+    public static List<Release> Parse(string json, ReleaseFeed feed)
     {
         var list = new List<Release>();
         using var doc = JsonDocument.Parse(json);
@@ -95,13 +106,13 @@ internal static class GitHubReleases
             var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal)
                 ? url
                 : PagePrefix + "tag/" + Uri.EscapeDataString(tag!);
-            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r)));
+            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed.DownloadPrefix)));
         }
         return list;
     }
 
     /// <summary>The release's x64 MSI, once it is fully uploaded; one from another place is ignored.</summary>
-    private static ReleaseAsset? Msi(JsonElement release)
+    private static ReleaseAsset? Msi(JsonElement release, string downloadPrefix)
     {
         if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
         foreach (var a in assets.EnumerateArray())
@@ -110,7 +121,7 @@ internal static class GitHubReleases
             var url = Str(a, "browser_download_url");
             if (name == null || url == null || !name.EndsWith("-x64.msi", StringComparison.OrdinalIgnoreCase)) continue;
             if (Str(a, "state") is { } state && state != "uploaded") continue;
-            if (!url.StartsWith(DownloadPrefix, StringComparison.Ordinal)) continue;
+            if (!url.StartsWith(downloadPrefix, StringComparison.Ordinal)) continue;
             long size = a.TryGetProperty("size", out var s) && s.TryGetInt64(out var n) ? n : 0;
             return new ReleaseAsset(name, url, size, UpdatePackage.Sha256FromDigest(Str(a, "digest")));
         }
