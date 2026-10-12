@@ -440,5 +440,7 @@
   "家庭影院：{0}": "Hjemmekino: {0}",
   "家庭影院": "Hjemmekino",
   "立体声对": "Stereopar",
-  "Apple TV「{0}」正连着它（家庭影院）": "Apple TV \"{0}\" er koblet til den (hjemmekino)"
+  "Apple TV「{0}」正连着它（家庭影院）": "Apple TV \"{0}\" er koblet til den (hjemmekino)",
+  "{0}需要在电视上配对一次，点「连接」开始": "{0} må pares én gang på TV-en: klikk på \"Koble til\" for å starte",
+  "{0}上的配对已失效，点「连接」重新配对": "Paringen med {0} er ikke lenger gyldig: klikk på \"Koble til\" for å pare på nytt"
 }

@@ -440,5 +440,7 @@
   "家庭影院：{0}": "Kotiteatteri: {0}",
   "家庭影院": "Kotiteatteri",
   "立体声对": "Stereopari",
-  "Apple TV「{0}」正连着它（家庭影院）": "Apple TV \"{0}\" on yhdistetty siihen (kotiteatteri)"
+  "Apple TV「{0}」正连着它（家庭影院）": "Apple TV \"{0}\" on yhdistetty siihen (kotiteatteri)",
+  "{0}需要在电视上配对一次，点「连接」开始": "{0} täytyy pariliittää kerran televisiossa: aloita napsauttamalla \"Yhdistä\"",
+  "{0}上的配对已失效，点「连接」重新配对": "Pariliitos laitteeseen {0} ei ole enää voimassa: pariliitä uudelleen napsauttamalla \"Yhdistä\""
 }

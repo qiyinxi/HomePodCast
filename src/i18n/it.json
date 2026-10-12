@@ -440,5 +440,7 @@
   "家庭影院：{0}": "Home theater: {0}",
   "家庭影院": "Home theater",
   "立体声对": "Coppia stereo",
-  "Apple TV「{0}」正连着它（家庭影院）": "L'Apple TV \"{0}\" è connessa (home theater)"
+  "Apple TV「{0}」正连着它（家庭影院）": "L'Apple TV \"{0}\" è connessa (home theater)",
+  "{0}需要在电视上配对一次，点「连接」开始": "{0} deve essere abbinato una volta sola sulla TV: fai clic su \"Connetti\" per iniziare",
+  "{0}上的配对已失效，点「连接」重新配对": "L'abbinamento con {0} non è più valido: fai clic su \"Connetti\" per abbinare di nuovo"
 }

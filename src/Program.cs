@@ -248,6 +248,7 @@ public static class Program
         {
             VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
             StreamSetupOverrides = overrides.Count > 0 ? overrides : null,
+            Pairings = PairingStore.Default, // an Apple TV paired in the app: pair-verify with that pairing (never a new PIN)
         };
 
         var sw = Stopwatch.StartNew();

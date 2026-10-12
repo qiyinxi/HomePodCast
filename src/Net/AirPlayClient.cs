@@ -23,12 +23,21 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
     /// the group's shared "groupUUID". Null for a single speaker, whose session SETUP stays as it always was.
     /// </summary>
     public IReadOnlyDictionary<string, object?>? SessionSetupExtras { get; init; }
+
+    /// <summary>
+    /// Stored HAP pairings (receivers that need a PIN pairing, such as an Apple TV), looked up by <see cref="DeviceId"/>.
+    /// Null: no stored pairing is used (a receiver that needs one then fails with <see cref="PairingRequiredException"/>).
+    /// </summary>
+    public PairingStore? Pairings { get; init; }
+
+    /// <summary>The receiver's device id (TXT "deviceid"); null: the one its /info reports ("deviceID").</summary>
+    public string? DeviceId { get; init; }
 }
 
 /// <summary>
 /// One AirPlay 2 realtime audio session to one speaker:
-/// transient pair-setup → encrypted RTSP → SETUP (session) → event channel → SETUP (stream)
-/// → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
+/// transient pair-setup (HomePods) or pair-verify with a stored PIN pairing (Apple TV) → encrypted RTSP → SETUP (session)
+/// → event channel → SETUP (stream) → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
 /// </summary>
 public sealed class AirPlayClient : IDisposable, IGroupMember
 {
@@ -131,7 +140,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         SetVolumeDb(volumeDb);
     }
 
-    /// <summary>/info, transient pairing, encrypted session SETUP, event channel and stream SETUP.</summary>
+    /// <summary>/info, pairing (<see cref="Pair"/>), encrypted session SETUP, event channel and stream SETUP.</summary>
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
         VolumeCapPercent = options.VolumeCapPercent;
@@ -141,7 +150,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 
-        var shared = PairTransient();
+        var shared = Pair(options);
         _rtsp.EnableEncryption(
             HapKeys.Derive(shared, "Control-Salt", "Control-Write-Encryption-Key"),
             HapKeys.Derive(shared, "Control-Salt", "Control-Read-Encryption-Key"));
@@ -278,8 +287,44 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         }
     }
 
+    /// <summary>
+    /// The secret the session keys come from. A receiver with a stored pairing: pair-verify. One that needs a PIN pairing
+    /// (<see cref="PairingFlags"/>) and has none: <see cref="PairingRequiredException"/> before anything is sent to it, so an
+    /// automatic connect never shows a PIN on the TV. Everything else (HomePods): the transient pairing, exactly as before.
+    /// </summary>
+    private byte[] Pair(StreamOptions options)
+    {
+        string? deviceId = options.DeviceId ?? Info.GetValueOrDefault("deviceID") as string;
+        var stored = deviceId != null ? options.Pairings?.Find(deviceId) : null;
+        if (stored != null)
+        {
+            try
+            {
+                var secret = HapHttp.Verify(_rtsp, stored);
+                Log.Info("pairing: pair-verify with the stored pairing ok");
+                return secret;
+            }
+            catch (HapPairingException ex) when (ex.Error == HapError.Authentication)
+            {
+                Log.Warn($"pairing: pair-verify refused: {ex.Message}");
+                throw new PairingRequiredException(Name, deviceId, PairingReason.PairingRejected);
+            }
+            catch (HapPairingException ex)
+            {
+                throw new AirPlayException($"pair-verify failed: {ex.Message}");
+            }
+        }
+        if (PairingFlags.NeedsPinPairing(Info))
+        {
+            string flags = StatusFlags.FromInfo(Info) is { } f ? StatusFlags.Hex(f) : "(from TXT)";
+            Log.Info($"pairing: statusFlags {flags} ask for a one-time PIN pairing, and none is stored");
+            throw new PairingRequiredException(Name, deviceId, PairingReason.NotPaired);
+        }
+        return PairTransient(deviceId);
+    }
+
     /// <summary>HAP transient pairing (pair-setup M1..M4 with PIN 3939); returns the SRP session key.</summary>
-    private byte[] PairTransient()
+    private byte[] PairTransient(string? deviceId)
     {
         var headers = new KeyValuePair<string, string>[]
         {
@@ -290,8 +335,14 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
         _rtsp.Http("POST", "/pair-pin-start", PairUserAgent, octet, null, headers);
 
-        var m2 = Expect(_rtsp.Http("POST", "/pair-setup", PairUserAgent, octet,
-            Tlv8.Write((Tlv8.Method, [0]), (Tlv8.State, [1]), (Tlv8.Flags, [Tlv8.FlagTransient])), headers), "pair-setup M1");
+        var m2 = _rtsp.Http("POST", "/pair-setup", PairUserAgent, octet,
+            Tlv8.Write((Tlv8.Method, [0]), (Tlv8.State, [1]), (Tlv8.Flags, [Tlv8.FlagTransient])), headers);
+        if (m2.StatusCode == 470) // Connection Authorization Required: a receiver whose flags didn't say it needs a pairing
+        {
+            Log.Info("pairing: transient pair-setup refused with 470");
+            throw new PairingRequiredException(Name, deviceId, PairingReason.NotPaired);
+        }
+        Expect(m2, "pair-setup M1");
         var t2 = Tlv8.Read(m2.Body);
         ThrowIfTlvError(t2, "M2");
 

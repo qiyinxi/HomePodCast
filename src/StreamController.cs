@@ -166,10 +166,13 @@ public sealed partial class StreamController : IDisposable
             string? lostReason = null;
             AirPlayClient? mine = null;
             bool live = false;
+            IPAddress? resolved = null;
+            PairingRequiredException? needsPairing = null;
             try
             {
                 Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
                 var address = await ResolveAsync(deviceId, host, ct);
+                resolved = address;
                 host = address.ToString();
                 HostResolved?.Invoke(host);
                 await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct,
@@ -182,7 +185,10 @@ public sealed partial class StreamController : IDisposable
                 EffectiveLatencyMs = SafeLatency(latencyMs);
                 if (EffectiveLatencyMs != latencyMs)
                     Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
-                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
+                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume)
+                {
+                    VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,
+                };
                 var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
@@ -223,6 +229,11 @@ public sealed partial class StreamController : IDisposable
             {
                 break;
             }
+            catch (PairingRequiredException ex)
+            {
+                Log.Info($"stream: {AirPlayException.ForLog(ex)}");
+                needsPairing = ex;
+            }
             catch (Exception ex)
             {
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
@@ -240,6 +251,13 @@ public sealed partial class StreamController : IDisposable
             }
 
             if (ct.IsCancellationRequested) break;
+
+            if (needsPairing != null && resolved != null)
+            {
+                // Retrying can't help: only a PIN pairing, which the user starts (StreamController.Pairing.cs).
+                StopForPairing(deviceId, resolved, needsPairing, trigger);
+                return;
+            }
 
             if (State == StreamState.Streaming && started.Elapsed > TakeoverGrace &&
                 lostReason == EventChannel.ClosedBySpeaker)

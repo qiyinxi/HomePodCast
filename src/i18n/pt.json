@@ -440,5 +440,7 @@
   "家庭影院：{0}": "Cinema em casa: {0}",
   "家庭影院": "Cinema em casa",
   "立体声对": "Par estéreo",
-  "Apple TV「{0}」正连着它（家庭影院）": "A Apple TV \"{0}\" está ligada a ela (cinema em casa)"
+  "Apple TV「{0}」正连着它（家庭影院）": "A Apple TV \"{0}\" está ligada a ela (cinema em casa)",
+  "{0}需要在电视上配对一次，点「连接」开始": "{0} precisa de ser emparelhado uma vez na TV: clique em \"Ligar\" para começar",
+  "{0}上的配对已失效，点「连接」重新配对": "O emparelhamento com {0} já não é válido: clique em \"Ligar\" para emparelhar novamente"
 }
