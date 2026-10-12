@@ -118,6 +118,12 @@ Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's 
 
 `update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
+### The browser extension in CI
+
+Every build (push, PR and tag) also runs the job `extension-e2e` (Ubuntu, a few minutes, independent of `build`), and the `release` job waits for it. It loads the browser extension unpacked into Chromium (Puppeteer's Chrome for Testing, headless) and drives it on local stand-ins for a YouTube and a bilibili player (also bilibili's WASM `<bwp-video>` canvas player) and a bare `<video>`, against a fake HomePodCast API that the tests switch between streaming, idle and not running (`extension/test/e2e`; host names other than `*.localhost` don't resolve, so nothing leaves the runner and the real sites are never opened). It checks the in-page controls, sync fullscreen, the ±5/±20 ms buttons and Alt shortcuts with the saved site offset and its bounds, the delayed picture through the frame numbers the test video carries (pause, seek, fullscreen, web fullscreen, streaming off), and the popup. Screenshots of failed tests are the `extension-e2e-screenshots` artifact. The items it covers are marked 「CI 自动测试：extension-e2e」 in `docs/device-test-checklist.zh-CN.md` (section 五 and the top); the real sites, lip sync and 60 fps smoothness stay with a person.
+
+To run it locally: `npm ci`, then `npm test` in `extension/test/e2e` (ffmpeg makes the test video). When HomePodCast holds port 47100, the fake API takes another port and the test uses a copy of the extension that asks that port; `HPC_E2E_HEADED=1` shows the browser.
+
 ### The Store package in CI
 
 Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is marked 「（CI 自动测试：msix-e2e）」 in `docs/device-test-checklist.zh-CN.md`, section 十一; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
@@ -269,6 +275,12 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。每次发布仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 第七节）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
 
 `update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
+
+### CI 里的浏览器插件测试
+
+每次构建（推送、PR 和标签）还会跑 `extension-e2e` 作业（Ubuntu，几分钟，不依赖 `build`），`release` 作业也要等它通过。它把浏览器插件以解压方式加载进 Chromium（Puppeteer 自带的 Chrome for Testing，无头模式），在本地仿制的 YouTube、bilibili 播放器页面（也有 bilibili 的 WASM 播放器 `<bwp-video>`）和一个裸 `<video>` 页面上操作，连的是假的 HomePodCast 本地接口，测试中会把它切换成推流中、未推流和没在运行（`extension/test/e2e`；`*.localhost` 以外的主机名都解析不了，所以不会访问运行器以外的地址，也绝不会打开真实网站）。它检查页面上的插件按钮、同步全屏、±5／±20 ms 按钮和 Alt 快捷键（含保存的网站偏移和上下限）、按测试视频每帧里的帧号检查延迟画面（暂停、拖进度条、全屏、网页全屏、停止推流），以及插件弹窗。失败的测试会留下截图，在 `extension-e2e-screenshots` 产物里。它覆盖的项目在 `docs/device-test-checklist.zh-CN.md` 里标了「CI 自动测试：extension-e2e」（第五节和开头）；真实网站、口型和 60 帧流畅度仍要人测。
+
+本地运行：在 `extension/test/e2e` 里 `npm ci`，再 `npm test`（用 ffmpeg 生成测试视频）。HomePodCast 占着 47100 端口时，假接口换一个端口，测试用一份改成这个端口的插件副本；设 `HPC_E2E_HEADED=1` 可以看到浏览器。
 
 ### CI 里的 Microsoft Store 版测试
 

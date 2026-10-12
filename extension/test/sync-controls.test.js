@@ -291,6 +291,27 @@ test('the controls stay hidden until the pointer moves over the video and hide a
   ui.detach();
 });
 
+test('focus leaving the controls while they move out of the fullscreen player (Chrome fires focusout during the move) throws nothing', async () => {
+  const h = harness(); const { ui, entry } = manager(h);
+  h.click(entry.full); await settled(); // the controls now live in the fullscreen player
+  assert.equal(entry.host.parentNode, h.container);
+  entry.host.dispatch('focusin'); // the clicked button keeps the focus
+  const remove = entry.host.remove.bind(entry.host);
+  let focused = true;
+  entry.host.remove = function () { // like Chrome: removing the focused element first fires focusout, synchronously
+    const from = this.parentNode;
+    if (focused) { focused = false; this.dispatch('focusout'); }
+    if (this.parentNode !== from) throw new Error('NotFoundError: The node to be removed is no longer a child of this node.');
+    remove();
+  };
+  h.fullscreen(null); // leaving fullscreen moves them back to the page
+  assert.equal(entry.host.parentNode, h.doc.body);
+  assert.equal(h.doc.body.children.filter((c) => c === entry.host).length, 1);
+  h.frame(); assert.equal(entry.host.hidden, false); // focus just left them: the idle time starts again
+  h.flush(2500); assert.equal(entry.host.hidden, true);
+  ui.detach();
+});
+
 test('resting on the controls or focusing them keeps them; leaving starts the idle time again', () => {
   const h = harness(); const { ui, entry } = manager(h);
   h.pointer(320, 180); h.frame(); entry.host.dispatch('pointerenter');
