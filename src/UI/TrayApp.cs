@@ -82,6 +82,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
+        InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>

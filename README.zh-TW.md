@@ -43,6 +43,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - 音量上限、夜間模式（壓縮動態範圍＋減弱低音）、全域快速鍵；鍵盤音量鍵也能調整 HomePod（跟隨 Windows 音量，或串流時只調整 HomePod），見下文
 - 麥克風送到 HomePod，附殘響和等化器，可用耳機低延遲監聽；串流到揚聲器的所有聲音可選等化器預設集
 - 立體聲組合和多房間同步（實驗性，尚未在實際裝置上驗證）
+- Apple TV：第一次按「連線」時在電視上配對一次（輸入電視顯示的 4 位數字）；它的家庭劇院揚聲器是 HomePod 時由 HomePod 出聲（實驗性，尚未在實際的 Apple TV 上驗證）
 - 影音同步測試：螢幕閃光加上「喀」一聲，一眼看出聲音比畫面晚多少
 - 設定中的揚聲器資訊：型號、系統和 AirPlay 版本、IP 位址、Wi‑Fi MAC 位址（在路由器的裝置清單裡依它找到 HomePod，看它連在哪個頻段或替它指定固定 IP）、藍牙位址、裝置 ID
 - 瀏覽器擴充功能（測試版）：把 YouTube、bilibili 的畫面延後，和 HomePod 的聲音對齊。「音樂」場景的 500 ms 是給聽音樂用的，看影片用「影視」或「推薦」最流暢（畫面延遲超過 300 ms 時擴充功能的彈出視窗會提示）
@@ -184,6 +185,7 @@ CI 無法連到 HomePod，所以 `dev` 合併到 `main` 之前，要在實機上
 - [pyatv](https://github.com/postlund/pyatv)（MIT）：通訊協定流程的參考，配對演算法以其相依套件 srptools 為對照。
 - [NAudio](https://github.com/naudio/NAudio)（MIT）：核對 Windows Core Audio 介面定義。
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低延遲送出封包與緩衝的思路。
+- [TweetNaCl](https://tweetnacl.cr.yp.to/)（公有領域）：Ed25519 和 X25519 程式碼，移植到 C# 用於 Apple TV 配對。
 
 ## 授權條款
 

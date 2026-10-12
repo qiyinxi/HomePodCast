@@ -134,6 +134,7 @@ internal sealed class SettingsPage : ScrollPage
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
         AddSpeakerInfo(before: updates);
+        AddPairings(before: updates);
 
         _language.SelectionChangeCommitted += (_, _) =>
         {
@@ -542,6 +543,7 @@ internal sealed class SettingsPage : ScrollPage
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
         _speakerInfo?.PageShown();
+        _pairings?.PageShown();
     }
 
     /// <summary>A password typed but not saved is not kept once the page is left.</summary>
@@ -550,6 +552,7 @@ internal sealed class SettingsPage : ScrollPage
         _vlcPassword.Clear();
         ShowVlcPasswordButtons();
         _speakerInfo?.PageHidden();
+        _pairings?.PageHidden();
     }
 
     // ---------------------------------------------------------------- 音箱信息 (SpeakerInfoPanel.cs)
@@ -568,6 +571,24 @@ internal sealed class SettingsPage : ScrollPage
         Content.Controls.SetChildIndex(_speakerInfo, at + 1);
         Content.GapBefore[header] = 20;
         Content.GapBefore[_speakerInfo] = 4;
+    }
+
+    // ---------------------------------------------------------------- 已配对的电视 (PairingsPanel.cs)
+
+    private PairingsPanel? _pairings;
+
+    /// <summary>The paired TVs (Apple TV), just above <paramref name="before"/>; hidden while there are none.</summary>
+    private void AddPairings(Control before)
+    {
+        var header = Ui.Section(L.T("已配对的电视"));
+        _pairings = new PairingsPanel(_app, header);
+        int at = Content.Controls.GetChildIndex(before);
+        Content.Controls.Add(header);
+        Content.Controls.Add(_pairings);
+        Content.Controls.SetChildIndex(header, at);
+        Content.Controls.SetChildIndex(_pairings, at + 1);
+        Content.GapBefore[header] = 20;
+        Content.GapBefore[_pairings] = 4;
     }
 
     protected override void Dispose(bool disposing)
