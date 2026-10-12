@@ -70,8 +70,9 @@ public sealed partial class StreamController : IDisposable
     /// queue behind a slow Stop) is kept instead of <paramref name="volume"/>. Null: always use <paramref name="volume"/>.
     /// </param>
     /// <param name="trigger">Why it connects: what a speaker busy with another sender means for it (<see cref="TakeoverPolicy"/>).</param>
+    /// <param name="takenFrom">With <see cref="ConnectTrigger.TakeOver"/>: the home-theater Apple TV the user takes the HomePod from.</param>
     public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null,
-        ConnectTrigger trigger = ConnectTrigger.Manual)
+        ConnectTrigger trigger = ConnectTrigger.Manual, string? takenFrom = null)
     {
         lock (_lifecycle)
         {
@@ -80,7 +81,7 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, cts.Token));
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
             }
         }
     }
@@ -153,10 +154,10 @@ public sealed partial class StreamController : IDisposable
     }
 
     private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, ConnectTrigger trigger,
-        CancellationToken ct)
+        string? takenFrom, CancellationToken ct)
     {
         int attempt = 0;
-        bool streamed = false;
+        bool streamed = false, endedBySpeaker = false;
         string key = OwnSession.KeyOf(deviceId);
         TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
@@ -171,7 +172,8 @@ public sealed partial class StreamController : IDisposable
                 var address = await ResolveAsync(deviceId, host, ct);
                 host = address.ToString();
                 HostResolved?.Invoke(host);
-                await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct);
+                await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct,
+                    endedBySpeaker, takenFrom);
                 started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
                 EnsureCapture(ct);
@@ -206,7 +208,7 @@ public sealed partial class StreamController : IDisposable
                 attempt = 0;
                 OwnSession.Began(key, UtcNow()); // before the change is announced: the UI saves it
                 live = streamed = true;
-                Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
+                Set(StreamState.Streaming, ConnectedText(client.Info.GetValueOrDefault("name")));
 
                 using (var net = new NetworkWatch(address))
                 {
@@ -232,6 +234,7 @@ public sealed partial class StreamController : IDisposable
                 // Ended by the speaker itself: another sender took over, so a set flag is not ours. Stopped by us: TEARDOWN.
                 if (live && lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget();
                 else if (live) OwnSession.Ended(UtcNow(), clean: ct.IsCancellationRequested);
+                if (live) endedBySpeaker = lostReason == EventChannel.ClosedBySpeaker; // a home theater's Apple TV is not fought
                 // Only this loop's own session (Stop may already have taken and disposed it).
                 if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }

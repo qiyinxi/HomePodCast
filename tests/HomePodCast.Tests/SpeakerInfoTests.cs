@@ -95,7 +95,12 @@ public class SpeakerInfoTests
     [InlineData("AudioAccessory6,1", "HomePod 第二代（AudioAccessory6,1）")]
     [InlineData("AudioAccessory5,1", "HomePod mini（AudioAccessory5,1）")]
     [InlineData("AudioAccessory1,1", "HomePod（AudioAccessory1,1）")]
-    [InlineData("AppleTV11,1", "Apple TV（AppleTV11,1）")]
+    [InlineData("AppleTV14,1", "Apple TV 4K 第三代（AppleTV14,1）")]
+    [InlineData("AppleTV11,1", "Apple TV 4K 第二代（AppleTV11,1）")]
+    [InlineData("AppleTV6,2", "Apple TV 4K 第一代（AppleTV6,2）")]
+    [InlineData("AppleTV5,3", "Apple TV HD（AppleTV5,3）")]
+    [InlineData("AppleTV3,2", "Apple TV（AppleTV3,2）")]
+    [InlineData("AppleTV14,2", "Apple TV（AppleTV14,2）")] // not known: no guessing from the number
     [InlineData("Speaker2,7", "Speaker2,7")]
     public void Models_are_named_in_plain_words(string model, string expected) =>
         Assert.Equal(expected, SpeakerDetails.ModelDescription(model));
@@ -324,6 +329,42 @@ public class SpeakerInfoTests
         panel.PageShown();
         Assert.Contains("还没有选择音箱", Texts(panel));
         Assert.DoesNotContain("卧室", Texts(panel));
+    });
+
+    [Fact]
+    public void The_settings_section_shows_the_home_theater_and_the_stereo_pair_a_speaker_belongs_to() => OnSta(() =>
+    {
+        var tv = HomeTheaterTests.AppleTv();
+        var held = HomeTheaterTests.Bedroom();
+        var (links, rechts) = StereoPairTests.IdlePair();
+        var cache = new SpeakerInfoCache((address, _) => address.Equals(Bedroom)
+            ? Task.FromResult<IReadOnlyDictionary<string, object?>>(HomeTheaterTests.HeldInfo())
+            : throw new IOException("connection refused"));
+        List<SelectedSpeaker> speakers = [new(held.DeviceId, "卧室", Bedroom, held.Txt)];
+        IReadOnlyList<AirPlayDevice> scan = [held, tv, links, rechts];
+        using var panel = new UI.Pages.SpeakerInfoPanel(cache, () => speakers, () => false, () => null, () => scan);
+
+        panel.PageShown();
+        var texts = Texts(panel);
+        Assert.Contains("家庭影院：Apple TV「客厅」的音箱", texts);   // from the scan's TXT before /info is read
+        cache.RefreshAsync(held.DeviceId, "", Bedroom).Wait();
+        panel.PageShown();
+        texts = Texts(panel);
+        Assert.Contains("家庭影院：Apple TV「客厅」的音箱", texts);
+        Assert.Contains("Apple TV「客厅」正连着它（家庭影院）", texts); // 状态 names the Apple TV instead of "an iPhone or a Mac"
+
+        speakers = [new(tv.DeviceId, "客厅", null, tv.Txt)];
+        panel.PageShown();
+        Assert.Contains("家庭影院：卧室", Texts(panel));
+        Assert.Contains("Apple TV 4K 第三代（AppleTV14,1）", Texts(panel));
+
+        speakers = [new(links.DeviceId, "Links", null, links.Txt), new(rechts.DeviceId, "Rechts", null, rechts.Txt)];
+        panel.PageShown();
+        Assert.Equal(2, Texts(panel).Count(t => t == "立体声对「Büro 2」"));
+
+        speakers = [new("BB:00:00:00:00:01", "厨房", null, new Dictionary<string, string> { ["model"] = "AudioAccessory5,1", ["igl"] = "1" })];
+        panel.PageShown();
+        Assert.DoesNotContain(Texts(panel), t => t.StartsWith("家庭影院") || t.StartsWith("立体声对")); // in no group: no 分组 line
     });
 
     [Fact]

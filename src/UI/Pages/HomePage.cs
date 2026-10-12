@@ -402,8 +402,8 @@ internal sealed class HomePage : ScrollPage
     {
         _devices = devices;
         _device.Items.Clear();
-        foreach (var d in devices)
-            _device.Items.Add(string.IsNullOrEmpty(d.Model) ? d.Name : L.F("{0}（{1}）", d.Name, FriendlyModel(d.Model)));
+        var scan = _app.LastScan;
+        foreach (var d in devices) _device.Items.Add(DeviceLabel(d, scan));
         var cfgId = _app.Config.DeviceId;
         _device.SelectedIndex = devices.FindIndex(d =>
             cfgId != null && StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(cfgId), StringComparison.OrdinalIgnoreCase));
@@ -426,6 +426,19 @@ internal sealed class HomePage : ScrollPage
     }
 
     internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
+
+    /// <summary>
+    /// A speaker in the picker: "卧室（HomePod 第二代）"; an Apple TV with home-theater speakers "客厅（Apple TV，家庭影院：卧室）"
+    /// (connecting to it streams through the Apple TV, which needs its PIN pairing: only when picked on purpose).
+    /// </summary>
+    /// <param name="scan">The last scan as found (pairs not merged), where the home theater's speakers are.</param>
+    internal static string DeviceLabel(AirPlayDevice d, IReadOnlyList<AirPlayDevice> scan)
+    {
+        if (string.IsNullOrEmpty(d.Model)) return d.Name;
+        if (HomeTheater.IsAppleTv(d) && HomeTheater.SpeakerNames(d, scan) is { } speakers)
+            return L.F("{0}（Apple TV，家庭影院：{1}）", d.Name, speakers);
+        return L.F("{0}（{1}）", d.Name, FriendlyModel(d.Model));
+    }
 
     public void UpdateState()
     {

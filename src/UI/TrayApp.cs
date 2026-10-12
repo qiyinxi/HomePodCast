@@ -155,7 +155,8 @@ internal sealed partial class TrayApp : ApplicationContext
     private readonly LatestRequestQueue _connection = new("connection");
 
     /// <param name="trigger">Why: what a speaker busy with another sender means for this connection (TakeoverPolicy).</param>
-    public void Connect(ConnectTrigger trigger)
+    /// <param name="takenFrom">仍然连接 on a HomePod its home-theater Apple TV held: that Apple TV's name (for the 已连接 line).</param>
+    public void Connect(ConnectTrigger trigger, string? takenFrom = null)
     {
         if (Config.DeviceId == null)
         {
@@ -171,10 +172,10 @@ internal sealed partial class TrayApp : ApplicationContext
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
         {
-            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf, trigger));
+            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf, trigger, takenFrom));
             return;
         }
-        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf, trigger));
+        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf, trigger, takenFrom));
     }
 
     public void Disconnect()
@@ -245,7 +246,9 @@ internal sealed partial class TrayApp : ApplicationContext
         try
         {
             var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
-            LastScan = found; // TXT records and pair members for 设置 → 音箱信息
+            LastScan = found; // TXT records and pair members for 设置 → 音箱信息, home theaters for the busy check
+            Controller.RecheckSpeaker(); // a connect waiting for a HomePod may now see that its home-theater Apple TV holds it
+            var scan = found;
             found = StereoPairs.Merge(found); // a stereo pair shows as one entry (experimental)
             // Keep the configured speaker in the list even if it didn't answer this time.
             if (Config.DeviceId != null && !found.Any(d =>
@@ -255,9 +258,11 @@ internal sealed partial class TrayApp : ApplicationContext
                     L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
-            if (Config.DeviceId == null && found.FirstOrDefault(d => d.Model.StartsWith("AudioAccessory")) is { } homepod)
+            if (Config.DeviceId == null && FirstHomePod(found, scan) is { } homepod)
             {
                 SelectDevice(homepod);
+                // A home theater's HomePod: taken over (临时接管), or the status names its Apple TV at once (先询问).
+                if (HomeTheater.HolderOf(homepod, scan) is { } tv) Log.Info($"first speaker: {Log.Name(homepod.Name)}, held by its home-theater Apple TV {Log.Name(tv.Name)}");
                 if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
                 _form.SetDevices(found);
             }
@@ -270,6 +275,16 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetScanning(false);
         }
+    }
+
+    /// <summary>
+    /// The speaker a first start selects: a HomePod, one that is not an Apple TV's home-theater speaker if there is one
+    /// (connecting to that one takes it from the Apple TV); null when no HomePod was found.
+    /// </summary>
+    internal static AirPlayDevice? FirstHomePod(IReadOnlyList<AirPlayDevice> list, IReadOnlyList<AirPlayDevice> scan)
+    {
+        var homepods = list.Where(d => d.Model.StartsWith("AudioAccessory", StringComparison.Ordinal)).ToList();
+        return homepods.FirstOrDefault(d => HomeTheater.OwnerOf(d, scan) == null) ?? homepods.FirstOrDefault();
     }
 
     public void RunSyncTest(IWin32Window owner)

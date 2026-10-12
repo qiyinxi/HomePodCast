@@ -66,7 +66,12 @@ public static class TxtRecord
         info?.GetValueOrDefault("txtAirPlay") is byte[] bytes ? Parse(bytes) : null;
 }
 
-/// <summary>Model identifiers in plain words ("AudioAccessory6,1" → "HomePod 第二代").</summary>
+/// <summary>
+/// Model identifiers in plain words ("AudioAccessory6,1" → "HomePod 第二代"). Apple TV identifiers as theapplewiki.com
+/// (Models/Apple TV), appledb.dev and everymac.com list them: AppleTV5,3 Apple TV HD (2015), AppleTV6,2 Apple TV 4K
+/// (2017), AppleTV11,1 Apple TV 4K (2nd generation, 2021), AppleTV14,1 Apple TV 4K (3rd generation, 2022; both the Wi-Fi
+/// and the Wi-Fi + Ethernet model). Any other Apple TV is just "Apple TV".
+/// </summary>
 public static class SpeakerModels
 {
     public static string Name(string model) => model switch
@@ -74,6 +79,10 @@ public static class SpeakerModels
         _ when model.StartsWith("AudioAccessory6") => L.T("HomePod 第二代"),
         _ when model.StartsWith("AudioAccessory5") => "HomePod mini",
         _ when model.StartsWith("AudioAccessory1") => "HomePod",
+        "AppleTV14,1" => L.T("Apple TV 4K 第三代"),
+        "AppleTV11,1" => L.T("Apple TV 4K 第二代"),
+        "AppleTV6,2" => L.T("Apple TV 4K 第一代"),
+        "AppleTV5,3" => "Apple TV HD",
         _ when model.StartsWith("AppleTV") => "Apple TV",
         _ => model,
     };
