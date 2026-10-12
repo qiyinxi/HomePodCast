@@ -39,6 +39,7 @@ internal static class Program
         Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2); // UI Automation and screenshots in real pixels
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
+        if (Opt("--fit-dumps") is { } dumps) return FitDumps(dumps);
 
         var exe = Opt("--app") is { } app ? Path.GetFullPath(app) : null;
         if (exe == null || !File.Exists(exe))
@@ -117,6 +118,30 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine(markdown);
         return report.Failures.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// <c>--fit-dumps &lt;folder&gt;</c>: the cut-off check on the UI trees of a downloaded gui-screenshots artifact
+    /// (tree-*.txt; the scale and language from the scenario folder's name), for working on that check without the app.
+    /// </summary>
+    private static int FitDumps(string folder)
+    {
+        var line = new System.Text.RegularExpressions.Regex(@"^\s*Text ""(?<name>.*)"" \[(?<x>-?\d+),(?<y>-?\d+) (?<w>\d+)x(?<h>\d+)\] hwnd=");
+        foreach (var file in Directory.GetFiles(folder, "tree-*.txt", SearchOption.AllDirectories).Order())
+        {
+            var scenario = Path.GetFileName(Path.GetDirectoryName(file))!;
+            int dpi = scenario.Contains("-150") ? 144 : 96;
+            bool latin = !scenario.Contains("-zh-");
+            foreach (var text in File.ReadLines(file))
+            {
+                var m = line.Match(text);
+                if (!m.Success) continue;
+                var r = new Rectangle(int.Parse(m.Groups["x"].Value), int.Parse(m.Groups["y"].Value), int.Parse(m.Groups["w"].Value), int.Parse(m.Groups["h"].Value));
+                if (r.Width > 0 && r.Height > 0 && Checks.TextFit.Needed(m.Groups["name"].Value, r, dpi, latin) is { } needed)
+                    Console.WriteLine($"{scenario}/{Path.GetFileName(file)}: \"{m.Groups["name"].Value}\" {r.Width}x{r.Height}, needs {needed}");
+            }
+        }
+        return 0;
     }
 
     /// <summary>

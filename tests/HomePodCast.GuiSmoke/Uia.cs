@@ -19,6 +19,17 @@ internal sealed class Node
 
     public bool HasSize => Rect.Width > 0 && Rect.Height > 0;
 
+    private string? _text;
+
+    /// <summary>The control's own text (its window text), read when asked.</summary>
+    public string Text => _text ??= Hwnd == IntPtr.Zero ? "" : Native.ControlText(Hwnd);
+
+    /// <summary>
+    /// Shows or is named <paramref name="text"/>. A settings row (SettingRow) names its control after the row's title, so
+    /// its 导出诊断 button is announced as 诊断报告: such a button is found by what it says, its window text.
+    /// </summary>
+    public bool Says(string text) => Name == text || Text == text;
+
     /// <summary>Shown: its own window (if it has one) and every ancestor window are visible.</summary>
     public bool Shown
     {
@@ -78,12 +89,23 @@ internal static class Uia
         return request;
     }
 
-    /// <summary>The whole tree under a window, read in one request.</summary>
+    /// <summary>The whole tree under a window, read in one request (again if a control went away while it was read).</summary>
     public static Node Snapshot(IntPtr hwnd)
     {
-        AutomationElement root;
-        using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
-        return Convert(root, null);
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                AutomationElement root;
+                using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
+                return Convert(root, null);
+            }
+            catch (Exception ex) when (attempt < 4 && ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException
+                                           or InvalidOperationException && Native.IsWindow(hwnd))
+            {
+                Thread.Sleep(300);
+            }
+        }
     }
 
     private static Node Convert(AutomationElement e, Node? parent)

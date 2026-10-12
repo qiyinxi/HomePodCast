@@ -61,6 +61,18 @@ internal static partial class Native
         return sb.ToString();
     }
 
+    [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessageTimeoutText(IntPtr hwnd, int msg, IntPtr wParam, StringBuilder text, int flags, int timeoutMs, out IntPtr result);
+
+    /// <summary>A control's own text in another process (WM_GETTEXT; GetWindowText only reads captions across processes).</summary>
+    public static string ControlText(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "";
+        if (SendMessageTimeout(hwnd, 0x000E /* WM_GETTEXTLENGTH */, IntPtr.Zero, IntPtr.Zero, 0x2, 2000, out var length) == IntPtr.Zero) return "";
+        var sb = new StringBuilder((int)Math.Clamp((long)length + 1, 1, 65536));
+        return SendMessageTimeoutText(hwnd, 0x000D /* WM_GETTEXT */, new IntPtr(sb.Capacity), sb, 0x2, 2000, out _) == IntPtr.Zero ? "" : sb.ToString();
+    }
+
     public static string ClassName(IntPtr hwnd)
     {
         var sb = new StringBuilder(256);

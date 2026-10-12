@@ -16,8 +16,9 @@ internal sealed class HomePage : ScrollPage
     private readonly System.Windows.Forms.Timer _statsTimer = new() { Interval = 500 };
 
     // speaker
-    private readonly TextBlock _name = new("", TextStyle.Subtitle);
-    private readonly TextBlock _model = new("", TextStyle.Caption, TextRole.Secondary);
+    // Wrapped: next to 连接 in half the window, 「还没有选择音箱」 / 「在下面选择一台 AirPlay 音箱」 lost their ends (German too).
+    private readonly TextBlock _name = new("", TextStyle.Subtitle, wrap: true);
+    private readonly TextBlock _model = new("", TextStyle.Caption, TextRole.Secondary, wrap: true);
     private readonly FluentButton _connect = new(L.T("连接"), ButtonKind.Primary) { MinWidth = 96 };
     private readonly FluentComboBox _device = new();
     private readonly FluentButton _refresh;
@@ -154,9 +155,12 @@ internal sealed class HomePage : ScrollPage
         _latency.AccessibleName = L.T("延迟");
         var number = Ui.Row(12, _latencyHint, _latencyValue, _latencyHint);
         var slider = Ui.Row(4, _latency, minus, _latency, plus);
+        // 管理配置 in the header: in the picker's row it left the picker 「Pr…」 wide in German (the GUI smoke test's screenshots).
         var manage = new FluentButton(L.T("管理配置"), ButtonKind.Subtle);
-        var profiles = Ui.Row(8, _profiles, _profiles, _profileApply, manage);
-        var card = Ui.Card(Ui.Header(L.T("场景")), _scenes, profiles, number, _lag, slider, _movieHint);
+        var header = Ui.Header(L.T("场景"));
+        var head = Ui.Row(8, header, header, manage);
+        var profiles = Ui.Row(8, _profiles, _profiles, _profileApply);
+        var card = Ui.Card(head, _scenes, profiles, number, _lag, slider, _movieHint);
         manage.Click += (_, _) => _app.ShowProfiles(FindForm()!);
         _profileApply.Click += (_, _) =>
         {

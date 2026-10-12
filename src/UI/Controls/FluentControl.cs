@@ -413,7 +413,13 @@ internal class Card : LayoutPanel, ISurface
         foreach (Control c in Controls)
         {
             int h = HeightFor(c, inner.Width);
-            if (h <= 0) continue;
+            if (h <= 0)
+            {
+                // Out of the way, as StackPanel does: never placed, a panel kept its default 200x100 at the card's corner
+                // and painted over it (麦克风与音效: the row of the collapsed 打开麦克风隐私设置 link, found by the GUI smoke test).
+                if (apply && c.Height != 0 && !IsCollapsed(c)) Place(c, inner.X, y, inner.Width, 0);
+                continue;
+            }
             if (!first) y += Dp(Gap);
             if (apply) Place(c, inner.X, y, inner.Width, h);
             y += h;

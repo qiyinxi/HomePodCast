@@ -16,6 +16,7 @@ internal static class Checks
     public static void Layout(Node root, string where, Texts texts, Report report, IReadOnlyCollection<string> userData)
     {
         var shown = root.Descendants().Where(n => n.Shown && !n.InChrome).ToList();
+        int dpi = root.Hwnd != IntPtr.Zero ? (int)Native.GetDpiForWindow(root.Hwnd) : 96;
 
         foreach (var n in shown)
         {
@@ -58,6 +59,9 @@ internal static class Checks
 
             if (!texts.Cjk && Texts.HasCjk(n.Name) && !AllowedCjk(n.Name, userData))
                 report.Fail(where, $"untranslated text in {texts.Language}: {n.Describe()}");
+
+            if (n.Type == "Text" && n.HasSize && n.Hwnd != IntPtr.Zero && TextFit.Needed(n.Name, n.Rect, dpi, !texts.Cjk) is { } needed)
+                report.Warn(where, $"{n.Describe()} is probably cut off with an ellipsis (needs about {needed}px)");
         }
     }
 
@@ -66,6 +70,56 @@ internal static class Checks
         var rest = name;
         foreach (var allowed in Texts.NativeLanguageNames.Concat(userData)) rest = rest.Replace(allowed, "");
         return !Texts.HasCjk(rest);
+    }
+
+    /// <summary>
+    /// Single-line texts the app shortens with an ellipsis (TextBlock without wrap): its height is one line of one of the
+    /// type ramp's fonts (UI/Theme.cs: 9, 10, 10 strong, 12, 15 pt, Segoe UI or Microsoft YaHei UI), so measuring the text in
+    /// that font, as the app does, says whether it fits. A wrapped text taller than a line is never cut. The 20 and 30 pt
+    /// styles (page titles, the latency) are left out: two or three wrapped lines are as tall as one line of them.
+    /// </summary>
+    internal static class TextFit
+    {
+        private const TextFormatFlags Measure = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+        private static readonly (float Points, bool Strong)[] Ramp = [(9, false), (10, false), (10, true), (12, true), (15, true)];
+        private static readonly Dictionary<(string, float, bool, int), Font> Fonts = [];
+
+        /// <returns>The width the text needs when it is a single line that doesn't fit; null when it fits or isn't one.</returns>
+        public static int? Needed(string text, Rectangle r, int dpi, bool latinUi)
+        {
+            if (text.Trim().Length == 0 || text.Contains('\n')) return null;
+            string family = latinUi && !Texts.HasCjk(text) ? "Segoe UI" : "Microsoft YaHei UI";
+            int? needed = null;
+            foreach (var (points, strong) in Ramp)
+            {
+                var font = FontOf(family, points, strong, dpi);
+                int line = TextRenderer.MeasureText("Ag国", font, Size.Empty, Measure).Height;
+                var size = TextRenderer.MeasureText(text, font, Size.Empty, Measure);
+                if (Math.Abs(r.Height - (Math.Max(size.Height, line) + 1)) > 1) continue; // not this style's single line
+                if (size.Width <= r.Width + 1) return null;
+                needed = needed is { } n ? Math.Min(n, size.Width) : size.Width;
+            }
+            return needed;
+        }
+
+        private static Font FontOf(string family, float points, bool strong, int dpi)
+        {
+            var key = (family, points, strong, dpi);
+            if (Fonts.TryGetValue(key, out var font)) return font;
+            float px = points * dpi / 72f;
+            string? semibold = null;
+            if (strong)
+            {
+                try
+                {
+                    using var f = new FontFamily(family + " Semibold");
+                    semibold = f.Name;
+                }
+                catch (ArgumentException) { }
+            }
+            return Fonts[key] = semibold != null ? new Font(semibold, px, FontStyle.Regular, GraphicsUnit.Pixel)
+                : new Font(family, px, strong ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Pixel);
+        }
     }
 
     /// <summary>The window itself inside the screen's working area (a dialog or flyout pushed off-screen).</summary>

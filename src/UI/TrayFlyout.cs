@@ -20,9 +20,9 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     private readonly FooterPanel _footer = new();
 
     // speaker
-    private readonly TextBlock _name = new("", TextStyle.BodyStrong);
+    private readonly TextBlock _name = new("", TextStyle.BodyStrong, wrap: true); // 「Noch kein Lautsprecher ausgewählt」
     private readonly StatusDot _dot = new();
-    private readonly TextBlock _status = new("", TextStyle.Caption);
+    private readonly TextBlock _status = new("", TextStyle.Caption, wrap: true); // 「找不到音箱：…，N 秒后重试」 is long
     private readonly FluentButton _connect = new(L.T("连接"), ButtonKind.Primary) { MinWidth = 88 };
 
     // volume

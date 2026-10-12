@@ -41,7 +41,13 @@ The script:
 
 It warns when `main` is not an ancestor of `dev`: such a beta can't be promoted (see below). Without `-NotesFile` the release keeps GitHub's generated notes; apply real ones later with `gh release edit vX.Y.Z-beta.N --notes-file <notes.md>`.
 
-Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md`.
+Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md`. Before that, glance through the screenshots of the GUI smoke test: download the `gui-screenshots` artifact of the beta's tag build (Actions → build → the run → Artifacts) and open its `index.html`. The checklist's items marked 「（CI 自动测试：gui-smoke）」 are covered by that job and need no testing by hand.
+
+### The GUI smoke test
+
+Every build (pushes, PRs, tags) runs the job `gui-smoke` after `build`: `tests/HomePodCast.GuiSmoke` starts the Release exe of that build (from its `-win-x64.zip`) on the runner's desktop with test configs and walks it through UI Automation: every page scrolled through, the tray flyout, 全局快捷键, 使用配置, 多音箱 and 设置 → 音箱信息; idle, waiting to retry a speaker nobody answers (首页 and the flyout must read 连接), and connected to the tests' fake HomePod on 127.0.0.1:7000; in Chinese, English and German at 100 % (also at the window's minimum width) and 150 % scale, and once in dark mode. It fails on the app exiting, an `ERROR` in its log, a window that doesn't appear, controls clipped by or overlapping others, buttons without text, untranslated (Chinese) text in English or German, and its page checks; texts cut off with an ellipsis and controls without an accessible name are listed as warnings. Every screenshot, the UI Automation trees and each run's log are in the `gui-screenshots` artifact; the job summary lists what failed. The `release` job needs it, so a tag whose GUI smoke test fails publishes nothing.
+
+It never runs on a developer's PC: it starts the real app, which would take the HomePod away from the copy in use there. It refuses to start outside GitHub Actions unless given `--allow-local` (only for a machine without a speaker); `HomePodCast.GuiSmoke --selftest` checks the texts it looks for without starting anything.
 
 ### Promoting a beta to a stable release
 
@@ -88,6 +94,8 @@ The messages it fails with:
 
 Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
 
+The `release` job also needs [the GUI smoke test](#the-gui-smoke-test): nothing is published unless `gui-smoke` passed for the tagged commit too.
+
 The checks read everything through the GitHub API, so they run locally too, read-only:
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
 
@@ -127,7 +135,7 @@ Tags made before these rules aren't checked again: re-running one of their workf
 The tag stays: never move or delete a pushed tag, not even one whose build failed. Find the run with `gh run list --branch <tag>`.
 
 - **"Release checks" failed because the tag was pushed before the branch CI had finished**: when the branch run passes, re-run the tag build (`gh run rerun <run id>`); it then publishes normally, and the number isn't lost. If the branch run failed, fix it on `dev` and make the next beta.
-- **Flaky infrastructure** (a runner or network hiccup, a NuGet outage, a timing test on a busy runner): `gh run rerun <run id> --failed`. Since `release.ps1` stopped at the failure, check the release and apply the notes by hand afterwards (`gh release view <tag>`, `gh release edit <tag> --notes-file <notes.md>`).
+- **Flaky infrastructure** (a runner or network hiccup, a NuGet outage, a timing test on a busy runner, a GUI smoke step that waited too long for a window): `gh run rerun <run id> --failed`. Since `release.ps1` stopped at the failure, check the release and apply the notes by hand afterwards (`gh release view <tag>`, `gh release edit <tag> --notes-file <notes.md>`).
 - **The code is broken**: fix it on `dev`, push, wait for CI, and make the next beta (`-Beta` takes the next number). The failed tag keeps its number without a release; that's what happened to `v0.2.2-beta.2` and `beta.3` on 2026-10-11 (tagged before `dev`'s CI had finished, which then failed); `beta.4` was the first good one.
 - **A stable tag build fails**: its source is a beta whose build passed, so it is almost always infrastructure: re-run the failed jobs. Should the code really be at fault, `vX.Y.Z` is spent: fix it on `dev`, set the next patch version, and release that as a beta, then promote it.
 
@@ -170,7 +178,13 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 如果 `main` 不是 `dev` 的祖先，脚本会警告：这样的测试版不能转正（见下文）。不给 `-NotesFile` 时，发布页保留 GitHub 自动生成的说明，之后用 `gh release edit vX.Y.Z-beta.N --notes-file <说明.md>` 换成正式的。
 
-然后用 `docs/device-test-checklist.zh-CN.md` 在真实 HomePod 上测试这个测试版。
+然后用 `docs/device-test-checklist.zh-CN.md` 在真实 HomePod 上测试这个测试版。在那之前先扫一眼界面冒烟测试的截图：下载这个测试版标签构建的 `gui-screenshots` 工件（Actions → build → 这次运行 → Artifacts），打开里面的 `index.html`。清单里标了「（CI 自动测试：gui-smoke）」的项由这个作业测过，不用再手动测。
+
+### 界面冒烟测试
+
+每次构建（推送、PR、标签）在 `build` 之后都会跑作业 `gui-smoke`：`tests/HomePodCast.GuiSmoke` 在运行器的桌面上用测试配置启动这次构建的 Release 版程序（来自它的 `-win-x64.zip`），通过 UI Automation 走一遍：每一页整页滚动，托盘面板，全局快捷键、使用配置、多音箱和 设置 → 音箱信息；没有音箱、等待重试一个没人应答的音箱地址（首页和托盘面板必须显示「连接」）、连着测试用的假 HomePod（127.0.0.1:7000）三种状态；中文、English、Deutsch，在 100 %（另加最小窗口宽度）和 150 % 缩放下，另有一次深色模式。程序退出、日志里有 `ERROR`、窗口没出来、控件被裁掉或互相重叠、按钮没有文字、English 或 Deutsch 里有没翻译的中文，以及各页的检查没通过，都会让它失败；被省略号截断的文字、没有无障碍名称的控件作为警告列出。所有截图、UI Automation 树和每次运行的日志都在 `gui-screenshots` 工件里，作业摘要列出失败项。`release` 作业依赖它，所以界面冒烟测试失败的标签不会发布任何东西。
+
+它不会在开发者的电脑上跑：它启动的是真程序，会把那台电脑上正在用的 HomePod 抢走。不在 GitHub Actions 里时它拒绝启动，除非加 `--allow-local`（只用于没有音箱的机器）；`HomePodCast.GuiSmoke --selftest` 只检查它要找的界面文字，什么都不启动。
 
 ### 测试版转正
 
@@ -211,6 +225,8 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
 
+`release` 作业还依赖[界面冒烟测试](#界面冒烟测试)：打标签的提交 `gui-smoke` 也通过了才会发布。
+
 这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。
 
@@ -230,6 +246,6 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 标签保留：推送过的标签永远不移动、不删除，构建失败的也一样。用 `gh run list --branch <标签>` 找到那次运行。
 
 - **「Release checks」失败，因为标签在分支 CI 跑完之前就推送了**：分支那次运行通过后，重跑标签构建（`gh run rerun <运行 id>`），它会正常发布，编号不会浪费。如果分支那次运行失败了，就在 `dev` 上修好，发下一个测试版。
-- **基础设施偶发问题**（运行器或网络抖动、NuGet 故障、繁忙运行器上的计时测试）：`gh run rerun <运行 id> --failed`。因为 `release.ps1` 在失败处已经停下，之后要手动检查发布并应用说明（`gh release view <标签>`、`gh release edit <标签> --notes-file <说明.md>`）。
+- **基础设施偶发问题**（运行器或网络抖动、NuGet 故障、繁忙运行器上的计时测试、界面冒烟测试等窗口等超时）：`gh run rerun <运行 id> --failed`。因为 `release.ps1` 在失败处已经停下，之后要手动检查发布并应用说明（`gh release view <标签>`、`gh release edit <标签> --notes-file <说明.md>`）。
 - **代码有问题**：在 `dev` 上修好、推送、等 CI，然后发下一个测试版（`-Beta` 会自动用下一个编号）。失败的标签占着编号，没有发布页；2026-10-11 的 `v0.2.2-beta.2` 和 `beta.3` 就是这样（在 `dev` 的 CI 跑完之前打了标签，而那次 CI 失败了），`beta.4` 才是第一个好的。
 - **正式版标签构建失败**：它的源码就是一个构建通过的测试版，所以几乎一定是基础设施问题：重跑失败的作业。万一真是代码问题，`vX.Y.Z` 这个号就用掉了：在 `dev` 上修好，设置下一个补丁版本号，先作为测试版发布，再转正。

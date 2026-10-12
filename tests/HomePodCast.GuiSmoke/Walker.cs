@@ -149,7 +149,7 @@ internal sealed class Walker
         var reconnecting = _t.Pattern("正在重连（第 {0} 次）…");
         WaitForStatus(MainWindow, "首页", s => reconnecting.IsMatch(s), 90_000);
         WaitForStatus(MainWindow, "首页", Retrying, 30_000);
-        var connect = Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Name == T("连接") && n.Shown)
+        var connect = Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T("连接")) && n.Shown)
                       ?? throw new StepFailed("首页 has no 连接 button");
         Uia.Invoke(connect);
         var (after, _) = WaitForStatus(MainWindow, "首页", s => s == T("正在连接…") || reconnecting.IsMatch(s), 6000);
@@ -238,9 +238,9 @@ internal sealed class Walker
         var page = PagePane(tree, "首页");
         var buttons = page.Descendants().Where(n => n.Type == "Button" && n.Shown).ToList();
         string expected = connected ? T("断开") : T("连接");
-        Expect(buttons.Any(b => b.Name == expected), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
+        Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
         foreach (var gone in new[] { "刚才卡了", "导出诊断" }) // moved: 设置 → 工具, and a hotkey
-            Expect(buttons.All(b => b.Name != T(gone)), "首页", $"「{T(gone)}」 is on 首页 again");
+            Expect(buttons.All(b => !b.Says(T(gone))), "首页", $"「{T(gone)}」 is on 首页 again");
         if (!connected)
         {
             Expect(Has(page, T("未连接")), "首页", $"the status doesn't say 「{T("未连接")}」");
@@ -275,7 +275,7 @@ internal sealed class Walker
             tree = Uia.Snapshot(MainWindow());
         }
         var page = PagePane(tree, "设置");
-        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Name == T("导出诊断")), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
+        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
         Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
         Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
         if (connected)
@@ -323,7 +323,7 @@ internal sealed class Walker
         var tree = Uia.Snapshot(flyout);
         Dump(tree, "flyout");
         string expected = connected ? T("断开") : T("连接");
-        Expect(tree.Descendants().Any(n => n.Type == "Button" && n.Name == expected), "flyout", $"no 「{expected}」 button");
+        Expect(tree.Descendants().Any(n => n.Type == "Button" && n.Says(expected)), "flyout", $"no 「{expected}」 button");
         string name = connected ? _fake!.Name : T("还没有选择音箱");
         Expect(Has(tree, name), "flyout", $"doesn't show 「{name}」");
         Shoot(flyout, "flyout", "tray flyout");
@@ -331,7 +331,7 @@ internal sealed class Walker
         Checks.OnScreen(flyout, Where("flyout"), _report);
 
         // 打开主界面: the flyout goes, the window shows 首页.
-        var open = Find(tree, n => n.Type == "Button" && n.Name == T("打开主界面"));
+        var open = Find(tree, n => n.Type == "Button" && n.Says(T("打开主界面")));
         if (open == null)
         {
             _report.Fail(Where("flyout"), $"no 「{T("打开主界面")}」 button");
@@ -367,7 +367,7 @@ internal sealed class Walker
     // ---------------------------------------------------------------- dialogs
 
     private Node Button(string text) =>
-        Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Name == T(text) && n.Shown)
+        Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T(text)) && n.Shown)
         ?? throw new StepFailed($"no 「{T(text)}」 button on {CurrentPageName()}");
 
     /// <summary>The button <paramref name="text"/> in the settings row titled <paramref name="title"/>.</summary>
@@ -375,7 +375,7 @@ internal sealed class Walker
     {
         var tree = Uia.Snapshot(MainWindow());
         foreach (var caption in tree.Descendants().Where(n => n.Type == "Text" && n.Name == T(title) && n.Shown))
-            if (caption.Parent is { } row && Find(row, n => n.Type == "Button" && n.Name == T(text)) is { } button)
+            if (caption.Parent is { } row && Find(row, n => n.Type == "Button" && n.Says(T(text))) is { } button)
                 return button;
         throw new StepFailed($"no 「{T(text)}」 button in the row 「{T(title)}」");
     }
@@ -406,7 +406,7 @@ internal sealed class Walker
         Checks.OnScreen(hwnd, Where(what), _report);
         check?.Invoke(tree, what);
 
-        var close = Find(tree, n => n.Type == "Button" && n.Name == T(closeKey));
+        var close = Find(tree, n => n.Type == "Button" && n.Says(T(closeKey)));
         if (close != null) Uia.Invoke(close);
         else
         {
@@ -540,7 +540,7 @@ internal sealed class Walker
         try
         {
             var flyout = OpenFlyout();
-            var quit = Find(Uia.Snapshot(flyout), n => n.Type == "Button" && n.Name == T("退出")) ?? throw new StepFailed($"no 「{T("退出")}」 in the flyout");
+            var quit = Find(Uia.Snapshot(flyout), n => n.Type == "Button" && n.Says(T("退出"))) ?? throw new StepFailed($"no 「{T("退出")}」 in the flyout");
             Uia.Invoke(quit);
         }
         catch (Exception ex) when (ex is StepFailed or InvalidOperationException or System.Windows.Automation.ElementNotAvailableException)
@@ -587,8 +587,17 @@ internal sealed class Walker
     /// <summary>Message boxes: the firewall ones are expected on a runner without the MSI's rule (answered No), any other one fails.</summary>
     private void HandlePrompts()
     {
-        if (_app == null || _app.HasExited) return;
-        foreach (var h in Native.TopLevelWindows(_app.Id))
+        if (_app == null || _app.HasExited || _inPrompts) return;
+        _inPrompts = true; // waiting for a box to close goes through WaitUntil, which comes back here
+        try { AnswerPrompts(); }
+        finally { _inPrompts = false; }
+    }
+
+    private bool _inPrompts;
+
+    private void AnswerPrompts()
+    {
+        foreach (var h in Native.TopLevelWindows(App.Id))
         {
             if (Native.ClassName(h) != "#32770") continue;
             string title = Native.WindowText(h);
