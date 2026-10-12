@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HomePodCast.Tests" />
+    <!-- The GUI smoke test hosts the tests' fake AirPlay receiver (tests/HomePodCast.GuiSmoke). -->
+    <InternalsVisibleTo Include="HomePodCast.GuiSmoke" />
   </ItemGroup>
 
   <!-- UI translations (source string → text), read by L.cs as i18n.<language>.json -->

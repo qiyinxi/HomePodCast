@@ -1,0 +1,174 @@
+using System.Text;
+using System.Windows.Automation;
+
+namespace HomePodCast.GuiSmoke;
+
+/// <summary>One element of a window's UI Automation tree, read in one go (a cached snapshot).</summary>
+internal sealed class Node
+{
+    public required AutomationElement Element { get; init; }
+    public required string Name { get; init; }
+    public required string Type { get; init; } // "Button", "Text", "Pane", … (ControlType without "ControlType.")
+    public required Rectangle Rect { get; init; }
+    public required IntPtr Hwnd { get; init; }
+    public required bool Enabled { get; init; }
+    public required string ClassName { get; init; }
+    public required string AutomationId { get; init; }
+    public Node? Parent { get; init; }
+    public List<Node> Children { get; } = [];
+
+    public bool HasSize => Rect.Width > 0 && Rect.Height > 0;
+
+    /// <summary>Shown: its own window (if it has one) and every ancestor window are visible.</summary>
+    public bool Shown
+    {
+        get
+        {
+            for (var n = this; n != null; n = n.Parent)
+                if (n.Hwnd != IntPtr.Zero && !Native.IsWindowVisible(n.Hwnd)) return false;
+            return true;
+        }
+    }
+
+    /// <summary>Inside the window frame's title bar or a scroll bar (Windows' parts, not the app's).</summary>
+    public bool InChrome
+    {
+        get
+        {
+            for (var n = this; n != null; n = n.Parent)
+                if (n.Type is "TitleBar" or "ScrollBar" or "MenuBar" or "Thumb") return true;
+            return false;
+        }
+    }
+
+    public IEnumerable<Node> Descendants()
+    {
+        foreach (var c in Children)
+        {
+            yield return c;
+            foreach (var d in c.Descendants()) yield return d;
+        }
+    }
+
+    public IEnumerable<Node> Ancestors()
+    {
+        for (var n = Parent; n != null; n = n.Parent) yield return n;
+    }
+
+    public string Describe() => $"{Type} \"{Shorten(Name)}\" [{Rect.X},{Rect.Y} {Rect.Width}x{Rect.Height}]";
+
+    public static string Shorten(string text) => text.Length > 60 ? text[..57].Replace('\n', ' ') + "…" : text.Replace('\n', ' ');
+}
+
+/// <summary>UI Automation through System.Windows.Automation, with MSAA (oleacc) where the managed API has no access.</summary>
+internal static class Uia
+{
+    private static readonly CacheRequest Request = MakeRequest();
+
+    private static CacheRequest MakeRequest()
+    {
+        var request = new CacheRequest { TreeScope = TreeScope.Subtree, TreeFilter = Automation.RawViewCondition, AutomationElementMode = AutomationElementMode.Full };
+        foreach (var p in new[]
+                 {
+                     AutomationElement.NameProperty, AutomationElement.ControlTypeProperty, AutomationElement.BoundingRectangleProperty,
+                     AutomationElement.NativeWindowHandleProperty, AutomationElement.IsEnabledProperty, AutomationElement.ClassNameProperty,
+                     AutomationElement.AutomationIdProperty,
+                 })
+            request.Add(p);
+        return request;
+    }
+
+    /// <summary>The whole tree under a window, read in one request.</summary>
+    public static Node Snapshot(IntPtr hwnd)
+    {
+        AutomationElement root;
+        using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
+        return Convert(root, null);
+    }
+
+    private static Node Convert(AutomationElement e, Node? parent)
+    {
+        var node = new Node
+        {
+            Element = e,
+            Name = Cached(e, AutomationElement.NameProperty) as string ?? "",
+            Type = (Cached(e, AutomationElement.ControlTypeProperty) as ControlType)?.ProgrammaticName.Replace("ControlType.", "") ?? "?",
+            Rect = ToRectangle(Cached(e, AutomationElement.BoundingRectangleProperty)),
+            Hwnd = Cached(e, AutomationElement.NativeWindowHandleProperty) is int h ? new IntPtr(h) : IntPtr.Zero,
+            Enabled = Cached(e, AutomationElement.IsEnabledProperty) is not false,
+            ClassName = Cached(e, AutomationElement.ClassNameProperty) as string ?? "",
+            AutomationId = Cached(e, AutomationElement.AutomationIdProperty) as string ?? "",
+            Parent = parent,
+        };
+        AutomationElementCollection? children = null;
+        try { children = e.CachedChildren; } catch (InvalidOperationException) { }
+        if (children != null)
+            foreach (AutomationElement c in children)
+                node.Children.Add(Convert(c, node));
+        return node;
+    }
+
+    private static object? Cached(AutomationElement e, AutomationProperty p)
+    {
+        try
+        {
+            var value = e.GetCachedPropertyValue(p, ignoreDefaultValue: false);
+            return value == AutomationElement.NotSupported ? null : value;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static Rectangle ToRectangle(object? value)
+    {
+        if (value is not System.Windows.Rect r || r.IsEmpty || double.IsInfinity(r.Width) || double.IsNaN(r.Width)) return Rectangle.Empty;
+        return new Rectangle((int)Math.Round(r.X), (int)Math.Round(r.Y), (int)Math.Round(r.Width), (int)Math.Round(r.Height));
+    }
+
+    /// <summary>
+    /// Clicks a control the way an accessibility tool would, without moving the mouse or taking the focus: a control with a
+    /// window of its own (every WinForms control) through its MSAA default action, which is exactly what the app's
+    /// AccessibleObject.DoDefaultAction does (NavItem selects its page; FluentButton posts its click, so a dialog it opens
+    /// doesn't block this call); anything else through UI Automation's Invoke, select or toggle.
+    /// </summary>
+    public static void Invoke(Node node)
+    {
+        if (node.Hwnd != IntPtr.Zero && Native.MsaaDoDefaultAction(node.Hwnd)) return;
+        var e = node.Element;
+        if (e.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke))
+        {
+            ((InvokePattern)invoke).Invoke();
+            return;
+        }
+        if (e.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var select))
+        {
+            ((SelectionItemPattern)select).Select();
+            return;
+        }
+        if (e.TryGetCurrentPattern(TogglePattern.Pattern, out var toggle))
+        {
+            ((TogglePattern)toggle).Toggle();
+            return;
+        }
+        throw new InvalidOperationException($"{node.Describe()} can't be invoked");
+    }
+
+    /// <summary>Text of the tree, one element per line (saved next to a failure, for finding out what the window had).</summary>
+    public static string Dump(Node root)
+    {
+        var sb = new StringBuilder();
+        void Walk(Node n, int depth)
+        {
+            sb.Append(' ', depth * 2).Append(n.Describe());
+            if (n.Hwnd != IntPtr.Zero) sb.Append($" hwnd={n.Hwnd:X}{(Native.IsWindowVisible(n.Hwnd) ? "" : " hidden")}");
+            if (n.AutomationId.Length > 0) sb.Append($" id={n.AutomationId}");
+            if (!n.Enabled) sb.Append(" disabled");
+            sb.AppendLine();
+            foreach (var c in n.Children) Walk(c, depth + 1);
+        }
+        Walk(root, 0);
+        return sb.ToString();
+    }
+}

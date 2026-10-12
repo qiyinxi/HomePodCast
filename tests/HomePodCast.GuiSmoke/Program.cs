@@ -1,0 +1,154 @@
+using System.Diagnostics;
+
+namespace HomePodCast.GuiSmoke;
+
+/// <summary>
+/// GUI smoke test of a built HomePodCast.exe (CI job gui-smoke, .github/workflows/build.yml):
+/// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--only id,id…] [--allow-local]</c>.
+/// Runs the scenarios below one after the other, at 100 % and (when the runner offers it) 150 % display scale; writes
+/// the screenshots, the UI Automation trees and each run's log into the folder, with index.html and report.md; exits 1
+/// when any check failed.
+/// It starts the real app, so it refuses to run outside GitHub Actions unless given --allow-local: on a PC with a
+/// HomePod, any copy that connects takes the speaker away from the HomePodCast already running there.
+/// </summary>
+internal static class Program
+{
+    /// <summary>
+    /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
+    /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
+    /// HomePod, which also walk everything while connected.
+    /// </summary>
+    private static readonly Scenario[] Matrix =
+    [
+        new("idle", "zh-CN", 100, Narrow: true),
+        new("idle", "en", 100, Narrow: true),
+        new("idle", "de", 100, Narrow: true),
+        new("idle", "zh-CN", 100, Theme: "dark"),
+        new("retrying", "zh-CN", 100),
+        new("retrying", "en", 100),
+        new("streaming", "zh-CN", 100),
+        new("idle", "zh-CN", 150),
+        new("idle", "de", 150),
+        new("streaming", "de", 150),
+    ];
+
+    private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
+
+    public static int Main(string[] args)
+    {
+        Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2); // UI Automation and screenshots in real pixels
+        string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        if (args.Contains("--selftest")) return SelfTest();
+
+        var exe = Opt("--app") is { } app ? Path.GetFullPath(app) : null;
+        if (exe == null || !File.Exists(exe))
+        {
+            Console.Error.WriteLine("usage: HomePodCast.GuiSmoke --app <HomePodCast.exe> --out <folder> [--only id,id] [--allow-local]");
+            return 2;
+        }
+        bool ci = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+        if (!ci && !args.Contains("--allow-local"))
+        {
+            Console.Error.WriteLine("This starts HomePodCast's window, and a copy that connects takes the HomePod away from the one already " +
+                                    "running on this PC. It is meant for the CI runner; pass --allow-local only on a machine without a speaker.");
+            return 2;
+        }
+        Walker.Profile = ci ? null : "gui-smoke";
+        var outDir = Path.GetFullPath(Opt("--out") ?? "gui-screenshots");
+        Directory.CreateDirectory(outDir);
+        var only = Opt("--only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var scenarios = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal))).ToList();
+
+        var report = new Report();
+        var total = Stopwatch.StartNew();
+        var originalSize = Display.Resolution();
+        var originalScale = Display.Scale();
+        report.Note("runner", $"display {originalSize.Width}x{originalSize.Height} at {originalScale?.Current.ToString() ?? "?"}% " +
+                              $"(recommended {originalScale?.Recommended.ToString() ?? "?"}%, at most {originalScale?.Maximum.ToString() ?? "?"}%); " +
+                              $"modes: {string.Join(", ", Display.Modes().Select(m => $"{m.Width}x{m.Height}"))}");
+        // A bigger screen than the runner's 1024x768, so that 150 % is offered (Windows keeps the scaled screen at least
+        // about 600 px high) and the window gets its normal size.
+        if (originalSize.Height < 1080 && Display.Modes().Contains(new Size(1920, 1080)))
+        {
+            var (ok, detail) = Display.SetResolution(new Size(1920, 1080));
+            if (ok) report.Note("runner", detail);
+            else report.Warn("runner", detail);
+        }
+
+        foreach (var group in scenarios.GroupBy(s => s.Scale))
+        {
+            var (scaled, why) = Display.SetScale(group.Key);
+            if (!scaled)
+            {
+                report.Warn("runner", $"{group.Key}% scale not available on this runner: {why}");
+                foreach (var s in group) report.Scenarios.Add((s.Id, $"skipped: {group.Key}% scale not available ({why})"));
+                continue;
+            }
+            report.Note("runner", why);
+            foreach (var scenario in group)
+            {
+                Console.WriteLine($"=== {scenario.Id}");
+                int failuresBefore = report.Failures.Count;
+                var watch = Stopwatch.StartNew();
+                var walker = new Walker(scenario, exe, outDir, report);
+                var thread = new Thread(walker.Run) { IsBackground = true, Name = scenario.Id };
+                thread.SetApartmentState(ApartmentState.MTA);
+                thread.Start();
+                if (!thread.Join(ScenarioTimeout))
+                {
+                    report.Fail(scenario.Id, $"did not finish within {ScenarioTimeout.TotalMinutes} minutes");
+                    walker.Kill();
+                    thread.Join(TimeSpan.FromSeconds(60));
+                }
+                int failed = report.Failures.Count - failuresBefore;
+                report.Scenarios.Add((scenario.Id, (failed == 0 ? "passed" : $"**{failed} failure(s)**") + $" ({watch.Elapsed.TotalSeconds:F0} s)"));
+            }
+        }
+
+        // Leave the runner's screen as it was (it is thrown away afterwards anyway).
+        if (originalScale != null) Display.SetScale(originalScale.Current);
+        if (Display.Resolution() != originalSize && originalSize != Size.Empty) Display.SetResolution(originalSize);
+
+        report.Note("runner", $"{scenarios.Count} scenario(s) in {total.Elapsed.TotalMinutes:F1} min, {report.Shots.Count} screenshots");
+        File.WriteAllText(Path.Combine(outDir, "index.html"), report.Html());
+        var markdown = report.Markdown();
+        File.WriteAllText(Path.Combine(outDir, "report.md"), markdown);
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } summary) File.AppendAllText(summary, markdown);
+        Console.WriteLine();
+        Console.WriteLine(markdown);
+        return report.Failures.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// <c>--selftest</c>: what the runner itself can check without starting the app or changing the screen: the texts and
+    /// status patterns it looks for in each language, and what it reads about the display.
+    /// </summary>
+    private static int SelfTest()
+    {
+        int failures = 0;
+        void Check(bool ok, string what)
+        {
+            Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
+            if (!ok) failures++;
+        }
+        foreach (var lang in new[] { "zh-CN", "en", "de" })
+        {
+            var t = new Texts(lang);
+            string notFound = t.T("找不到音箱：请确认它已通电、和电脑在同一网络");
+            string status = t.F("{0}，{1:F0} 秒后重试", notFound, 16.0);
+            Check(t.Pattern("{0}，{1:F0} 秒后重试").IsMatch(status) && status.StartsWith(notFound, StringComparison.Ordinal), $"{lang}: retry status 「{status}」");
+            Check(!t.Pattern("{0}，{1:F0} 秒后重试").IsMatch(t.T("正在连接…")), $"{lang}: 「{t.T("正在连接…")}」 is no retry status");
+            Check(t.Pattern("正在重连（第 {0} 次）…").IsMatch(t.F("正在重连（第 {0} 次）…", 3)), $"{lang}: 「{t.F("正在重连（第 {0} 次）…", 3)}」");
+            Check(t.Pattern("已连接 · {0}").IsMatch(t.F("已连接 · {0}", "Smoke Test HomePod")), $"{lang}: 「{t.F("已连接 · {0}", "Smoke Test HomePod")}」");
+            foreach (var key in new[] { "首页", "混音器", "麦克风与音效", "设置", "连接", "断开", "全局快捷键", "标记刚才的卡顿", "未设置", "使用配置",
+                         "多音箱（实验性）", "导出诊断", "音箱信息", "HomePod 音响", "打开主界面", "退出", "需要防火墙放行", "当前是公用网络", "自动检查更新",
+                         "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "断音", "重传" })
+                Check(lang == "zh-CN" || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
+        }
+        var scale = Display.Scale();
+        Console.WriteLine($"display {Display.Resolution().Width}x{Display.Resolution().Height}, scale {scale?.Current}% " +
+                          $"(recommended {scale?.Recommended}%, max {scale?.Maximum}%), monitor {Native.PrimaryMonitorDpi()} dpi; " +
+                          $"modes {string.Join(", ", Display.Modes().Select(m => $"{m.Width}x{m.Height}"))}");
+        return failures == 0 ? 0 : 1;
+    }
+}
