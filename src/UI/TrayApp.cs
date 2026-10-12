@@ -188,9 +188,15 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <summary>连接 / 断开 (首页, the tray flyout). 连接 asks first when another device is playing to the speaker.</summary>
     public void ToggleConnection(IWin32Window? owner = null)
     {
-        if (Controller.State == StreamState.Idle) ConnectManual(owner);
+        if (ShowsConnect(Controller.State)) ConnectManual(owner);
         else Disconnect();
     }
+
+    /// <summary>
+    /// The button says 连接 while nothing is connected: idle, and also waiting to retry (「找不到音箱…，30 秒后重试」), where
+    /// 断开 read as if something were connected (2026-10-12). There a click connects at once instead of waiting.
+    /// </summary>
+    public static bool ShowsConnect(StreamState state) => state is StreamState.Idle or StreamState.Retrying;
 
     public void SelectDevice(AirPlayDevice device)
     {

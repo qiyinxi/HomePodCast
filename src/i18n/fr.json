@@ -47,7 +47,7 @@
   "已断开（音箱可能被其他设备占用）": "Déconnecté (un autre appareil a peut-être pris l'enceinte)",
   "音箱结束了会话": "L'enceinte a mis fin à la session",
   "{0}，{1:F0} 秒后重试": "{0} — nouvel essai dans {1:F0} s",
-  "找不到音箱（是否通电、和电脑在同一网络？）": "Enceinte introuvable (est-elle allumée et sur le même réseau que ce PC ?)",
+  "找不到音箱：请确认它已通电、和电脑在同一网络": "Enceinte introuvable (est-elle allumée et sur le même réseau que ce PC ?)",
   "音箱没有响应（网络中断？）": "L'enceinte ne répond pas (réseau coupé ?)",
   "事件通道异常：{0}": "Erreur du canal d'événements : {0}",
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Les demandes de synchronisation d'horloge de l'enceinte n'arrivent pas à ce programme ; en général, le Pare-feu Windows bloque les connexions entrantes vers HomePodCast.exe",

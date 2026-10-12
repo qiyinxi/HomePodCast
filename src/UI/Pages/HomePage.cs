@@ -446,9 +446,9 @@ internal sealed class HomePage : ScrollPage
 
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;
-        bool idle = c.State == StreamState.Idle;
-        _connect.Text = idle ? L.T("连接") : L.T("断开");
-        _connect.Kind = idle ? ButtonKind.Primary : ButtonKind.Secondary;
+        bool connect = TrayApp.ShowsConnect(c.State);
+        _connect.Text = connect ? L.T("连接") : L.T("断开");
+        _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
         if (c.State == StreamState.Streaming && c.Volume is { } v) ShowVolume(v);
         _mute.Checked = c.Muted;
         UpdateFloor();

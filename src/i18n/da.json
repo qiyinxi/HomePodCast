@@ -47,7 +47,7 @@
   "已断开（音箱可能被其他设备占用）": "Afbrudt (en anden enhed har muligvis overtaget højttaleren)",
   "音箱结束了会话": "Højttaleren afsluttede sessionen",
   "{0}，{1:F0} 秒后重试": "{0} – prøver igen om {1:F0} s",
-  "找不到音箱（是否通电、和电脑在同一网络？）": "Højttaleren blev ikke fundet (er den tændt og på samme netværk som pc'en?)",
+  "找不到音箱：请确认它已通电、和电脑在同一网络": "Højttaleren blev ikke fundet (er den tændt og på samme netværk som pc'en?)",
   "音箱没有响应（网络中断？）": "Højttaleren svarer ikke (er netværket nede?)",
   "事件通道异常：{0}": "Fejl i hændelseskanalen: {0}",
   "音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接": "Højttalerens anmodninger om ursynkronisering nåede aldrig frem til programmet; typisk blokerer Windows Firewall indgående forbindelser til HomePodCast.exe",

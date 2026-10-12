@@ -306,7 +306,7 @@ public sealed partial class StreamController : IDisposable
             return known;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var match = devices.FirstOrDefault(d => string.Equals(Normalize(d.DeviceId), Normalize(deviceId), StringComparison.OrdinalIgnoreCase));
-        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
+        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
     }
 
     public static string Normalize(string id) => id.Replace(":", "").Replace("-", "");

@@ -78,7 +78,7 @@ public sealed record GroupPlan(
                 };
             return found;
         }
-        if (found.Count == 0) throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
+        if (found.Count == 0) throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
         if (StereoPairs.Leader(found) is { } leader) return [leader];
         Log.Warn($"pair {PairTsid}: no single member has the tight-sync leader bit; using {Log.Name(found[0].Name)}");
         return [found[0]];

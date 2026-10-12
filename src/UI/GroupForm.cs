@@ -238,7 +238,7 @@ internal sealed class GroupForm : FluentDialog
     private string LeaderOnlyState()
     {
         var pair = StereoPairs.Members(_found, _tsid!);
-        if (pair.Count == 0) return L.T("找不到音箱（是否通电、和电脑在同一网络？）");
+        if (pair.Count == 0) return L.T("找不到音箱：请确认它已通电、和电脑在同一网络");
         return StereoPairs.Leader(pair) is { } leader
             ? L.F("只连接主音箱「{0}」。另一只会不会一起响，需要实测。", leader.Name)
             : L.F("这对音箱都没有标出主音箱，将只连接「{0}」。", pair[0].Name);

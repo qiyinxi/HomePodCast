@@ -153,9 +153,9 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
             StreamState.Retrying => TextRole.Critical,
             _ => TextRole.Secondary,
         };
-        bool idle = c.State == StreamState.Idle;
-        _connect.Text = idle ? L.T("连接") : L.T("断开");
-        _connect.Kind = idle ? ButtonKind.Primary : ButtonKind.Secondary;
+        bool connect = TrayApp.ShowsConnect(c.State);
+        _connect.Text = connect ? L.T("连接") : L.T("断开");
+        _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
 
         int cap = cfg.VolumeCapPercent;
         _volume.Ceiling = cap;

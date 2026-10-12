@@ -99,7 +99,8 @@ public static class Program
             HomePodCast
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
               info --host IP                         dump the speaker's /info (read-only)
-              stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
+              stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
+                     [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
@@ -230,24 +231,32 @@ public static class Program
         int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
         double? volume = Opt(args, "--volume") is { } v ? double.Parse(v) : null;
         bool tone = args.Contains("--tone");
+        bool silent = args.Contains("--silent"); // nothing captured: the sender fills the stream with silence
 
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60);
-        using var capture = tone ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
-        using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
+        using var capture = tone || silent ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
+        using var toneGen = tone && !silent ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         capture?.Start();
         toneGen?.Start();
 
-        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys; integers, true/false or text.
-        var overrides = new Dictionary<string, object?>();
-        for (int i = 0; i < args.Length - 1; i++)
+        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session
+        // SETUP keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
+        Dictionary<string, object?>? Overrides(string option)
         {
-            if (args[i] != "--setup" || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
-            overrides[key] = long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+            var overrides = new Dictionary<string, object?>();
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+                overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                    : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+            }
+            return overrides.Count > 0 ? overrides : null;
         }
         var options = new StreamOptions(latency, volume)
         {
             VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
-            StreamSetupOverrides = overrides.Count > 0 ? overrides : null,
+            StreamSetupOverrides = Overrides("--setup"),
+            SessionSetupExtras = Overrides("--session"),
             Pairings = PairingStore.Default, // an Apple TV paired in the app: pair-verify with that pairing (never a new PIN)
         };
 

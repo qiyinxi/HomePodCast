@@ -21,6 +21,7 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
     /// <summary>
     /// Group members only (stereo pair / multi-room): keys added to or replaced in the session SETUP, such as
     /// the group's shared "groupUUID". Null for a single speaker, whose session SETUP stays as it always was.
+    /// Also experiments (`stream --session key=value`).
     /// </summary>
     public IReadOnlyDictionary<string, object?>? SessionSetupExtras { get; init; }
 
