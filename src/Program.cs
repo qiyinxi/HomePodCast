@@ -29,7 +29,8 @@ public static class Program
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
-                "autostart" => AutostartCommand(args),
+                Update.UpdateSelfTest.Command => Update.UpdateSelfTest.Run(args), // CI: tools/ci/update-e2e.ps1
+                "autostart" => AutostartCommand(args), // CI: packaging/msix/e2e-test.ps1
                 _ => Help(),
             };
         }
@@ -40,6 +41,9 @@ public static class Program
         }
     }
 
+    /// <summary>The window's single-instance mutex (one per test profile); update-selftest checks it for a running app.</summary>
+    internal static string SingleInstanceName => @"Local\HomePodCast.Single" + (AppConfig.Profile is { } p ? "." + p : "");
+
     /// <param name="testOsd">Hidden test switch <c>--osd</c> / <c>--osd-muted</c>: show the volume-key OSD once running.</param>
     private static int RunGui(bool startHidden, bool openMixer, bool openFlyout, string? testOsd)
     {
@@ -47,7 +51,7 @@ public static class Program
 
         var suffix = AppConfig.Profile is { } p ? "." + p : "";
         using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
-        using var single = new Mutex(true, @"Local\HomePodCast.Single" + suffix, out bool first);
+        using var single = new Mutex(true, SingleInstanceName, out bool first);
         if (!first)
         {
             show.Set(); // ask the running instance to show its window
@@ -106,6 +110,7 @@ public static class Program
               autostart on|off|status                the Microsoft Store version's startup task (tests: see packaging/msix)
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
     }
 

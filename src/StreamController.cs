@@ -14,7 +14,12 @@ public enum StreamState { Idle, Connecting, Streaming, Retrying }
 /// </summary>
 public sealed partial class StreamController : IDisposable
 {
-    private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// A session the speaker ends after streaming this long was taken by another sender: the controller backs off for good
+    /// (<see cref="TakenOverText"/>) instead of retrying. Ended sooner, it retries (and the takeover check decides). Tests
+    /// shorten it; the app always uses 15 s.
+    /// </summary>
+    internal TimeSpan TakeoverGrace { get; set; } = TimeSpan.FromSeconds(15);
 
     private readonly AudioFifo _fifo;
 

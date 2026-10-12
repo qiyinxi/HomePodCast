@@ -251,11 +251,113 @@ public class DiagnosticReportTests
         });
     }
 
+    /// <summary>
+    /// The device checklist's export after marking stutters: the marked times and the stream statistics are in the
+    /// summary, nothing that names the setup is (the summary's fields are a whitelist of measurements), and a config,
+    /// pairing file or recording lying next to the log never goes into the ZIP.
+    /// </summary>
+    [Fact]
+    public void A_report_after_marking_stutters_has_their_times_and_the_statistics_and_no_settings_or_audio()
+    {
+        WithTemp(folder =>
+        {
+            var markers = new GlitchMarkers();
+            var t0 = DateTimeOffset.Parse("2026-10-12T21:00:00+08:00");
+            Assert.True(markers.TryMark(streaming: true, t0));
+            Assert.True(markers.TryMark(streaming: true, t0.AddSeconds(42)));
+            string log = Path.Combine(folder, "homepodcast.log"), destination = Path.Combine(folder, "report.zip");
+            File.WriteAllText(log, $"21:00:00.000 INFO  connected to {Log.Name("Qz Bedroom")} (AudioAccessory6,1, AirTunes/870.14.1, OS 22A3354)\n" +
+                "21:00:05.000 INFO  stats: fifo=18ms underruns=3 rtx=4/5\n" +
+                "21:00:06.000 INFO  vlc password from Settings saved (encrypted)\n");
+            File.WriteAllText(Path.Combine(folder, "config.json"), """{ "DeviceName": "Qz Bedroom", "VlcPasswordProtected": "secret" }""");
+            File.WriteAllBytes(Path.Combine(folder, "pairings.dat"), [1, 2, 3]);
+            File.WriteAllBytes(Path.Combine(folder, "capture.wav"), [0x52, 0x49, 0x46, 0x46]);
+
+            DiagnosticReports.Export(destination, Sample() with { AudibleGlitchMarkers = markers.ToArray() }, ["Qz Bedroom"], log);
+            using var zip = ZipFile.OpenRead(destination);
+            Assert.Equal(new[] { "README.txt", "homepodcast.log", "summary.json" }, zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal).ToArray());
+
+            using var summary = JsonDocument.Parse(zip.GetEntry("summary.json")!.Open());
+            var times = summary.RootElement.GetProperty("AudibleGlitchMarkers").EnumerateArray().Select(e => e.GetDateTimeOffset()).ToArray();
+            Assert.Equal(new[] { t0, t0.AddSeconds(42) }, times);
+            Assert.Equal(1, summary.RootElement.GetProperty("Dropouts").GetInt64());
+            Assert.Equal(2, summary.RootElement.GetProperty("ResendRequests").GetInt64());
+            Assert.Equal(120, summary.RootElement.GetProperty("EffectiveLatencyMs").GetInt32());
+            // Measurements only: no field could hold a name, an address, an id, a path or a credential.
+            var fields = summary.RootElement.EnumerateObject().Select(p => p.Name).ToList();
+            Assert.DoesNotContain(fields, f => f.Contains("Name") || f.Contains("Host") || f.Contains("Address") || f.EndsWith("Id")
+                                               || f.Contains("Path") || f.Contains("Password") || f.Contains("Config"));
+
+            using var reader = new StreamReader(zip.GetEntry("homepodcast.log")!.Open());
+            string text = reader.ReadToEnd();
+            Assert.DoesNotContain("Qz", text);
+            Assert.DoesNotContain("password", text, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("stats: fifo=18ms underruns=3 rtx=4/5", text);
+            foreach (var entry in zip.Entries)
+            {
+                using var content = new StreamReader(entry.Open());
+                string all = content.ReadToEnd();
+                Assert.DoesNotContain("secret", all);
+                Assert.DoesNotContain("RIFF", all);
+            }
+        });
+    }
+
     private static void WithTemp(Action<string> run)
     {
         string folder = Path.Combine(Path.GetTempPath(), "HomePodCast-report-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         try { run(folder); }
         finally { Directory.Delete(folder, recursive: true); }
+    }
+}
+
+/// <summary>标记刚才的卡顿 (a global hotkey with no key by default): when a marker is kept.</summary>
+public class GlitchMarkerTests
+{
+    private static readonly DateTimeOffset T0 = DateTimeOffset.Parse("2026-10-12T21:00:00+08:00");
+
+    [Fact]
+    public void Marking_has_no_key_by_default_and_the_other_hotkeys_keep_theirs()
+    {
+        var cfg = new AppConfig();
+        Assert.Null(Hotkey.FromConfig(cfg, HotkeyAction.MarkStutter));
+        Assert.Equal("Ctrl+Alt+PageUp", Hotkey.FromConfig(cfg, HotkeyAction.VolumeUp)?.ToString());
+        Assert.Equal("Ctrl+Alt+PageDown", Hotkey.FromConfig(cfg, HotkeyAction.VolumeDown)?.ToString());
+        Assert.Equal("Ctrl+Alt+Insert", Hotkey.FromConfig(cfg, HotkeyAction.Mute)?.ToString());
+        Assert.Equal("Ctrl+Alt+N", Hotkey.FromConfig(cfg, HotkeyAction.NextScene)?.ToString());
+    }
+
+    [Fact]
+    public void A_marker_is_kept_only_while_streaming()
+    {
+        var markers = new GlitchMarkers();
+        Assert.False(markers.TryMark(streaming: false, T0));
+        Assert.Empty(markers.ToArray());
+        Assert.True(markers.TryMark(streaming: true, T0.AddSeconds(5)));
+        Assert.Equal([T0.AddSeconds(5)], markers.ToArray());
+    }
+
+    [Fact]
+    public void At_most_one_marker_a_second_so_a_held_key_marks_once()
+    {
+        var markers = new GlitchMarkers();
+        Assert.True(markers.TryMark(true, T0));
+        for (int ms = 30; ms < 1000; ms += 30) Assert.False(markers.TryMark(true, T0.AddMilliseconds(ms))); // auto-repeat
+        Assert.True(markers.TryMark(true, T0.AddSeconds(1)));
+        Assert.False(markers.TryMark(true, T0.AddSeconds(1.5)));
+        Assert.Equal([T0, T0.AddSeconds(1)], markers.ToArray());
+    }
+
+    [Fact]
+    public void The_last_100_markers_are_kept()
+    {
+        var markers = new GlitchMarkers();
+        for (int i = 0; i < 130; i++) Assert.True(markers.TryMark(true, T0.AddSeconds(i * 2)));
+        var kept = markers.ToArray();
+        Assert.Equal(GlitchMarkers.MaxKept, kept.Length);
+        Assert.Equal(100, kept.Length);
+        Assert.Equal(T0.AddSeconds(30 * 2), kept[0]);   // the oldest 30 are gone
+        Assert.Equal(T0.AddSeconds(129 * 2), kept[^1]);
     }
 }

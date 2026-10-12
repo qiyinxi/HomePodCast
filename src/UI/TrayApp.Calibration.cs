@@ -32,25 +32,38 @@ internal enum SyncCalibrationOutcome
 internal sealed partial class TrayApp
 {
     /// <summary>The exact open endpoint; an unavailable capture never reuses a default-device calibration.</summary>
-    public AvCalibrationContext? CurrentCalibrationContext => Controller.Capture is { } capture
-        && !capture.NoOutputDevice && !capture.CaptureDeviceMissing
-        && (Audio.CaptureEndpoint.FollowsDefault(Routing.CaptureDeviceId)
-            || Audio.CaptureEndpoint.Same(Routing.CaptureDeviceId, capture.EndpointId))
-        ? AvCalibrationContext.For(Config, capture.EndpointId, capture.ExtraLatencyMs > 0) : null;
+    public AvCalibrationContext? CurrentCalibrationContext => CalibrationContextFor(Config, Controller.Capture, Routing.CaptureDeviceId);
+
+    /// <summary>
+    /// The calibration key of what is captured now: the selected speaker or group, the endpoint actually open, whether it
+    /// follows the default output, and per-app routing (a capture path that adds latency). Null while nothing usable is
+    /// captured: no output device, the chosen device missing, or an open endpoint that is not the chosen one (the
+    /// capture has not switched yet).
+    /// </summary>
+    /// <param name="captureDeviceId">The chosen capture device as the routing reads it (null: the default output).</param>
+    internal static AvCalibrationContext? CalibrationContextFor(AppConfig cfg, Audio.ICaptureSource? capture, string? captureDeviceId) =>
+        capture is { } c && !c.NoOutputDevice && !c.CaptureDeviceMissing
+        && (Audio.CaptureEndpoint.FollowsDefault(captureDeviceId) || Audio.CaptureEndpoint.Same(captureDeviceId, c.EndpointId))
+            ? AvCalibrationContext.For(cfg, c.EndpointId, c.ExtraLatencyMs > 0) : null;
 
     public bool HasCurrentCalibration => AvCalibrations.Get(Config, CurrentCalibrationContext) != null;
 
     public bool TryGetCalibrationSnapshot(out AvCalibrationSnapshot snapshot)
     {
-        if (Controller.State == StreamState.Streaming && CurrentCalibrationContext is { } context)
+        if (SnapshotFor(Controller.State, CurrentCalibrationContext, Controller.EffectiveLatencyMs,
+                Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs) is { } now)
         {
-            snapshot = new(context, Controller.EffectiveLatencyMs, Controller.Capture?.ExtraLatencyMs ?? 0,
-                Controller.Fifo.TargetMs);
+            snapshot = now;
             return true;
         }
         snapshot = default;
         return false;
     }
+
+    /// <summary>The path a sync test measures on: only while streaming with a usable capture (null otherwise).</summary>
+    internal static AvCalibrationSnapshot? SnapshotFor(StreamState state, AvCalibrationContext? context, int effectiveLatencyMs,
+        int captureExtraMs, double fifoTargetMs) =>
+        state == StreamState.Streaming && context is { } c ? new(c, effectiveLatencyMs, captureExtraMs, fifoTargetMs) : null;
 
     public bool IsCalibrationSnapshotCurrent(AvCalibrationSnapshot snapshot) =>
         snapshot.SamePathAs(TryGetCalibrationSnapshot(out var current) ? current : null);
@@ -58,19 +71,36 @@ internal sealed partial class TrayApp
     /// <summary>All consumers (home, API, browser and local players) use this saved residual immediately.</summary>
     public SyncCalibrationOutcome ApplySyncCalibration(AvCalibrationSnapshot snapshot, int measuredOffsetMs)
     {
-        if (!IsCalibrationSnapshotCurrent(snapshot)) return SyncCalibrationOutcome.PathChanged;
-        int estimate = LatencyTuner.EstimatedSoundLagMs(snapshot.EffectiveLatencyMs, Config, snapshot.CaptureExtraMs,
-            snapshot.FifoTargetMs);
-        if (!AvCalibrations.Apply(Config, snapshot.Context, measuredOffsetMs, estimate))
+        var outcome = StoreSyncCalibration(Config, snapshot, TryGetCalibrationSnapshot(out var current) ? current : null,
+            measuredOffsetMs, out int estimate);
+        if (outcome == SyncCalibrationOutcome.PathChanged) return outcome;
+        if (outcome == SyncCalibrationOutcome.OutOfRange)
         {
             Log.Warn($"sync calibration not applied: {measuredOffsetMs} ms measured against a {estimate} ms estimate");
-            return SyncCalibrationOutcome.OutOfRange;
+            return outcome;
         }
         Config.MeasuredAvOffsetMs = measuredOffsetMs;
         Config.Save();
         Log.Info($"sync calibration applied: residual {measuredOffsetMs - estimate:+0;-0;0} ms for the selected capture path");
         SyncCalibrationChanged();
         return SyncCalibrationOutcome.Applied;
+    }
+
+    /// <summary>
+    /// 应用本次校准 for a test that began on <paramref name="taken"/>, with the path as it is now (<paramref name="now"/>; null:
+    /// not streaming). Nothing is saved when the two differ (the connection, capture path, latency or FIFO target changed
+    /// during the test) or when the value is no correction; otherwise the residual against that path's estimate is stored.
+    /// </summary>
+    /// <param name="estimate">The estimate the measurement was compared with (0 when the path changed).</param>
+    internal static SyncCalibrationOutcome StoreSyncCalibration(AppConfig cfg, AvCalibrationSnapshot taken, AvCalibrationSnapshot? now,
+        int measuredOffsetMs, out int estimate)
+    {
+        estimate = 0;
+        if (!taken.SamePathAs(now)) return SyncCalibrationOutcome.PathChanged;
+        estimate = LatencyTuner.EstimatedSoundLagMs(taken.EffectiveLatencyMs, cfg, taken.CaptureExtraMs, taken.FifoTargetMs);
+        return AvCalibrations.Apply(cfg, taken.Context, measuredOffsetMs, estimate)
+            ? SyncCalibrationOutcome.Applied
+            : SyncCalibrationOutcome.OutOfRange;
     }
 
     /// <summary>What 应用本次校准 says when nothing was saved, naming what happened; null once applied.</summary>

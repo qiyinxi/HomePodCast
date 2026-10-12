@@ -17,6 +17,34 @@ public sealed record DiagnosticSnapshot(DateTimeOffset CapturedAt, string Versio
     Net.NetworkVerdict? Network, DateTimeOffset[] AudibleGlitchMarkers);
 
 /// <summary>
+/// 标记刚才的卡顿 (a global hotkey, no key by default): when the user heard a stutter, for the report's summary. Only while
+/// streaming (with nothing streaming there is nothing to go with), at most one a second (a held key repeats), and the
+/// last <see cref="MaxKept"/>. UI thread only.
+/// </summary>
+internal sealed class GlitchMarkers
+{
+    public const int MaxKept = 100;
+    public static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(1);
+
+    private readonly Queue<DateTimeOffset> _markers = new();
+    private DateTimeOffset? _last;
+
+    /// <summary>Records <paramref name="now"/>; false when it is not recorded (not streaming, or within a second of the last).</summary>
+    public bool TryMark(bool streaming, DateTimeOffset now)
+    {
+        if (!streaming) return false;
+        if (_last is { } last && now - last < MinInterval) return false;
+        _last = now;
+        _markers.Enqueue(now);
+        while (_markers.Count > MaxKept) _markers.Dequeue();
+        return true;
+    }
+
+    /// <summary>The markers kept, oldest first.</summary>
+    public DateTimeOffset[] ToArray() => _markers.ToArray();
+}
+
+/// <summary>
 /// The diagnostic report (a ZIP with summary.json, README.txt and the redacted logs). Redaction is best effort, in this
 /// order: lines that may hold credentials and debug dumps are left out; names the log marked (<see cref="Log.Name"/>) are
 /// removed whatever they are, and older unmarked log formats that name speakers have those names removed by their

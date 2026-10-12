@@ -49,7 +49,8 @@ public sealed partial class StreamController
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
-                (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text));
+                (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text),
+                takeoverGrace: TakeoverGrace);
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
             runner.Connected += _ =>
             {
