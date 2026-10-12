@@ -100,7 +100,7 @@ Every build (push, PR and tag) also runs the job `msi-e2e` after `build`, and th
 1. reads the MSI's tables: every language of `installer/build.ps1` is an embedded transform with its own finish-page text, and the zh-CN wizard is Chinese (「启动 HomePodCast」 included) with the license in English;
 2. installs it silently into the default folder and checks the files, exactly one Start menu shortcut, exactly one entry in Programs and Features, and exactly one firewall rule for that exe (inbound, allow, Private, LocalSubnet: what the app adds itself); the installed exe's own startup check (`HomePodCast.exe firewall`, read-only) must find it and decide on no firewall prompt;
 3. uninstalls it: files, shortcut, firewall rule and Programs entry gone, a seeded `%APPDATA%\HomePodCast` untouched; then the same in a custom `INSTALLFOLDER` with a space and Chinese characters;
-4. installs v0.2.0, v0.2.1, v0.2.2 and the latest release (`gh release download`), one at a time, and the new MSI over each: one HomePodCast afterwards, the new version, same folder, one correct rule, with the two installs in different wizard languages (`TRANSFORMS=:2052`). A branch or PR build is MSI 0.2.0.<run>, older than v0.2.1 and later: for those it checks that the MSI refuses the downgrade with its message and leaves the release installed. The tag build tests the real upgrade.
+4. installs v0.2.0-beta.8, v0.2.0, v0.2.1, v0.2.2 and the latest release (`gh release download`), one at a time, and the new MSI over each: one HomePodCast afterwards, the new version, same folder, one correct rule, with the two installs in different wizard languages (`TRANSFORMS=:2052`, which the msiexec log must show applied). A branch or PR build is MSI 0.2.0.<run>: it upgrades v0.2.0-beta.8 and v0.2.0, but v0.2.1 and later are newer, so for those it checks that the MSI refuses the downgrade with its message and leaves the release installed. The tag build tests the real upgrade from all of them.
 
 Each check is an `ok` line in the log, and the job summary lists them; when it fails, msiexec's logs are the `msi-e2e-logs` artifact. The script refuses to run outside GitHub Actions; `./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` runs step 1 anywhere, without installing anything.
 
@@ -248,7 +248,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 1. 读 MSI 的表：`installer/build.ps1` 的每种语言都是一个嵌入的转换，完成页文字是它自己的；zh-CN 的向导是中文（包括「启动 HomePodCast」），许可协议是英文；
 2. 静默安装到默认目录，检查程序文件、开始菜单里正好一个快捷方式、「程序和功能」里正好一个条目、正好一条指向这个 exe 的防火墙规则（入站、允许、专用网络、本地子网，和程序自己添加的一样）；装好的 exe 自己的启动检查（`HomePodCast.exe firewall`，只读）要找到它、判断不弹防火墙提示；
 3. 卸载：程序文件、快捷方式、防火墙规则和「程序和功能」里的条目都没了，预先放好的 `%APPDATA%\HomePodCast` 原样保留；然后在带空格和中文的自定义 `INSTALLFOLDER` 里再来一遍；
-4. 逐个安装 v0.2.0、v0.2.1、v0.2.2 和最新发布的版本（`gh release download`），再在上面装新 MSI：之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条且正确，新旧两次安装用不同的向导语言（`TRANSFORMS=:2052`）。分支或 PR 构建的 MSI 版本是 0.2.0.<运行号>，比 v0.2.1 及以后的发布旧：对这些版本检查的是 MSI 拒绝降级、给出提示、旧版原样保留。真正的升级由标签构建测。
+4. 逐个安装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2 和最新发布的版本（`gh release download`），再在上面装新 MSI：之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条且正确，新旧两次安装用不同的向导语言（`TRANSFORMS=:2052`，msiexec 日志里要能看到转换已应用）。分支或 PR 构建的 MSI 版本是 0.2.0.<运行号>：能真正升级 v0.2.0-beta.8 和 v0.2.0，但 v0.2.1 及以后的发布比它新，对这些版本检查的是 MSI 拒绝降级、给出提示、旧版原样保留。从所有这些版本的真正升级由标签构建测。
 
 日志里每项检查是一行 `ok`，作业摘要里也列出所有检查；失败时 msiexec 的日志在 `msi-e2e-logs` 产物里。脚本在 GitHub Actions 之外拒绝运行；`./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` 只做第 1 步，在哪里都能跑，不安装任何东西。
 

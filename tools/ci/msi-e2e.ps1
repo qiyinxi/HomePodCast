@@ -30,7 +30,8 @@
 param(
     [Parameter(Mandatory)] [string] $Msi,
     # Releases to upgrade from; 'latest' is the newest published release (prereleases included).
-    [string[]] $OldReleases = @('v0.2.0', 'v0.2.1', 'v0.2.2', 'latest'),
+    # v0.2.0-beta.8 and v0.2.0 are MSI 0.2.0.x and 0.2.0, which even a branch or PR build (0.2.0.<run>) upgrades.
+    [string[]] $OldReleases = @('v0.2.0-beta.8', 'v0.2.0', 'v0.2.1', 'v0.2.2', 'latest'),
     [string] $Repo = $(if ($env:GITHUB_REPOSITORY) { $env:GITHUB_REPOSITORY } else { 'qiyinxi/HomePodCast' }),
     [string] $WorkDir = (Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }) 'msi-e2e'),
     [switch] $StaticOnly
@@ -471,10 +472,11 @@ function Assert-Installed([pscustomobject] $info, [string] $folder, [int] $langu
     $related = @(Get-RelatedProducts $info.UpgradeCode)
     Check ($related.Count -eq 1 -and $related[0] -eq $info.ProductCode) "Windows Installer knows one product with the upgrade code: $($related -join ', ')"
     Check ($Installer.ProductInfo($info.ProductCode, 'AssignmentType') -eq '1') 'installed per-machine (all users)'
-    $registered = $Installer.ProductInfo($info.ProductCode, 'Language')
-    Write-Host "    Windows Installer registered the product language $registered; installed with $culture ($language)"
-    if ($script:LastLog -and $language -ne 1033) {
-        Select-String -Path $script:LastLog -Pattern 'transform' | Select-Object -First 12 | ForEach-Object { Write-Host "    log: $($_.Line.Trim())" }
+    # Windows Installer registers the package's base language (1033) whatever language transform was applied, so the
+    # proof of a TRANSFORMS=:<lcid> install is its log here and the transform's strings below (shortcut, firewall rule).
+    if ($language -ne 1033) {
+        $applied = @(Select-String -Path $script:LastLog -Pattern "Looking for storage transform: $language\b|Applying regular transform to database" | ForEach-Object { ($_.Line -split '\]: ', 2)[-1].Trim() })
+        Check ($applied.Count -ge 2) "installed with the embedded $culture transform (msiexec log: $($applied -join '; '))"
     }
 
     Check ((Test-Path $exe) -and (Test-Path (Join-Path $folder 'LICENSE')) -and (Test-Path (Join-Path $folder 'README.md'))) "files in $folder (HomePodCast.exe, LICENSE, README.md)"
