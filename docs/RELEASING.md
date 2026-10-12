@@ -18,7 +18,7 @@
 2. **A stable release is the promotion (转正) of a tested beta.** `vX.Y.Z` is built from exactly the source of a `vX.Y.Z-beta.N` that was published as a prerelease and passed `docs/device-test-checklist.zh-CN.md` on the real HomePod. Promotion adds no code; a fix goes into a new beta first. The binaries are built again, since the version is compiled in, but from an identical source tree.
 3. **Release notes are English first, then 简体中文.**
 4. **A pushed tag is never moved or deleted.** A tag whose build failed keeps its number; the next beta takes the next one.
-5. **Approval:** any 0.x release, beta or stable, may be published without asking. A 1.0.0 or later release needs the maintainer's OK first.
+5. **Approval:** any beta may be published without asking, and any 0.x stable release. A stable 1.0.0 or later needs the maintainer's OK first.
 
 Both flows below are done by `tools/release.ps1` (PowerShell 7, git and an authenticated `gh`; run it from the repository, any worktree). CI enforces rules 1 and 2 for every pushed tag on its own (see [What CI enforces](#what-ci-enforces)), so a tag made by hand can't get around them either. `./tools/release.ps1 -Status` shows where things stand: the version on `dev`, the latest tags, whether `dev`'s CI is green and which betas can be promoted.
 
@@ -147,7 +147,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 2. **正式版是已测试测试版的转正。** `vX.Y.Z` 必须正好用某个 `vX.Y.Z-beta.N` 的源码构建，而这个测试版已经作为预发布版本发布，并在真实 HomePod 上过了 `docs/device-test-checklist.zh-CN.md`。转正时不加任何代码；修复要先进新的测试版。安装包会重新构建（版本号编译在程序里），但源码树完全相同。
 3. **发布说明先英文，后简体中文。**
 4. **推送过的标签永远不移动、不删除。** 构建失败的标签也占着它的编号，下一个测试版用下一个编号。
-5. **批准：** 0.x 的版本（测试版或正式版）可以直接发布；1.0.0 及以后的版本要先经维护者同意。
+5. **批准：** 测试版（任何版本号）和 0.x 正式版可以直接发布；1.0.0 及以后的正式版要先经维护者同意。
 
 下面两个流程都由 `tools/release.ps1` 完成（需要 PowerShell 7、git 和已登录的 `gh`；在仓库里运行，任何工作树都行）。CI 对每个推送的标签另外强制执行第 1、2 条（见「[CI 强制检查什么](#ci-强制检查什么)」），所以手动打的标签也绕不过去。`./tools/release.ps1 -Status` 显示当前情况：`dev` 上的版本、最新的标签、`dev` 的 CI 是否通过、哪些测试版可以转正。
 
