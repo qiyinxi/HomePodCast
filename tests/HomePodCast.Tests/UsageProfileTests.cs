@@ -212,6 +212,7 @@ public class UsageProfileTests
         [nameof(AppConfig.UpdateLastCheck)] = "updates",
         [nameof(AppConfig.UpdateNotified)] = "updates",
         [nameof(AppConfig.LastOwnSession)] = "a record of this PC's last session",
+        [nameof(AppConfig.HomeTheaterTakeover)] = "how the household's Apple TV and HomePod share, the same whatever the use",
         [nameof(AppConfig.AppSendVolumesOff)] = "where an app's own HomePod volume starts when turned on again; the levels in use are AppSendVolumes",
     };
 
