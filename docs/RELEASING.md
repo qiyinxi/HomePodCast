@@ -88,6 +88,8 @@ The messages it fails with:
 
 Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
 
+The `extension-e2e` job runs on every push, PR and tag, and a tag's `release` job waits for it: it loads the browser extension unpacked into Chromium (Puppeteer's Chrome for Testing, headless) and drives it on local stand-ins for a YouTube and a bilibili player and a bare `<video>`, against a fake HomePodCast API (`extension/test/e2e`; nothing leaves the runner). It checks the in-page controls, sync fullscreen, the ±5/±20 ms buttons and Alt shortcuts with the saved site offset and its bounds, the delayed picture through the frame numbers it shows (pause, seek, fullscreen, web fullscreen, streaming off), and the popup. The items it covers are marked 「CI 自动测试：extension-e2e」 in `docs/device-test-checklist.zh-CN.md`; the real sites, lip sync and 60 fps smoothness stay manual. To run it locally: `npm ci` and `npm test` in `extension/test/e2e` (needs ffmpeg for the test video; when HomePodCast holds port 47100 the fake API takes another port and the test uses a patched copy of the extension; `HPC_E2E_HEADED=1` shows the browser).
+
 The checks read everything through the GitHub API, so they run locally too, read-only:
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
 
@@ -210,6 +212,8 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 失败时的提示就是上面英文部分列出的那几条（CI 日志是英文的）。
 
 分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
+
+`extension-e2e` 任务在每次推送、PR 和标签时都跑，标签的 `release` 任务也要等它通过：它把浏览器插件以解压方式加载进 Chromium（Puppeteer 自带的 Chrome for Testing，无头模式），在本地仿制的 YouTube、bilibili 播放器页面和一个裸 `<video>` 页面上操作，连的是假的 HomePodCast 本地接口（`extension/test/e2e`，不访问运行器以外的任何地址）。它检查页面上的插件按钮、同步全屏、±5／±20 ms 按钮和 Alt 快捷键（含保存的网站偏移和上下限）、按每帧画面里的帧号检查延迟画面（暂停、拖进度条、全屏、网页全屏、停止推流），以及插件弹窗。它覆盖的项目在 `docs/device-test-checklist.zh-CN.md` 里标了「CI 自动测试：extension-e2e」；真实网站、口型和 60 帧流畅度仍要人测。本地运行：在 `extension/test/e2e` 里 `npm ci`，再 `npm test`（需要 ffmpeg 生成测试视频；HomePodCast 占着 47100 端口时，假接口换一个端口，测试用改了端口的插件副本；设 `HPC_E2E_HEADED=1` 可以看到浏览器）。
 
 这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。

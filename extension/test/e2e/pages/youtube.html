@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>E2E: YouTube-like player</title>
+<!--
+  Mimics the parts of YouTube's watch page the extension meets: #movie_player (the element YouTube itself makes
+  fullscreen) holds a zero-height .html5-video-container with the absolutely positioned <video>, whose inline
+  width/height/left/top the player script sets to fit the player (as YouTube does, also in fullscreen), and layers
+  above it: the caption window and the control bar (progress bar, play, fullscreen button; keys k and f).
+  Solid colours on the captions and the progress bar let the test find them in screenshots.
+-->
+<style>
+  html, body { margin: 0; background: #0f0f0f; color: #f1f1f1; font: 14px/1.4 Roboto, Arial, sans-serif; }
+  #masthead { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; }
+  #search { width: 360px; padding: 6px 10px; border-radius: 20px; border: 1px solid #333; background: #121212; color: #fff; }
+  #columns { padding: 16px 24px; }
+  #player-container { width: 854px; height: 480px; position: relative; }
+  #movie_player { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; outline: none; }
+  .html5-video-container { position: relative; z-index: 10; }
+  .html5-main-video { position: absolute; display: block; background: transparent; }
+  .ytp-caption-window-container { position: absolute; inset: 0; z-index: 40; pointer-events: none; }
+  .caption-window { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); }
+  .ytp-caption-segment { display: inline-block; padding: 4px 10px; background: rgb(255, 204, 0); color: #000; font-size: 22px; }
+  .ytp-chrome-bottom { position: absolute; left: 12px; right: 12px; bottom: 0; height: 48px; z-index: 59; }
+  .ytp-progress-bar { height: 8px; background: rgb(255, 0, 51); cursor: pointer; }
+  .ytp-chrome-controls { display: flex; align-items: center; gap: 8px; height: 40px; }
+  .ytp-chrome-controls button { background: #222; color: #fff; border: 0; padding: 4px 10px; }
+  .ytp-time-display { flex: 1; color: #ddd; }
+  #below { padding: 12px 0; width: 854px; }
+</style>
+</head>
+<body>
+<div id="masthead"><b>YouTube (E2E stand-in)</b><input id="search" placeholder="Search"></div>
+<div id="columns">
+  <div id="player-container">
+    <div id="movie_player" class="html5-video-player" tabindex="-1">
+      <div class="html5-video-container">
+        <video class="video-stream html5-main-video" src="/media/test.webm" muted loop playsinline preload="auto"></video>
+      </div>
+      <div class="ytp-caption-window-container"><div class="caption-window"><span class="ytp-caption-segment">CAPTION</span></div></div>
+      <div class="ytp-chrome-bottom">
+        <div class="ytp-progress-bar" role="slider" aria-label="Seek slider"></div>
+        <div class="ytp-chrome-controls">
+          <button class="ytp-play-button" type="button" aria-label="Pause (k)">Pause</button>
+          <span class="ytp-time-display">0:00</span>
+          <button class="ytp-fullscreen-button" type="button" aria-label="Full screen (f)">Full screen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="below"><h1>E2E test video</h1><p>Comments and recommendations would be here.</p></div>
+</div>
+<script>
+(() => {
+  const player = document.getElementById('movie_player');
+  const video = player.querySelector('video');
+  const play = player.querySelector('.ytp-play-button');
+  const time = player.querySelector('.ytp-time-display');
+
+  // YouTube fits the video into the player with inline styles, also when the player goes fullscreen.
+  function layout() {
+    const W = player.clientWidth;
+    const H = player.clientHeight;
+    const vw = video.videoWidth || 16;
+    const vh = video.videoHeight || 9;
+    const s = Math.min(W / vw, H / vh);
+    const w = Math.round(vw * s);
+    const h = Math.round(vh * s);
+    video.style.width = `${w}px`;
+    video.style.height = `${h}px`;
+    video.style.left = `${Math.round((W - w) / 2)}px`;
+    video.style.top = `${Math.round((H - h) / 2)}px`;
+  }
+  layout();
+  new ResizeObserver(layout).observe(player);
+  video.addEventListener('loadedmetadata', layout);
+
+  const toggleFullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : player.requestFullscreen());
+  const togglePlay = () => (video.paused ? video.play() : video.pause());
+  player.querySelector('.ytp-fullscreen-button').addEventListener('click', toggleFullscreen);
+  play.addEventListener('click', togglePlay);
+  player.querySelector('.ytp-progress-bar').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest && e.target.closest('input, textarea, [contenteditable]')) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'f') toggleFullscreen();
+    else if (e.key === 'k') togglePlay();
+  });
+  const sync = () => {
+    play.textContent = video.paused ? 'Play' : 'Pause';
+    time.textContent = `${video.currentTime.toFixed(1)} s`;
+  };
+  for (const t of ['play', 'pause', 'timeupdate', 'seeked']) video.addEventListener(t, sync);
+  video.play().catch(() => {});
+})();
+</script>
+</body>
+</html>

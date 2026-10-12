@@ -175,8 +175,49 @@ jobs:
           path: publish/*.msix
           if-no-files-found: error
 
+  # The browser extension in a real Chromium (extension/test/e2e): the unpacked extension against local stand-ins for a
+  # YouTube and a bilibili player and a bare <video>, with a fake HomePodCast API that the tests switch between
+  # streaming, idle and not running. Nothing leaves the runner (no real site; host names other than *.localhost don't
+  # resolve). Checks the in-page controls, sync fullscreen, ±5/±20 ms and the Alt shortcuts, the delayed picture by the
+  # frame numbers it shows, and the popup; see docs/device-test-checklist.zh-CN.md for what stays manual.
+  extension-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: extension/test/e2e
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extension/test/e2e/package-lock.json
+
+      # ffmpeg makes the test video; Ubuntu 24.04 keeps Chromium's sandbox from user namespaces unless this is off.
+      - name: Prepare the runner
+        run: |
+          command -v ffmpeg || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg; }
+          userns=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -e "$userns" ]; then echo 0 | sudo tee "$userns"; fi
+
+      - name: Install Puppeteer (and its Chrome for Testing)
+        run: npm ci --no-audit --no-fund
+
+      - name: Browser tests
+        run: npm test
+
+      - name: Upload screenshots of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: extension-e2e-screenshots
+          path: extension/test/e2e/artifacts
+          if-no-files-found: ignore
+
   release:
-    needs: build
+    needs: [build, extension-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
