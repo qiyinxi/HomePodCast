@@ -168,6 +168,18 @@ public class PackagedTests(ITestOutputHelper output)
         Assert.Equal(new AutostartView(on, canChange, Enum.Parse<AutostartNote>(note)), Autostart.ViewOf(state));
 
     [Fact]
+    public void Autostart_command_needs_the_package()
+    {
+        // `autostart on|off|status` (CI's msix-e2e job runs it inside the installed package): an unpackaged copy has no
+        // startup task, so it fails at once, before the Run value or the log, and never falls through to the window.
+        Assert.Equal(1, Program.Main(["autostart", "status"]));
+        Assert.Equal(1, Program.Main(["autostart", "on"]));
+        Assert.Equal(1, Program.Main(["autostart", "off"]));
+        Assert.Equal(1, Program.Main(["autostart"]));
+        Assert.Equal(1, Program.Main(["autostart", "maybe"]));
+    }
+
+    [Fact]
     public void Startup_task_api_fails_cleanly_without_a_package()
     {
         // The real WinRT calls (activation factory, vtable slots, the async operation): without package identity

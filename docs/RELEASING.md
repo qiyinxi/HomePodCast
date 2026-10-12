@@ -107,6 +107,10 @@ Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's 
 
 `update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
+### The Store package in CI
+
+Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is marked 「（CI 自动测试：msix-e2e）」 in `docs/device-test-checklist.zh-CN.md`, section 十一; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
+
 ### Release notes
 
 - English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
@@ -243,6 +247,10 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。每次发布仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 第七节）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
 
 `update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
+
+### CI 里的 Microsoft Store 版测试
+
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msix-e2e` 作业，`release` 作业要等它通过，所以 Microsoft Store 版的包在那里没通过的标签什么都不会发布。`packaging/msix/e2e-test.ps1` 安装 `msix` 产物的一个副本（用一次性证书签名；产物本身仍然不签名，Store 要的就是不签名的包），像开始菜单那样启动它，检查包标识、日志在包的存储里、从不访问 GitHub、清单里的防火墙规则和没有防火墙提示、对再次启动和 MSI 版的单实例锁、开机启动任务（用程序的 `autostart on|off|status` 命令，也就是开关的那段代码），然后卸载并检查什么都没留下。每项检查在作业日志里是一行 `PASS`；程序日志在 `msix-e2e-logs` 产物里。覆盖了哪些项，`docs/device-test-checklist.zh-CN.md` 第十一节里标着「（CI 自动测试：msix-e2e）」；细节见 `packaging/msix/README.md` 的 CI test 一节。这个脚本会安装证书、包和 MSI，所以在 GitHub Actions 之外不加 `-Force`（一次性的测试虚拟机）就拒绝运行。
 
 ### 发布说明
 
