@@ -102,8 +102,7 @@ internal static class UpdateSelfTest
                 return NotInstalled;
         }
         // A running HomePodCast would be closed by the installer and then meet the copy the helper starts: quit it first.
-        var instance = @"Local\HomePodCast.Single" + (AppConfig.Profile is { } p ? "." + p : ""); // Program.RunGui
-        if (!o.NoInstall && Mutex.TryOpenExisting(instance, out var running))
+        if (!o.NoInstall && Mutex.TryOpenExisting(Program.SingleInstanceName, out var running))
         {
             running.Dispose();
             Log.Error($"{Command}: HomePodCast is running; quit it first (its update button does this itself)");
