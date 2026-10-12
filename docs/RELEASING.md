@@ -94,7 +94,7 @@ The messages it fails with:
 - `Stable tag vX.Y.Z is on commit <sha>, which is not on main. A stable release is tagged on the merge commit that tools/release.ps1 -Promote makes on main (release/X.Y.Z -> main), after main's CI for it has passed.`
 - `Stable tag vX.Y.Z: no published vX.Y.Z-beta.N prerelease has the same source tree as <sha> (tree …). Checked: …. A stable release is a promotion of a tested beta: release this source as a beta first (tools/release.ps1 -Beta), test it, then promote it (tools/release.ps1 -Promote vX.Y.Z-beta.N).`
 
-Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the checks `build`, `update-e2e`, `msi-e2e`, `msix-e2e` and `extension-e2e`, and the branch up to date with `main`.
+Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the checks `build`, `update-e2e`, `msi-e2e`, `msix-e2e`, `extension-e2e` and `gui-smoke`, and the branch up to date with `main`.
 
 The `release` job also needs [the GUI smoke test](#the-gui-smoke-test): nothing is published unless `gui-smoke` passed for the tagged commit too.
 
@@ -262,7 +262,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 失败时的提示就是上面英文部分列出的那几条（CI 日志是英文的）。
 
-分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR；`build`、`update-e2e`、`msi-e2e`、`msix-e2e`、`extension-e2e` 这几项检查通过；分支和 `main` 保持最新。
+分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR；`build`、`update-e2e`、`msi-e2e`、`msix-e2e`、`extension-e2e`、`gui-smoke` 这几项检查通过；分支和 `main` 保持最新。
 
 `release` 作业还依赖[界面冒烟测试](#界面冒烟测试)：打标签的提交 `gui-smoke` 也通过了才会发布。
 

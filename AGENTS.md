@@ -36,8 +36,9 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - The C# tests use in-process fakes (AirPlay receiver, HomePod, Apple TV, release feed, local API); they need no
   speaker and make no sound. Every change keeps them green, and new behaviour gets a test.
 - CI (`.github/workflows/build.yml`, every push and PR to dev/main/release) also runs, on its own runners:
-  `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package) and `extension-e2e` (Chrome with
-  the extension); `gui-smoke` (every page, screenshots) is being added. The `release` job needs them; main requires them.
+  `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
+  the extension) and `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact). The
+  `release` job needs all of them; main requires them.
 - What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression and
   one-time verifications. Mark items you automate there (「CI 自动测试：…」 or 「单元测试：…」).
 
