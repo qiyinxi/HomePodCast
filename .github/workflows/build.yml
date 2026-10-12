@@ -106,6 +106,8 @@ jobs:
           if ($LASTEXITCODE) { throw 'ONNX developer tool install failed' }
           ./tools/build-stem-module.ps1
           $env:HOMEPODCAST_STEM_MODULE = (Resolve-Path publish/stem-module).Path
+          # Exercise the anonymous-pipe path without relying on a large thread pool.
+          $env:DOTNET_PROCESSOR_COUNT = '2'
           dotnet test tests/HomePodCast.Tests -c Release --no-restore --filter FullyQualifiedName~StemModuleTests
           if ($LASTEXITCODE) { throw 'Live stem module integration failed' }
 

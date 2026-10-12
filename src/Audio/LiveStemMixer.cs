@@ -149,7 +149,6 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
         private readonly long[] _sequences = new long[Slots];
         private readonly float[] _pending = new float[BlockFrames * 2];
         private readonly AutoResetEvent _signal = new(false);
-        private readonly CancellationTokenSource _cancel = new();
         private Process? _process;
         private int _read, _write, _pendingFrames;
         private volatile bool _stopped;
@@ -161,7 +160,12 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
         public float HomeVocal, HomeMusic, HomeEnvelope;
         public double InferenceMs;
 
-        public Pipeline(string directory) => Task.Run(() => Run(directory));
+        public Pipeline(string directory)
+        {
+            // Redirected anonymous pipes use blocking handles. A pool thread waiting on ReadExactlyAsync
+            // can starve that same pool's IO continuations on two-core PCs/runners (2026-10-13).
+            new Thread(() => Run(directory)) { IsBackground = true, Name = "Stem pipe worker" }.Start();
+        }
         public void Push(float left, float right)
         {
             Span<float> pair = stackalloc float[2] { left, right };
@@ -191,15 +195,19 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
                 if (_stopped) { process.Kill(true); return; }
                 // Drain stderr concurrently: an error must never fill the pipe and deadlock inference.
                 var errors = process.StandardError.ReadToEndAsync();
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token);
-                deadline.CancelAfter(TimeSpan.FromSeconds(20));
+                // Killing the child closes its pipe ends and unblocks a stalled synchronous read/write.
+                using var deadline = new System.Threading.Timer(_ =>
+                {
+                    Error = "Stem module response timed out.";
+                    try { if (!process.HasExited) process.Kill(true); } catch { }
+                }, null, TimeSpan.FromSeconds(20), Timeout.InfiniteTimeSpan);
                 var header = new byte[16];
-                process.StandardOutput.BaseStream.ReadExactlyAsync(header, deadline.Token).AsTask().GetAwaiter().GetResult();
+                process.StandardOutput.BaseStream.ReadExactly(header);
                 if (BitConverter.ToInt32(header, 0) != 0x31535448 || BitConverter.ToInt32(header, 4) != BlockFrames ||
                     BitConverter.ToInt32(header, 8) != 128 || BitConverter.ToInt32(header, 12) != 44100)
                     throw new InvalidDataException("Incompatible stem module protocol.");
                 Ready = true;
-                deadline.CancelAfter(Timeout.InfiniteTimeSpan);
+                deadline.Change(Timeout.Infinite, Timeout.Infinite);
                 var input = process.StandardInput.BaseStream; var output = process.StandardOutput.BaseStream;
                 var response = new byte[8 + BlockFrames * 8]; var request = new byte[8 + BlockFrames * 8];
                 long previousEnd = -1;
@@ -211,10 +219,10 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
                     BitConverter.TryWriteBytes(request, first);
                     MemoryMarshal.AsBytes(_requests[read % Slots].AsSpan()).CopyTo(request.AsSpan(8));
                     long began = Stopwatch.GetTimestamp();
+                    deadline.Change(2000, Timeout.Infinite);
                     input.Write(request); input.Flush();
-                    deadline.CancelAfter(TimeSpan.FromSeconds(2));
-                    output.ReadExactlyAsync(response, deadline.Token).AsTask().GetAwaiter().GetResult();
-                    deadline.CancelAfter(Timeout.InfiniteTimeSpan);
+                    output.ReadExactly(response);
+                    deadline.Change(Timeout.Infinite, Timeout.Infinite);
                     if (BitConverter.ToInt64(response, 0) != first - 128) throw new InvalidDataException("Stem output lost input alignment.");
                     var vocals = MemoryMarshal.Cast<byte, float>(response.AsSpan(8));
                     foreach (float value in vocals) if (!float.IsFinite(value)) throw new InvalidDataException("Invalid stem audio.");
@@ -228,7 +236,7 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
             }
             catch (Exception ex) when (!_stopped)
             {
-                Error = ex.Message; Log.Warn($"stem module: {ex.Message}");
+                Error ??= ex.Message; Log.Warn($"stem module: {Error}");
             }
             finally
             {
@@ -239,7 +247,7 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
         }
         public void Stop()
         {
-            _stopped = true; _cancel.Cancel(); _signal.Set();
+            _stopped = true; _signal.Set();
             try { if (_process is { HasExited: false } p) p.Kill(true); } catch { }
         }
     }
