@@ -43,6 +43,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
+- Apple TV after a one-time PIN pairing: click Connect and type the 4 digits the TV shows; with HomePods as its home theater speakers, they play the sound (experimental, not yet tested on a real Apple TV)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
 - Speaker info in Settings: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID
 - Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
@@ -188,6 +189,7 @@ clicks "Check for updates" or turns on automatic checks.
 - [pyatv](https://github.com/postlund/pyatv) (MIT): reference for the protocol flow; its dependency srptools serves as the reference for the pairing algorithm.
 - [NAudio](https://github.com/naudio/NAudio) (MIT): cross-checking the Windows Core Audio interface definitions.
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash) (GPL-3.0): ideas for low-latency packet sending and buffering.
+- [TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain): the Ed25519 and X25519 code, ported to C# for the Apple TV pairing.
 
 ## License
 

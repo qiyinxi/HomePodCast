@@ -109,6 +109,26 @@
 
 ## 九、Apple TV（第 7 代，接上后再测）
 
+### PIN 配对与推流（新增）
+
+Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电视上配对一次：程序生成自己的身份，Apple TV 记住这台电脑；以后每次连接只做 pair-verify，不再显示数字。配对信息存在 `%APPDATA%\HomePodCast\pairings.dat`（DPAPI 加密，只有这个 Windows 用户在这台电脑上能读）。Apple TV 的家庭影院扬声器是 HomePod，所以声音会从 HomePod 出来：**测试前先在首页把音量调到 25% 以下**。
+
+1. - [ ] 退出 HomePodCast，在「设置」里打开「启动后自动连接」，首页选中 Apple TV 后退出，再启动：**电视不会亮、不显示数字**，也不弹配对窗口；首页状态写「〈Apple TV 名字〉需要在电视上配对一次，点「连接」开始」。日志有 `pairing: statusFlags 0x644 ask for a one-time PIN pairing`
+2. - [ ] 点「连接」：弹出「在电视上配对」，写着「要在电视上配对 〈名字〉：点「开始」后，电视会显示 4 位数字，把它输入到这里。」。点「取消」：什么都不发生，电视不亮
+3. - [ ] 再点「连接」→「开始」：电视亮起并显示 4 位数字（日志 `pairing: the receiver shows a PIN`），窗口里出现输入框
+4. - [ ] 故意输错（比如 0000）→「配对」：窗口写「数字不对。电视上会显示新的数字，请重新输入。」，电视换成新的数字
+5. - [ ] 输入正确的数字 →「配对」：窗口关闭，自动连接；HomePod 出声（家庭影院）。日志依次有 `pairing: done (pair-setup M6 verified)`、`pairing saved for ‹名字›`、`pairing: pair-verify with the stored pairing ok`、`stream ready: ... arrivalToRenderLatency=__ms`（**记下这个数**，HomePod 直连是 85）
+6. - [ ] 推流开始时电视有没有被一起打开（HDMI-CEC）：____
+7. - [ ] 在首页拖音量：HomePod 的音量跟着变（不超过 25%）
+8. - [ ] 退出程序再启动（自动连接开着）：不显示数字、直接连上（日志只有 pair-verify，没有 `pair-pin-start`）
+9. - [ ] 延迟：「游戏」场景（105 ms）做音画同步测试并录像：声音比画面晚 ____ ms；再连回 HomePod 直连录一段：____ ms（上次 118 ms）。两者差多少就是 Apple TV 转一手的代价
+10. - [ ] 「设置 → 已配对的电视」里有这台 Apple TV 和配对日期；点「忘记配对」→ 确认：这一栏消失，`pairings.dat` 被删掉。再点「连接」：又弹出配对窗口
+11. - [ ] 在 Apple TV 的设置里移除这台电脑（或者重置 Apple TV）后点「连接」：首页写「〈名字〉上的配对已失效，点「连接」重新配对」，配对窗口第一行写「电视上的配对已失效……」；重新配对后能连上
+12. - [ ] 输错 5 次以上：窗口是否提示「输错次数太多……」（记下 Apple TV 实际的反应）
+13. - [ ] 日志复制到「下载」后发我（不要包含 `pairings.dat`，那个文件不用发）
+
+### 其他
+
 - [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
 - [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
 - [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低

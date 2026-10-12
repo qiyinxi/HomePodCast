@@ -43,6 +43,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - 音量上限、夜间模式（压缩动态范围 + 减弱低音）、全局快捷键；键盘音量键也能调 HomePod（跟随 Windows 音量，或推流时只调 HomePod），见下文
 - 麦克风送到 HomePod，带混响和均衡，可用耳机低延迟监听；推到音箱的所有声音可选均衡预设
 - 立体声对和多房间同步（实验性，尚未在真实设备上验证）
+- Apple TV：第一次点「连接」时在电视上配对一次（输入电视显示的 4 位数字）；它的家庭影院扬声器是 HomePod 时由 HomePod 出声（实验性，尚未在真实 Apple TV 上验证）
 - 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
 - 设置里的音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
 - 浏览器插件（测试版）：把 YouTube、bilibili 的画面延后，和 HomePod 的声音对齐。「音乐」场景的 500 ms 是给听音乐用的，看视频用「影视」或「推荐」最流畅（画面延迟超过 300 ms 时插件弹窗会提示）
@@ -184,6 +185,7 @@ CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做
 - [pyatv](https://github.com/postlund/pyatv)（MIT）：协议流程参考，配对算法以其依赖 srptools 为对照。
 - [NAudio](https://github.com/naudio/NAudio)（MIT）：核对 Windows Core Audio 接口定义。
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低延迟发包与缓冲的思路。
+- [TweetNaCl](https://tweetnacl.cr.yp.to/)（公有领域）：Ed25519 和 X25519 代码，移植到 C# 用于 Apple TV 配对。
 
 ## 许可证
 
