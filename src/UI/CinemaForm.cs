@@ -10,6 +10,7 @@ internal sealed class CinemaForm : Form
     private readonly TrayApp _app;
     private readonly TextBlock _file = Ui.Note();
     private readonly TextBlock _status = Ui.Note();
+    private readonly TextBlock _calibrationStatus = Ui.Note();
     private readonly FluentButton _play = new(L.T("播放")), _pause = new(L.T("暂停")), _stop = new(L.T("停止"));
     private readonly FluentButton _calibrate = new(L.T("测量音箱延迟"));
     private readonly FluentComboBox _microphone = new();
@@ -70,6 +71,9 @@ internal sealed class CinemaForm : Form
         else _microphone.SelectedIndex = mic + 1;
         body.Controls.Add(new FieldRow(L.T("校准麦克风"), Ui.Row(8, _microphone, _microphone, _calibrate)));
         body.Controls.Add(Ui.Note(L.T("播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。")));
+        // Keep measurement results readable while the 250 ms playback status continues updating.
+        body.Controls.Add(_calibrationStatus);
+        _calibrationStatus.TextChanged += (_, _) => FitBody();
         var volume = Ui.Slider(0, (int)app.Config.VolumeCapPercent); volume.Value = Math.Min(volume.Maximum, (int)(app.Config.Volume ?? 20));
         volume.Scroll += (_, _) => app.PreviewVolume(volume.Value);
         body.Controls.Add(new FieldRow(L.T("音量"), volume)); body.Controls.Add(_status);
@@ -100,6 +104,7 @@ internal sealed class CinemaForm : Form
     {
         if (_path == null || _measurement != null) return;
         StopPlayback();
+        _calibrationStatus.Text = "";
         CinemaFileSource? source = null;
         try
         {
@@ -122,7 +127,7 @@ internal sealed class CinemaForm : Form
         {
             int choice = _microphone.SelectedIndex;
             string? mic = choice <= 0 ? null : choice <= _inputs.Count ? _inputs[choice - 1].Id : _app.Config.Cinema.CalibrationMicId;
-            _status.Text = L.T("正在测量音箱延迟…");
+            _calibrationStatus.Text = L.T("正在测量音箱延迟…");
             var readings = await CinemaAcousticCalibrator.MeasureAsync(source, _activeLayout.Length, mic,
                 () => ReferenceEquals(_source, source) && _app.CinemaStreaming, cancellation.Token);
             if (IsDisposed || !ReferenceEquals(_source, source)) return;
@@ -133,10 +138,10 @@ internal sealed class CinemaForm : Form
                 var row = _rows.First(r => r.Role == _activeLayout[i].Role); row.Delay.Value = delays[i]; row.Value.Text = delays[i] + " ms";
             }
             source.ApplyDelays(delays); _app.Config.Cinema.CalibrationMicId = mic; _app.Config.Cinema.Speakers = _activeLayout.ToList(); _app.Config.Save();
-            _status.Text = L.T("音箱延迟校准已应用。");
+            _calibrationStatus.Text = L.T("音箱延迟校准已应用。");
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!IsDisposed) _status.Text = L.F("音箱校准失败：{0}", ex.Message); }
+        catch (OperationCanceledException) { if (!IsDisposed) _calibrationStatus.Text = ""; }
+        catch (Exception ex) { if (!IsDisposed) _calibrationStatus.Text = L.F("音箱校准失败：{0}", ex.Message); }
         finally { _measurement = null; }
     }
     private void RefreshStatus()
