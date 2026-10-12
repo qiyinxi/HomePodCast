@@ -95,6 +95,11 @@ internal sealed class SettingsPage : ScrollPage
             L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
 
         var tools = Ui.Section(L.T("工具"));
+        var videoWindow = new FluentButton(L.T("打开"));
+        var videoModule = new FluentButton(L.T("选择模块…"));
+        var videoWindowRow = new SettingRow(Glyph.Video, L.T("同步观影窗口（实验性）"),
+            L.T("延迟显示选定窗口，跟随 HomePod 音频；请关闭播放器和浏览器的其他同步补偿，避免重复调整。"),
+            Ui.Row(8, null, videoModule, videoWindow));
         var profiles = new FluentButton(L.T("管理配置"));
         var profilesRow = new SettingRow(Glyph.Settings, L.T("使用配置"),
             L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), profiles);
@@ -126,11 +131,11 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, videoWindowRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, videoWindowRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
@@ -202,6 +207,8 @@ internal sealed class SettingsPage : ScrollPage
         _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
+        videoModule.Click += (_, _) => _app.ChooseVideoWindowModule(FindForm());
+        videoWindow.Click += (_, _) => _app.OpenVideoWindow(FindForm());
         profiles.Click += (_, _) => _app.ShowProfiles(FindForm()!);
         diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);

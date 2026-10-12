@@ -495,6 +495,7 @@ internal sealed partial class TrayApp : ApplicationContext
         DisposeSound();
         DisposeEffects();
         DisposePlayers();
+        StopVideoWindow();
         _api?.Dispose();
         // A Start still running would otherwise begin a stream after the Stop below (it never faults).
         connecting.Wait(TimeSpan.FromSeconds(10));

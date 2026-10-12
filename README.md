@@ -54,6 +54,10 @@ Playback profiles, per-speaker/source A/V calibration, independent per-app HomeP
 
 ## Usage
 
+An optional [synchronized viewing window (experimental)](docs/VIDEO_WINDOW.md#english) delays a selected native
+window for players without a delay API, with HomePod delay tracking, fullscreen and fine adjustment.
+The separate module currently provides up to 720p/30 fps SDR preview; actual capture and A/V alignment remain unverified.
+
 1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
 2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
    - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.

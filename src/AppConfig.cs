@@ -40,6 +40,8 @@ public sealed class AppConfig
     public int VideoDelayExtraMs { get; set; } = 36;
 
     public int LocalApiPort { get; set; } = Net.LocalApi.DefaultPort;
+    // Optional viewing companion; opening it never starts audio streaming or window capture automatically.
+    public string? VideoWindowModuleDirectory { get; set; }
 
     // ---- Stereo pair / multi-speaker (experimental, see GroupPlan.cs) -------------------------------
     // DeviceId "pair:<tsid>" selects a stereo pair; MultiRoom* adds a second speaker to a single one.

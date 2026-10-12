@@ -99,6 +99,10 @@ jobs:
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:Version=${{ steps.ver.outputs.version }} -o publish/HomePodCast
 
+      - name: Publish optional viewing window and verify native readback without a GUI
+        shell: pwsh
+        run: ./tools/build-video-window.ps1 -Version '${{ steps.ver.outputs.version }}'
+
       # Code signing via SignPath Foundation (https://signpath.org) — enable once the project is approved
       # and the SIGNPATH_API_TOKEN secret plus the organization/project/policy ids are known.
       # - name: Upload unsigned exe
@@ -138,6 +142,7 @@ jobs:
           $v = '${{ steps.ver.outputs.version }}'
           Copy-Item LICENSE, README*.md publish/HomePodCast/
           Compress-Archive -Path publish/HomePodCast/* -DestinationPath "publish/HomePodCast-$v-win-x64.zip"
+          Compress-Archive -Path publish/video-window/* -DestinationPath "publish/HomePodCast-video-window-$v.zip"
           if (Test-Path extension/manifest.json) {
             Compress-Archive -Path (Get-Item extension/manifest.json, extension/src, extension/_locales, extension/icons -ErrorAction SilentlyContinue) -DestinationPath "publish/HomePodCast-extension-$v.zip"
           }

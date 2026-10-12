@@ -39,6 +39,7 @@ public class LocalizationTests(ITestOutputHelper output)
 
     private static List<SourceScanner.Use> ScanSrc() => SourceScanner.Scan(
         SourceScanner.SourceFiles(Path.Combine(Repo.Root, "src"))
+            .Concat(Directory.Exists(Path.Combine(Repo.Root, "modules")) ? SourceScanner.SourceFiles(Path.Combine(Repo.Root, "modules")) : [])
             .Select(f => (Repo.Relative(f), File.ReadAllText(f))));
 
     /// <summary>A table as written in the file: entries in order, duplicates kept.</summary>

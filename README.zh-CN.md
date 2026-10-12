@@ -1,5 +1,8 @@
 # HomePodCast
 
+可选的[同步观影窗口（实验性）](docs/VIDEO_WINDOW.md#简体中文)延迟显示选定的原生窗口，适配没有延迟接口的播放器，
+跟随 HomePod 声音延迟，提供全屏和微调。独立模块当前最高为 720p/30 fps SDR 预览，实际采集和音画对齐尚未验证。
+
 [English](README.md) | **简体中文** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
 把 Windows 电脑的声音实时推送到 HomePod（AirPlay 2），为打游戏和看视频做的低延迟方案。
