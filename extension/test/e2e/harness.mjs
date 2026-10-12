@@ -169,9 +169,8 @@ export async function startHarness() {
 
     async waitOverlay(page, timeout = 8000) {
       await waitFor(() => page.evaluate(() => {
-        const v = document.querySelector('video');
-        const c = window.__e2e.overlayOf(v);
-        return !!c && c.width > 0 && getComputedStyle(c).display !== 'none' && window.__e2e.readOverlay(v) !== null;
+        const c = window.__e2e.overlayOf();
+        return !!c && c.width > 0 && getComputedStyle(c).display !== 'none' && window.__e2e.readOverlay() !== null;
       }), { timeout, what: 'the delayed canvas' });
     },
 
@@ -180,7 +179,7 @@ export async function startHarness() {
       const lags = [];
       const seen = [];
       for (let i = 0; i < n * 3 && lags.length < n; i++) {
-        const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
+        const s = await page.evaluate(() => window.__e2e.sample());
         if (s.video !== null && s.overlay !== null && !s.paused) {
           lags.push((framesBehind(s.video, s.overlay) * 1000) / CODE.FPS);
           seen.push(s.overlay);
@@ -196,8 +195,8 @@ export async function startHarness() {
     async screen(page, { points = [] } = {}) {
       const data = `data:image/png;base64,${await page.screenshot({ encoding: 'base64' })}`;
       return page.evaluate(async (dataUrl, pts) => {
-        const v = document.querySelector('video');
-        const r = v.getBoundingClientRect();
+        const v = window.__e2e.source();
+        const r = window.__e2e.player().getBoundingClientRect();
         const rect = { left: r.left, top: r.top, width: r.width, height: r.height };
         return {
           frame: await window.__e2e.readScreenshot(dataUrl, rect, v.videoWidth, v.videoHeight),

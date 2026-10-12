@@ -39,7 +39,7 @@ const near = (a, b, tol = 2) => Math.abs(a - b) <= tol;
 // ---------- helpers on a page ----------
 
 const videoBox = (page) => page.evaluate(() => {
-  const r = document.querySelector('video').getBoundingClientRect();
+  const r = window.__e2e.player().getBoundingClientRect();
   return { left: r.left, top: r.top, width: r.width, height: r.height, x: r.left + r.width / 2, y: r.top + r.height / 2 };
 });
 
@@ -92,7 +92,7 @@ async function setBase(page, ms) {
 
 const fullscreenElement = (page) => page.evaluate(() => {
   const fe = document.fullscreenElement;
-  return fe && { tag: fe.tagName, id: fe.id, cls: typeof fe.className === 'string' ? fe.className : '', isVideoParent: fe === document.querySelector('video').parentElement };
+  return fe && { tag: fe.tagName, id: fe.id, cls: typeof fe.className === 'string' ? fe.className : '', isVideoParent: fe === window.__e2e.player().parentElement };
 });
 
 /** Waits until the saved site offset, the content script and the engine all agree on offset. */
@@ -111,7 +111,7 @@ async function expectOffset(page, offset) {
 
 /** Layout facts that sync fullscreen must give back on exit. */
 const layout = (page) => page.evaluate(() => {
-  const v = document.querySelector('video');
+  const v = window.__e2e.player();
   const decls = (el) => {
     const out = {};
     for (let i = 0; i < el.style.length; i++) {
@@ -182,7 +182,7 @@ async function watchOverlay(page, ms, { minFrame = 0 } = {}) {
   const frames = [];
   const until = Date.now() + ms;
   while (Date.now() < until) {
-    const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
+    const s = await page.evaluate(() => window.__e2e.sample());
     frames.push(s.overlay);
     await sleep(80);
   }
@@ -431,7 +431,7 @@ describe('YouTube-like player', () => {
     await waitFor(() => page.evaluate(() => document.querySelector('video').paused), { what: 'pause' });
     // Paused: the delayed canvas shows the paused frame itself (the sound has stopped too).
     const paused = await waitFor(async () => {
-      const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
+      const s = await page.evaluate(() => window.__e2e.sample());
       return s.overlay !== null && s.overlay === s.video ? s : null;
     }, { timeout: 2000, what: 'the delayed canvas to show the paused frame' });
     const still = await watchOverlay(page, 600, { minFrame: paused.video });
@@ -458,7 +458,7 @@ describe('YouTube-like player', () => {
     }, 0.75 * CODE.SECONDS), { what: 'the seek' });
     // Right after the seek the delayed canvas shows the new position, never the frames from before it.
     const afterSeek = await waitFor(async () => {
-      const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
+      const s = await page.evaluate(() => window.__e2e.sample());
       return s.overlay !== null && s.overlay >= target - 3 ? s : null;
     }, { timeout: 2000, what: 'the delayed canvas to show the seek position' });
     assert.ok(afterSeek.overlay <= target + 60, `after the seek the canvas shows ${afterSeek.overlay}`);
@@ -473,7 +473,7 @@ describe('YouTube-like player', () => {
 
   test('when the app stops streaming the picture is no longer delayed, and the controls are not offered', async () => {
     h.app.setStatus({ streaming: false });
-    await waitFor(() => page.evaluate(() => !window.__e2e.overlayOf(document.querySelector('video'))), { timeout: 5000, what: 'the delayed canvas to go' });
+    await waitFor(() => page.evaluate(() => !window.__e2e.overlayOf()), { timeout: 5000, what: 'the delayed canvas to go' });
     const d = await h.debug(page);
     assert.equal(d.stats[0].mode, 'off');
     assert.equal(d.stats[0].reason, 'zero-delay');
@@ -566,7 +566,7 @@ describe('YouTube-like player', () => {
       await popup.click('#siteToggle');
       let p = await waitPopup((x) => !x.site, 'the site switch off');
       assert.equal(p.hint, msg('hintSiteOff'));
-      await waitFor(() => page.evaluate(() => !window.__e2e.overlayOf(document.querySelector('video'))), { timeout: 4000, what: 'the delayed canvas to go' });
+      await waitFor(() => page.evaluate(() => !window.__e2e.overlayOf()), { timeout: 4000, what: 'the delayed canvas to go' });
       assert.equal((await h.debug(page)).stats[0].reason, 'disabled');
       await popup.click('#siteToggle');
       p = await waitPopup((x) => x.site, 'the site switch on');
@@ -664,7 +664,7 @@ describe('bilibili-like player', () => {
     await watchOverlay(page, 600);
     await page.click('.bpx-player-ctrl-play');
     const paused = await waitFor(async () => {
-      const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
+      const s = await page.evaluate(() => window.__e2e.sample());
       return s.paused && s.overlay !== null && s.overlay === s.video ? s : null;
     }, { timeout: 2500, what: 'the paused frame on the delayed canvas' });
     assert.equal((await h.screen(page)).frame, paused.video);
@@ -676,6 +676,59 @@ describe('bilibili-like player', () => {
     assert.deepEqual(l.video, saved.video);
     await sleep(h.app.status.videoDelayMs + 800);
     await watchOverlay(page, 600);
+  });
+});
+
+describe('bilibili-like WASM player (<bwp-video>: a worker draws the picture on a canvas in a closed shadow root)', () => {
+  let page;
+  after(() => page?.close());
+
+  test('the canvas player is delayed like a video', async () => {
+    h.app.resetStatus();
+    page = await h.open('bilibili', '/video/BV1e2e?player=bwp');
+    const d = await h.debug(page);
+    assert.equal(d.stats.length, 1, 'only the <bwp-video> is taken over (not its 2×2 px source)');
+    assert.equal(d.stats[0].source, 'canvas');
+    assert.equal(d.stats[0].sourceIssue, null);
+    assert.equal(d.stats[0].mode, 'canvas');
+    await assertCanvasOverVideo(page);
+    await retry(async () => {
+      await sleep(500);
+      const lag = await h.lagMs(page);
+      // measured against the source video: the worker draws each frame a little after the video shows it
+      assert.ok(lag.median >= BASE_MS - 70 && lag.median <= BASE_MS + 170, `lag ${lag.median} ms at ${BASE_MS} ms`);
+    });
+    await setBase(page, SCREEN_BASE_MS);
+    await sleep(1500);
+    await assertDelayedOnScreen(page, [
+      { name: 'the danmaku', at: await paddingOf(page, '.bili-danmaku-x-dm'), rgb: [255, 102, 204] },
+    ]);
+  });
+
+  test('pausing shows the paused frame, and 同步全屏 takes the video area', async () => {
+    await pointAt(page, 'outside');
+    await page.click('.bpx-player-ctrl-play');
+    await waitFor(async () => {
+      const s = await page.evaluate(() => window.__e2e.sample());
+      return s.paused && s.overlay !== null && Math.abs(s.overlay - s.video) <= 1 ? s : null;
+    }, { timeout: 3000, what: 'the paused frame on the delayed canvas' });
+    await page.click('.bpx-player-ctrl-play');
+    await sleep(h.app.status.videoDelayMs + 800);
+    const frames = await watchOverlay(page, 800);
+    assert.ok(frames[frames.length - 1] > frames[0], `the delayed picture doesn't move after play: ${frames}`);
+    const saved = await layout(page);
+    await clickControl(page, msg('syncFullscreen'));
+    const fe = await waitFor(() => fullscreenElement(page), { what: 'sync fullscreen' });
+    assert.equal(fe.cls, 'bpx-player-primary-area', `fullscreen element ${JSON.stringify(fe)}`);
+    await assertCanvasOverVideo(page);
+    await sleep(800);
+    await assertDelayedOnScreen(page, [
+      { name: 'the subtitles', at: await paddingOf(page, '.bpx-player-subtitle-wrap span'), rgb: [255, 204, 0] },
+    ]);
+    await clickControl(page, msg('syncExitFullscreen'));
+    await waitFor(async () => !(await fullscreenElement(page)), { what: 'leaving sync fullscreen' });
+    await assertCanvasOverVideo(page);
+    assert.deepEqual(await layout(page), saved);
   });
 });
 

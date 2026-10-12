@@ -176,9 +176,9 @@ jobs:
           if-no-files-found: error
 
   # The browser extension in a real Chromium (extension/test/e2e): the unpacked extension against local stand-ins for a
-  # YouTube and a bilibili player and a bare <video>, with a fake HomePodCast API that the tests switch between
-  # streaming, idle and not running. Nothing leaves the runner (no real site; host names other than *.localhost don't
-  # resolve). Checks the in-page controls, sync fullscreen, ±5/±20 ms and the Alt shortcuts, the delayed picture by the
+  # YouTube and a bilibili player (also its WASM <bwp-video>) and a bare <video>, with a fake HomePodCast API that the
+  # tests switch between streaming, idle and not running. Nothing leaves the runner (no real site; host names other than
+  # *.localhost don't resolve). Checks the in-page controls, sync fullscreen, ±5/±20 ms and the Alt shortcuts, the delayed picture by the
   # frame numbers it shows, and the popup; see docs/device-test-checklist.zh-CN.md for what stays manual.
   extension-e2e:
     runs-on: ubuntu-latest

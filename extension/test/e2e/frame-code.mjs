@@ -63,22 +63,29 @@ export function installReader(code) {
     return decode();
   }
 
-  const overlayOf = (video) => {
-    const c = video.nextElementSibling;
+  // The player the extension takes over (a <bwp-video>-like canvas player, or the <video>) and the <video> the
+  // picture comes from (for a canvas player, the page's hidden source).
+  const player = () => document.querySelector('bwp-video') || document.querySelector('video');
+  const source = () => document.querySelector('video');
+  const overlayOf = (el = player()) => {
+    const c = el.nextElementSibling;
     return c && c.tagName === 'CANVAS' && c.getAttribute('data-hpc-delay') === 'overlay' ? c : null;
   };
 
   window.__e2e = {
+    player,
+    source,
     overlayOf,
-    readVideo(video) {
+    readVideo(video = source()) {
       if (!video.videoWidth) return null;
       ctx.drawImage(video, 0, 0, W, H);
       return decode();
     },
-    readOverlay(video) {
-      const c = overlayOf(video);
-      if (!c || !c.width || !video.videoWidth) return null;
-      return readContained(c, c.width, c.height, video.videoWidth, video.videoHeight);
+    readOverlay(el = player()) {
+      const c = overlayOf(el);
+      const v = source();
+      if (!c || !c.width || !v.videoWidth) return null;
+      return readContained(c, c.width, c.height, v.videoWidth, v.videoHeight);
     },
     // A screenshot (data URL) of the viewport; rect: the video's content box in CSS pixels.
     async readScreenshot(dataUrl, rect, iw, ih) {
@@ -109,14 +116,15 @@ export function installReader(code) {
       return points.map(([x, y]) => [...g.getImageData(Math.round(x * sx), Math.round(y * sx), 1, 1).data.slice(0, 3)]);
     },
     // Frame numbers of the video and of the delayed canvas, read in the same animation frame.
-    sample(video) {
+    sample() {
       return new Promise((resolve) => requestAnimationFrame(() => {
+        const v = source();
         resolve({
           at: performance.now(),
-          video: this.readVideo(video),
-          overlay: this.readOverlay(video),
-          currentTime: video.currentTime,
-          paused: video.paused,
+          video: this.readVideo(v),
+          overlay: this.readOverlay(),
+          currentTime: v.currentTime,
+          paused: v.paused,
         });
       }));
     },
