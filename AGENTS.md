@@ -23,6 +23,9 @@ These protect the maintainer's own setup. Breaking one has happened before and c
   TV): say what to change and let the maintainer do it.
 - The maintainer's real `%APPDATA%\HomePodCast` (config, log, `pairings.dat`) is theirs: read a copy they give you;
   never write to it.
+- **Don't switch the branch of a checkout you didn't create.** Other agents may be committing in the main checkout at
+  the same moment (2026-10-12: a new branch checked out there took another agent's next commits with it). Start your
+  own work in your own `git worktree`, and check `git branch --show-current` before you commit.
 
 ## Build and test
 
