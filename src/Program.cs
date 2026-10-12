@@ -29,6 +29,7 @@ public static class Program
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
+                "firewall" => FirewallCommand.Run(),
                 _ => Help(),
             };
         }
@@ -102,6 +103,7 @@ public static class Program
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
+              firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
         return 0;
