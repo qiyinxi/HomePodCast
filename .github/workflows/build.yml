@@ -175,6 +175,47 @@ jobs:
           path: publish/*.msix
           if-no-files-found: error
 
+  # The MSI install's in-app update (设置 → 软件更新 「更新」), end to end, on every build: an older MSI built from this
+  # source (0.0.1-e2e.1, never uploaded) is installed, then its `update-selftest` command runs the button's code against a
+  # fake release list on 127.0.0.1 that offers this build's MSI: download, SHA-256 (a corrupted copy must be refused),
+  # helper, msiexec through Verb runas, the new version started again with --updated-from=, in the default and in a
+  # custom folder. Nothing goes to GitHub. The UAC dialog itself is the part only a person sees (tools/ci/update-e2e.ps1).
+  update-e2e:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: packages
+          path: packages
+
+      - name: Update end to end
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: ./tools/ci/update-e2e.ps1 -NewMsi "packages/HomePodCast-$env:VERSION-x64.msi" -NewVersion $env:VERSION
+
+      - name: Upload update e2e logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: update-e2e-logs
+          path: ${{ runner.temp }}/update-e2e/logs
+          if-no-files-found: ignore
+
   # End-to-end test of the MSI on the runner (tools/ci/msi-e2e.ps1; docs/device-test-checklist.zh-CN.md section 七):
   # silent install into the default and a custom folder (files, Start menu shortcut, one Programs and Features entry, the
   # firewall rule, which the installed exe's own startup check must accept), uninstall (all gone, %APPDATA%\HomePodCast
@@ -214,7 +255,7 @@ jobs:
           path: ${{ runner.temp }}/msi-e2e/logs
 
   release:
-    needs: [build, msi-e2e]
+    needs: [build, update-e2e, msi-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:

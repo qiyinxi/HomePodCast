@@ -88,12 +88,35 @@ The messages it fails with:
 
 Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
 
-Every build, branches and PRs included, also tests the MSI end to end in the `msi-e2e` job (`tools/ci/msi-e2e.ps1`, on the Windows runner), in place of the installer section of the device checklist: silent install into the default folder and into a custom one; the files, one Start menu shortcut, exactly one entry in Programs and Features, and one firewall rule for exactly that exe (inbound, allow, Private, LocalSubnet), which the installed exe's own startup check (`HomePodCast.exe firewall`) must accept; uninstall (all of it gone, `%APPDATA%\HomePodCast` untouched); upgrades from v0.2.0, v0.2.1, v0.2.2 and the latest release (one HomePodCast afterwards, the new version, same folder, one rule); and the embedded wizard languages (zh-CN in Chinese, finish page included). The `release` job needs it, so a tag whose installer fails is not published: fix it on `dev` and release the next beta. A branch or PR build is MSI version 0.2.0.<run>, older than v0.2.1 and later; for those releases it checks instead that the MSI refuses the downgrade, and the tag build tests the real upgrade. The job summary lists every check; when it fails, the msiexec logs are in the `msi-e2e-logs` artifact. `./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` runs the language checks locally without installing anything; never run the rest on your own PC (it refuses outside CI).
-
 The checks read everything through the GitHub API, so they run locally too, read-only:
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
 
 Tags made before these rules aren't checked again: re-running one of their workflow runs uses the workflow file of their own commit. By rule 3, `v0.2.1` (no beta) and `v0.2.0` (changes after beta 8) would not pass today; that is expected, and the rule stays strict for every new tag.
+
+### The installer in CI
+
+Every build (push, PR and tag) also runs the job `msi-e2e` after `build`, and the `release` job waits for it, so a tag whose MSI is broken publishes nothing: fix it on `dev` and release the next beta. It replaces the installer part of `docs/device-test-checklist.zh-CN.md` (section 七). `tools/ci/msi-e2e.ps1`, on the runner:
+
+1. reads the MSI's tables: every language of `installer/build.ps1` is an embedded transform with its own finish-page text, and the zh-CN wizard is Chinese (「启动 HomePodCast」 included) with the license in English;
+2. installs it silently into the default folder and checks the files, exactly one Start menu shortcut, exactly one entry in Programs and Features, and exactly one firewall rule for that exe (inbound, allow, Private, LocalSubnet: what the app adds itself); the installed exe's own startup check (`HomePodCast.exe firewall`, read-only) must find it and decide on no firewall prompt;
+3. uninstalls it: files, shortcut, firewall rule and Programs entry gone, a seeded `%APPDATA%\HomePodCast` untouched; then the same in a custom `INSTALLFOLDER` with a space and Chinese characters;
+4. installs v0.2.0, v0.2.1, v0.2.2 and the latest release (`gh release download`), one at a time, and the new MSI over each: one HomePodCast afterwards, the new version, same folder, one correct rule, with the two installs in different wizard languages (`TRANSFORMS=:2052`). A branch or PR build is MSI 0.2.0.<run>, older than v0.2.1 and later: for those it checks that the MSI refuses the downgrade with its message and leaves the release installed. The tag build tests the real upgrade.
+
+Each check is an `ok` line in the log, and the job summary lists them; when it fails, msiexec's logs are the `msi-e2e-logs` artifact. The script refuses to run outside GitHub Actions; `./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` runs step 1 anywhere, without installing anything.
+
+### The in-app update in CI
+
+Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and the `release` job waits for it, so a tag whose update path is broken publishes nothing. `tools/ci/update-e2e.ps1`, on the runner:
+
+1. builds an older MSI from the same source (version `0.0.1-e2e.1`, MSI 0.0.1.1; it never leaves the runner) and installs it silently;
+2. serves a fake release list in the GitHub API's shape (with the asset's `digest`) and the build's own MSI on `127.0.0.1` (`tools/ci/fake-release-feed.ps1`), so nothing goes to GitHub and the real releases are never touched;
+3. runs the installed old exe's `update-selftest --feed http://127.0.0.1:<port>/releases`: the code of 设置 → 软件更新 「更新」 (`src/Update/UpdateFlow.cs`, shared with the button) without UI: check, pick, download, SHA-256, installer helper, exit;
+4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
+5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
+
+Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person, per release (`docs/device-test-checklist.zh-CN.md`, section 七): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
+
+`update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
 ### Release notes
 
@@ -213,12 +236,35 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
 
-每次构建（包括分支和 PR）还会在 `msi-e2e` 任务里端到端测试 MSI（`tools/ci/msi-e2e.ps1`，在 Windows 运行器上），代替实机测试清单里安装包那一节：静默安装到默认目录和一个自定义目录；检查程序文件、开始菜单里一个快捷方式、「程序和功能」里正好一个条目，以及正好指向这个 exe 的一条防火墙规则（入站、允许、专用网络、本地子网），而且装好的 exe 自己的启动检查（`HomePodCast.exe firewall`）要认可它；卸载（全部清掉，`%APPDATA%\HomePodCast` 原样保留）；从 v0.2.0、v0.2.1、v0.2.2 和最新发布的版本升级（之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条）；以及嵌入的向导语言（zh-CN 是中文，包括完成页）。`release` 任务依赖它，所以安装包有问题的标签不会发布：在 `dev` 上修好，发下一个测试版。分支或 PR 构建的 MSI 版本是 0.2.0.<运行号>，比 v0.2.1 及以后的发布旧；对这些版本它改为检查 MSI 拒绝降级，真正的升级由标签构建测。任务摘要列出每一项检查；失败时 msiexec 日志在 `msi-e2e-logs` 产物里。`./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` 可以在本地只读地跑语言检查，不安装任何东西；其余部分不要在自己的电脑上跑（脚本在 CI 之外会拒绝运行）。
-
 这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。
 
 有这些规则之前打的标签不会再被检查：重跑它们的工作流时，用的是它们自己提交里的工作流文件。按第 3 条，`v0.2.1`（没有测试版）和 `v0.2.0`（beta 8 之后还有改动）今天都过不了；这是预期的，规则对每个新标签都严格执行。
+
+### CI 里的安装包测试
+
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msi-e2e` 作业，`release` 作业要等它通过，所以 MSI 坏了的标签什么都不会发布：在 `dev` 上修好，发下一个测试版。它代替 `docs/device-test-checklist.zh-CN.md` 第七节里安装包的部分。`tools/ci/msi-e2e.ps1` 在运行器上：
+
+1. 读 MSI 的表：`installer/build.ps1` 的每种语言都是一个嵌入的转换，完成页文字是它自己的；zh-CN 的向导是中文（包括「启动 HomePodCast」），许可协议是英文；
+2. 静默安装到默认目录，检查程序文件、开始菜单里正好一个快捷方式、「程序和功能」里正好一个条目、正好一条指向这个 exe 的防火墙规则（入站、允许、专用网络、本地子网，和程序自己添加的一样）；装好的 exe 自己的启动检查（`HomePodCast.exe firewall`，只读）要找到它、判断不弹防火墙提示；
+3. 卸载：程序文件、快捷方式、防火墙规则和「程序和功能」里的条目都没了，预先放好的 `%APPDATA%\HomePodCast` 原样保留；然后在带空格和中文的自定义 `INSTALLFOLDER` 里再来一遍；
+4. 逐个安装 v0.2.0、v0.2.1、v0.2.2 和最新发布的版本（`gh release download`），再在上面装新 MSI：之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条且正确，新旧两次安装用不同的向导语言（`TRANSFORMS=:2052`）。分支或 PR 构建的 MSI 版本是 0.2.0.<运行号>，比 v0.2.1 及以后的发布旧：对这些版本检查的是 MSI 拒绝降级、给出提示、旧版原样保留。真正的升级由标签构建测。
+
+日志里每项检查是一行 `ok`，作业摘要里也列出所有检查；失败时 msiexec 的日志在 `msi-e2e-logs` 产物里。脚本在 GitHub Actions 之外拒绝运行；`./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` 只做第 1 步，在哪里都能跑，不安装任何东西。
+
+### CI 里的软件更新测试
+
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `update-e2e` 作业，`release` 作业要等它通过，所以更新流程坏了的标签什么都不会发布。`tools/ci/update-e2e.ps1` 在运行器上：
+
+1. 用同一份源码构建一个更旧的 MSI（版本 `0.0.1-e2e.1`，MSI 版本 0.0.1.1；它不会离开运行器），并静默安装；
+2. 在 `127.0.0.1` 上提供一个假的发布列表（和 GitHub API 的格式一样，带安装包的 `digest`）和这次构建自己的 MSI（`tools/ci/fake-release-feed.ps1`），所以不会访问 GitHub，也绝不会碰真实的发布；
+3. 运行已安装旧版的 `update-selftest --feed http://127.0.0.1:<端口>/releases`：就是 设置 → 软件更新 「更新」 的代码（`src/Update/UpdateFlow.cs`，和按钮共用），只是没有界面：检查、选版本、下载、SHA-256 校验、启动安装助手、退出；
+4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
+5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
+
+它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。每次发布仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 第七节）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
+
+`update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
 
 ### 发布说明
 
