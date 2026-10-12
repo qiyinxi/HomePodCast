@@ -40,4 +40,3 @@ dotnet test tests/HomePodCast.Tests --no-restore --filter FullyQualifiedName~Ste
 ```
 
 脚本校验完整模型 SHA-256，裁出人声图，再校验裁剪后 SHA-256；真实 ONNX 输出与发布者的独立 PyTorch 参考比较（8 组，含短片段、部分尾块、重置与 EOF flush，误差 ≤ 1e-5），随后运行非静音性能测试。基准反映此电脑的推理速度，不代表音乐质量或 HomePod 的端到端延迟。
-
