@@ -12,6 +12,9 @@ internal sealed class Report
 
     private readonly HashSet<string> _seen = [];
 
+    /// <summary>Collects without printing (a first look that is checked again).</summary>
+    public bool Silent { get; init; }
+
     public List<Entry> Failures { get; } = [];
     public List<Entry> Warnings { get; } = [];
     public List<Entry> Notes { get; } = [];
@@ -25,14 +28,14 @@ internal sealed class Report
     {
         if (!First("fail", where, text)) return;
         Failures.Add(new(where, text));
-        Console.WriteLine($"FAIL  [{where}] {text}");
+        if (!Silent) Console.WriteLine($"FAIL  [{where}] {text}");
     }
 
     public void Warn(string where, string text)
     {
         if (!First("warn", where, text)) return;
         Warnings.Add(new(where, text));
-        Console.WriteLine($"warn  [{where}] {text}");
+        if (!Silent) Console.WriteLine($"warn  [{where}] {text}");
     }
 
     public void Note(string where, string text)

@@ -375,6 +375,14 @@ internal class RowPanel : LayoutPanel
         int fixedSum = items.Where(c => c != Fill).Sum(WidthOf);
         int fillWidth = Math.Max(0, width - gaps - fixedSum);
         var widths = items.Select(c => c == Fill ? fillWidth : WidthOf(c)).ToList();
+        int over = widths.Sum() + gaps - width;
+        if (Fill == null && over > 0)
+        {
+            // Too narrow (the window's minimum width, long words): the widest child gives way instead of the last ones being
+            // cut off (German 「Löschen」 after the VLC password, English 「Send to」; found by the GUI smoke test).
+            int widest = widths.IndexOf(widths.Max());
+            widths[widest] = Math.Max(0, widths[widest] - over);
+        }
         var heights = items.Select((c, i) => HeightFor(c, widths[i])).ToList();
         int height = Math.Max(Dp(MinHeight), heights.Max());
         if (apply)

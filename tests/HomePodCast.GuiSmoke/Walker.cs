@@ -730,7 +730,23 @@ internal sealed class Walker
         if (!ok) _report.Fail(Where(step), failure);
     }
 
-    private void Layout(Node tree, string step) => Checks.Layout(tree, Where(step), _t, _report, _userData);
+    /// <summary>
+    /// The layout checks; a failure is reported only if a second look a moment later still finds it (the controls are read
+    /// one by one, and a status line that changes meanwhile re-lays the card out between two reads).
+    /// </summary>
+    private void Layout(Node tree, string step)
+    {
+        var first = new Report { Silent = true };
+        Checks.Layout(tree, Where(step), _t, first, _userData);
+        if (first.Failures.Count > 0 && tree.Hwnd != IntPtr.Zero && Native.IsWindowVisible(tree.Hwnd))
+        {
+            Thread.Sleep(800);
+            first = new Report { Silent = true };
+            Checks.Layout(Uia.Snapshot(tree.Hwnd), Where(step), _t, first, _userData);
+        }
+        foreach (var f in first.Failures) _report.Fail(f.Where, f.Text);
+        foreach (var w in first.Warnings) _report.Warn(w.Where, w.Text);
+    }
 
     private void Shoot(IntPtr hwnd, string name, string caption)
     {
