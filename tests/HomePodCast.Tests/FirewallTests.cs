@@ -36,6 +36,24 @@ public class FirewallTests
     }
 
     [Fact]
+    public void Firewall_command_exits_with_0_only_when_the_first_start_shows_no_prompt()
+    {
+        const string exe = @"C:\Program Files\HomePodCast\HomePodCast.exe";
+        var (code, line) = FirewallCommand.Report(exe, new FirewallRules(true, true, false), packaged: false);
+        Assert.Equal(0, code);
+        Assert.Equal($"firewall: {exe}: rules read True, private allow rule True, public allowed False, block rule False; " +
+                     "startup prompt on a Private network: None", line);
+
+        (code, line) = FirewallCommand.Report(exe, new FirewallRules(true, false, false), packaged: false);
+        Assert.Equal(2, code);
+        Assert.EndsWith("startup prompt on a Private network: AddRule", line);
+
+        Assert.Equal(2, FirewallCommand.Report(exe, new FirewallRules(true, true, false, BlockRule: true), packaged: false).ExitCode);
+        Assert.Equal(1, FirewallCommand.Report(exe, FirewallRules.Unknown, packaged: false).ExitCode);
+        Assert.Equal(0, FirewallCommand.Report(exe, new FirewallRules(true, false, false), packaged: true).ExitCode); // the package brings its rules
+    }
+
+    [Fact]
     public async Task PowerShell_reads_every_literal_back_as_the_exact_path()
     {
         // Let Windows PowerShell itself parse the literals (the same -EncodedCommand route the rule takes) and hand

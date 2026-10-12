@@ -14,6 +14,8 @@ This writes `publish/HomePodCast-0.2.0-local.1-x64.msi` and takes about a minute
 - The Windows Installer ICE checks on the final MSI and on the package of every other language. Expect one ICE61 warning per package (15 in all): it comes from allowing a build to replace another one with the same version (see below).
 - For each language transform embedded in the MSI, it applies the transform to a copy, the same way Windows Installer does at install time, and checks that the result is identical to that language's own package (`Database.GenerateTransform` finds no differences). It also checks that the finish-page checkbox text matches the `.wxl`.
 
+CI installs, upgrades and uninstalls every build's MSI on its Windows runner (the `msi-e2e` job, `tools/ci/msi-e2e.ps1`; see `docs/RELEASING.md`). `./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` runs its language checks on a local build without installing it.
+
 Don't install test builds on your everyday PC unless you mean to: the MSI writes to Program Files and adds a firewall rule. To look inside a package without installing it, use `dotnet wix msi decompile <msi> -x <folder>`. The decompiled MSI shows the English base. For another language, decompile `installer/obj/<culture>/HomePodCast.msi`.
 
 ## Toolset

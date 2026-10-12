@@ -1,0 +1,17 @@
+{
+  "name": "homepodcast-extension-e2e",
+  "private": true,
+  "description": "Browser tests of the HomePodCast extension in Chromium against local test pages and a fake app API (CI job extension-e2e). Not part of the extension package.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=spec e2e.test.mjs",
+    "video": "node make-video.mjs",
+    "fake-app": "node fake-app.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "25.12.0"
+  }
+}

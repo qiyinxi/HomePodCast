@@ -35,8 +35,9 @@
 - [ ] 刚拖动音量后立即应用不同音箱配置：旧滑块值不会稍后写到新音箱；选择框也跟随新音箱（单元测试：ProfileSwitchTests）
 - [ ] 「两者」模式：HomePod 独立音量固定 60%，Windows 从 20% 调到 40%，音箱听感基本不变、本机变响；静音或 0% 两边都静音（单元测试：SendVolumeTests；仍需实机：听感）
 - [ ] 给「标记刚才的卡顿」设一个快捷键，推流时按一下，再从 设置 → 工具 导出 ZIP：时间和统计存在，音箱／立体声成员名称、设备 ID、地址和路径被隐藏（尽力而为），组统计的数字（underruns、各成员 sent／rtx）保留，没有密码、配置或音频；没在推流时按快捷键不记录（单元测试：GlitchMarkerTests、DiagnosticReportTests、HotkeyTests）
-- [ ] YouTube／bilibili：鼠标移到视频上才出现插件按钮，约 2.5 秒不动后消失。点「同步全屏」：网站的控制栏、字幕／弹幕和延迟画面都保留，画面铺满屏幕；±5／±20 ms 和 Alt 快捷键生效（按钮隐藏时快捷键也有效），退出后布局恢复
-- [ ] YouTube／bilibili 用网站自己的全屏：插件按钮不会自己出现，移动鼠标或按 Alt 才出现；Alt+←/→ 生效
+- [x] 鼠标移到视频上才出现插件按钮，约 2.5 秒不动后消失；单按 Alt 也会出现。点「同步全屏」：全屏的是播放器而不是单独的视频元素，网站的控制栏、字幕／弹幕和延迟画面都保留，画面铺满屏幕；±5／±20 ms 按钮和 Alt+←/→、Alt+Shift+←/→ 改变画面延迟并保存网站偏移（按钮隐藏时快捷键也有效，光标在输入框里时不拦截），偏移不超过 ±500 ms、画面延迟在 0–2000 ms 之间；退出后布局恢复。没有播放器包住的视频，同步全屏用它的父元素（CI 自动测试：extension-e2e）
+- [x] 网站自己的全屏（按钮或 f 键）：插件按钮不会自己出现，移动鼠标或按 Alt 才出现；Alt+←/→ 生效（CI 自动测试：extension-e2e）
+- [ ] 真实的 YouTube 和 bilibili 上各试一次上面两条：自动测试用的是本地仿制的播放器页面，真实网站的页面结构会变。重点看「同步全屏」后网站的控制栏是否在屏幕底部、字幕／弹幕是否还在
 
 ## 已由 Claude 在 2026-10-08 测过（不用重复）
 
@@ -85,19 +86,21 @@
 
 安装：解压 `HomePodCast-extension-*.zip` → 扩展程序页 → 开启开发者模式 → 加载已解压的扩展程序。
 
+标了「CI 自动测试：extension-e2e」的项目，每次 CI 都在 Chromium 里自动测（`extension/test/e2e`：加载解压的插件，用本地仿制的 YouTube、bilibili 播放器页面（bilibili 的也有 WASM 播放器 `<bwp-video>` 的版本）和一个假的 HomePodCast 本地接口，不访问真实网站；画面延迟按视频每帧里编码的帧号检查）。真实网站上的表现、口型对不对、60 帧是否流畅仍然要人看。
+
 - [ ] YouTube 一个有人说话的视频：口型和声音对得上吗？插件弹窗显示的延迟是多少
   - 2026-10-08 Edge：「影视」场景下插件弹窗显示画面延迟 237 ms、实测 238 ms，普通视频流畅；一个动画 MV 第一次打开时在 538 ms（「音乐」场景）和约 238 ms 下觉得卡，刷新后目测正常。可能是 MV 本身有低帧率段落，或者是第一次打开的冷启动（插件装好前就开着的页面、YouTube 刚开始的清晰度切换）。60 帧长延迟的情况正在用测量确认
 - [x] bilibili 普通视频：237 ms 下流畅（2026-10-08）
 - [ ] bilibili 番剧
-- [x] 播放中在弹窗里反复开关「在此网站启用」：画面正常切换（2026-10-08）
-- [ ] 暂停、拖进度条、全屏、网页全屏：画面有没有错乱
-- [ ] 断开 HomePod 后：画面恢复不延迟
+- [x] 播放中在弹窗里反复开关「在此网站启用」：画面正常切换（2026-10-08；CI 自动测试：extension-e2e）
+- [x] 暂停、拖进度条、全屏、网页全屏：画面有没有错乱（CI 自动测试：extension-e2e：暂停时显示暂停的那一帧，拖动后不出现拖动前的画面，全屏和网页全屏时延迟画面盖住视频、继续更新）
+- [x] 断开 HomePod 后：画面恢复不延迟（CI 自动测试：extension-e2e：HomePodCast 报告未推流或没在运行时，延迟画面撤掉、插件按钮不再出现；恢复推流后重新延迟）
 - [x] 0.2.1：YouTube 60 帧 MV 在「音乐」（538 ms）和「影视」（约 238 ms）下卡顿的反馈（用户刷新后复现不了）。Claude 用本地 1080p60 / 1440p60 / 2160p60 的 VP9、AV1、H.264 和 30 帧视频实测（Chrome 154、240 Hz 屏、临时配置文件，见下方「测试记录」）：平稳播放时插件开和关一样流畅，141 / 238 / 538 ms 都不掉帧、每帧间隔一致。查出并修了两个问题：
   - WebM（YouTube 的 VP9，含 MSE）画面少延迟 12.5 ms、30 帧的 MP4 多延迟 16.7 ms：改按帧的 presentationTime 计时，各种格式都在目标值 ±1 ms 内
   - 60 帧视频、延迟超过约 650 ms（比如「音乐」再加 +110 ms 的网站偏移）时延迟画面整个冻住：改为超过约 630 ms 就隔帧存，降到 30 帧（2000 ms 时 15 帧）
   - 已知限制：网页主线程忙时（YouTube 刚打开、加载评论和推荐时最明显）延迟画面会跳帧，原视频不受影响；刷新后不卡就是这种情况
 - [ ] 0.2.1：YouTube 60 帧视频（动画 MV 等）在「影视」场景看 1 分钟：流畅吗？口型对得上吗？弹窗「实测」是多少
-- [ ] 0.2.1：切到「音乐」场景时，弹窗延迟数字下面出现「延迟较长：看视频建议用「影视」或「推荐」场景」
+- [x] 0.2.1：切到「音乐」场景时，弹窗延迟数字下面出现「延迟较长：看视频建议用「影视」或「推荐」场景」（CI 自动测试：extension-e2e：HomePodCast 报告 538 ms 时出现，300 ms 及以下不出现；弹窗的状态、网站、延迟、±1 ms 和重置也一起测）
 
 ## 六、影视场景（播放器自动对齐，完成后再测）
 
@@ -106,12 +109,20 @@
 
 ## 七、安装包（MSI）
 
-- [x] 安装时可以改目录，默认 `C:\Program Files\HomePodCast\`；只弹一次 UAC
-- [x] 装完第一次启动：**不再**弹防火墙提示，能直接连上
-- [x] 卸载后：程序、快捷方式、防火墙规则都没了；`%APPDATA%\HomePodCast` 里的设置还在
-- [ ] 下载时浏览器提示「不安全」：程序未签名、下载量少，属于预期（见 README）
-- [ ] 中文 Windows 上安装向导是中文（包括完成页的「启动 HomePodCast」）；许可协议页是英文原文，这是预期的
-- [ ] 用新的多语言 MSI 覆盖旧的纯英文 MSI 安装：旧版被替换，「设置 → 应用」里只有一个 HomePodCast
+每次构建（分支、PR、标签）CI 都会在 GitHub 的 Windows 运行器上真正安装、升级、卸载 MSI：`build.yml` 的 `msi-e2e` 任务，脚本 `tools/ci/msi-e2e.ps1`。它失败时标签不会发布。标了「（CI 自动测试：msi-e2e）」的项不用再手动测，失败时看任务日志和 `msi-e2e-logs` 里的 msiexec 日志。
+
+- [x] 默认目录是 `C:\Program Files\HomePodCast\`：静默安装后程序文件在里面，开始菜单里正好一个 HomePodCast 快捷方式（没有桌面快捷方式），「设置 → 应用」里正好一个 HomePodCast（CI 自动测试：msi-e2e）
+- [x] 防火墙规则只有一条，正好指向装好的 exe：入站、允许、已启用、仅专用网络、仅本地子网，和程序自己添加的规则参数一样（CI 自动测试：msi-e2e）
+- [x] 装完第一次启动**不再**弹防火墙提示：用装好的 exe 自己的启动检查（`HomePodCast.exe firewall`，只读，判断和程序启动时一样）确认找到规则、不会提示（CI 自动测试：msi-e2e）
+- [x] 安装时可以改目录：装到自定义目录（`INSTALLFOLDER`，路径里有空格和中文），以上各项同样成立，默认目录里什么都没有（CI 自动测试：msi-e2e）
+- [x] 卸载后：程序、快捷方式、防火墙规则、「应用」里的条目都没了；`%APPDATA%\HomePodCast` 里的设置（config.json、日志）原样还在（CI 自动测试：msi-e2e）
+- [x] 覆盖安装旧版：先装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2 和最新发布的版本，再装新 MSI：旧版被替换，「应用」里只有一个 HomePodCast，是新版本、目录不变，防火墙规则仍只有一条且正确；新旧两次安装用不同的向导语言（旧英文 → 新中文、旧中文 → 新英文交替）。PR 和分支构建的 MSI 版本是 0.2.0.x，比 v0.2.1 以后的发布旧，这时检查的是新 MSI 拒绝降级、给出提示、旧版原样保留；真正从这些版本升级在打标签的构建上测，v0.2.0-beta.8 和 v0.2.0 每次构建都真正升级（CI 自动测试：msi-e2e）
+  - 注：发布过的 MSI 从 v0.2.0-beta.2 起都是多语言的，纯英文的 MSI 只在更早的 CI 构建里有过；「旧版英文安装、新版中文安装」和反过来都由上面的语言交替覆盖
+- [x] 安装向导的语言：MSI 里嵌入了 `installer/build.ps1` 的全部语言转换，每种语言完成页的勾选框都是它自己的文字；中文转换里向导各页（欢迎、许可协议、安装目录、准备安装、进度、完成）都是中文，包括完成页的「启动 HomePodCast」，许可协议页是英文原文（预期）。升级测试里还用 `TRANSFORMS=:2052` 真正装了中文版：msiexec 日志显示应用了内嵌的 2052 转换，快捷方式和防火墙规则的说明是中文（CI 自动测试：msi-e2e）
+- [ ] 中文 Windows 上**双击** MSI：向导自动是中文（按系统显示语言选转换；CI 运行器是英文系统，只能指定 `TRANSFORMS=:2052`）；完成页勾着「启动 HomePodCast」点完成，程序自己打开
+- [x] 双击安装只弹一次 UAC（CI 运行器以管理员运行、没有 UAC，只能实机看）
+- [x] 装完能直接连上 HomePod（要真实音箱）
+- [ ] 下载时浏览器提示「不安全」、SmartScreen 拦截：程序未签名、下载量少，属于预期（见 README）
 
 ### 软件更新（需要 GitHub 上已经有比本机更新的版本；Claude 不能代为点 UAC，只能实机测）
 
@@ -197,7 +208,7 @@ Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电�
 
 ## 十一、Microsoft Store 版（MSIX，1.0.0 上架前）
 
-Claude 只能打包、不能安装和运行打包版，下面都要实机测。打包版和 MSI / 便携版共用单实例锁，测之前先在托盘里退出已经开着的 HomePodCast。
+标了「（CI 自动测试：msix-e2e）」的项不用再手动测：每次构建（分支、PR、标签）CI 的 `msix-e2e` 作业都会在 GitHub 的 Windows 运行器上安装打包版（用一次性证书签名的副本，发布的 msix 仍然不签名）、像开始菜单那样启动、逐项检查、再卸载，作业日志里每项一行 PASS / FAIL（见 `packaging/msix/README.md` 的 CI test 一节）。运行器上没有 HomePod、没有麦克风、也不能注销登录，其余的项还要实机测。打包版和 MSI / 便携版共用单实例锁，测之前先在托盘里退出已经开着的 HomePodCast。
 
 准备（不需要管理员权限）：
 
@@ -205,23 +216,24 @@ Claude 只能打包、不能安装和运行打包版，下面都要实机测。�
 2. 在仓库根目录运行 `./packaging/msix/build.ps1 -Version 1.0.0-local.1`，再运行 `Add-AppxPackage -Register packaging\msix\obj\layout\AppxManifest.xml`（未签名的包只能这样注册）。
 3. 从开始菜单启动 HomePodCast。测完卸载：`Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`。
 
-- [ ] 日志的启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`（「设置 → 工具 → 日志 → 打开日志文件夹」）
-- [ ] 防火墙：第一次启动**没有**「需要防火墙放行」，也没有 UAC。PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*\layout\HomePodCast.exe' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled` 列出两条（TCP、UDP）入站、Private、已启用的规则（这样注册的包从 `packaging\msix\obj\layout` 运行，规则写的是那里的 exe；从 Store 安装的在 `C:\Program Files\WindowsApps` 下）
+- [x] 从开始菜单的方式（`explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）启动：进程有包标识；日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`，没有错误；真正的 `%APPDATA%\HomePodCast` 里什么都没写（CI 自动测试：msix-e2e）
+- [x] 防火墙：安装后有两条（TCP、UDP）入站、允许、Private、已启用的规则，指向包里的 HomePodCast.exe；第一次启动**没有**「需要防火墙放行」，也没有 UAC（日志里没有加规则的记录），日志里没有 `no rule of the package found`（CI 自动测试：msix-e2e）。手动看规则：PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*\layout\HomePodCast.exe' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled`（这样注册的包从 `packaging\msix\obj\layout` 运行，规则写的是那里的 exe；从 Store 安装的在 `C:\Program Files\WindowsApps` 下）
 - [ ] 连接 HomePod 推流 1 分钟（音量不超过 25%）：有声音、不弹防火墙提示；日志里没有 `no rule of the package found`
 - [ ] 混音器里给一个程序设「本机」、另一个设「HomePod」：分流照常生效（按程序分流在包里也能用）
-- [ ] 麦克风：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
-- [ ] 麦克风被拒：Windows 设置 → 隐私和安全性 → 麦克风，在应用列表里关掉 HomePodCast，回到程序把麦克风关掉再打开：只弹一次「无法使用麦克风」（点「是」打开麦克风隐私设置页面），页面上麦克风下面是红字和「打开麦克风隐私设置」链接；日志里只有一行 `mic: Windows refuses the microphone (0x80070005 ...)`，没有每 2 秒一行的 `retrying`。重新允许后把麦克风关掉再打开，恢复正常
-- [ ] 麦克风被拒时，混音器的按程序分流是否还正常（记下来：如果日志里出现 0x80070005，说明进程回环采集也受麦克风权限管）
-- [ ] MSI 版也测一次麦克风被拒：关掉「允许桌面应用访问你的麦克风」，弹窗里说的是这个开关
-- [ ] 开机自动启动：「设置 → 开机自动启动」默认是关的；打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的，日志有 `autostart: startup task enable requested, now Enabled`
+- [ ] 麦克风（没有麦克风，暂时测不了）：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
+- [ ] 麦克风被拒（没有麦克风，暂时测不了）：Windows 设置 → 隐私和安全性 → 麦克风，在应用列表里关掉 HomePodCast，回到程序把麦克风关掉再打开：只弹一次「无法使用麦克风」（点「是」打开麦克风隐私设置页面），页面上麦克风下面是红字和「打开麦克风隐私设置」链接；日志里只有一行 `mic: Windows refuses the microphone (0x80070005 ...)`，没有每 2 秒一行的 `retrying`。重新允许后把麦克风关掉再打开，恢复正常
+- [ ] 麦克风被拒时（没有麦克风，暂时测不了），混音器的按程序分流是否还正常（记下来：如果日志里出现 0x80070005，说明进程回环采集也受麦克风权限管）
+- [ ] MSI 版也测一次麦克风被拒（没有麦克风，暂时测不了）：关掉「允许桌面应用访问你的麦克风」，弹窗里说的是这个开关
+- [x] 开机启动任务：默认是关的；打开后 Windows 记录的状态是「已启用」（Windows 设置 → 应用 → 启动 和任务管理器显示的就是它），日志有 `autostart: startup task enable requested, now Enabled`；关掉后状态变回「已禁用」，日志有 `autostart: startup task disabled, now Disabled`（CI 自动测试：msix-e2e。用的是 `HomePodCast.exe autostart on|off|status`，和「设置 → 开机自动启动」开关调用同一段代码）
+- [ ] 「设置 → 开机自动启动」开关本身：默认是关的；在程序里打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的；在程序里关掉，那里也变成关（启动任务本身 CI 已测，这里看开关和 Windows 设置页面是否一致）
 - [ ] 注销再登录（或重启）：HomePodCast 在托盘里启动，不弹主窗口。日志里如果有 `started by the startup task: into the tray`，说明 Windows 没传 `--tray`、靠的是启动方式判断，告诉我
 - [ ] 在 Windows 设置 → 应用 → 启动 里关掉 HomePodCast，回到程序的设置页：开关变成关，下面写「已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。」；再在程序里打开它：弹窗问要不要打开 Windows 设置的「启动」页面
-- [ ] 在程序里关掉开机自动启动：Windows 设置的「启动」页面里也变成关
-- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）
+- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）。CI 用同一条 `explorer.exe shell:AppsFolder\...` 命令启动打包版，所以这条命令本身能用
 - [ ] 「设置 → 工具 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）
-- [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查；日志有 `update: Microsoft Store package: never contacts GitHub`
-- [ ] 打包版开着时再启动 MSI 版：只会把打包版的窗口叫出来
-- [ ] 卸载后：Windows 防火墙里那两条规则、「启动」页面里的 HomePodCast、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了
+- [x] 日志有 `update: Microsoft Store package: never contacts GitHub`，没有安排或进行更新检查；进程没有连到本机以外的 TCP 连接（CI 自动测试：msix-e2e）
+- [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查
+- [x] 打包版开着、窗口关到托盘时，再从开始菜单启动它、或者启动 MSI 版（静默安装）：只会把打包版的窗口叫出来；新进程都以 0 退出、不写日志，只剩原来那个打包版进程（CI 自动测试：msix-e2e）
+- [x] 卸载后：Windows 防火墙里那两条规则、启动任务（「启动」页面里的 HomePodCast）、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了，也没有其他名字带 HomePodCast 的开机启动项（CI 自动测试：msix-e2e）
 
 上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart）。
 
@@ -238,4 +250,5 @@ Claude 只能打包、不能安装和运行打包版，下面都要实机测。�
 | 2026-10-08 16:57 | 同上，120 ms | 137 ms（124–144）。当时缓冲 20 ms：每次切场景重连被误算成断音，缓冲 +4 ms（beta.4 已修） |
 | 2026-10-08 约 17:10 | 用户举手喝水时一次卡顿 | 电脑端 0 断音；17:09:30–17:10:30 HomePod 请求重发 1 个包（rtx 1/1），是 15 分钟里唯一的网络事件 → 很可能是 Wi-Fi 抖动。beta.5 加了网络监测（每 100 ms ping 音箱）。事后约 17:15 ping 50 次：中位 2 ms、最大 7 ms |
 | 2026-10-08 | 日志里的其他问题 | 每次退出时托盘图标报空引用（早上一次导致崩溃）→ beta.4 已修；混音器里显示了 HomePodCast 自己 → beta.4 已隐藏 |
+| 2026-10-12 | 浏览器插件自动测试 extension-e2e（Chrome for Testing 154 无头模式，本地仿 YouTube／bilibili 页面，假 HomePodCast 接口） | 25 项全过（另有 bilibili WASM 播放器 `<bwp-video>` 的仿制版：画布在封闭的 shadow root 里、由 worker 绘制，也能延迟、暂停、同步全屏）。查出并修了一个问题：点「退出全屏」后插件按钮移回页面时，Chrome 因按钮失去焦点同步触发 focusout，界面更新重入，内容脚本报错 `NotFoundError: Failed to execute 'appendChild'`（按钮最后位置是对的，但同一次更新里其他播放器的按钮没更新）。改为重入时推到下一帧再更新，并加了单元测试 |
 | 2026-10-08 | 浏览器插件画面延迟的流畅度（Chrome 154 临时配置文件、240 Hz 屏，仿 YouTube 播放器 1280×720；页面内统计 + 只录测试窗口） | 插件关 / 0.2.0 / 0.2.1，1080p60 VP9·AV1·H.264、2160p60、1080p30，141 / 238 / 538 ms：视频掉帧都是 0，引擎漏帧、丢帧 0，延迟画面每帧都在第 4 个刷新周期换（30 帧为第 8 个），拷贝一帧 0.09–0.17 ms，没有长任务；录屏上 0 跳帧、没有停留超过 1.5 帧的画面，和插件关时一样（帧停留时间标准差：关 0.9–1.9 ms，开 0.9–2.2 ms）。中途接入 538 ms：先定格约 0.55 秒（与声音同步），之后均匀。延迟准确度（并排录屏，按换帧时刻）：0.2.0 时 H.264 MP4 141.5 / 250.0 / 537.4 ms，VP9 WebM 129.2 / 237.4 / 524.9 ms，MSE 的 VP9 目标 250 实际 237.2，30 帧 MP4 266.7；0.2.1 各格式中位数都正好是目标值（141.7 / 250.0 / 537.5），均值差不超过 1.2 ms。700 ms：0.2.0 延迟画面冻住（0 帧），0.2.1 为 30 帧、仍准到 700.0 ms。主线程每 0.5 秒忙 40 ms 时：原视频 0 跳帧，延迟画面跳约 10% 的帧（两版相同） |

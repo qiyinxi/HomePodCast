@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>E2E: bilibili-like player</title>
+<!--
+  Mimics bilibili's player: .bpx-player-container (what bilibili itself makes fullscreen; data-screen normal / web /
+  full) holds the primary area with the video area (video wrap, danmaku layer, subtitles, control bar over the
+  picture) and, below it, the danmaku sending area with its input (in fullscreen it stays at the bottom, as the
+  input moves into bilibili's fullscreen bar). 网页全屏 (web fullscreen) fixes the container over the viewport.
+  Solid colours on the danmaku, subtitle and progress bar let the test find them in screenshots.
+
+  ?player=bwp: bilibili's WASM player instead of the <video>: a <bwp-video> element whose picture a worker draws on
+  a transferred canvas in a closed shadow root (div.-bwp-internal-container > canvas.-bwp-internal-render-canvas),
+  with the media events re-dispatched on the element. Its frames come from the <video>, which moves out of the player
+  to a 2×2 px corner (too small for the extension to take it over).
+-->
+<style>
+  html, body { margin: 0; background: #fff; color: #18191c; font: 14px/1.5 "PingFang SC", "Microsoft YaHei", sans-serif; }
+  body.player-mode-webscreen { overflow: hidden; }
+  .bili-header { height: 64px; display: flex; align-items: center; padding: 0 24px; border-bottom: 1px solid #eee; }
+  .video-container-v1 { padding: 16px 24px; }
+  #bilibili-player { width: 854px; }
+  .bpx-player-container { display: flex; flex-direction: column; background: #000; }
+  .bpx-player-primary-area { position: relative; width: 854px; height: 480px; }
+  .bpx-player-video-area { position: relative; width: 100%; height: 100%; }
+  .bpx-player-video-perch, .bpx-player-video-wrap { position: relative; width: 100%; height: 100%; }
+  .bpx-player-video-wrap video, .bpx-player-video-wrap bwp-video { display: block; width: 100%; height: 100%; object-fit: contain; }
+  video.bwp-source { position: fixed; left: 0; bottom: 0; width: 2px; height: 2px; }
+  .bpx-player-row-dm-wrap { position: absolute; inset: 0 0 20% 0; z-index: 12; pointer-events: none; overflow: hidden; }
+  .bili-danmaku-x-dm { position: absolute; left: 40%; top: 40px; padding: 2px 8px; background: rgb(255, 102, 204); color: #fff; font-size: 20px; }
+  .bpx-player-subtitle-wrap { position: absolute; left: 0; right: 0; bottom: 64px; z-index: 13; text-align: center; pointer-events: none; }
+  .bpx-player-subtitle-wrap span { display: inline-block; padding: 2px 10px; background: rgb(255, 204, 0); color: #000; font-size: 20px; }
+  .bpx-player-control-wrap { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; z-index: 75; padding: 0 12px; }
+  .bpx-player-progress { height: 6px; background: rgb(0, 174, 236); cursor: pointer; }
+  .bpx-player-control-bottom { display: flex; align-items: center; gap: 8px; height: 38px; }
+  .bpx-player-control-bottom button { background: #333; color: #fff; border: 0; padding: 3px 10px; }
+  .bpx-player-ctrl-time { flex: 1; color: #ddd; }
+  .bpx-player-sending-area { flex: none; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #f1f2f3; }
+  .bpx-player-dm-input { flex: 1; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; }
+  /* 全屏 (the container fullscreen) and 网页全屏 (the container over the viewport) */
+  .bpx-player-container:fullscreen { width: 100%; height: 100%; }
+  .bpx-player-container[data-screen="web"] { position: fixed; inset: 0; z-index: 100000; }
+  .bpx-player-container[data-screen="full"] .bpx-player-primary-area,
+  .bpx-player-container[data-screen="web"] .bpx-player-primary-area { width: 100%; height: auto; flex: 1; min-height: 0; }
+</style>
+</head>
+<body>
+<div class="bili-header"><b>bilibili (E2E stand-in)</b></div>
+<div class="video-container-v1">
+  <h1 class="video-title">E2E 测试视频</h1>
+  <div id="bilibili-player">
+    <div class="bpx-player-container" data-screen="normal">
+      <div class="bpx-player-primary-area">
+        <div class="bpx-player-video-area">
+          <div class="bpx-player-video-perch">
+            <div class="bpx-player-video-wrap"><video src="/media/test.webm" muted loop playsinline preload="auto"></video></div>
+          </div>
+          <div class="bpx-player-row-dm-wrap"><div class="bili-danmaku-x-dm">弹幕 DANMAKU</div></div>
+          <div class="bpx-player-subtitle-wrap"><span>字幕 SUBTITLE</span></div>
+          <div class="bpx-player-control-wrap">
+            <div class="bpx-player-progress"></div>
+            <div class="bpx-player-control-bottom">
+              <button class="bpx-player-ctrl-play" type="button">暂停</button>
+              <span class="bpx-player-ctrl-time">0:00</span>
+              <button class="bpx-player-ctrl-web" type="button" aria-label="网页全屏">网页全屏</button>
+              <button class="bpx-player-ctrl-full" type="button" aria-label="进入全屏">全屏</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bpx-player-sending-area">
+        <input class="bpx-player-dm-input" placeholder="发个友善的弹幕见证当下">
+        <button type="button">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const container = document.querySelector('.bpx-player-container');
+  const video = container.querySelector('video');
+  if (new URLSearchParams(location.search).get('player') === 'bwp') makeBwpPlayer(video);
+
+  function makeBwpPlayer(src) {
+    const workerSrc = `
+      let canvas = null, ctx = null;
+      onmessage = (e) => {
+        if (e.data.canvas) { canvas = e.data.canvas; ctx = canvas.getContext('2d', { alpha: false }); return; }
+        const f = e.data.frame;
+        try {
+          if (canvas.width !== f.displayWidth || canvas.height !== f.displayHeight) {
+            canvas.width = f.displayWidth;
+            canvas.height = f.displayHeight;
+          }
+          ctx.drawImage(f, 0, 0);
+        } finally {
+          f.close();
+        }
+      };`;
+    customElements.define('bwp-video', class extends HTMLElement {
+      constructor() {
+        super();
+        const root = this.attachShadow({ mode: 'closed' });
+        root.innerHTML = '<style>.-bwp-internal-container { width: 100%; height: 100%; position: relative; }' +
+          ' .-bwp-internal-render-canvas { width: 100%; height: 100%; display: block; object-fit: contain; }</style>' +
+          '<div class="-bwp-internal-container"><canvas class="-bwp-internal-render-canvas" width="640" height="360"></canvas></div>';
+        this.renderCanvas = root.querySelector('canvas');
+      }
+      get paused() { return src.paused; }
+      get currentTime() { return src.currentTime; }
+      set currentTime(t) { src.currentTime = t; }
+      play() { return src.play(); }
+      pause() { src.pause(); }
+    });
+    const el = document.createElement('bwp-video');
+    src.replaceWith(el);
+    src.classList.add('bwp-source');
+    document.body.appendChild(src);
+    const off = el.renderCanvas.transferControlToOffscreen();
+    const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })));
+    worker.postMessage({ canvas: off }, [off]);
+    for (const t of ['play', 'playing', 'pause', 'seeking', 'seeked', 'waiting', 'emptied', 'loadeddata', 'ended', 'timeupdate']) {
+      src.addEventListener(t, () => el.dispatchEvent(new Event(t)));
+    }
+    const feed = (_now, meta) => {
+      try {
+        const f = new VideoFrame(src, { timestamp: Math.round((meta.mediaTime || 0) * 1e6) });
+        worker.postMessage({ frame: f }, [f]);
+      } catch (_) { /* no frame yet */ }
+      src.requestVideoFrameCallback(feed);
+    };
+    src.requestVideoFrameCallback(feed);
+  }
+  const play = container.querySelector('.bpx-player-ctrl-play');
+  const time = container.querySelector('.bpx-player-ctrl-time');
+  const input = container.querySelector('.bpx-player-dm-input');
+  window.__keys = []; // what the danmaku input saw (the test checks the extension left these keys alone)
+  input.addEventListener('keydown', (e) => window.__keys.push({ key: e.key, alt: e.altKey, prevented: e.defaultPrevented }));
+
+  const setScreen = (mode) => {
+    container.dataset.screen = mode;
+    document.body.classList.toggle('player-mode-webscreen', mode === 'web');
+  };
+  container.querySelector('.bpx-player-ctrl-full').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else container.requestFullscreen();
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement === container) setScreen('full');
+    else if (container.dataset.screen === 'full') setScreen('normal');
+  });
+  container.querySelector('.bpx-player-ctrl-web').addEventListener('click', () => {
+    setScreen(container.dataset.screen === 'web' ? 'normal' : 'web');
+  });
+  const togglePlay = () => (video.paused ? video.play() : video.pause());
+  play.addEventListener('click', togglePlay);
+  container.querySelector('.bpx-player-progress').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
+  });
+  const sync = () => {
+    play.textContent = video.paused ? '播放' : '暂停';
+    time.textContent = `${video.currentTime.toFixed(1)} s`;
+  };
+  for (const t of ['play', 'pause', 'timeupdate', 'seeked']) video.addEventListener(t, sync);
+  video.play().catch(() => {});
+})();
+</script>
+</body>
+</html>
