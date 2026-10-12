@@ -15,6 +15,7 @@ public sealed class AppConfig
     public int? MeasuredAvOffsetMs { get; set; }
     public Dictionary<string, AvCalibration> SyncCalibrations { get; set; } = [];
     public List<UsageProfile> UsageProfiles { get; set; } = [];
+    public Audio.StemSettings Stems { get; set; } = new();
 
     /// <summary>
     /// The profile applied last, which 首页's picker shows (UsageProfiles.PickerIndex); null: none yet, or it was deleted.

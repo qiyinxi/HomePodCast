@@ -25,6 +25,7 @@ internal sealed class MixerPage : ScrollPage
         "指定了采集设备时，「HomePod 跟随 Windows 音量」跟随的是这块设备的音量；音量键只调 Windows 默认输出。想用音量键调 HomePod，就把这块设备设为默认输出。";
 
     private readonly TrayApp _app;
+    private readonly StemPanel _stems;
     private readonly FluentComboBox _captureDevice = new() { MinWidth = 220 };
     private readonly SettingRow _captureRow;
     private List<AudioEndpoint> _captureOutputs = [];
@@ -78,7 +79,8 @@ internal sealed class MixerPage : ScrollPage
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
         var note = Ui.Note(L.F("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，音箱音量由 HomePod 滑块决定；开启时不会超过它现在的 Windows 音量，音箱不会突然变响。送到「两者」的程序可以分别调节音箱和本机；送到「HomePod」的程序本机已静音，Windows 音量不再改变音箱音量；送到「本机」的程序不推送。独立音量会启用按程序分流，推送的声音多约 {0} ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × HomePod 音量。关闭独立音量可恢复跟随 Windows。", RoutedCapture.RoutedExtraLatencyMs));
-        Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
+        _stems = new StemPanel(app);
+        Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, _stems, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
         _empty.Collapsed = true;
@@ -264,6 +266,7 @@ internal sealed class MixerPage : ScrollPage
 
     public override void PageShown()
     {
+        _stems.Start();
         _active = true;
         ShowMaster();
         LoadCaptureDevices();
@@ -275,6 +278,7 @@ internal sealed class MixerPage : ScrollPage
 
     public override void PageHidden()
     {
+        _stems.Stop();
         _active = false;
         _meterTimer.Stop();
         _refreshTimer.Stop();

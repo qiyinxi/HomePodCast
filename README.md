@@ -54,6 +54,8 @@ Playback profiles, per-speaker/source A/V calibration, independent per-app HomeP
 
 ## Usage
 
+Experimental local vocal/accompaniment mixing is available in Mixer with a separately installed model module. See [Music separation](docs/MUSIC_STEMS.md#english) for installation, latency and quality limits.
+
 1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
 2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
    - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.

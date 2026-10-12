@@ -99,6 +99,16 @@ jobs:
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:Version=${{ steps.ver.outputs.version }} -o publish/HomePodCast
 
+      - name: Build optional music separation module and verify PyTorch parity
+        shell: pwsh
+        run: |
+          python -m pip install onnx==1.20.1
+          if ($LASTEXITCODE) { throw 'ONNX developer tool install failed' }
+          ./tools/build-stem-module.ps1
+          $env:HOMEPODCAST_STEM_MODULE = (Resolve-Path publish/stem-module).Path
+          dotnet test tests/HomePodCast.Tests -c Release --no-restore --filter FullyQualifiedName~StemModuleTests
+          if ($LASTEXITCODE) { throw 'Live stem module integration failed' }
+
       # Code signing via SignPath Foundation (https://signpath.org) — enable once the project is approved
       # and the SIGNPATH_API_TOKEN secret plus the organization/project/policy ids are known.
       # - name: Upload unsigned exe
@@ -138,6 +148,7 @@ jobs:
           $v = '${{ steps.ver.outputs.version }}'
           Copy-Item LICENSE, README*.md publish/HomePodCast/
           Compress-Archive -Path publish/HomePodCast/* -DestinationPath "publish/HomePodCast-$v-win-x64.zip"
+          Compress-Archive -Path publish/stem-module/* -DestinationPath "publish/HomePodCast-stems-$v.zip"
           if (Test-Path extension/manifest.json) {
             Compress-Archive -Path (Get-Item extension/manifest.json, extension/src, extension/_locales, extension/icons -ErrorAction SilentlyContinue) -DestinationPath "publish/HomePodCast-extension-$v.zip"
           }
