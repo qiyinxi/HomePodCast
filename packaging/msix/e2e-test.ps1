@@ -199,6 +199,34 @@ namespace MsixE2e
             }
         }
 
+        // The process's top-level WinForms window with this title, visible or not; IntPtr.Zero if none.
+        public static IntPtr FindWindow(int processId, string title)
+        {
+            IntPtr found = IntPtr.Zero;
+            EnumWindows((window, unused) =>
+            {
+                uint owner;
+                GetWindowThreadProcessId(window, out owner);
+                if (owner != (uint)processId) return true;
+                var text = new StringBuilder(256);
+                GetWindowText(window, text, text.Capacity);
+                var cls = new StringBuilder(256);
+                GetClassName(window, cls, cls.Capacity);
+                if (text.ToString() != title || !cls.ToString().StartsWith("WindowsForms")) return true;
+                found = window;
+                return false;
+            }, IntPtr.Zero);
+            return found;
+        }
+
+        public static bool IsVisible(IntPtr window) { return IsWindowVisible(window); }
+
+        // What the window's close button sends (WM_SYSCOMMAND SC_CLOSE): WinForms sees CloseReason.UserClosing.
+        public static void CloseToTray(IntPtr window)
+        {
+            if (!PostMessage(window, 0x0112, new IntPtr(0xF060), IntPtr.Zero)) throw new Win32Exception();
+        }
+
         // The package's SID (S-1-15-2-...), as firewall rules name a package.
         public static string PackageSid(string familyName)
         {
@@ -226,6 +254,26 @@ namespace MsixE2e
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool QueryFullProcessImageName(IntPtr process, int flags, StringBuilder name, ref int size);
+
+        private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr window, StringBuilder text, int maxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr window, StringBuilder name, int maxCount);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
         [DllImport("userenv.dll", CharSet = CharSet.Unicode)]
         private static extern int DeriveAppContainerSidFromAppContainerName(string name, out IntPtr sid);
@@ -480,14 +528,34 @@ try {
 
     # ---------------------------------------------------------------------------------------- 4. single instance
     Step '4. Single instance'
+    # The main window (Start passes no --tray, so it is open), closed to the tray before a second start the way the
+    # user closes it (its close button: SC_CLOSE only hides it). A second start must bring it back.
+    $main = [MsixE2e.Native]::FindWindow($guiPid, 'HomePodCast')
+    Info ("main window 0x{0:X}, visible: {1}" -f $main.ToInt64(), ($main -ne [IntPtr]::Zero -and [MsixE2e.Native]::IsVisible($main)))
+    Check ($main -ne [IntPtr]::Zero) 'the app has its main window'
+    function Close-ToTray([string] $before) {
+        if ($main -eq [IntPtr]::Zero) { return }
+        [MsixE2e.Native]::CloseToTray($main)
+        $hidden = Wait-For { -not [MsixE2e.Native]::IsVisible($main) } 10
+        Check $hidden "the window closed to the tray (before $before)"
+    }
+    function Check-Shown([string] $by) {
+        if ($main -eq [IntPtr]::Zero) { return }
+        $shown = Wait-For { [MsixE2e.Native]::IsVisible($main) } 15
+        Check $shown "$by brought the running copy's window back"
+    }
+
+    Close-ToTray 'the second start from Start'
     Start-Process (Join-Path $env:WINDIR 'explorer.exe') "shell:AppsFolder\$aumid"
-    Start-Sleep -Seconds 8
+    Check-Shown 'starting it again from Start'
+    Start-Sleep -Seconds 5
     $ids = @(Get-HomePodCastProcesses | ForEach-Object { $_.Id })
     Check ($ids.Count -eq 1 -and $ids[0] -eq $guiPid) 'started again from Start: still the one process' "processes: $($ids -join ', ')"
 
+    Close-ToTray 'the activation'
     $run = [MsixE2e.Native]::ActivateAndWait($aumid, '', 30000)
     Info "activated again (AppX activation API): process $($run.ProcessId), exit code $($run.ExitCode)"
-    Start-Sleep -Seconds 2
+    Check-Shown 'activating it again'
     $ids = @(Get-HomePodCastProcesses | ForEach-Object { $_.Id })
     Check ($ids.Count -eq 1 -and $ids[0] -eq $guiPid -and $run.ProcessId -ne $guiPid) `
         'activated again: the new process ended and left the one that was running' "processes: $($ids -join ', ')"
@@ -505,11 +573,13 @@ try {
             # Should it get past the lock after all: no speaker, no automatic connect there either.
             New-Item -ItemType Directory -Force $realFolder | Out-Null
             [IO.File]::WriteAllText((Join-Path $realFolder 'config.json'), $config)
+            Close-ToTray 'the MSI build starts'
             $msiRun = Start-Process $msiExe -PassThru
             $null = $msiRun.Handle # kept, so that ExitCode is there after the exit
             $ended = $msiRun.WaitForExit(30000)
             Info "MSI build $msiExe, process $($msiRun.Id), ended: $ended"
             if (-not $ended) { $msiRun.Kill() }
+            Check-Shown 'the MSI build'
             $ids = @(Get-HomePodCastProcesses | ForEach-Object { $_.Id })
             Check ($ended -and $msiRun.ExitCode -eq 0) 'the MSI build started next to it exited with 0' "ended $ended, exit code $(if ($ended) { $msiRun.ExitCode })"
             Check ($ids.Count -eq 1 -and $ids[0] -eq $guiPid) 'the MSI build left the packaged one running alone' "processes: $($ids -join ', ')"

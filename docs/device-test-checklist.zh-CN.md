@@ -193,8 +193,7 @@ Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电�
 - [ ] 「设置 → 工具 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）
 - [x] 日志有 `update: Microsoft Store package: never contacts GitHub`，没有安排或进行更新检查；进程没有连到本机以外的 TCP 连接（CI 自动测试：msix-e2e）
 - [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查
-- [x] 打包版开着时，再从开始菜单启动它、或者启动 MSI 版（静默安装）：新进程都以 0 退出、不写日志，只剩原来那个打包版进程（CI 自动测试：msix-e2e）
-- [ ] 打包版开着时再启动 MSI 版：打包版的窗口被叫到前面（进程这一半 CI 已测）
+- [x] 打包版开着、窗口关到托盘时，再从开始菜单启动它、或者启动 MSI 版（静默安装）：只会把打包版的窗口叫出来；新进程都以 0 退出、不写日志，只剩原来那个打包版进程（CI 自动测试：msix-e2e）
 - [x] 卸载后：Windows 防火墙里那两条规则、启动任务（「启动」页面里的 HomePodCast）、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了，也没有其他名字带 HomePodCast 的开机启动项（CI 自动测试：msix-e2e）
 
 上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart）。
