@@ -75,7 +75,6 @@ internal sealed class HomePage : ScrollPage
     private readonly Card _updateBanner;
 
     private StreamState _lastState = StreamState.Idle;
-    private readonly FluentButton _markGlitch = new(L.T("刚才卡了"), ButtonKind.Subtle) { Enabled = false }; // only while streaming
     private DateTime _streamingSince;
     private long _underrunsAtStart;
     private bool _loading;
@@ -93,13 +92,8 @@ internal sealed class HomePage : ScrollPage
         var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330 };
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
-        var statsTitle = Ui.Section(L.T("推流状态"));
-        var mark = _markGlitch;
-        var report = new FluentButton(L.T("导出诊断"), ButtonKind.Subtle);
-        var statsHeader = Ui.Row(8, statsTitle, statsTitle, mark, report);
-        mark.Click += (_, _) => _app.MarkAudibleGlitch();
-        report.Click += (_, _) => _app.ExportDiagnostics(FindForm());
-        _tips.SetToolTip(mark, L.T("记录听到卡顿的时间，便于对照日志。"));
+        // Diagnostics live in 设置 → 工具, marking a stutter on a hotkey (unset by default): neither is for every day.
+        var statsHeader = Ui.Section(L.T("推流状态"));
         _netLine = Ui.Row(8, _netStatus, new GlyphLabel(Glyph.Wifi), _netStatus);
         _netLine.Collapsed = true;
         _netHint = BuildNetworkHint();
@@ -449,7 +443,6 @@ internal sealed class HomePage : ScrollPage
             _underrunsAtStart = c.Fifo.Underruns;
         }
         _lastState = c.State;
-        _markGlitch.Enabled = c.State == StreamState.Streaming; // a marker without a stream has nothing to compare with
 
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;
@@ -588,7 +581,7 @@ internal sealed class HomePage : ScrollPage
     /// </summary>
     internal static string NetworkHintText(NetworkVerdict v)
     {
-        int n = v.Episodes;
+        int n = v.Threats; // not every episode: 2026-10-12 it said 38, every spike over 30 ms, most of them harmless
         return ((v.Hop, v.SuggestedMs) switch
         {
             (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms。" +

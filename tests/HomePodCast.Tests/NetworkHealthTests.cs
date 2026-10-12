@@ -99,6 +99,34 @@ public class NetworkHealthTests
     }
 
     [Fact]
+    public void Lost_pings_only_threaten_a_margin_under_half_the_pings_timeout()
+    {
+        // 2026-10-12 at 500 ms (a 410 ms margin): a few lost pings among answers of 2 ms made 断音 read ≈9, with no
+        // resend request. All a lost ping shows is a round trip past the 500 ms timeout: twice a 250 ms margin.
+        NetworkHealth Pairs() => Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1), (200_000, -1), (200_100, -1));
+        var at500 = Pairs().Assess(300 * S, 500, A2R, true);
+        Assert.Equal(3, at500.Episodes);
+        Assert.Equal(0, at500.Threats);
+        Assert.False(at500.Threatened);
+        Assert.Equal(0, at500.ConnectionThreats);
+
+        Assert.Equal(0, Pairs().Assess(300 * S, 340, A2R, true).Threats); // margin 250: twice it is the timeout
+        var at339 = Pairs().Assess(300 * S, 339, A2R, true);
+        Assert.Equal(3, at339.Threats);
+        Assert.Equal(3, at339.ConnectionThreats);
+
+        // A resend among them may have come too late: the round trip itself is the margin it needed.
+        var resend = new NetworkHealth();
+        resend.AddPing(PingTarget.Speaker, 10_000, -1);
+        resend.AddPing(PingTarget.Speaker, 10_100, -1);
+        resend.AddResends(10_300, 1, 0);
+        var v = resend.Assess(300 * S, 500, A2R, true);
+        Assert.Equal(1, v.Threats);
+        Assert.Equal(1, v.ConnectionThreats);
+        Assert.Equal(0, resend.Assess(300 * S, 600, A2R, true).Threats); // margin 510
+    }
+
+    [Fact]
     public void Any_resend_miss_is_worth_a_hint_at_once()
     {
         var h = new NetworkHealth();
@@ -287,6 +315,7 @@ public class NetworkHealthTests
         Same(Spikes((10_000, 70), (10_100, 90), (10_700, 40), (11_600, 35), (12_500, 31)), 30 * S, 120, A2R, 1); // one bad second
         Same(Spikes((10 * S, -1), (100 * S, -1), (200 * S, -1)), 300 * S, 300, A2R, 0);                     // single lost pings
         Same(Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1)), 300 * S, 300, A2R, 2);       // lost pairs
+        Same(Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1)), 300 * S, 500, A2R, 0);       // not at 500 ms
         Same(Spikes((100 * S, 150), (200 * S, 250), (300_000, -1), (300_100, -1)), 400 * S, 200, A2R, 2);  // 影视: 150 absorbed
 
         var quiet = new NetworkHealth();
@@ -512,7 +541,8 @@ public class NetworkHealthFeedTests
 /// </summary>
 public class HomeNetworkTextTests
 {
-    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(3, 3, true, hop, 30, suggestedMs, 3);
+    // 38 episodes, 3 of them threats: the hint counts the threats ("10 分钟内 3 次").
+    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(38, 3, true, hop, 30, suggestedMs, 3);
 
     [Fact]
     public void The_homepods_hop_leads_with_the_band_and_placement_comes_second()

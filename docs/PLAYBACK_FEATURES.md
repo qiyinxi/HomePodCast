@@ -24,9 +24,9 @@ Windows session mute or zero volume still silences the HomePod. Below 1% Windows
 
 ### Report a stutter
 
-Select **Home → Mark a stutter** when you hear one (the button works while streaming). It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
+To mark a stutter when you hear one, give **Mark a stutter** a key in **Settings → Global hotkeys** (it has none by default) and press it while streaming, also in a fullscreen game. It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
 
-**Export diagnostics** is available on Home and in Settings. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
+**Settings → Tools → Export diagnostics**. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
 
 ### Synchronized browser fullscreen
 
@@ -58,9 +58,9 @@ Windows 音频会话静音或音量为 0 时，HomePod 也没有声音。Windows
 
 ### 记录卡顿并导出报告
 
-听到卡顿时点 **首页 → 刚才卡了**（推流时可用），记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
+想在听到卡顿时记下时间，先在 **设置 → 全局快捷键** 里给 **标记刚才的卡顿** 设一个组合键（默认没有），推流时按一下即可，全屏游戏里也能用。它记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
 
-首页和设置里均有 **导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB）；读不了的日志会略过，报告里的 README 会写明。不包含配置文件、密码或录音。脱敏是尽力而为：日志写音箱和组成员名称时会做标记，导出时移除；旧版本日志里的名称按这些日志行的格式移除；当前设置里的名称和标识、地址、设备 ID 和路径会隐藏，统计数字保留。不会上传。分享前请检查内容。
+**设置 → 工具 → 导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB）；读不了的日志会略过，报告里的 README 会写明。不包含配置文件、密码或录音。脱敏是尽力而为：日志写音箱和组成员名称时会做标记，导出时移除；旧版本日志里的名称按这些日志行的格式移除；当前设置里的名称和标识、地址、设备 ID 和路径会隐藏，统计数字保留。不会上传。分享前请检查内容。
 
 ### 浏览器同步全屏
 
