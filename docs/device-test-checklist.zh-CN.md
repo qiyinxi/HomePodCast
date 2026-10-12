@@ -169,7 +169,7 @@ Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电�
 
 ## 十一、Microsoft Store 版（MSIX，1.0.0 上架前）
 
-Claude 只能打包、不能安装和运行打包版，下面都要实机测。打包版和 MSI / 便携版共用单实例锁，测之前先在托盘里退出已经开着的 HomePodCast。
+标了「（CI 自动测试：msix-e2e）」的项不用再手动测：每次构建（分支、PR、标签）CI 的 `msix-e2e` 作业都会在 GitHub 的 Windows 运行器上安装打包版（用一次性证书签名的副本，发布的 msix 仍然不签名）、像开始菜单那样启动、逐项检查、再卸载，作业日志里每项一行 PASS / FAIL（见 `packaging/msix/README.md` 的 CI test 一节）。运行器上没有 HomePod、没有麦克风、也不能注销登录，其余的项还要实机测。打包版和 MSI / 便携版共用单实例锁，测之前先在托盘里退出已经开着的 HomePodCast。
 
 准备（不需要管理员权限）：
 
@@ -177,23 +177,25 @@ Claude 只能打包、不能安装和运行打包版，下面都要实机测。�
 2. 在仓库根目录运行 `./packaging/msix/build.ps1 -Version 1.0.0-local.1`，再运行 `Add-AppxPackage -Register packaging\msix\obj\layout\AppxManifest.xml`（未签名的包只能这样注册）。
 3. 从开始菜单启动 HomePodCast。测完卸载：`Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`。
 
-- [ ] 日志的启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`（「设置 → 工具 → 日志 → 打开日志文件夹」）
-- [ ] 防火墙：第一次启动**没有**「需要防火墙放行」，也没有 UAC。PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*\layout\HomePodCast.exe' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled` 列出两条（TCP、UDP）入站、Private、已启用的规则（这样注册的包从 `packaging\msix\obj\layout` 运行，规则写的是那里的 exe；从 Store 安装的在 `C:\Program Files\WindowsApps` 下）
+- [x] 从开始菜单的方式（`explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）启动：进程有包标识；日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`，没有错误；真正的 `%APPDATA%\HomePodCast` 里什么都没写（CI 自动测试：msix-e2e）
+- [x] 防火墙：安装后有两条（TCP、UDP）入站、允许、Private、已启用的规则，指向包里的 HomePodCast.exe；第一次启动**没有**「需要防火墙放行」，也没有 UAC（日志里没有加规则的记录），日志里没有 `no rule of the package found`（CI 自动测试：msix-e2e）。手动看规则：PowerShell 里 `Get-NetFirewallApplicationFilter | Where-Object Program -like '*\layout\HomePodCast.exe' | Get-NetFirewallRule | Format-Table DisplayName, Direction, Profile, Enabled`（这样注册的包从 `packaging\msix\obj\layout` 运行，规则写的是那里的 exe；从 Store 安装的在 `C:\Program Files\WindowsApps` 下）
 - [ ] 连接 HomePod 推流 1 分钟（音量不超过 25%）：有声音、不弹防火墙提示；日志里没有 `no rule of the package found`
 - [ ] 混音器里给一个程序设「本机」、另一个设「HomePod」：分流照常生效（按程序分流在包里也能用）
-- [ ] 麦克风：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
-- [ ] 麦克风被拒：Windows 设置 → 隐私和安全性 → 麦克风，在应用列表里关掉 HomePodCast，回到程序把麦克风关掉再打开：只弹一次「无法使用麦克风」（点「是」打开麦克风隐私设置页面），页面上麦克风下面是红字和「打开麦克风隐私设置」链接；日志里只有一行 `mic: Windows refuses the microphone (0x80070005 ...)`，没有每 2 秒一行的 `retrying`。重新允许后把麦克风关掉再打开，恢复正常
-- [ ] 麦克风被拒时，混音器的按程序分流是否还正常（记下来：如果日志里出现 0x80070005，说明进程回环采集也受麦克风权限管）
-- [ ] MSI 版也测一次麦克风被拒：关掉「允许桌面应用访问你的麦克风」，弹窗里说的是这个开关
-- [ ] 开机自动启动：「设置 → 开机自动启动」默认是关的；打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的，日志有 `autostart: startup task enable requested, now Enabled`
+- [ ] 麦克风（没有麦克风，暂时测不了）：「麦克风与音效 → 开启麦克风」，Windows 如果弹出是否允许 HomePodCast 使用麦克风，选允许；电平表会动、人声能推到 HomePod
+- [ ] 麦克风被拒（没有麦克风，暂时测不了）：Windows 设置 → 隐私和安全性 → 麦克风，在应用列表里关掉 HomePodCast，回到程序把麦克风关掉再打开：只弹一次「无法使用麦克风」（点「是」打开麦克风隐私设置页面），页面上麦克风下面是红字和「打开麦克风隐私设置」链接；日志里只有一行 `mic: Windows refuses the microphone (0x80070005 ...)`，没有每 2 秒一行的 `retrying`。重新允许后把麦克风关掉再打开，恢复正常
+- [ ] 麦克风被拒时（没有麦克风，暂时测不了），混音器的按程序分流是否还正常（记下来：如果日志里出现 0x80070005，说明进程回环采集也受麦克风权限管）
+- [ ] MSI 版也测一次麦克风被拒（没有麦克风，暂时测不了）：关掉「允许桌面应用访问你的麦克风」，弹窗里说的是这个开关
+- [x] 开机启动任务：默认是关的；打开后 Windows 记录的状态是「已启用」（Windows 设置 → 应用 → 启动 和任务管理器显示的就是它），日志有 `autostart: startup task enable requested, now Enabled`；关掉后状态变回「已禁用」，日志有 `autostart: startup task disabled, now Disabled`（CI 自动测试：msix-e2e。用的是 `HomePodCast.exe autostart on|off|status`，和「设置 → 开机自动启动」开关调用同一段代码）
+- [ ] 「设置 → 开机自动启动」开关本身：默认是关的；在程序里打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的；在程序里关掉，那里也变成关（启动任务本身 CI 已测，这里看开关和 Windows 设置页面是否一致）
 - [ ] 注销再登录（或重启）：HomePodCast 在托盘里启动，不弹主窗口。日志里如果有 `started by the startup task: into the tray`，说明 Windows 没传 `--tray`、靠的是启动方式判断，告诉我
 - [ ] 在 Windows 设置 → 应用 → 启动 里关掉 HomePodCast，回到程序的设置页：开关变成关，下面写「已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。」；再在程序里打开它：弹窗问要不要打开 Windows 设置的「启动」页面
-- [ ] 在程序里关掉开机自动启动：Windows 设置的「启动」页面里也变成关
-- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）
+- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）。CI 用同一条 `explorer.exe shell:AppsFolder\...` 命令启动打包版，所以这条命令本身能用
 - [ ] 「设置 → 工具 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）
-- [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查；日志有 `update: Microsoft Store package: never contacts GitHub`
-- [ ] 打包版开着时再启动 MSI 版：只会把打包版的窗口叫出来
-- [ ] 卸载后：Windows 防火墙里那两条规则、「启动」页面里的 HomePodCast、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了
+- [x] 日志有 `update: Microsoft Store package: never contacts GitHub`，没有安排或进行更新检查；进程没有连到本机以外的 TCP 连接（CI 自动测试：msix-e2e）
+- [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查
+- [x] 打包版开着时，再从开始菜单启动它、或者启动 MSI 版（静默安装）：新进程都以 0 退出、不写日志，只剩原来那个打包版进程（CI 自动测试：msix-e2e）
+- [ ] 打包版开着时再启动 MSI 版：打包版的窗口被叫到前面（进程这一半 CI 已测）
+- [x] 卸载后：Windows 防火墙里那两条规则、启动任务（「启动」页面里的 HomePodCast）、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了，也没有其他名字带 HomePodCast 的开机启动项（CI 自动测试：msix-e2e）
 
 上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart）。
 

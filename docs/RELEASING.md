@@ -88,6 +88,8 @@ The messages it fails with:
 
 Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
 
+Every build, of a branch, a PR or a tag, also runs the `msix-e2e` job after `build`: it installs the Microsoft Store package on the runner (a copy signed with a throwaway certificate), starts it, and uninstalls it again, checking what `docs/device-test-checklist.zh-CN.md` section 十一 marks 「（CI 自动测试：msix-e2e）」 (see `packaging/msix/README.md`, CI test). The `release` job needs it, so a tag whose package fails there publishes nothing. A runner hiccup there is re-run like any other failed job.
+
 The checks read everything through the GitHub API, so they run locally too, read-only:
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
 
@@ -210,6 +212,8 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 失败时的提示就是上面英文部分列出的那几条（CI 日志是英文的）。
 
 分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
+
+每次构建（分支、PR 或标签）在 `build` 之后还会跑 `msix-e2e` 作业：在运行器上安装 Microsoft Store 版的包（用一次性证书签名的副本）、启动它、再卸载，检查 `docs/device-test-checklist.zh-CN.md` 第十一节里标了「（CI 自动测试：msix-e2e）」的项（见 `packaging/msix/README.md` 的 CI test 一节）。`release` 作业依赖它，所以包在那里没通过的标签什么都不会发布。运行器偶发问题和其他失败的作业一样，重跑即可。
 
 这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。
