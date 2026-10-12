@@ -259,8 +259,47 @@ jobs:
             msix-e2e/*.log
           if-no-files-found: ignore
 
+  # End-to-end test of the MSI on the runner (tools/ci/msi-e2e.ps1; docs/device-test-checklist.zh-CN.md section 七):
+  # silent install into the default and a custom folder (files, Start menu shortcut, one Programs and Features entry, the
+  # firewall rule, which the installed exe's own startup check must accept), uninstall (all gone, %APPDATA%\HomePodCast
+  # kept), upgrades from published releases (gh release download), and the embedded wizard languages. The release job
+  # needs it: a tag whose installer is broken is never published.
+  msi-e2e:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # The MSI's launch condition wants the .NET 10 Desktop Runtime (x64) in C:\Program Files\dotnet; the SDK brings it.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: packages
+          path: packages
+
+      - name: MSI end-to-end test
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $msi = @(Get-ChildItem packages -Filter *.msi)
+          if ($msi.Count -ne 1) { throw "expected one .msi in the packages artifact, found $($msi.Count)" }
+          ./tools/ci/msi-e2e.ps1 -Msi $msi[0].FullName
+
+      - name: Upload msiexec logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi-e2e-logs
+          path: ${{ runner.temp }}/msi-e2e/logs
+
+
   release:
-    needs: [build, update-e2e, msix-e2e]
+    needs: [build, update-e2e, msix-e2e, msi-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:

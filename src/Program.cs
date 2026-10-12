@@ -29,6 +29,7 @@ public static class Program
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
+                "firewall" => FirewallCommand.Run(), // CI: tools/ci/msi-e2e.ps1
                 Update.UpdateSelfTest.Command => Update.UpdateSelfTest.Run(args), // CI: tools/ci/update-e2e.ps1
                 "autostart" => AutostartCommand(args), // CI: packaging/msix/e2e-test.ps1
                 _ => Help(),
@@ -108,6 +109,7 @@ public static class Program
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
               autostart on|off|status                the Microsoft Store version's startup task (tests: see packaging/msix)
+              firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
         Console.WriteLine(Update.UpdateSelfTest.Usage);
