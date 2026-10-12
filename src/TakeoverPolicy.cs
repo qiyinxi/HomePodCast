@@ -35,15 +35,37 @@ public enum TakeoverAction
     Wait,
 }
 
+/// <summary>设置 → 「HomePod 当 Apple TV 家庭影院音箱时」: what a HomePod held by its own home-theater Apple TV means.</summary>
+public enum HomeTheaterMode
+{
+    /// <summary>
+    /// 临时接管 (the default): every connect takes the HomePod over from its Apple TV, as TuneBlade did. The Apple TV has
+    /// no sound through it until this PC disconnects (TEARDOWN); it connects again the next time it plays.
+    /// </summary>
+    TakeOver,
+
+    /// <summary>先询问: like any other sender's session (a click asks, naming the Apple TV; automatic connects wait).</summary>
+    Ask,
+}
+
 /// <summary>
 /// Whether to connect to a speaker whose status flag says a session is active. AirPlay lets a new sender take a speaker
 /// over: connecting while an iPhone plays to it cuts the iPhone off. So nothing but the user's own click ever takes over
 /// another sender's session, and the click asks first. The flag may also be our own session's, still active on the speaker
 /// after a drop or a restart; a reconnect of our own session is never held back for it.
+/// <para>
+/// A HomePod that is an Apple TV's home-theater speaker shows the flag all the time, idle or not: the Apple TV keeps its
+/// session. When every busy speaker is held by its own home-theater Apple TV (<see cref="BusyHolder.HomeTheater"/>, from
+/// the group fields: <see cref="Net.HomeTheater"/>) and the setting is <see cref="HomeTheaterMode.TakeOver"/>, every
+/// trigger connects: the HomePod is taken over for as long as this PC is connected. Not when the speaker ended this
+/// connection's own session itself (the Apple TV took it back): then nothing fights it.
+/// </para>
 /// <list type="table">
 /// <item>Free or Unknown (unreadable: offline, timeout): connect. The connection itself then fails, and the next attempt
 ///   reads again.</item>
-/// <item>Manual: busy with someone else's session → Ask; busy while ours was alive just now → connect.</item>
+/// <item>Held by its home-theater Apple TV, 临时接管: connect (but a retry after the speaker ended our session → Wait).</item>
+/// <item>Manual: busy with someone else's session (or a home theater with 先询问) → Ask; busy while ours was alive just
+///   now → connect.</item>
 /// <item>TakeOver: connect.</item>
 /// <item>Automatic: busy → Wait. While ours was alive just now the wait is for our own session to end, so it is bounded by
 ///   <see cref="OwnSession"/>'s window; after it the flag is someone else's, and the wait goes on until the speaker is free.</item>
@@ -57,15 +79,27 @@ public static class TakeoverPolicy
     public static bool SkipsCheck(ConnectTrigger trigger, bool oursRecently) =>
         trigger == ConnectTrigger.TakeOver || trigger == ConnectTrigger.Reconnect && oursRecently;
 
-    public static TakeoverAction Decide(ConnectTrigger trigger, SpeakerBusy busy, bool oursRecently)
+    /// <param name="holder">Who holds the busy speakers (<see cref="BusyReading.Holder"/>).</param>
+    /// <param name="mode">The home-theater setting.</param>
+    /// <param name="endedBySpeaker">The speaker ended this connection's last session itself (another sender took it).</param>
+    public static TakeoverAction Decide(ConnectTrigger trigger, SpeakerBusy busy, bool oursRecently,
+        BusyHolder holder = BusyHolder.OtherSender, HomeTheaterMode mode = HomeTheaterMode.Ask, bool endedBySpeaker = false)
     {
         if (busy != SpeakerBusy.Busy || SkipsCheck(trigger, oursRecently)) return TakeoverAction.Connect;
+        if (TakesOverHomeTheater(holder, mode, endedBySpeaker)) return TakeoverAction.Connect;
         return trigger switch
         {
             ConnectTrigger.Manual => oursRecently ? TakeoverAction.Connect : TakeoverAction.Ask,
             _ => TakeoverAction.Wait, // Automatic (ours or not), Reconnect long after our session
         };
     }
+
+    /// <summary>
+    /// A busy reading that 临时接管 connects through: every busy speaker is held by its home-theater Apple TV, and the
+    /// speaker didn't just end our own session (the Apple TV taking it back is never fought).
+    /// </summary>
+    public static bool TakesOverHomeTheater(BusyHolder holder, HomeTheaterMode mode, bool endedBySpeaker = false) =>
+        holder == BusyHolder.HomeTheater && mode == HomeTheaterMode.TakeOver && !endedBySpeaker;
 
     /// <summary>
     /// The trigger of the next attempt of one connection's retry loop: once it has streamed, a retry is our own session

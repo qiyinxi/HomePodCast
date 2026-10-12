@@ -23,24 +23,33 @@ public sealed partial class StreamController
     /// <summary>The sender of whatever is streaming (one speaker or a group), for stats and the sync probe.</summary>
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
 
-    /// <summary>One StartGroup's connection: why it connects, the selection's key, and whether it has streamed yet.</summary>
-    private sealed class GroupRun(ConnectTrigger trigger, string key)
+    /// <summary>
+    /// One StartGroup's connection: why it connects, the selection's key, whether it has streamed yet, and whether a
+    /// speaker ended its last session itself (another sender took it: a home theater's Apple TV is then not fought).
+    /// </summary>
+    private sealed class GroupRun(ConnectTrigger trigger, string key, string? takenFrom)
     {
         public ConnectTrigger Trigger { get; } = trigger;
         public string Key { get; } = key;
+        public string? TakenFrom { get; } = takenFrom;
         public volatile bool Streamed;
+        public volatile bool EndedBySpeaker;
     }
 
     /// <param name="volumeAsOf">As for <see cref="Start"/>: a volume set after the request was made is kept.</param>
     /// <param name="trigger">As for <see cref="Start"/>; every member is checked.</param>
-    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null, ConnectTrigger trigger = ConnectTrigger.Manual)
+    /// <param name="takenFrom">As for <see cref="Start"/>.</param>
+    public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null, ConnectTrigger trigger = ConnectTrigger.Manual,
+        string? takenFrom = null)
     {
         lock (_lifecycle)
         {
             Stop();
             var cts = new CancellationTokenSource();
-            var run = new GroupRun(trigger, OwnSession.KeyOf(plan));
-            var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct), Set);
+            var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom);
+            // The connected line says when the group was taken over from a home theater's Apple TV.
+            var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
+                (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text));
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
             runner.Connected += _ =>
             {
@@ -51,6 +60,7 @@ public sealed partial class StreamController
             {
                 if (lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget(); // another sender took a member over
                 else OwnSession.Ended(UtcNow(), clean: stopped);
+                run.EndedBySpeaker = lostReason == EventChannel.ClosedBySpeaker;
             };
             runner.Connected += OnGroupConnected;
             lock (_lock)
@@ -70,7 +80,7 @@ public sealed partial class StreamController
     {
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
-            members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct);
+            members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
         EnsureCapture(ct);
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);

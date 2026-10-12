@@ -23,6 +23,9 @@ internal sealed class SettingsPage : ScrollPage
     private readonly ToggleSwitch _autostart = new();
     private readonly SettingRow _autostartRow;
     private readonly ToggleSwitch _autoconnect = new();
+    private static readonly HomeTheaterMode[] HomeTheaterModes = [HomeTheaterMode.TakeOver, HomeTheaterMode.Ask];
+    private readonly Segmented _homeTheater = new(L.T("临时接管"), L.T("先询问"));
+    private readonly SettingRow _homeTheaterRow;
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
@@ -63,6 +66,8 @@ internal sealed class SettingsPage : ScrollPage
         var theme = new SettingRow(Glyph.Appearance, L.T("外观"), L.T("浅色或深色；默认跟随 Windows。"), _theme);
         var autostart = _autostartRow = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T(AutostartText), _autostart);
         var autoconnect = new SettingRow(Glyph.Sync, L.T("启动后自动连接"), L.T("启动时连接上次用的音箱。"), _autoconnect);
+        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时");
+        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
         var capRow = Ui.Row(10, _cap, _cap, _capValue);
@@ -119,11 +124,11 @@ internal sealed class SettingsPage : ScrollPage
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
             players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
                      playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
@@ -159,6 +164,12 @@ internal sealed class SettingsPage : ScrollPage
         {
             _app.Config.AutoConnect = _autoconnect.Checked;
             _app.Config.Save();
+        };
+        _homeTheater.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_homeTheater.SelectedIndex < 0) return;
+            _app.SetHomeTheaterMode(HomeTheaterModes[_homeTheater.SelectedIndex]);
+            ShowHomeTheater();
         };
         _cap.Scroll += (_, _) =>
         {
@@ -335,6 +346,7 @@ internal sealed class SettingsPage : ScrollPage
         _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(cfg.Theme));
         ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
+        ShowHomeTheater();
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
         ShowSoundOptions();
@@ -448,6 +460,25 @@ internal sealed class SettingsPage : ScrollPage
         _cap.Value = _app.Config.VolumeCapPercent;
         _capValue.Text = $"{_cap.Value}%";
     }
+
+    /// <summary>「HomePod 当 Apple TV 家庭影院音箱时」: the selected choice and what it does.</summary>
+    private void ShowHomeTheater()
+    {
+        var mode = _app.Config.HomeTheaterTakeover;
+        _homeTheater.SelectedIndex = Array.IndexOf(HomeTheaterModes, mode);
+        _homeTheaterRow.DescriptionText.Text = HomeTheaterModeDescription(mode);
+    }
+
+    /// <summary>
+    /// What 临时接管 / 先询问 do. That the Apple TV connects again the next time it plays is how Apple's home theater is
+    /// expected to behave, not yet seen on the user's own Apple TV (docs/device-test-checklist.zh-CN.md).
+    /// </summary>
+    internal static string HomeTheaterModeDescription(HomeTheaterMode mode) => mode switch
+    {
+        HomeTheaterMode.TakeOver => L.T("连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。" +
+                                        "HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。"),
+        _ => L.T("点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。"),
+    };
 
     private static string VolumeKeyModeName(VolumeKeyMode mode) => mode switch
     {

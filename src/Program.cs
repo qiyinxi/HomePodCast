@@ -203,6 +203,7 @@ public static class Program
             if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
         }
         foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
+        foreach (var line in HomeTheater.Describe(devices)) Console.WriteLine(line); // Apple TVs and their home-theater HomePods
         return 0;
     }
 

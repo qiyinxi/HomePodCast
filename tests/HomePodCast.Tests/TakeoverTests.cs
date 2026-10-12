@@ -37,8 +37,50 @@ public class TakeoverPolicyTests
     [InlineData(Reconnect, Busy, false, Wait)]
     [InlineData(Reconnect, Free, false, Connect)]
     [InlineData(Reconnect, Unknown, false, Connect)]
-    public void Decides_by_trigger_flag_and_whether_the_session_was_ours(ConnectTrigger trigger, SpeakerBusy busy, bool ours, TakeoverAction expected) =>
+    public void Decides_by_trigger_flag_and_whether_the_session_was_ours(ConnectTrigger trigger, SpeakerBusy busy, bool ours, TakeoverAction expected)
+    {
         Assert.Equal(expected, TakeoverPolicy.Decide(trigger, busy, ours));
+        // Another sender's session: the home-theater setting changes nothing.
+        foreach (var mode in Enum.GetValues<HomeTheaterMode>())
+            Assert.Equal(expected, TakeoverPolicy.Decide(trigger, busy, ours, BusyHolder.OtherSender, mode));
+    }
+
+    private const BusyHolder Theater = BusyHolder.HomeTheater, Other = BusyHolder.OtherSender;
+    private const HomeTheaterMode TakeOverTemporarily = HomeTheaterMode.TakeOver, AskFirst = HomeTheaterMode.Ask;
+
+    [Theory]
+    // 临时接管 (the default): a HomePod its home-theater Apple TV holds is taken over by every connect...
+    [InlineData(Manual, false, TakeOverTemporarily, false, Connect)]
+    [InlineData(Automatic, false, TakeOverTemporarily, false, Connect)]
+    [InlineData(Automatic, true, TakeOverTemporarily, false, Connect)]
+    [InlineData(Reconnect, false, TakeOverTemporarily, false, Connect)]  // after a long sleep
+    // ...but never taken back after the Apple TV ended our session itself.
+    [InlineData(Reconnect, false, TakeOverTemporarily, true, Wait)]
+    [InlineData(Automatic, false, TakeOverTemporarily, true, Wait)]
+    // 先询问: like any other sender's session.
+    [InlineData(Manual, false, AskFirst, false, Ask)]
+    [InlineData(Manual, true, AskFirst, false, Connect)]
+    [InlineData(Automatic, false, AskFirst, false, Wait)]
+    [InlineData(Reconnect, false, AskFirst, false, Wait)]
+    [InlineData(TakeOver, false, AskFirst, false, Connect)]
+    // Our own live session: never read, whatever the setting.
+    [InlineData(Reconnect, true, AskFirst, true, Connect)]
+    public void A_HomePod_held_by_its_home_theater_Apple_TV_is_taken_over_unless_the_setting_says_ask(ConnectTrigger trigger, bool ours,
+        HomeTheaterMode mode, bool endedBySpeaker, TakeoverAction expected) =>
+        Assert.Equal(expected, TakeoverPolicy.Decide(trigger, Busy, ours, Theater, mode, endedBySpeaker));
+
+    [Fact]
+    public void Only_a_busy_reading_held_by_the_home_theater_with_the_takeover_setting_takes_over_without_asking()
+    {
+        Assert.True(TakeoverPolicy.TakesOverHomeTheater(Theater, TakeOverTemporarily));
+        Assert.False(TakeoverPolicy.TakesOverHomeTheater(Theater, TakeOverTemporarily, endedBySpeaker: true));
+        Assert.False(TakeoverPolicy.TakesOverHomeTheater(Theater, AskFirst));
+        Assert.False(TakeoverPolicy.TakesOverHomeTheater(Other, TakeOverTemporarily)); // an iPhone or a Mac: never
+        Assert.False(TakeoverPolicy.TakesOverHomeTheater(BusyHolder.None, TakeOverTemporarily));
+        // Free or unreadable speakers connect anyway.
+        Assert.Equal(Connect, TakeoverPolicy.Decide(Automatic, Free, false, BusyHolder.None, AskFirst));
+        Assert.Equal(Connect, TakeoverPolicy.Decide(Automatic, Unknown, false, BusyHolder.None, AskFirst));
+    }
 
     [Theory]
     [InlineData(TakeOver, false, true)]
@@ -255,18 +297,22 @@ public class TakeoverControllerTests : IDisposable
         foreach (var rx in _receivers) rx.Dispose();
     }
 
-    /// <summary>Answers from a mutable set of busy speaker names; counts the reads.</summary>
+    /// <summary>Answers from a mutable set of busy speaker names (held by <see cref="HeldBy"/> when set); counts the reads.</summary>
     private sealed class FakeBusyReader : ISpeakerBusyReader
     {
         public readonly HashSet<string> Busy = [];
         public int Reads;
 
+        /// <summary>The home-theater Apple TV holding every busy speaker; null: another sender.</summary>
+        public volatile AirPlayDevice? HeldBy;
+
         public Task<BusyReading> ReadAsync(IReadOnlyList<BusyTarget> targets, CancellationToken ct)
         {
             Interlocked.Increment(ref Reads);
             lock (Busy)
-                return Task.FromResult(BusyReading.Combine(targets.Select(t =>
-                    new BusyReading.Member(t.Name, Busy.Contains(t.Name) ? SpeakerBusy.Busy : SpeakerBusy.Free, t.Name)).ToList()));
+                return Task.FromResult(BusyReading.Combine(targets.Select(t => Busy.Contains(t.Name)
+                    ? new BusyReading.Member(t.Name, SpeakerBusy.Busy, t.Name, HeldBy)
+                    : new BusyReading.Member(t.Name, SpeakerBusy.Free, t.Name)).ToList()));
         }
 
         public void Set(params string[] busy)
@@ -431,6 +477,101 @@ public class TakeoverControllerTests : IDisposable
 
         reader.Set();
         await Until(() => c.State == StreamState.Streaming, "streaming");
+    }
+
+    // ---------------------------------------------------------------- an Apple TV's home-theater HomePod
+
+    private static readonly AirPlayDevice Tv = HomeTheaterTests.AppleTv("电视");
+    private const string HeldText = "卧室是 Apple TV「电视」的家庭影院音箱，Apple TV 正连着它";
+
+    [Fact]
+    public async Task An_automatic_connect_takes_a_HomePod_over_from_its_home_theater_Apple_TV_and_ends_every_session_on_disconnect()
+    {
+        var (c, reader) = Controller();                          // the default setting: 临时接管
+        Assert.Equal(HomeTheaterMode.TakeOver, c.HomeTheaterMode);
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        Assert.Equal("已连接 · 卧室 + 客厅（临时从 Apple TV「电视」接管，断开后交还）", c.StatusText);
+        Assert.Equal("电视", c.TakenFromAppleTv);
+        Assert.Equal(2, Members().Count);
+
+        // 断开 (and quit, which stops the controller too): every session ends with its TEARDOWN (the real member's
+        // Dispose), so nothing lingers on the HomePod and the Apple TV can connect again.
+        c.Stop();
+        Assert.All(Members(), m => Assert.True(m.Disposed));
+        Assert.False(c.OwnSession.Live);
+        Assert.Equal("未连接", c.StatusText);
+
+        // Next time the speaker is free: an ordinary connection again.
+        reader.Set();
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming && Members().Count == 4, "streaming again");
+        Assert.Null(c.TakenFromAppleTv);
+        Assert.Equal("已连接 · 卧室 + 客厅（实验性）", c.StatusText);
+    }
+
+    [Fact]
+    public async Task With_ask_first_an_automatic_connect_waits_naming_the_Apple_TV_and_the_takeover_setting_connects_at_once()
+    {
+        var (c, reader) = Controller();
+        c.HomeTheaterMode = HomeTheaterMode.Ask;
+        c.BusyPollInterval = TimeSpan.FromHours(1);              // only RecheckSpeaker reads again in this test
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.StatusText == HeldText, "waiting");
+        Assert.True(c.WaitingForSpeaker);
+        Assert.Equal(StreamState.Idle, c.State);
+        Assert.Empty(Members());
+
+        c.HomeTheaterMode = HomeTheaterMode.TakeOver;            // 设置 → 临时接管
+        c.RecheckSpeaker();
+        await Until(() => c.State == StreamState.Streaming, "streaming after the setting changed");
+        Assert.Equal("电视", c.TakenFromAppleTv);
+    }
+
+    [Fact]
+    public async Task A_waiting_connect_reads_again_as_soon_as_a_scan_found_the_Apple_TV()
+    {
+        var (c, reader) = Controller();
+        c.BusyPollInterval = TimeSpan.FromHours(1);
+        reader.Set("卧室");                                      // no scan yet: the Apple TV is not known, so "another device"
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.StatusText == "卧室正在被其他设备使用，空闲后自动连接", "waiting");
+
+        reader.HeldBy = Tv;                                      // the scan arrived (TrayApp.RefreshDevices calls RecheckSpeaker)
+        c.RecheckSpeaker();
+        await Until(() => c.State == StreamState.Streaming, "taken over right after the scan");
+    }
+
+    [Fact]
+    public async Task When_the_Apple_TV_takes_its_HomePod_back_a_retry_waits_instead_of_taking_it_again()
+    {
+        var (c, reader) = Controller();
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+
+        Members().Last(m => m.Name == "A").Lose(EventChannel.ClosedBySpeaker); // the Apple TV played something
+        await Until(() => c.StatusText == HeldText, "waiting instead of fighting the Apple TV");
+        Assert.True(c.WaitingForSpeaker);
+        Assert.Equal(2, Members().Count);
+    }
+
+    [Fact]
+    public async Task A_confirmed_takeover_of_a_home_theater_HomePod_says_so_without_reading()
+    {
+        var (c, reader) = Controller();
+        c.HomeTheaterMode = HomeTheaterMode.Ask;
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.TakeOver, takenFrom: "电视"); // 先询问 → 仍然连接
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        Assert.Equal(0, reader.Reads);
+        Assert.Equal("已连接 · 卧室 + 客厅（临时从 Apple TV「电视」接管，断开后交还）", c.StatusText);
     }
 
     [Fact]

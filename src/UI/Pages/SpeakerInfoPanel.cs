@@ -18,6 +18,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
     private readonly Func<List<SelectedSpeaker>> _speakers;
     private readonly Func<bool> _streaming;
     private readonly Func<int?> _processingMs;
+    private readonly Func<IReadOnlyList<AirPlayDevice>> _scan;
     private readonly TextBlock _none = Ui.Note();
     private readonly StackPanel _cards = new() { Gap = 8 };
     private readonly TextBlock _processing = Ui.Note();
@@ -26,16 +27,19 @@ internal sealed class SpeakerInfoPanel : StackPanel
     private bool _shown;
 
     public SpeakerInfoPanel(TrayApp app) : this(app.SpeakerInfo, app.SelectedSpeakers,
-        () => app.Controller.State == StreamState.Streaming, () => app.Config.ArrivalToRenderMs)
+        () => app.Controller.State == StreamState.Streaming, () => app.Config.ArrivalToRenderMs, () => app.LastScan)
     {
     }
 
     /// <param name="speakers">The selected speakers now.</param>
     /// <param name="streaming">This PC streams to them now.</param>
     /// <param name="processingMs">The speaker's processing time saved from the last connection.</param>
-    internal SpeakerInfoPanel(SpeakerInfoCache cache, Func<List<SelectedSpeaker>> speakers, Func<bool> streaming, Func<int?> processingMs)
+    /// <param name="scan">The last scan as found (pairs not merged): the other devices of a speaker's group.</param>
+    internal SpeakerInfoPanel(SpeakerInfoCache cache, Func<List<SelectedSpeaker>> speakers, Func<bool> streaming, Func<int?> processingMs,
+        Func<IReadOnlyList<AirPlayDevice>>? scan = null)
     {
         (_cache, _speakers, _streaming, _processingMs) = (cache, speakers, streaming, processingMs);
+        _scan = scan ?? (() => []);
         Gap = 8;
         _refresh.AccessibleName = L.T("重新读取音箱信息");
         Controls.AddRange([_none, _cards, Ui.Row(12, _processing, _processing, _refresh)]);
@@ -98,6 +102,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _byKey.Remove(gone);
         }
         bool streaming = _streaming();
+        var scan = _scan();
         for (int i = 0; i < speakers.Count; i++)
         {
             if (!_byKey.TryGetValue(keys[i], out var card))
@@ -106,7 +111,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
                 _cards.Controls.Add(card);
             }
             _cards.Controls.SetChildIndex(card, i);
-            card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming);
+            card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming, scan);
         }
         _processing.Text = _processingMs() is { } ms ? L.F("上次连接时的音箱处理时间：{0} ms", ms) : "";
         Relayout(this);
@@ -123,8 +128,8 @@ internal sealed class SpeakerInfoPanel : StackPanel
     {
         private readonly TextBlock _name = new("", TextStyle.BodyStrong);
         private readonly TextBlock _state = new("", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Right };
-        private readonly TextBlock _model = Value(), _session = Value(), _system = Value(), _airplay = Value(), _address = Value(),
-            _mac = new(), _bluetooth = Value(), _deviceId = Value();
+        private readonly TextBlock _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
+            _address = Value(), _mac = new(), _bluetooth = Value(), _deviceId = Value();
         private readonly TextBlock _macNote = Ui.Note(L.T("在路由器的设备列表里按这个地址找到 HomePod，就能看到它连在 2.4G 还是 5G，也可以给它分配固定 IP。"));
         private readonly FluentButton _copy = new(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 Wi-Fi MAC 地址") };
         private readonly RowPanel _macRow;
@@ -137,6 +142,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _macRow = Ui.Row(8, null, _mac, _copy);
             _lines.Add(L.T("型号"), _model);
             _lines.Add(L.T("状态"), _session);
+            _lines.Add(L.T("分组"), _group);
             _lines.Add(L.T("系统版本"), _system);
             _lines.Add(L.T("AirPlay 版本"), _airplay);
             _lines.Add(L.T("IP 地址"), _address);
@@ -154,13 +160,16 @@ internal sealed class SpeakerInfoPanel : StackPanel
             };
         }
 
-        public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming)
+        public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming, IReadOnlyList<AirPlayDevice> scan)
         {
             var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info);
             _name.Text = d.Name;
             (_state.Text, _state.Role) = ReadState(entry);
             Set(_model, d.ModelText);
-            Set(_session, SessionText(d.SessionActive, streaming));
+            var txt = TxtRecord.FromInfo(entry?.Info) ?? speaker.Txt;
+            var holder = HomeTheater.IsAppleTvModel(d.Model) ? null : HomeTheater.HolderOf(GroupMembership.FromTxt(txt), scan);
+            Set(_session, SessionText(d.SessionActive, streaming, holder?.Name));
+            Set(_group, GroupText(GroupRole.Of(d.Model, txt, scan)));
             Set(_system, d.SystemVersion);
             Set(_airplay, d.AirPlayVersion);
             Set(_address, d.Address);
@@ -193,10 +202,26 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _ => ("", TextRole.Secondary),
         };
 
-        /// <summary>The active-session flag in words (null: not read yet); while this PC streams, the session is ours.</summary>
-        internal static string? SessionText(bool? active, bool streaming) => streaming ? L.T("这台电脑正在推送")
+        /// <summary>The speaker's group in words (null: none, the line is left out).</summary>
+        internal static string? GroupText(GroupRole role) => role switch
+        {
+            { Kind: GroupRoleKind.HomeTheaterSpeaker, Name: { } tv } => L.F("家庭影院：Apple TV「{0}」的音箱", tv),
+            { Kind: GroupRoleKind.HomeTheaterSpeaker } => L.T("家庭影院：Apple TV 的音箱"),
+            { Kind: GroupRoleKind.HomeTheaterLeader, Name: { } speakers } => L.F("家庭影院：{0}", speakers),
+            { Kind: GroupRoleKind.HomeTheaterLeader } => L.T("家庭影院"),
+            { Kind: GroupRoleKind.StereoPair, Name: { } pair } => L.F("立体声对「{0}」", pair),
+            { Kind: GroupRoleKind.StereoPair } => L.T("立体声对"),
+            _ => null,
+        };
+
+        /// <summary>
+        /// The active-session flag in words (null: not read yet); while this PC streams, the session is ours. A HomePod held
+        /// by its home-theater Apple TV (<paramref name="appleTv"/>) names it.
+        /// </summary>
+        internal static string? SessionText(bool? active, bool streaming, string? appleTv = null) => streaming ? L.T("这台电脑正在推送")
             : active switch
             {
+                true when appleTv != null => L.F("Apple TV「{0}」正连着它（家庭影院）", appleTv),
                 true => L.T("其他设备正在推送（比如 iPhone 或 Mac）"),
                 false => L.T("空闲"),
                 null => null,

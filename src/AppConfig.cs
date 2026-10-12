@@ -172,6 +172,12 @@ public sealed class AppConfig
     public OwnSessionRecord? LastOwnSession { get; set; }
 
     /// <summary>
+    /// 「HomePod 当 Apple TV 家庭影院音箱时」: 临时接管 (the default: every connect takes the HomePod over from its Apple TV
+    /// until this PC disconnects) or 先询问 (like any other sender: a click asks, automatic connects wait).
+    /// </summary>
+    public HomeTheaterMode HomeTheaterTakeover { get; set; } = HomeTheaterMode.TakeOver;
+
+    /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
     /// speaker or the real instance's port.
