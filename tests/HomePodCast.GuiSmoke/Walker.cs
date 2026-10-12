@@ -164,7 +164,8 @@ internal sealed class Walker
     {
         try
         {
-            _fake = new FakeAirPlayReceiver(appleTv: false, port: 7000) { Name = "Smoke Test HomePod" };
+            // 85 ms in the speaker, as a real HomePod 2 reports it (the fake's 140 would raise 首页's latency floor to 155 ms).
+            _fake = new FakeAirPlayReceiver(appleTv: false, port: 7000) { Name = "Smoke Test HomePod", ArrivalToRenderMs = 85 };
         }
         catch (SocketException ex)
         {
