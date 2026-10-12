@@ -36,6 +36,7 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
     public StemSettings Settings { get; }
     public bool Enabled => _pipeline != null;
     public bool Ready => _pipeline?.Ready == true;
+    internal Thread? WorkerThread => _pipeline?.Thread;
     public string? Error => _pipeline?.Error;
     public long MissedFrames => _pipeline?.MissedFrames ?? 0;
     public long DroppedBlocks => _pipeline?.DroppedBlocks ?? 0;
@@ -159,12 +160,14 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
         public long Position, MissedFrames, DroppedBlocks;
         public float HomeVocal, HomeMusic, HomeEnvelope;
         public double InferenceMs;
+        public Thread Thread { get; }
 
         public Pipeline(string directory)
         {
             // Redirected anonymous pipes use blocking handles. A pool thread waiting on ReadExactlyAsync
             // can starve that same pool's IO continuations on two-core PCs/runners (2026-10-13).
-            new Thread(() => Run(directory)) { IsBackground = true, Name = "Stem pipe worker" }.Start();
+            Thread = new Thread(() => Run(directory)) { IsBackground = true, Name = "Stem pipe worker" };
+            Thread.Start();
         }
         public void Push(float left, float right)
         {
@@ -234,9 +237,10 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
                     Volatile.Write(ref _read, read + 1);
                 }
             }
-            catch (Exception ex) when (!_stopped)
+            catch (Exception ex)
             {
-                Error ??= ex.Message; Log.Warn($"stem module: {Error}");
+                // A killed pipe can throw during disable; exceptions on a dedicated thread must never escape.
+                if (!_stopped) { Error ??= ex.Message; Log.Warn($"stem module: {Error}"); }
             }
             finally
             {

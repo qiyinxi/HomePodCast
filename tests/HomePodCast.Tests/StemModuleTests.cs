@@ -15,6 +15,26 @@ public sealed class StemModuleFact : FactAttribute
 public class StemModuleTests
 {
     [StemModuleFact]
+    public void Stop_during_pipe_inference_exits_the_dedicated_worker_without_an_unhandled_exception()
+    {
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            using var mixer = new LiveStemMixer(new StemSettings
+                { ModuleDirectory = Environment.GetEnvironmentVariable("HOMEPODCAST_STEM_MODULE") });
+            mixer.SetEnabled(true);
+            Assert.True(SpinWait.SpinUntil(() => mixer.Ready || mixer.Error != null, TimeSpan.FromSeconds(20)));
+            Assert.Null(mixer.Error);
+            var thread = mixer.WorkerThread!;
+            var pcm = new float[2048]; Array.Fill(pcm, 0.2f);
+            for (int i = 0; i < 3; i++) mixer.Process(pcm, 1024);
+            Thread.Sleep(1); // child is receiving/processing queued blocks; stop closes its pipes
+            mixer.SetEnabled(false);
+            Assert.True(thread.Join(TimeSpan.FromSeconds(2)), "Stopped worker did not release its child/pipes");
+            Assert.False(mixer.Enabled);
+        }
+    }
+
+    [StemModuleFact]
     public void Real_module_keeps_up_with_packet_cadence_and_never_blocks_the_sender()
     {
         var settings = new StemSettings { ModuleDirectory = Environment.GetEnvironmentVariable("HOMEPODCAST_STEM_MODULE"),
