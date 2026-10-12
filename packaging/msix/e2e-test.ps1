@@ -335,9 +335,9 @@ try {
     finally {
         $zip.Dispose()
     }
-    $identity = $manifest.Package.Identity
-    $publisher = $identity.Publisher
-    Info "identity $($identity.Name), publisher $publisher, version $($identity.Version), $($entries.Count) files"
+    $identityName = $manifest.Package.Identity.GetAttribute('Name')
+    $publisher = $manifest.Package.Identity.GetAttribute('Publisher')
+    Info "identity $identityName, publisher $publisher, version $($manifest.Package.Identity.GetAttribute('Version')), $($entries.Count) files"
     Check (-not ($entries -contains 'AppxSignature.p7x')) 'the msix artifact is unsigned (the Store signs it)'
 
     # ---------------------------------------------------------------------------------------- 1. install
@@ -374,25 +374,28 @@ try {
     if ($LASTEXITCODE) { throw "signtool sign failed ($LASTEXITCODE)" }
     $cleanup.Add({ Remove-Item $signed -ErrorAction SilentlyContinue }.GetNewClosure())
 
-    $existing = @(Get-AppxPackage -Name $identity.Name)
-    if ($existing.Count) { throw "$($identity.Name) is installed already ($($existing[0].PackageFullName)): this test needs a machine without it" }
+    $existing = @(Get-AppxPackage -Name $identityName)
+    if ($existing.Count) { throw "$identityName is installed already ($($existing[0].PackageFullName)): this test needs a machine without it" }
     Add-AppxPackage -Path $signed
-    $pkg = Get-AppxPackage -Name $identity.Name
-    Check ($null -ne $pkg) "Add-AppxPackage installed $($identity.Name)"
+    $pkg = Get-AppxPackage -Name $identityName
+    Check ($null -ne $pkg) "Add-AppxPackage installed $identityName"
     if (-not $pkg) { throw 'the package is not installed' }
     $cleanup.Add({
-        $left = Get-AppxPackage -Name $pkg.Name
+        $left = Get-AppxPackage -Name $identityName
         if ($left) { Remove-AppxPackage -Package $left.PackageFullName -ErrorAction SilentlyContinue }
     }.GetNewClosure())
+    # Kept as plain values: the package object reads some of them from Windows, and they are gone after the uninstall.
     $family = $pkg.PackageFamilyName
+    $packageFullName = $pkg.PackageFullName
+    $installFolder = $pkg.InstallLocation
     $aumid = "$family!HomePodCast"
-    $exe = Join-Path $pkg.InstallLocation 'HomePodCast.exe'
+    $exe = Join-Path $installFolder 'HomePodCast.exe'
     $data = Join-Path $env:LOCALAPPDATA "Packages\$family"
     $packageSid = [MsixE2e.Native]::PackageSid($family)
-    Info "full name $($pkg.PackageFullName), status $($pkg.Status), signature $($pkg.SignatureKind)"
-    Info "installed in $($pkg.InstallLocation)"
+    Info "full name $packageFullName, status $($pkg.Status), signature $($pkg.SignatureKind)"
+    Info "installed in $installFolder"
     Info "package SID $packageSid"
-    if ($identity.Name -eq 'qiyinxi.HomePodCast' -and $publisher -eq 'CN=874AAE1B-1F37-40C7-80D9-3146C953705B') {
+    if ($identityName -eq 'qiyinxi.HomePodCast' -and $publisher -eq 'CN=874AAE1B-1F37-40C7-80D9-3146C953705B') {
         Check ($family -eq 'qiyinxi.HomePodCast_21rkx5qfj0b6t') "package family name $family (as the docs name it)"
     }
     Check (Test-Path -LiteralPath $exe) 'HomePodCast.exe is in the install folder'
@@ -442,7 +445,7 @@ try {
     Info "process $guiPid, $image"
     Check ($image -ieq $exe) 'the process runs the package''s exe' $image
     $fullName = [MsixE2e.Native]::PackageFullName($guiPid)
-    Check ($fullName -eq $pkg.PackageFullName) 'the process has package identity (GetPackageFullName)' "GetPackageFullName: $fullName"
+    Check ($fullName -eq $packageFullName) 'the process has package identity (GetPackageFullName)' "GetPackageFullName: $fullName"
 
     $patterns = [ordered]@{
         start   = ' starting from the package ' + [regex]::Escape($family) + ' \(Microsoft Store version\)$'
@@ -550,8 +553,8 @@ try {
 
     # ---------------------------------------------------------------------------------------- 6. uninstall
     Step '6. Uninstall'
-    Remove-AppxPackage -Package $pkg.PackageFullName
-    Check (-not (Get-AppxPackage -Name $identity.Name)) 'Remove-AppxPackage removed the package'
+    Remove-AppxPackage -Package $packageFullName
+    Check (-not (Get-AppxPackage -Name $identityName)) 'Remove-AppxPackage removed the package'
     $gone = Wait-For { -not (Test-Path -LiteralPath $data) } 60
     Check $gone "the package's data folder is gone ($data)"
     Wait-For { @(Get-AppFirewallRules $exe $packageSid).Count -eq 0 } 30 | Out-Null
@@ -569,11 +572,11 @@ try {
     $startupCommands = @(Get-CimInstance Win32_StartupCommand | Where-Object { "$($_.Caption) $($_.Command)" -like '*HomePodCast*' })
     Check ($runValues.Count -eq 0 -and @($startupFolders).Count -eq 0 -and $startupCommands.Count -eq 0) 'no HomePodCast startup entry anywhere (Run keys, Startup folders)' `
         "$($runValues -join ', ') $(@($startupFolders) -join ', ') $(@($startupCommands | ForEach-Object Command) -join ', ')"
-    $installGone = Wait-For { -not (Test-Path -LiteralPath $pkg.InstallLocation) } 30
-    Info "install folder removed: $installGone"
+    $installGone = Wait-For { -not (Test-Path -LiteralPath $installFolder) } 30
+    Info "install folder $installFolder removed: $installGone"
 
-    Step 'Key log lines'
-    foreach ($line in Find-Line $lines 'starting|update:|network:|firewall|autostart:|UI language') { Info $line }
+    Step "The app's log ($($lines.Count) lines; artifact msix-e2e-logs)"
+    foreach ($line in $lines) { Info $line }
 }
 finally {
     Get-HomePodCastProcesses | Stop-Process -Force -ErrorAction SilentlyContinue
