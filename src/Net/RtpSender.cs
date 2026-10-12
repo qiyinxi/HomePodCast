@@ -52,6 +52,8 @@ public sealed class RtpSender : IDisposable
 
     /// <summary>In-place processing of each packet's PCM before encoding (EffectChain: EQ, night mode).</summary>
     public IAudioEffect? Effects { get; init; }
+    /// <summary>Optional discrete cinema source; when present the stereo loopback/effects path is not read.</summary>
+    public IGroupPacketSource? GroupSource { get; init; }
 
     public ushort FirstSeq => _streams[0].FirstSeq;
     public uint RtpBase { get; }
@@ -129,6 +131,7 @@ public sealed class RtpSender : IDisposable
         using var mmcss = Native.EnterMmcss("Pro Audio");
         using var timer = new Native.PreciseTimer();
         var pcm = new float[FramesPerPacket * 2];
+        var groupPayloads = GroupSource != null ? _streams.Select(_ => new byte[PayloadBytes]).ToArray() : null;
         long n = 0;
         long nextSync = MediaClock.Now;
         bool firstSync = true, firstPacket = true;
@@ -158,6 +161,7 @@ public sealed class RtpSender : IDisposable
                 n += skip;
                 SkippedPackets += skip;
                 _fifo.DiscardToTarget();
+                GroupSource?.SkipPackets((int)Math.Min(skip, int.MaxValue));
                 Log.Warn($"sender stalled {MediaClock.ToMs(late):F0} ms, skipped {skip} packets");
                 continue;
             }
@@ -167,15 +171,28 @@ public sealed class RtpSender : IDisposable
                 MaxLateMs = Math.Max(MaxLateMs, MediaClock.ToMs(late));
             }
 
-            if (!_fifo.Read(pcm)) SilentPackets++;
-            Effects?.Process(pcm, FramesPerPacket); // ---- effects hook: the one place audio is processed before sending
-            if (OnsetSent is { } onset) DetectOnset(pcm, deadline, onset);
-            EncodePayloads(pcm);
+            if (GroupSource is { } source)
+            {
+                if (!source.ReadPacket(deadline)) SilentPackets++;
+            }
+            else
+            {
+                if (!_fifo.Read(pcm)) SilentPackets++;
+                Effects?.Process(pcm, FramesPerPacket);
+                if (OnsetSent is { } onset) DetectOnset(pcm, deadline, onset);
+                EncodePayloads(pcm);
+            }
             uint rtp = unchecked(RtpBase + (uint)(n * FramesPerPacket));
             for (int i = 0; i < _streams.Length; i++)
             {
                 var s = _streams[i];
-                s.SendAudio((ushort)(s.FirstSeq + n), rtp, _payloads[(int)s.Channels]!, firstPacket);
+                byte[] payload = _payloads[(int)s.Channels]!;
+                if (GroupSource is { } groupSource)
+                {
+                    groupSource.ReadTarget(i, pcm);
+                    payload = groupPayloads![i]; ToS16BigEndian(pcm, payload);
+                }
+                s.SendAudio((ushort)(s.FirstSeq + n), rtp, payload, firstPacket);
             }
             PacketsSent++;
             firstPacket = false;

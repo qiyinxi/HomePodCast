@@ -11,6 +11,7 @@ public sealed partial class StreamController
     private int? _groupArrivalToRenderMs;
     private (string Key, List<ResolvedMember> Members)? _lastPair;
     private double _groupConnectCap = 100;
+    private Audio.IGroupPacketSource? _groupSource;
 
     internal sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port);
 
@@ -27,11 +28,12 @@ public sealed partial class StreamController
     /// One StartGroup's connection: why it connects, the selection's key, whether it has streamed yet, and whether a
     /// speaker ended its last session itself (another sender took it: a home theater's Apple TV is then not fought).
     /// </summary>
-    private sealed class GroupRun(ConnectTrigger trigger, string key, string? takenFrom)
+    private sealed class GroupRun(ConnectTrigger trigger, string key, string? takenFrom, Audio.IGroupPacketSource? source)
     {
         public ConnectTrigger Trigger { get; } = trigger;
         public string Key { get; } = key;
         public string? TakenFrom { get; } = takenFrom;
+        public Audio.IGroupPacketSource? Source { get; } = source;
         public volatile bool Streamed;
         public volatile bool EndedBySpeaker;
     }
@@ -40,13 +42,14 @@ public sealed partial class StreamController
     /// <param name="trigger">As for <see cref="Start"/>; every member is checked.</param>
     /// <param name="takenFrom">As for <see cref="Start"/>.</param>
     public void StartGroup(GroupPlan plan, int latencyMs, double? volume, int? volumeAsOf = null, ConnectTrigger trigger = ConnectTrigger.Manual,
-        string? takenFrom = null)
+        string? takenFrom = null, Audio.IGroupPacketSource? source = null)
     {
         lock (_lifecycle)
         {
             Stop();
             var cts = new CancellationTokenSource();
-            var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom);
+            _groupSource = source;
+            var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
                 (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text),
@@ -82,7 +85,7 @@ public sealed partial class StreamController
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
             members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
-        EnsureCapture(ct);
+        if (run.Source == null) EnsureCapture(ct);
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         if (EffectiveLatencyMs != latencyMs)
@@ -90,7 +93,7 @@ public sealed partial class StreamController
         // One groupUUID per connection, shared by every member's session (see GroupPlan).
         var options = new StreamOptions(EffectiveLatencyMs, null)
         {
-            VolumeCapPercent = VolumeCapPercent, Effects = Effects, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
+            VolumeCapPercent = VolumeCapPercent, Effects = run.Source == null ? Effects : null, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
         };
 
         var prepare = PrepareGroupMember ??
@@ -101,7 +104,7 @@ public sealed partial class StreamController
         // OnGroupConnected pushes again if anything changed meanwhile.
         _groupConnectCap = options.VolumeCapPercent;
         // The cap is read live, so lowering it while streaming also caps members with a positive offset.
-        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, () => VolumeCapPercent);
+        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, () => VolumeCapPercent, run.Source);
         if (group.ArrivalToRenderMs is { } a2r) _groupArrivalToRenderMs = a2r;
         if (!ct.IsCancellationRequested) Volume ??= group.MasterVolume;
         return group;
@@ -158,5 +161,9 @@ public sealed partial class StreamController
     }
 
     /// <summary>Called by Stop() after the loop was asked to end.</summary>
-    private void TearDownGroup() => Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
+    private void TearDownGroup()
+    {
+        Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
+        Interlocked.Exchange(ref _groupSource, null)?.Dispose();
+    }
 }

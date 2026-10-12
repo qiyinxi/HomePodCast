@@ -54,6 +54,8 @@ Playback profiles, per-speaker/source A/V calibration, independent per-app HomeP
 
 ## Usage
 
+Experimental discrete 5.1/7.1 file audio playback and microphone-based relative speaker alignment are available in Settings → Tools → Wireless cinema. See [Wireless cinema audio](docs/WIRELESS_CINEMA.md#english) for setup and hardware limits.
+
 1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
 2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
    - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.

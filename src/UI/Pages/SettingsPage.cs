@@ -102,6 +102,9 @@ internal sealed class SettingsPage : ScrollPage
         var diagnosticRow = new SettingRow(Glyph.Info, L.T("诊断报告"),
             L.T("导出脱敏日志、设备和网络统计；不包含配置文件、密码或录音，也不会上传。"), diagnostic);
         var group = new FluentButton(L.T("打开"));
+        var cinema = new FluentButton(L.T("打开"));
+        var cinemaRow = new SettingRow(Glyph.Devices, L.T("无线影院（实验性）"),
+            L.T("本地 5.1／7.1 声道分配与麦克风声学校准。"), cinema);
         var groupRow = new SettingRow(Glyph.Devices, L.T("多音箱（实验性）"),
             L.T("立体声对、多房间同步、分声道和每台音箱的音量偏移。"), group);
         var sync = new FluentButton(L.T("开始"));
@@ -126,11 +129,11 @@ internal sealed class SettingsPage : ScrollPage
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, cinemaRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, cinemaRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
@@ -202,6 +205,7 @@ internal sealed class SettingsPage : ScrollPage
         _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
+        cinema.Click += (_, _) => { using var form = new CinemaForm(_app); form.ShowDialog(FindForm()); };
         profiles.Click += (_, _) => _app.ShowProfiles(FindForm()!);
         diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
