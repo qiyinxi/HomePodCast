@@ -91,6 +91,7 @@ function Wait-For([scriptblock] $probe, [int] $seconds = 30, [int] $intervalMs =
 
 Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -108,6 +109,19 @@ namespace MsixE2e
 
     [ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
     internal class ApplicationActivationManager { }
+
+    public sealed class WindowInfo
+    {
+        public IntPtr Handle;
+        public string Class, Title, Text;
+        public bool Visible, Enabled;
+
+        public override string ToString()
+        {
+            return string.Format("0x{0:X} {1} \"{2}\" visible={3} enabled={4}{5}", Handle.ToInt64(), Class, Title, Visible, Enabled,
+                Text.Length > 0 ? ": " + Text : "");
+        }
+    }
 
     public sealed class Run
     {
@@ -199,24 +213,34 @@ namespace MsixE2e
             }
         }
 
-        // The process's top-level WinForms window with this title, visible or not; IntPtr.Zero if none.
-        public static IntPtr FindWindow(int processId, string title)
+        // The process's top-level windows, visible or not; for a dialog (#32770, a message box) also its text.
+        public static WindowInfo[] TopWindows(int processId)
         {
-            IntPtr found = IntPtr.Zero;
+            var list = new List<WindowInfo>();
             EnumWindows((window, unused) =>
             {
                 uint owner;
                 GetWindowThreadProcessId(window, out owner);
                 if (owner != (uint)processId) return true;
-                var text = new StringBuilder(256);
-                GetWindowText(window, text, text.Capacity);
-                var cls = new StringBuilder(256);
-                GetClassName(window, cls, cls.Capacity);
-                if (text.ToString() != title || !cls.ToString().StartsWith("WindowsForms")) return true;
-                found = window;
-                return false;
+                var info = new WindowInfo
+                {
+                    Handle = window, Class = ClassOf(window), Title = TextOf(window),
+                    Visible = IsWindowVisible(window), Enabled = IsWindowEnabled(window), Text = ""
+                };
+                if (info.Class == "#32770")
+                {
+                    var texts = new List<string>();
+                    EnumChildWindows(window, (child, unused2) =>
+                    {
+                        if (ClassOf(child) == "Static" && TextOf(child).Length > 0) texts.Add(TextOf(child));
+                        return true;
+                    }, IntPtr.Zero);
+                    info.Text = string.Join(" ", texts.ToArray()).Replace("\r", " ").Replace("\n", " ");
+                }
+                list.Add(info);
+                return true;
             }, IntPtr.Zero);
-            return found;
+            return list.ToArray();
         }
 
         public static bool IsVisible(IntPtr window) { return IsWindowVisible(window); }
@@ -225,6 +249,28 @@ namespace MsixE2e
         public static void CloseToTray(IntPtr window)
         {
             if (!PostMessage(window, 0x0112, new IntPtr(0xF060), IntPtr.Zero)) throw new Win32Exception();
+        }
+
+        // Presses a dialog's button (WM_COMMAND with its id: 6 Yes, 7 No).
+        public static void Answer(IntPtr dialog, int buttonId)
+        {
+            if (!PostMessage(dialog, 0x0111, new IntPtr(buttonId), IntPtr.Zero)) throw new Win32Exception();
+        }
+
+        private static string ClassOf(IntPtr window)
+        {
+            var name = new StringBuilder(256);
+            GetClassName(window, name, name.Capacity);
+            return name.ToString();
+        }
+
+        // WM_GETTEXT, which also reads another process's controls (GetWindowText reads only captions there).
+        private static string TextOf(IntPtr window)
+        {
+            var text = new StringBuilder(2048);
+            IntPtr result;
+            SendMessageTimeout(window, 0x000D, new IntPtr(text.Capacity), text, 2 /* SMTO_ABORTIFHUNG */, 2000, out result);
+            return text.ToString();
         }
 
         // The package's SID (S-1-15-2-...), as firewall rules name a package.
@@ -263,14 +309,21 @@ namespace MsixE2e
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
 
+        [DllImport("user32.dll")]
+        private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr parameter);
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetWindowText(IntPtr window, StringBuilder text, int maxCount);
+        private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam, StringBuilder lParam, uint flags,
+            uint timeoutMs, out IntPtr result);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr window, StringBuilder name, int maxCount);
 
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowEnabled(IntPtr window);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
@@ -466,11 +519,11 @@ try {
     if (Test-Path -LiteralPath $realFolder) { throw "$realFolder exists: this test needs a machine where no HomePodCast ran before" }
     Info "package data folder $data exists after the install: $(Test-Path -LiteralPath $data)"
     # The package's %APPDATA% writes go to its own storage, and it reads files there as if they were in %APPDATA%:
-    # the settings seeded there are the ones it starts with. No speaker, no automatic connect; a dark theme shows in
-    # the log that this file was read.
+    # the settings seeded there are the ones it starts with. No speaker, no automatic connect; English, so that the
+    # titles of its messages are known; a dark theme shows in the log that this file was read.
     $settings = Join-Path $data 'LocalCache\Roaming\HomePodCast'
     New-Item -ItemType Directory -Force $settings | Out-Null
-    $config = '{ "DeviceId": null, "AutoConnect": false, "AutoUpdateCheck": false, "Theme": "dark" }'
+    $config = '{ "DeviceId": null, "AutoConnect": false, "AutoUpdateCheck": false, "Language": "en", "Theme": "dark" }'
     [IO.File]::WriteAllText((Join-Path $settings 'config.json'), $config)
     Info "seeded $settings\config.json: $config"
     $log = Join-Path $settings 'homepodcast.log'
@@ -498,7 +551,7 @@ try {
     $patterns = [ordered]@{
         start   = ' starting from the package ' + [regex]::Escape($family) + ' \(Microsoft Store version\)$'
         update  = 'update: Microsoft Store package: never contacts GitHub'
-        theme   = 'UI language \S+, theme dark '
+        theme   = 'UI language en, theme dark '
         network = '(INFO|WARN)  network: '
     }
     $lines = @(Wait-For {
@@ -526,17 +579,37 @@ try {
     $outside = @($tcp | Where-Object { $_.State -ne 'Listen' -and $_.RemoteAddress -notin '127.0.0.1', '::1', '0.0.0.0', '::' })
     Check ($outside.Count -eq 0) 'no TCP connection leaves the machine' (@($outside | ForEach-Object { "$($_.RemoteAddress):$($_.RemotePort)" }) -join ', ')
 
+    # The messages it shows at startup. Never the firewall prompt ("Firewall permission needed": adding a rule, UAC).
+    # A runner's network is Public: then the app warns about that, the Store version too, since the package's rules
+    # are for Private networks; the warning is answered No (Yes opens Windows Settings).
+    $publicNetwork = [bool](Find-Line $lines 'network: .* is Public')
+    $dialogs = @(Wait-For { @([MsixE2e.Native]::TopWindows($guiPid) | Where-Object { $_.Class -eq '#32770' -and $_.Visible }) } $(if ($publicNetwork) { 15 } else { 3 }))
+    foreach ($w in [MsixE2e.Native]::TopWindows($guiPid)) { Info "window $w" }
+    Check (-not ($dialogs | Where-Object { $_.Title -eq 'Firewall permission needed' })) 'no firewall prompt is open'
+    $warning = @($dialogs | Where-Object { $_.Title -eq 'Public network' })
+    Check (@($dialogs | Where-Object { $_.Title -ne 'Public network' }).Count -eq 0) 'no other message is open' (@($dialogs | ForEach-Object { "$_" }) -join ' | ')
+    if ($publicNetwork) {
+        Check ($warning.Count -eq 1) 'the network is Public: the Public network warning is open'
+        foreach ($w in $warning) { [MsixE2e.Native]::Answer($w.Handle, 7) }
+        $closed = Wait-For { -not @([MsixE2e.Native]::TopWindows($guiPid) | Where-Object { $_.Class -eq '#32770' -and $_.Visible }).Count } 10
+        Check $closed 'the Public network warning closed on No'
+    }
+    else {
+        Check ($warning.Count -eq 0) 'the network is not Public: no Public network warning'
+    }
+
     # ---------------------------------------------------------------------------------------- 4. single instance
     Step '4. Single instance'
     # The main window (Start passes no --tray, so it is open), closed to the tray before a second start the way the
     # user closes it (its close button: SC_CLOSE only hides it). A second start must bring it back.
-    $main = [MsixE2e.Native]::FindWindow($guiPid, 'HomePodCast')
-    Info ("main window 0x{0:X}, visible: {1}" -f $main.ToInt64(), ($main -ne [IntPtr]::Zero -and [MsixE2e.Native]::IsVisible($main)))
-    Check ($main -ne [IntPtr]::Zero) 'the app has its main window'
+    $mainWindow = @([MsixE2e.Native]::TopWindows($guiPid) | Where-Object { $_.Title -eq 'HomePodCast' -and $_.Class -like 'WindowsForms*' })
+    $main = if ($mainWindow.Count) { $mainWindow[0].Handle } else { [IntPtr]::Zero }
+    Check ($mainWindow.Count -eq 1 -and $mainWindow[0].Visible) 'the main window is open (Start passes no --tray)' (@($mainWindow | ForEach-Object { "$_" }) -join ' | ')
     function Close-ToTray([string] $before) {
         if ($main -eq [IntPtr]::Zero) { return }
         [MsixE2e.Native]::CloseToTray($main)
         $hidden = Wait-For { -not [MsixE2e.Native]::IsVisible($main) } 10
+        if (-not $hidden) { foreach ($w in [MsixE2e.Native]::TopWindows($guiPid)) { Info "window $w" } }
         Check $hidden "the window closed to the tray (before $before)"
     }
     function Check-Shown([string] $by) {
