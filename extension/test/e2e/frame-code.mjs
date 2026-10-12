@@ -2,13 +2,20 @@
 // <video>, from the extension's delayed canvas, or from a screenshot.
 
 export const CODE = Object.freeze({
-  W: 640, H: 360, FPS: 30, SECONDS: 60,
+  W: 640, H: 360, FPS: 30, SECONDS: 120,
   BITS: 12, // frame numbers 0…4095
   SQ: 32, // square size
   PITCH: 40, // square + gap
   X0: 44, // left edge of the left registration square
   Y0: 164, // top of the squares: mid-picture, clear of the test pages' captions, danmaku and control bars
 });
+
+/** How many frames `shown` is behind `current`, also across the loop back to frame 0. */
+export function framesBehind(current, shown) {
+  const n = CODE.FPS * CODE.SECONDS;
+  const d = (((current - shown) % n) + n) % n;
+  return d > n / 2 ? d - n : d;
+}
 
 // Runs in the page (main world): installs window.__e2e. Self-contained, since puppeteer serializes it.
 export function installReader(code) {

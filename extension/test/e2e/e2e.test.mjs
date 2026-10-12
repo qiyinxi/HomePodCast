@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { CODE, framesBehind } from './frame-code.mjs';
 import { sleep, startHarness, waitFor } from './harness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -16,7 +17,7 @@ const OFFSET_LIMIT = 500;
 const MAX_DELAY_MS = 2000;
 const BASE_MS = 141; // the fake app's videoDelayMs (「推荐」-like)
 const SCREEN_BASE_MS = 1000; // for screenshot checks: far more than a screenshot's own latency
-const FRAME_MS = 1000 / 30;
+const FRAME_MS = 1000 / CODE.FPS;
 
 let h;
 let msg; // chrome.i18n.getMessage with the browser's UI language
@@ -141,7 +142,7 @@ async function assertDelayedOnScreen(page, points = []) {
   assert.ok(base >= 900, 'screen checks need a long delay');
   const s = await h.screen(page, { points: points.map((p) => p.at) });
   assert.notEqual(s.frame, null, 'no picture with a readable frame code where the video is');
-  const lag = (s.video - s.frame) * FRAME_MS;
+  const lag = framesBehind(s.video, s.frame) * FRAME_MS;
   // A screenshot takes some time itself, so the lag reads a bit long; without the delayed canvas it would be that alone.
   assert.ok(lag >= base * 0.6 && lag <= base + 1500, `screen shows frame ${s.frame} while the video is at ${s.video}: ${Math.round(lag)} ms behind, expected about ${base}`);
   points.forEach((p, i) => {
@@ -444,17 +445,17 @@ describe('YouTube-like player', () => {
     const playing = await watchOverlay(page, 800, { minFrame: paused.video });
     assert.ok(playing[playing.length - 1] > playing[0], `the delayed picture doesn't move after play: ${playing}`);
 
-    // Seek to 75 % (45 s, frame 1350) with the site's progress bar.
+    // Seek to 75 % with the site's progress bar.
     const bar = await page.evaluate(() => {
       const r = document.querySelector('.ytp-progress-bar').getBoundingClientRect();
       return { x: r.left + r.width * 0.75, y: r.top + r.height / 2 };
     });
     await page.mouse.click(bar.x, bar.y);
-    const target = Math.round(45 * 30);
-    await waitFor(() => page.evaluate(() => {
+    const target = Math.round(0.75 * CODE.SECONDS * CODE.FPS);
+    await waitFor(() => page.evaluate((t) => {
       const v = document.querySelector('video');
-      return !v.seeking && v.currentTime > 44;
-    }), { what: 'the seek' });
+      return !v.seeking && v.currentTime > t - 1;
+    }, 0.75 * CODE.SECONDS), { what: 'the seek' });
     // Right after the seek the delayed canvas shows the new position, never the frames from before it.
     const afterSeek = await waitFor(async () => {
       const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
@@ -478,7 +479,8 @@ describe('YouTube-like player', () => {
     assert.equal(d.stats[0].reason, 'zero-delay');
     const s = await h.screen(page);
     assert.notEqual(s.frame, null);
-    assert.ok((s.video - s.frame) * FRAME_MS < 400, `the screen is still ${Math.round((s.video - s.frame) * FRAME_MS)} ms behind`);
+    const behind = framesBehind(s.video, s.frame) * FRAME_MS;
+    assert.ok(behind < 400, `the screen is still ${Math.round(behind)} ms behind`);
     await pointAt(page, 'video');
     await staysHidden(page, 800, 'while the app is not streaming');
     await page.keyboard.press('Alt');

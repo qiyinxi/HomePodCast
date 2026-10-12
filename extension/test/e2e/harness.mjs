@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 import { startFakeApp } from './fake-app.mjs';
-import { CODE, installReader } from './frame-code.mjs';
+import { CODE, framesBehind, installReader } from './frame-code.mjs';
 import { makeVideo } from './make-video.mjs';
 import { startSiteServer } from './site-server.mjs';
 
@@ -182,7 +182,7 @@ export async function startHarness() {
       for (let i = 0; i < n * 3 && lags.length < n; i++) {
         const s = await page.evaluate(() => window.__e2e.sample(document.querySelector('video')));
         if (s.video !== null && s.overlay !== null && !s.paused) {
-          lags.push(((s.video - s.overlay) * 1000) / CODE.FPS);
+          lags.push((framesBehind(s.video, s.overlay) * 1000) / CODE.FPS);
           seen.push(s.overlay);
         }
         await sleep(60);

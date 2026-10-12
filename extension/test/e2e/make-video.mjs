@@ -1,5 +1,5 @@
 // Generates the test video for the browser tests with ffmpeg (VP8 WebM, which every Chromium build plays):
-// 640×360, 30 fps, 60 s. Each frame carries its frame number as a 12-bit code (frame-code.mjs reads it back from any
+// 640×360, 30 fps, 2 minutes. Each frame carries its frame number as a 12-bit code (frame-code.mjs reads it back from any
 // copy of the picture, e.g. the extension's delayed canvas), plus the number in large digits for people looking at it.
 //
 //   node make-video.mjs [out.webm]      (default media/test.webm; kept when it is already there)
@@ -37,7 +37,8 @@ function filters(withText) {
 }
 
 // Named after what it contains, so a changed layout makes a new file.
-export const VIDEO_FILE = path.join(HERE, 'media', `test-${createHash('sha1').update(filters(true)).digest('hex').slice(0, 10)}.webm`);
+export const VIDEO_FILE = path.join(HERE, 'media',
+  `test-${createHash('sha1').update(JSON.stringify(CODE) + filters(true)).digest('hex').slice(0, 10)}.webm`);
 
 export function makeVideo(out = VIDEO_FILE) {
   if (fs.existsSync(out) && fs.statSync(out).size > 10000) return out;
