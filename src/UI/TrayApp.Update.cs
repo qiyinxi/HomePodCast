@@ -113,19 +113,9 @@ internal sealed partial class TrayApp
     private void ScheduleUpdateChecks()
     {
         _updateTimer.Stop();
-        if (_store)
+        if (NoAutomaticCheck(_store, Config.AutoUpdateCheck, _noAutomaticUpdates) is { } why)
         {
-            Log.Info("update: Microsoft Store package: never contacts GitHub (the Store updates it)");
-            return;
-        }
-        if (!Config.AutoUpdateCheck)
-        {
-            Log.Info("update: automatic checks are off (only 「检查更新」 contacts GitHub)");
-            return;
-        }
-        if (_noAutomaticUpdates != null)
-        {
-            Log.Info($"update: no automatic checks in this build ({_noAutomaticUpdates})");
+            Log.Info($"update: {why}");
             return;
         }
         _updateDue = UpdateSchedule.FirstDue(Config.UpdateLastCheck, DateTime.UtcNow);
@@ -205,37 +195,59 @@ internal sealed partial class TrayApp
 
     private void ShowCheckResult(CheckResult result, bool automatic)
     {
-        var release = result.Release;
-        if (result.Outcome != CheckOutcome.UpdateAvailable)
+        var view = CheckView(result, automatic, _update, _updateBanner, Config.UpdateNotified);
+        _update = view.Update;
+        _updateBanner = view.Banner;
+        SetUpdateStatus(view.Status, view.Role);
+        if (view.Notify && view.Update is { } release)
         {
-            _update = null;
-            _updateBanner = false;
-        }
-        switch (result.Outcome)
-        {
-            case CheckOutcome.UpdateAvailable:
-                if (_update?.Version.Equals(release!.Version) != true) _updateBanner = false;
-                _update = release;
-                _updateBanner |= automatic;
-                SetUpdateStatus(L.F("发现新版本 {0}", release!.Version), TextRole.Accent);
-                if (automatic && Config.UpdateNotified != release.Version.ToString())
-                {
-                    Config.UpdateNotified = release.Version.ToString();
-                    Config.Save();
-                    ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, () => ShowMain(AppPage.Home));
-                }
-                break;
-            case CheckOutcome.Skipped:
-                SetUpdateStatus(L.F("已跳过 {0}，有更新的版本时会再提示", release!.Version), TextRole.Secondary);
-                break;
-            case CheckOutcome.PrereleaseAhead:
-                SetUpdateStatus(L.T("当前测试版比最新正式版新，下一个正式版发布后会提示更新"), TextRole.Secondary);
-                break;
-            default:
-                SetUpdateStatus(L.T("已是最新版本"), TextRole.Success);
-                break;
+            Config.UpdateNotified = release.Version.ToString();
+            Config.Save();
+            ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, () => ShowMain(AppPage.Home));
         }
     }
+
+    /// <summary>What a check's result does to 设置 → 软件更新 and 首页 (<see cref="ShowCheckResult"/> applies it).</summary>
+    /// <param name="Update">The release 「更新」 offers (null: no 更新 button, no banner).</param>
+    /// <param name="Banner">首页's banner: only for an update an automatic check found (a manual check answers in 设置).</param>
+    /// <param name="Notify">The tray balloon: an automatic check's first find of this version.</param>
+    internal readonly record struct UpdateCheckView(Release? Update, bool Banner, string Status, TextRole Role, bool Notify);
+
+    /// <param name="previous">The update offered before this check (its banner stays for the same version).</param>
+    /// <param name="previousBanner">Whether 首页 showed it.</param>
+    /// <param name="notified">The version the balloon announced last (<see cref="AppConfig.UpdateNotified"/>).</param>
+    internal static UpdateCheckView CheckView(CheckResult result, bool automatic, Release? previous, bool previousBanner, string? notified)
+    {
+        var release = result.Release;
+        return result.Outcome switch
+        {
+            CheckOutcome.UpdateAvailable => new(release,
+                (previous?.Version.Equals(release!.Version) == true && previousBanner) || automatic,
+                L.F("发现新版本 {0}", release!.Version), TextRole.Accent,
+                automatic && notified != release.Version.ToString()),
+            CheckOutcome.Skipped => new(null, false, L.F("已跳过 {0}，有更新的版本时会再提示", release!.Version), TextRole.Secondary, false),
+            // Never a downgrade and never a 「更新」 to an older stable release.
+            CheckOutcome.PrereleaseAhead => new(null, false, L.T("当前测试版比最新正式版新，下一个正式版发布后会提示更新"), TextRole.Secondary, false),
+            _ => new(null, false, L.T("已是最新版本"), TextRole.Success, false),
+        };
+    }
+
+    /// <summary>「更新」's confirmation (an MSI install); while a connection is up it says the stream stops for about a minute.</summary>
+    internal static string InstallConfirmation(ReleaseVersion version, StreamState state)
+    {
+        var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
+                       "HomePodCast 会先退出，装好后自动重新启动。", version);
+        if (state != StreamState.Idle) text += "\n\n" + L.T("正在推流：推送会停止大约一分钟。");
+        return text;
+    }
+
+    /// <summary>Why no automatic check is scheduled (logged as "update: …"), or null when one is.</summary>
+    /// <param name="notInThisBuild">Why this build never checks by itself (<see cref="NoAutomaticUpdates"/>).</param>
+    internal static string? NoAutomaticCheck(bool store, bool automaticOn, string? notInThisBuild) =>
+        store ? "Microsoft Store package: never contacts GitHub (the Store updates it)"
+        : !automaticOn ? "automatic checks are off (only 「检查更新」 contacts GitHub)"
+        : notInThisBuild != null ? $"no automatic checks in this build ({notInThisBuild})"
+        : null;
 
     // ---------------------------------------------------------------- settings
 
@@ -318,9 +330,7 @@ internal sealed partial class TrayApp
             return;
         }
 
-        var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
-                       "HomePodCast 会先退出，装好后自动重新启动。", release.Version);
-        if (Controller.State != StreamState.Idle) text += "\n\n" + L.T("正在推流：推送会停止大约一分钟。");
+        var text = InstallConfirmation(release.Version, Controller.State);
         var answer = owner != null
             ? MessageBox.Show(owner, text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question)
             : MessageBox.Show(text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);

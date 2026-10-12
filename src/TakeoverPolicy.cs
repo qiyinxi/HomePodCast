@@ -183,6 +183,12 @@ public sealed class OwnSession
         get { lock (_lock) return _live; }
     }
 
+    /// <summary>A session to <paramref name="key"/> streams right now (not merely recently, not another selection's).</summary>
+    public bool IsLiveFor(string? key)
+    {
+        lock (_lock) return _live && key != null && _key == key;
+    }
+
     public bool IsRecent(string? key, DateTime now) => Remaining(key, now) > TimeSpan.Zero;
 
     /// <summary>How much longer the flag may be ours (zero: not ours; <see cref="TimeSpan.MaxValue"/> while live).</summary>

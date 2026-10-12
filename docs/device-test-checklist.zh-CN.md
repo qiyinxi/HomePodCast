@@ -2,14 +2,16 @@
 
 测试时 HomePod 音量不超过 25%。每一项打勾或写下现象；有问题的项写清楚“做了什么 → 看到/听到什么”。
 
+标了「（单元测试：…）」的项，程序自己的逻辑已经由 `tests/HomePodCast.Tests` 里写明的测试类用模拟的音箱、Apple TV、播放器和接口测过，每次 CI 构建都会跑；后面写「仍需实机」的部分（声音、画面、真实设备的反应）还要人来看。没有标的项只能实机测。
+
 ## 使用配置、校准和独立音量（新增）
 
-- [ ] 校准后：首页、插件和 mpv／VLC 使用同一补偿；切换场景时总延迟仍变化；恢复默认后回到估算
-- [ ] 换音箱、采集声卡、默认设备或分流模式：原校准不会误用；测试中改变连接或路径，不能应用旧测试
-- [ ] 保存两套配置，一键切换：声卡、去处、独立音量、EQ、音量上限和夜间模式恢复；麦克风关闭，最多重连一次
-- [ ] 刚拖动音量后立即应用不同音箱配置：旧滑块值不会稍后写到新音箱；选择框也跟随新音箱
-- [ ] 「两者」模式：HomePod 独立音量固定 60%，Windows 从 20% 调到 40%，音箱听感基本不变、本机变响；静音或 0% 两边都静音
-- [ ] 给「标记刚才的卡顿」设一个快捷键，推流时按一下，再从 设置 → 工具 导出 ZIP：时间和统计存在，音箱／立体声成员名称、设备 ID、地址和路径被隐藏（尽力而为），组统计的数字（underruns、各成员 sent／rtx）保留，没有密码、配置或音频；没在推流时按快捷键不记录
+- [ ] 校准后：首页、插件和 mpv／VLC 使用同一补偿；切换场景时总延迟仍变化；恢复默认后回到估算（单元测试：CalibrationPathTests、AvCalibrationTests）
+- [ ] 换音箱、采集声卡、默认设备或分流模式：原校准不会误用；测试中改变连接或路径，不能应用旧测试（单元测试：CalibrationPathTests、AvCalibrationTests）
+- [ ] 保存两套配置，一键切换：声卡、去处、独立音量、EQ、音量上限和夜间模式恢复；麦克风关闭，最多重连一次（单元测试：UsageProfileTests、ProfileConnectionTests、ProfileSwitchTests、LatencyTunerTests；仍需实机：麦克风确实关了）
+- [ ] 刚拖动音量后立即应用不同音箱配置：旧滑块值不会稍后写到新音箱；选择框也跟随新音箱（单元测试：ProfileSwitchTests）
+- [ ] 「两者」模式：HomePod 独立音量固定 60%，Windows 从 20% 调到 40%，音箱听感基本不变、本机变响；静音或 0% 两边都静音（单元测试：SendVolumeTests；仍需实机：听感）
+- [ ] 给「标记刚才的卡顿」设一个快捷键，推流时按一下，再从 设置 → 工具 导出 ZIP：时间和统计存在，音箱／立体声成员名称、设备 ID、地址和路径被隐藏（尽力而为），组统计的数字（underruns、各成员 sent／rtx）保留，没有密码、配置或音频；没在推流时按快捷键不记录（单元测试：GlitchMarkerTests、DiagnosticReportTests、HotkeyTests）
 - [ ] YouTube／bilibili：鼠标移到视频上才出现插件按钮，约 2.5 秒不动后消失。点「同步全屏」：网站的控制栏、字幕／弹幕和延迟画面都保留，画面铺满屏幕；±5／±20 ms 和 Alt 快捷键生效（按钮隐藏时快捷键也有效），退出后布局恢复
 - [ ] YouTube／bilibili 用网站自己的全屏：插件按钮不会自己出现，移动鼠标或按 Alt 才出现；Alt+←/→ 生效
 
@@ -33,21 +35,21 @@
 
 - [x] 「游戏」场景玩 30 分钟：有没有断音、爆音、卡顿？结束后把 `%APPDATA%\HomePodCast\homepodcast.log` 发我（用户日常用安装版打游戏，2026-10-08 反馈没有大问题）
 - [ ] 听到卡顿时记下时间（精确到分钟）和当时在做什么。beta.5 起日志会记录 Wi-Fi 抖动（`network: ping ...`），能对上是不是网络的问题。日志请先复制到「下载」或项目文件夹再发，Claude 读不到 `AppData` 里的真实文件。「设置 → 工具 → 日志 → 打开日志文件夹」会直接打开日志所在的文件夹（Microsoft Store 版的日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）
-- [ ] 首页「推流状态」下面的网络一行：平时是「网络：稳定」；卡顿后有没有变成「网络：最近 10 分钟抖动 N 次」
-- [ ] 如果出现黄色提示（「HomePod 那边 / 电脑这边的 Wi-Fi 最近不太稳……建议把延迟调到 … ms」）：截图，记下当时的时间。点「应用」：场景切到「自定义」、延迟变成建议值、重连一次，提示消失；之后卡顿是否变少。不点就不会改延迟
+- [ ] 首页「推流状态」下面的网络一行：平时是「网络：稳定」；卡顿后有没有变成「网络：最近 10 分钟抖动 N 次」（单元测试：HomeNetworkTextTests、NetworkHealthTests；仍需实机：真实的卡顿有没有被记到）
+- [ ] 如果出现黄色提示（「HomePod 那边 / 电脑这边的 Wi-Fi 最近不太稳……建议把延迟调到 … ms」）：截图，记下当时的时间。点「应用」：场景切到「自定义」、延迟变成建议值、重连一次，提示消失；之后卡顿是否变少。不点就不会改延迟（单元测试：HomeNetworkTextTests、LatencyTunerTests；仍需实机：之后卡顿是否变少）
 - [ ] 卡顿时先确认 HomePod 连在 5G 上：路由器开着双频合一（Smart Connect）时，它可能被分到拥挤的 2.4G（2026-10-10 新家：2.4G 上 ping 中位 21 ms、丢 4%，200 和 500 ms 都卡；关掉双频合一、换到 5G 后 2 ms、0 丢包）
-- [ ] 中途切到「音乐」再切回来：重连约 1 秒，有没有异常
+- [ ] 中途切到「音乐」再切回来：重连约 1 秒，有没有异常（单元测试：LatencyTunerTests，来回切只在停下 1 秒后重连一次；仍需实机：重连多久、有没有异常）
 
 ## 三、按键与托盘
 
-- [ ] 「设置 → 键盘音量键」=「HomePod 跟随 Windows 音量」（默认）：推流时按音量 +/−、静音键，Windows 和 HomePod 一起变（Windows 100% = 音量上限），Windows 静音时 HomePod 也静音
-- [x] 同一模式：连接前把 Windows 调到 100%、HomePod 存的是 30% 左右，连接后 Windows 被降到约 30%；再按一次音量 −，HomePod 到 28 左右（不会跳到 98）。在程序里拖 HomePod 音量，Windows 音量跟着变（用户 2026-10-08 确认）
+- [ ] 「设置 → 键盘音量键」=「HomePod 跟随 Windows 音量」（默认）：推流时按音量 +/−、静音键，Windows 和 HomePod 一起变（Windows 100% = 音量上限），Windows 静音时 HomePod 也静音（单元测试：VolumeKeyModeTests、FollowWindowsLinkTests）
+- [x] 同一模式：连接前把 Windows 调到 100%、HomePod 存的是 30% 左右，连接后 Windows 被降到约 30%；再按一次音量 −，HomePod 到 28 左右（不会跳到 98）。在程序里拖 HomePod 音量，Windows 音量跟着变（用户 2026-10-08 确认）（单元测试：FollowWindowsLinkTests）
   - 日志已验证另一个方向：Windows 12%、HomePod 24% → 连接时 HomePod 降到 12%（2026-10-08 16:53）
-- [ ] 改成「推流时控制 HomePod」：推流时按音量 +/−（按住连续变）、静音键，只有 HomePod 变，Windows 音量不动，屏幕下方弹出 HomePod 音量条约 1.5 秒；断开后按键又调 Windows
-- [ ] 同一模式下进全屏游戏按音量键：游戏不失去焦点、不最小化；独占全屏时不弹音量条
+- [ ] 改成「推流时控制 HomePod」：推流时按音量 +/−（按住连续变）、静音键，只有 HomePod 变，Windows 音量不动，屏幕下方弹出 HomePod 音量条约 1.5 秒；断开后按键又调 Windows（单元测试：VolumeKeyModeTests；仍需实机：弹出的音量条）
+- [ ] 同一模式下进全屏游戏按音量键：游戏不失去焦点、不最小化；独占全屏时不弹音量条（单元测试：VolumeKeyModeTests，独占全屏时不弹音量条；仍需实机：游戏不失去焦点）
 - [x] 「HomePod 跟随 Windows 音量」模式下进全屏游戏按音量键：游戏没被切出去，HomePod 跟着变（用户 2026-10-08 确认；台式机，Fn 键未测）
-- [ ] 「仅在 Windows 静音时」：把 Windows 设为**静音**，按音量 +/−、静音键：HomePod 音量跟着变，Windows 保持静音
-- [x] 快捷键 Ctrl+Alt+PageUp / PageDown / Insert / N 各按一次（用户 2026-10-08 反馈：日常使用中没问题）
+- [ ] 「仅在 Windows 静音时」：把 Windows 设为**静音**，按音量 +/−、静音键：HomePod 音量跟着变，Windows 保持静音（单元测试：VolumeKeyForwardingTests、VolumeKeyModeTests）
+- [x] 快捷键 Ctrl+Alt+PageUp / PageDown / Insert / N 各按一次（用户 2026-10-08 反馈：日常使用中没问题）（单元测试：HotkeyTests、GlitchMarkerTests）
 - [x] 右键托盘图标：面板贴着图标弹出；拖音量、切场景、开关夜间模式；再右键一次能关掉（用户 2026-10-08 反馈：日常使用中没问题）
 - [x] 左键托盘图标打开主窗口（用户 2026-10-08 反馈：日常使用中没问题）
 
@@ -76,8 +78,8 @@
 
 ## 六、影视场景（播放器自动对齐，完成后再测）
 
-- [ ] mpv / VLC 按设置页的说明开启控制接口后：切到「影视」，播放器的音频延迟自动设好；切回别的场景自动恢复
-- [ ] PotPlayer：首页显示要手动填的数值，按它设置后口型对得上
+- [ ] mpv / VLC 按设置页的说明开启控制接口后：切到「影视」，播放器的音频延迟自动设好；切回别的场景自动恢复（单元测试：PlayerSyncTests、PlayerEndpointTests、CalibrationPathTests；仍需实机：真实的 mpv / VLC）
+- [ ] PotPlayer：首页显示要手动填的数值，按它设置后口型对得上（单元测试：PlayerSyncTests，首页显示的数值；仍需实机：口型）
 
 ## 七、安装包（MSI）
 
@@ -90,21 +92,21 @@
 
 ### 软件更新（需要 GitHub 上已经有比本机更新的版本；Claude 不能代为点 UAC，只能实机测）
 
-- [ ] 新装或旧配置升级后：「设置 → 软件更新」里「自动检查更新」是关的；日志里只有 `update: automatic checks are off`，没有任何 `GET https://api.github.com/...`
-- [ ] 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」
-- [ ] 点「检查更新」：状态行变成「已是最新版本」或「发现新版本 x」；日志有一行 `update: manual check ... GET https://api.github.com/repos/qiyinxi/HomePodCast/releases?per_page=20`
-- [ ] 在测试版上切到「正式版」再检查（最新正式版比本机旧时）：显示「当前测试版比最新正式版新……」，没有「更新」按钮
-- [ ] 推流时点「更新」：确认框里有「正在推流：推送会停止大约一分钟。」；点「否」什么都不发生
+- [ ] 新装或旧配置升级后：「设置 → 软件更新」里「自动检查更新」是关的；日志里只有 `update: automatic checks are off`，没有任何 `GET https://api.github.com/...`（单元测试：UpdateViewTests、UpdateConfigTests）
+- [ ] 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」（单元测试：ReleaseSelectionTests、UpdateViewTests）
+- [ ] 点「检查更新」：状态行变成「已是最新版本」或「发现新版本 x」；日志有一行 `update: manual check ... GET https://api.github.com/repos/qiyinxi/HomePodCast/releases?per_page=20`（单元测试：UpdateViewTests、GitHubRequestTests；仍需实机：真的连上 GitHub）
+- [ ] 在测试版上切到「正式版」再检查（最新正式版比本机旧时）：显示「当前测试版比最新正式版新……」，没有「更新」按钮（单元测试：UpdateViewTests、ReleaseSelectionTests）
+- [ ] 推流时点「更新」：确认框里有「正在推流：推送会停止大约一分钟。」；点「否」什么都不发生（单元测试：UpdateViewTests，确认框的文字；仍需实机：点「否」）
 - [ ] 点「是」：状态行显示下载百分比 → 程序退出（推流停止、托盘图标消失）→ 弹出 UAC（发布者是 Windows Installer）→ 安装进度条 → HomePodCast 自己重新打开，托盘提示「已更新到 x」，「设置 → 关于」里是新版本；安装目录没变（装在自定义目录时也一样），开始菜单只有一个 HomePodCast
 - [ ] 再来一次但在 UAC 里点「否」：旧版自己重新打开，提示「更新已取消，仍在使用当前版本。」
 - [ ] `%TEMP%` 里没有残留的 `HomePodCast-update-*` 文件夹（下次启动会清掉）
-- [ ] 打开「自动检查更新」后重启：约 30 秒后检查一次；有新版本时托盘通知只弹一次，首页顶部出现提示条（更新 / 查看说明 / 跳过此版本）；点「跳过此版本」后提示条消失，同一版本不再提示
+- [ ] 打开「自动检查更新」后重启：约 30 秒后检查一次；有新版本时托盘通知只弹一次，首页顶部出现提示条（更新 / 查看说明 / 跳过此版本）；点「跳过此版本」后提示条消失，同一版本不再提示（单元测试：UpdateViewTests、UpdateScheduleTests、ReleaseSelectionTests；仍需实机：托盘通知和提示条的样子）
 - [ ] 便携版（zip）点「更新」：只打开发布页，不下载、不安装
 
 ## 八、其他
 
-- [x] 睡眠唤醒后自动重连（用户 2026-10-08 反馈：日常使用中没问题）
-- [x] iPhone 抢占 HomePod 后，电脑端不抢回；托盘显示被占用（用户 2026-10-08 反馈：日常使用中没问题）
+- [x] 睡眠唤醒后自动重连（用户 2026-10-08 反馈：日常使用中没问题）（单元测试：TakeoverControllerTests、TakeoverPolicyTests）
+- [x] iPhone 抢占 HomePod 后，电脑端不抢回；托盘显示被占用（用户 2026-10-08 反馈：日常使用中没问题）（单元测试：TakeoverControllerTests、GroupRunnerTests）
 - [ ] 设置 → 语言切换到 Svenska / English 看一眼，有没有明显不通的翻译
 
 ## 九、Apple TV（第 7 代，接上后再测）
@@ -140,17 +142,17 @@ Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电�
 前提：卧室设为 Apple TV「客厅」（这里用你的实际名称）的默认扬声器。Apple TV 闲着时也一直占着卧室的「正在使用」标志。
 
 1. - [ ] `HomePodCast.exe scan --txt`：最后出现 `home theater: 客厅 …` 和一行 `卧室 … held by it now=True`。整段发我
-2. - [ ] 设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」：默认选「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它
-3. - [ ] 电视不放东西，首页点「连接」：**不弹框**，直接连上，状态是「已连接 · 卧室（临时从 Apple TV「客厅」接管，断开后交还）」，托盘提示也一样；有声音；首页「音箱处理」还是 85 ms 吗：____ ms
+2. - [ ] 设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」：默认选「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（单元测试：HomeTheaterTests）
+3. - [ ] 电视不放东西，首页点「连接」：**不弹框**，直接连上，状态是「已连接 · 卧室（临时从 Apple TV「客厅」接管，断开后交还）」，托盘提示也一样；有声音；首页「音箱处理」还是 85 ms 吗：____ ms（单元测试：TakeoverControllerTests，不弹框、直接连上和状态文字；仍需实机：有声音、音箱处理的数值）
 4. - [ ] 点「断开」，然后在 Apple TV 上播放一段视频：HomePod 重新出 Apple TV 的声音吗？过了多久？要不要在 Apple TV 上做什么？（这一条决定「Apple TV 下次播放时会重新连上它」这句话对不对，**还没有在实机上验证过**）
 5. - [ ] 连着时从托盘退出 HomePodCast，再在 Apple TV 上播放：同第 4 条
-6. - [ ] 开着「启动后自动连接」，退出后重新打开：几秒内直接接管（状态同第 3 条）；日志里有 `held by its home-theater Apple TV: taking it over`
-7. - [ ] 推流时在 Apple TV 上开始播放：Apple TV 会把卧室抢回去吗？电脑端：连上 15 秒内被抢回 → 状态「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」并等待；超过 15 秒 → 「已断开（音箱可能被其他设备占用）」。两种都**不应来回抢**
-8. - [ ] 设置改成「先询问」，点「连接」：弹框写「卧室现在是 Apple TV「客厅」的家庭影院音箱。连接后 Apple TV 的声音会暂时断开；……」，只有「仍然连接」「取消」两个按钮；取消后什么都不变；仍然连接后状态同第 3 条
-9. - [ ] 「先询问」时重启 HomePodCast（开着自动连接）：不连接，状态显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（扫描完成后马上显示，不先显示「正在被其他设备使用」超过几秒）；这时把设置改回「临时接管」：马上连上
-10. - [ ] 首页、托盘、弹框里**都没有**「改为推送到 Apple TV」之类的按钮，正常使用不会出现 PIN；音箱列表里 Apple TV 显示为「客厅（Apple TV，家庭影院：卧室）」，只有手动选它再点「连接」才会走 Apple TV 的配对
-11. - [ ] 设置 → 音箱信息：卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」，「状态」是「Apple TV「客厅」正连着它（家庭影院）」；选 Apple TV 时型号是「Apple TV 4K 第三代（AppleTV14,1）」，分组是「家庭影院：卧室」
-12. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗
+6. - [ ] 开着「启动后自动连接」，退出后重新打开：几秒内直接接管（状态同第 3 条）；日志里有 `held by its home-theater Apple TV: taking it over`（单元测试：TakeoverControllerTests；仍需实机：重启后真的几秒内接管）
+7. - [ ] 推流时在 Apple TV 上开始播放：Apple TV 会把卧室抢回去吗？电脑端：连上 15 秒内被抢回 → 状态「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」并等待；超过 15 秒 → 「已断开（音箱可能被其他设备占用）」。两种都**不应来回抢**（单元测试：TakeoverControllerTests；仍需实机：Apple TV 会不会抢回去）
+8. - [ ] 设置改成「先询问」，点「连接」：弹框写「卧室现在是 Apple TV「客厅」的家庭影院音箱。连接后 Apple TV 的声音会暂时断开；……」，只有「仍然连接」「取消」两个按钮；取消后什么都不变；仍然连接后状态同第 3 条（单元测试：HomeTheaterTests、TakeoverControllerTests，弹框文字和仍然连接后的状态；仍需实机：两个按钮、取消）
+9. - [ ] 「先询问」时重启 HomePodCast（开着自动连接）：不连接，状态显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（扫描完成后马上显示，不先显示「正在被其他设备使用」超过几秒）；这时把设置改回「临时接管」：马上连上（单元测试：TakeoverControllerTests）
+10. - [ ] 首页、托盘、弹框里**都没有**「改为推送到 Apple TV」之类的按钮，正常使用不会出现 PIN；音箱列表里 Apple TV 显示为「客厅（Apple TV，家庭影院：卧室）」，只有手动选它再点「连接」才会走 Apple TV 的配对（单元测试：HomeTheaterTests、PairingPolicyTests；仍需实机：首页、托盘、弹框里没有多余的按钮）
+11. - [ ] 设置 → 音箱信息：卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」，「状态」是「Apple TV「客厅」正连着它（家庭影院）」；选 Apple TV 时型号是「Apple TV 4K 第三代（AppleTV14,1）」，分组是「家庭影院：卧室」（单元测试：SpeakerInfoTests）
+12. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗（单元测试：TakeoverPolicyTests、HomeTheaterTests；仍需实机：`scan --txt` 的结果）
 13. - [ ] Apple TV 正在播放（比如在 Apple TV 上看视频）和空闲时各跑一次 `scan --txt`，两段都发我：看 Apple TV 和卧室的 flags、gid、pgid、igl 有没有区别（用来判断以后能不能做到「Apple TV 空闲时才接管」）
 
 ## 十、立体声对（等有两只 HomePod 配成立体声对时再测）
@@ -165,7 +167,7 @@ Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电�
 6. - [ ] 第 3 步连不上，或者一只很快断开：用 `group --pair --no-group-uuid --tone --seconds 20 --volume 20` 再试一次，看是不是 groupUUID 引起的
 7. - [ ] 音量：在本程序里调音量，两只是否一起变；iPhone 控制中心里这对音箱的音量是否跟着变
 8. - [ ] 默认模式连续放 30 分钟：两只有没有慢慢不同步、断开、单只没声
-9. - [ ] 推流时用 iPhone 抢这对音箱：电脑端两路都退出、不抢回
+9. - [ ] 推流时用 iPhone 抢这对音箱：电脑端两路都退出、不抢回（单元测试：GroupRunnerTests、TakeoverControllerTests；仍需实机：真实的立体声对）
 
 ## 十一、Microsoft Store 版（MSIX，1.0.0 上架前）
 

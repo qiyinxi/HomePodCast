@@ -91,6 +91,66 @@ public class SendVolumeTests
         Assert.Equal(0.2f, SessionAttenuation.Restored(rawLevel), 5); // restore still returns Windows level
     }
 
+    /// <summary>
+    /// Device checklist 「两者」: an app heard here at its Windows level and sent to the HomePod at its own 60 %. Process
+    /// loopback captures it after the Windows session volume, so the capture divides that level out again.
+    /// </summary>
+    [Fact]
+    public void Both_mode_keeps_the_homepod_at_its_own_60_percent_while_windows_goes_from_20_to_40_percent()
+    {
+        const float source = 0.5f; // what the app plays before its Windows volume
+        var gain = new SendVolumeGain(settleDelay: 100, verifyWindow: 100);
+        float Here(float windows) => source * windows;
+        float HomePod(float windows, long now)
+        {
+            float captured = source * windows;
+            var g = RoutedCapture.ComposeGain(60, false, false, gain.For(10, now), captured);
+            return captured * g.Gain * g.Level;
+        }
+
+        gain.Verify(10, Check(At(0.2f)), 0);
+        gain.Verify(10, Check(At(0.2f)), 90);
+        Assert.Equal(0.3f, HomePod(0.2f, 95), 5);                   // 60 % of 0.5
+        Assert.Equal(0.1f, Here(0.2f), 5);
+
+        // The Windows mixer: 20 → 40 %. Its event arrives before the louder audio reaches the capture.
+        gain.Changed(10, 100, 0.4f);
+        Assert.Equal(0.3f, HomePod(0.4f, 101), 5);                  // the new audio: exactly 60 % at once
+        Assert.True(HomePod(0.2f, 101) <= 0.3f + 1e-6f);            // audio still on its way at 20 %: quieter, never louder
+        gain.Verify(10, Check(At(0.4f)), 110);
+        gain.Verify(10, Check(At(0.4f)), 205);
+        Assert.Equal(0.3f, HomePod(0.4f, 250), 5);                  // settled: the HomePod sounds the same...
+        Assert.Equal(0.2f, Here(0.4f), 5);                          // ...while this PC got twice as loud
+
+        // Muted, or at 0 %, in Windows: nothing is captured, so both are silent (and nothing is divided out).
+        foreach (var silent in new[] { At(0.4f, muted: true), At(0f) })
+        {
+            var check = Check(silent);
+            Assert.Equal(SendVolumeStatus.MutedOrZero, check.Status);
+            gain.Verify(10, check, 300);
+            Assert.Equal(1f, gain.For(10, 301));
+            float captured = silent.Muted ? 0f : source * silent.Logical;
+            var g = RoutedCapture.ComposeGain(60, false, false, gain.For(10, 301), captured);
+            Assert.Equal(0f, captured * g.Gain * g.Level);
+        }
+
+        // Below 1 %, or the app's sessions at different levels: no inverse, the HomePod just follows Windows (60 % x
+        // Windows), quieter than set and never louder.
+        foreach (var (check, windows) in new[] { (Check(At(0.005f)), 0.005f), (Check(At(0.2f), At(0.7f)), 0.7f) })
+        {
+            gain.Verify(20, check, 400);
+            Assert.Equal(1f, gain.For(20, 401));
+            Assert.True(HomePodAt(20, windows, 401) <= 0.6f * source * windows + 1e-6f);
+        }
+
+        float HomePodAt(uint root, float windows, long now)
+        {
+            float captured = source * windows;
+            var g = RoutedCapture.ComposeGain(60, false, false, gain.For(root, now), captured);
+            return captured * g.Gain * g.Level;
+        }
+    }
+
     [Fact]
     public void A_level_change_uses_the_higher_of_the_old_and_new_level_until_it_has_reached_the_capture()
     {
