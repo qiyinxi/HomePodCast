@@ -113,6 +113,10 @@ Every build (push, PR and tag) also runs the job `extension-e2e` (Ubuntu, a few 
 
 To run it locally: `npm ci`, then `npm test` in `extension/test/e2e` (ffmpeg makes the test video). When HomePodCast holds port 47100, the fake API takes another port and the test uses a copy of the extension that asks that port; `HPC_E2E_HEADED=1` shows the browser.
 
+### The Store package in CI
+
+Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is marked 「（CI 自动测试：msix-e2e）」 in `docs/device-test-checklist.zh-CN.md`, section 十一; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
+
 ### Release notes
 
 - English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
@@ -255,6 +259,10 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 每次构建（推送、PR 和标签）还会跑 `extension-e2e` 作业（Ubuntu，几分钟，不依赖 `build`），`release` 作业也要等它通过。它把浏览器插件以解压方式加载进 Chromium（Puppeteer 自带的 Chrome for Testing，无头模式），在本地仿制的 YouTube、bilibili 播放器页面（也有 bilibili 的 WASM 播放器 `<bwp-video>`）和一个裸 `<video>` 页面上操作，连的是假的 HomePodCast 本地接口，测试中会把它切换成推流中、未推流和没在运行（`extension/test/e2e`；`*.localhost` 以外的主机名都解析不了，所以不会访问运行器以外的地址，也绝不会打开真实网站）。它检查页面上的插件按钮、同步全屏、±5／±20 ms 按钮和 Alt 快捷键（含保存的网站偏移和上下限）、按测试视频每帧里的帧号检查延迟画面（暂停、拖进度条、全屏、网页全屏、停止推流），以及插件弹窗。失败的测试会留下截图，在 `extension-e2e-screenshots` 产物里。它覆盖的项目在 `docs/device-test-checklist.zh-CN.md` 里标了「CI 自动测试：extension-e2e」（第五节和开头）；真实网站、口型和 60 帧流畅度仍要人测。
 
 本地运行：在 `extension/test/e2e` 里 `npm ci`，再 `npm test`（用 ffmpeg 生成测试视频）。HomePodCast 占着 47100 端口时，假接口换一个端口，测试用一份改成这个端口的插件副本；设 `HPC_E2E_HEADED=1` 可以看到浏览器。
+
+### CI 里的 Microsoft Store 版测试
+
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msix-e2e` 作业，`release` 作业要等它通过，所以 Microsoft Store 版的包在那里没通过的标签什么都不会发布。`packaging/msix/e2e-test.ps1` 安装 `msix` 产物的一个副本（用一次性证书签名；产物本身仍然不签名，Store 要的就是不签名的包），像开始菜单那样启动它，检查包标识、日志在包的存储里、从不访问 GitHub、清单里的防火墙规则和没有防火墙提示、对再次启动和 MSI 版的单实例锁、开机启动任务（用程序的 `autostart on|off|status` 命令，也就是开关的那段代码），然后卸载并检查什么都没留下。每项检查在作业日志里是一行 `PASS`；程序日志在 `msix-e2e-logs` 产物里。覆盖了哪些项，`docs/device-test-checklist.zh-CN.md` 第十一节里标着「（CI 自动测试：msix-e2e）」；细节见 `packaging/msix/README.md` 的 CI test 一节。这个脚本会安装证书、包和 MSI，所以在 GitHub Actions 之外不加 `-Force`（一次性的测试虚拟机）就拒绝运行。
 
 ### 发布说明
 

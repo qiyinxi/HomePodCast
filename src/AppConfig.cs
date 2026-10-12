@@ -301,6 +301,27 @@ public static class Autostart
     };
 
     /// <summary>
+    /// The Store version's switch: asks Windows to turn the startup task on or off and logs the outcome. 设置 → 开机自动启动
+    /// and the <c>autostart on|off</c> command (Program) both go through here. Blocks for a few milliseconds: call it off
+    /// the UI thread. Returns the state afterwards; throws, after logging, what the StartupTask API throws (also outside
+    /// a package).
+    /// </summary>
+    public static StartupTaskState SetStartupTask(bool on)
+    {
+        try
+        {
+            var state = on ? StartupTaskApi.RequestEnable(AppEnvironment.StartupTaskId) : StartupTaskApi.Disable(AppEnvironment.StartupTaskId);
+            Log.Info($"autostart: startup task {(on ? "enable requested" : "disabled")}, now {state}");
+            return state;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: switching the startup task {(on ? "on" : "off")} failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
     /// The Store version started by its startup task at sign-in: the manifest passes --tray, and when Windows doesn't the
     /// activation kind still tells (AppInstance). Never throws; false when it can't tell.
     /// </summary>

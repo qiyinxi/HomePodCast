@@ -1,6 +1,6 @@
 # HomePodCast MSIX package (Microsoft Store)
 
-`build.ps1` builds `HomePodCast-<version>-x64.msix` from `AppxManifest.xml` (a template), the logos in `Assets/` and `priconfig.xml`. CI builds it on every run and uploads it as the workflow artifact **msix**. It is not attached to GitHub releases: the package is unsigned, and an unsigned MSIX only installs from the Store, which signs it with a Microsoft certificate when it publishes it. GitHub users keep getting the MSI and the zip.
+`build.ps1` builds `HomePodCast-<version>-x64.msix` from `AppxManifest.xml` (a template), the logos in `Assets/` and `priconfig.xml`. CI builds it on every run, uploads it as the workflow artifact **msix**, and tests it in the `msix-e2e` job (see [CI test](#ci-test-msix-e2e)). It is not attached to GitHub releases: the package is unsigned, and an unsigned MSIX only installs from the Store, which signs it with a Microsoft certificate when it publishes it. GitHub users keep getting the MSI and the zip.
 
 Release plan:
 
@@ -34,9 +34,28 @@ Don't install test packages on your everyday PC unless you mean to: a packaged H
 Add-AppxPackage -Register packaging\msix\obj\layout\AppxManifest.xml
 ```
 
-Remove it again with `Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`. What to check in a registered package is in `docs/device-test-checklist.zh-CN.md`, section 十一. Installing the `.msix` file itself needs a signature from a certificate whose subject is exactly the `Publisher` below and which the PC trusts (for example a self-signed one in Trusted People, signed with `signtool sign /fd SHA256`).
+Remove it again with `Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`. What to check in a registered package is in `docs/device-test-checklist.zh-CN.md`, section 十一; CI checks what needs no person, speaker or microphone on every build (see [CI test](#ci-test-msix-e2e)). Installing the `.msix` file itself needs a signature from a certificate whose subject is exactly the `Publisher` below and which the PC trusts (for example a self-signed one in Trusted People, signed with `signtool sign /fd SHA256`); the CI test does that with a throwaway certificate.
 
 [Windows App Certification Kit](https://learn.microsoft.com/windows/uwp/debug-test-perf/windows-app-certification-kit) (`appcert.exe` in the Windows SDK) runs the Store's local checks; it installs the package to test it, so run it on a test PC too.
+
+### CI test (msix-e2e)
+
+The `msix-e2e` job in `.github/workflows/build.yml` runs `e2e-test.ps1` on a GitHub-hosted Windows runner after every build (branches, PRs and tags), and the `release` job waits for it. It covers the items of `docs/device-test-checklist.zh-CN.md` section 十一 that need no person, speaker or microphone; they are marked 「（CI 自动测试：msix-e2e）」 there.
+
+1. **Install**: signs a copy of the `msix` artifact with a throwaway self-signed certificate whose subject is the manifest's `Publisher`, trusts it in LocalMachine\TrustedPeople and installs the copy with `Add-AppxPackage`. The artifact itself stays unsigned (checked: it has no `AppxSignature.p7x`).
+2. **Firewall**: the manifest's two rules exist for the package's exe: inbound, allow, enabled, Private, one for TCP and one for UDP.
+3. **Start**: seeds the package's settings (`LocalCache\Roaming\HomePodCast\config.json` in the package's storage: no `DeviceId`, `AutoConnect` off), starts the app with `explorer.exe shell:AppsFolder\<family name>!HomePodCast` (what Start does, and what the app runs to restart itself), and checks that the process has package identity (`GetPackageFullName`); that the log is in the package's storage, its startup line ends with `starting from the package <family name> (Microsoft Store version)` and it has `update: Microsoft Store package: never contacts GitHub`; that the firewall check ran, found the package's rules (no `no rule of the package found`) and took no firewall prompt or UAC path (the runner's network is Public, so the app logs and shows its Public network warning, as it should); that the log has no errors; that nothing went to the real `%APPDATA%\HomePodCast`; and that the app tried no speaker and has no TCP connection leaving the runner.
+4. **Single instance**: with the window closed to the tray (`SC_CLOSE`, as its close button does), the app started again through Start and through the AppX activation API, and the MSI build (from the `packages` artifact, installed with `msiexec /qn`) started next to it: each one brings the running copy's window back, exits with 0 without opening the log, and leaves the one packaged process running.
+5. **Startup task**: `HomePodCast.exe autostart status|on|off` activated inside the package (see below) turns the task on and off with the code of the app's own switch. Checked in the log (`autostart: startup task enable requested, now Enabled`, `autostart: startup task disabled, now Disabled`) and in the state Windows keeps for Settings > Apps > Startup and Task Manager (`State` 2 or 0 under `HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\<family name>\HomePodCastStartup`). It is left on for the next step.
+6. **Uninstall**: after `Remove-AppxPackage` the package, `%LOCALAPPDATA%\Packages\<family name>` (settings and log), its firewall rules and its startup task are gone, and no Run value or Startup folder entry names HomePodCast.
+
+The job's output has a PASS or FAIL line for each check (about 60), the app's whole log and a summary, which also goes to the run's summary page; the app's log and the MSI's install log are the artifact **msix-e2e-logs**. The job takes about a minute after `build`. Nothing connects anywhere: the settings name no speaker, and the Store version never contacts GitHub.
+
+`e2e-test.ps1` installs a certificate, the package and the MSI, so it refuses to run outside GitHub Actions. On a throwaway test VM (never an everyday PC), as administrator in Windows PowerShell 5.1 (the Appx module): `./packaging/msix/e2e-test.ps1 -Msix <msix> -Msi <msi> -Force`.
+
+Still by hand (the checklist keeps them): streaming to a HomePod and per-app routing in the package, the microphone permission prompts, the start at sign-in, turning the task off in Windows Settings, the restart after a change of the UI language, the Settings window itself, and the first real update from the Store.
+
+**`autostart on|off|status`** is a command for this test: the package has no app execution alias, so only the AppX activation API (`IApplicationActivationManager::ActivateApplication`, which the test calls) passes the packaged app arguments. It calls `Autostart.SetStartupTask`, the same code as 设置 → 开机自动启动, and writes to the app's log unless a running copy holds it. Exit code 0 when the task is as asked, 2 when Windows keeps another state (turned off by the user, or a policy), 1 on failure; an unpackaged copy has no startup task and returns 1 without touching anything.
 
 ## Package identity
 
@@ -128,5 +147,5 @@ The `store` job in `.github/workflows/build.yml` is commented out until the step
 - **Microphone**: the per-app switch under Settings > Privacy & security > Microphone applies. When Windows refuses the microphone (E_ACCESSDENIED, in either version), the app stops retrying, says so once and offers to open that page.
 - **Autostart**: the startup task (see [Manifest](#manifest)); the `Run` value has no effect, and the packaged app neither writes nor repairs it.
 - **Restart after a change of the UI language**: through the package (`explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`), so the new copy has package identity too.
-- **No command line**: the `scan`, `info`, `stream` and other commands are not reachable (there is no app execution alias), and Start launches the app without arguments.
+- **No command line**: the `scan`, `info`, `stream` and other commands are not reachable (there is no app execution alias), and Start launches the app without arguments. Only a caller of the AppX activation API passes arguments, which the CI test does for `autostart` (see [CI test](#ci-test-msix-e2e)).
 - The Store version and an MSI or portable copy don't run at the same time: they share the single-instance lock.
