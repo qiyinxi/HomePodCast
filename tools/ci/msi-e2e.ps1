@@ -305,7 +305,7 @@ function Get-ArpEntries {
 
 function Get-RelatedProducts([string] $upgradeCode) {
     $list = $Installer.RelatedProducts($upgradeCode)
-    try { for ($k = 0; $k -lt $list.Count; $k++) { $list.Item($k) } }
+    try { foreach ($code in $list) { $code } } # a StringList: PowerShell sees no Count on it, but enumerates it
     finally { Close-Com $list }
 }
 
