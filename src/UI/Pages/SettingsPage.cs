@@ -313,14 +313,10 @@ internal sealed class SettingsPage : ScrollPage
         StartupTaskState state;
         try
         {
-            state = await Task.Run(() => on
-                ? StartupTaskApi.RequestEnable(AppEnvironment.StartupTaskId)
-                : StartupTaskApi.Disable(AppEnvironment.StartupTaskId));
-            Log.Info($"autostart: startup task {(on ? "enable requested" : "disabled")}, now {state}");
+            state = await Task.Run(() => Autostart.SetStartupTask(on)); // logs the outcome, or the failure
         }
         catch (Exception ex)
         {
-            Log.Warn($"autostart: switching the startup task {(on ? "on" : "off")} failed: {ex.Message}");
             _settingStartupTask = false;
             if (IsDisposed) return;
             _autostart.Enabled = true;

@@ -175,8 +175,49 @@ jobs:
           path: publish/*.msix
           if-no-files-found: error
 
-  release:
+  # The Microsoft Store package installed and run on the runner (docs/device-test-checklist.zh-CN.md section 十一,
+  # packaging/msix/e2e-test.ps1): a copy of the msix artifact signed with a throwaway certificate (the artifact stays
+  # unsigned) is installed and started the way Start does; then package identity, the log in the package's storage,
+  # no GitHub contact, the manifest's firewall rules, the startup task (through the app's own `autostart` command),
+  # the single-instance lock against a second start and the MSI build, and a clean uninstall. Nothing connects: the
+  # test settings have no speaker and automatic connect off. Windows PowerShell for the Appx module.
+  msix-e2e:
     needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # The MSI build is framework-dependent: its launch condition and the exe want the .NET 10 Desktop Runtime.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: msix
+          path: msix
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: packages
+          path: packages
+
+      - name: Install, run and uninstall the MSIX
+        shell: powershell
+        run: ./packaging/msix/e2e-test.ps1 -Msix (Get-Item msix/*.msix).FullName -Msi (Get-Item packages/*.msi).FullName -OutDir msix-e2e
+
+      - name: Upload the app's log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: msix-e2e-logs
+          path: |
+            msix-e2e/*.log
+          if-no-files-found: ignore
+
+  release:
+    needs: [build, msix-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
