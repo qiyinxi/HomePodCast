@@ -74,6 +74,7 @@
       this.detached = false;
       this.pointer = null;
       this.frame = 0;
+      this.updating = false;
       this.onFullscreen = this.onFullscreen.bind(this);
       this.onKey = this.onKey.bind(this);
       this.onPointer = this.onPointer.bind(this);
@@ -237,6 +238,21 @@
 
     update() {
       if (this.detached) return;
+      // Moving focused controls between the page and the fullscreen player makes Chrome fire focusout during the move;
+      // an update from there would move them first and make this one's appendChild throw. It runs next frame instead.
+      if (this.updating) {
+        this.schedule();
+        return;
+      }
+      this.updating = true;
+      try {
+        this.render();
+      } finally {
+        this.updating = false;
+      }
+    }
+
+    render() {
       const pointer = this.pointer;
       this.pointer = null;
       // Every read first, then only the writes that change something: a write between two reads forces a layout.
