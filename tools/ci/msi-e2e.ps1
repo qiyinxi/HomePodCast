@@ -280,7 +280,6 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 $CommonPrograms = [Environment]::GetFolderPath('CommonPrograms')
-$Shell = New-Object -ComObject WScript.Shell
 
 function Get-ArpEntries {
     $keys = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -326,17 +325,68 @@ function Get-FirewallRules {
     }
 }
 
+# .lnk files read through IShellLinkW, opened read-only. WScript.Shell's shortcut object turns characters outside the ANSI
+# code page into '?', and Shell32's ShellLinkObject reads nothing from a shortcut it can't open for writing.
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+public static class MsiE2eShortcut
+{
+    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLinkW
+    {
+        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder file, int cch, IntPtr findData, int flags);
+        void GetIDList(out IntPtr pidl);
+        void SetIDList(IntPtr pidl);
+        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder name, int cch);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder dir, int cch);
+    }
+
+    [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+    private class ShellLink { }
+
+    /// <summary>Target, working folder and description of a .lnk file.</summary>
+    public static string[] Read(string path)
+    {
+        var link = (IShellLinkW)new ShellLink();
+        try
+        {
+            ((IPersistFile)link).Load(path, 0); // STGM_READ
+            var sb = new StringBuilder(32768);
+            link.GetPath(sb, sb.Capacity, IntPtr.Zero, 0);
+            string target = sb.ToString();
+            sb.Clear();
+            link.GetWorkingDirectory(sb, sb.Capacity);
+            string dir = sb.ToString();
+            sb.Clear();
+            link.GetDescription(sb, sb.Capacity);
+            return new[] { target, dir, sb.ToString() };
+        }
+        finally
+        {
+            Marshal.FinalReleaseComObject(link);
+        }
+    }
+}
+'@
+
 # Shortcuts named HomePodCast or pointing at a HomePodCast.exe, in the Start menu and on the desktop, all users and this one.
 function Get-Shortcuts {
     $dirs = 'CommonPrograms', 'Programs', 'CommonDesktopDirectory', 'DesktopDirectory' | ForEach-Object { [Environment]::GetFolderPath($_) }
     foreach ($dir in $dirs) {
         if (-not $dir -or -not (Test-Path $dir)) { continue }
         foreach ($file in Get-ChildItem $dir -Recurse -Filter *.lnk -ErrorAction SilentlyContinue) {
-            $link = $Shell.CreateShortcut($file.FullName)
-            if ($file.BaseName -like '*HomePodCast*' -or $link.TargetPath -like '*HomePodCast.exe') {
-                [pscustomobject]@{ Path = $file.FullName; Target = $link.TargetPath; WorkingDirectory = $link.WorkingDirectory; Description = $link.Description }
+            $link = @('', '', '')
+            # Shortcuts to shell items (Control Panel, Run) have no path to read; ours must.
+            try { $link = [MsiE2eShortcut]::Read($file.FullName) }
+            catch { if ($file.BaseName -like '*HomePodCast*') { Write-Host "  can't read $($file.FullName): $($_.Exception.Message)" } }
+            if ($file.BaseName -like '*HomePodCast*' -or $link[0] -like '*HomePodCast.exe') {
+                [pscustomobject]@{ Path = $file.FullName; Target = $link[0]; WorkingDirectory = $link[1]; Description = $link[2] }
             }
-            Close-Com $link
         }
     }
 }
@@ -430,7 +480,7 @@ function Assert-Installed([pscustomobject] $info, [string] $folder, [int] $langu
 
     $links = @(Get-Shortcuts)
     Check ($links.Count -eq 1) "exactly one shortcut: $(@($links | ForEach-Object Path) -join ', ')"
-    Check ($links[0].Path -eq (Join-Path $CommonPrograms 'HomePodCast.lnk') -and $links[0].Target -eq $exe -and $links[0].WorkingDirectory.TrimEnd('\') -eq $folder) "Start menu (all users) HomePodCast.lnk -> $exe, working folder $folder; no desktop shortcut"
+    Check ($links[0].Path -eq (Join-Path $CommonPrograms 'HomePodCast.lnk') -and $links[0].Target -eq $exe -and $links[0].WorkingDirectory.TrimEnd('\') -eq $folder) "Start menu (all users) HomePodCast.lnk -> $($links[0].Target), working folder $($links[0].WorkingDirectory) (expected $exe, $folder); no desktop shortcut"
     if ($Full) { Check ($links[0].Description -ceq $strings['ShortcutDescription']) "shortcut description in $culture`: '$($links[0].Description)'" }
 
     $rules = @(Get-FirewallRules)
