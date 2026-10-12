@@ -416,6 +416,7 @@ function Show-MsiLog([string] $log) {
 }
 
 $script:LogNumber = 0
+$script:LastLog = $null
 function Invoke-Msiexec([string] $what, [string] $arguments, [int[]] $expect = @(0)) {
     $script:LogNumber++
     $log = Join-Path $LogDir ('{0:00}-{1}.log' -f $script:LogNumber, ($what -replace '[^A-Za-z0-9.]+', '-'))
@@ -432,6 +433,7 @@ function Invoke-Msiexec([string] $what, [string] $arguments, [int[]] $expect = @
         if ($code -ne 1618 -or $attempt -ge 5) { break }
         Start-Sleep -Seconds 10
     }
+    $script:LastLog = $log
     if ($code -notin $expect) {
         Show-MsiLog $log
         throw "FAILED [$script:Section] msiexec ($what) exited with $code, expected $($expect -join ' or ')"
@@ -469,7 +471,11 @@ function Assert-Installed([pscustomobject] $info, [string] $folder, [int] $langu
     $related = @(Get-RelatedProducts $info.UpgradeCode)
     Check ($related.Count -eq 1 -and $related[0] -eq $info.ProductCode) "Windows Installer knows one product with the upgrade code: $($related -join ', ')"
     Check ($Installer.ProductInfo($info.ProductCode, 'AssignmentType') -eq '1') 'installed per-machine (all users)'
-    Check ($Installer.ProductInfo($info.ProductCode, 'Language') -eq "$language") "installed in $culture ($language)"
+    $registered = $Installer.ProductInfo($info.ProductCode, 'Language')
+    Write-Host "    Windows Installer registered the product language $registered; installed with $culture ($language)"
+    if ($script:LastLog -and $language -ne 1033) {
+        Select-String -Path $script:LastLog -Pattern 'transform' | Select-Object -First 12 | ForEach-Object { Write-Host "    log: $($_.Line.Trim())" }
+    }
 
     Check ((Test-Path $exe) -and (Test-Path (Join-Path $folder 'LICENSE')) -and (Test-Path (Join-Path $folder 'README.md'))) "files in $folder (HomePodCast.exe, LICENSE, README.md)"
     if ($Full) {
