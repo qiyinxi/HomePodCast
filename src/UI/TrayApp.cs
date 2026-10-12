@@ -60,20 +60,8 @@ internal sealed partial class TrayApp : ApplicationContext
         InitUpdate(updatedFrom);
         try
         {
-            _api = new LocalApi(Config.LocalApiPort, () =>
-            {
-                bool streaming = Controller.State == StreamState.Streaming;
-                return new
-                {
-                    app = "HomePodCast",
-                    version = typeof(TrayApp).Assembly.GetName().Version?.ToString(3),
-                    streaming,
-                    device = Config.DeviceName,
-                    latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = VideoDelayMs,
-                    videoDelaySource = HasCurrentCalibration ? "calibrated" : "estimate",
-                };
-            });
+            _api = new LocalApi(Config.LocalApiPort, () => ApiStatus(Controller.State == StreamState.Streaming, Config.DeviceName,
+                Controller.EffectiveLatencyMs, VideoDelayMs, HasCurrentCalibration));
         }
         catch (System.Net.Sockets.SocketException ex)
         {
@@ -438,7 +426,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // machine as a NullReferenceException in NotifyIcon.UpdateIcon on every quit.
         if (_quitting) return;
         var c = Controller;
-        if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
+        if (_wantConnected && GivesUp(c.State, c.StatusText)) _wantConnected = false;
 
         var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
@@ -449,9 +437,10 @@ internal sealed partial class TrayApp : ApplicationContext
             old?.Dispose();
             _lastIconState = c.State;
         }
-        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v && _pendingVolume is null)
+        var volume = c.Volume;
+        if (SavesStreamingVolume(c, volume, Config, _pendingVolume != null))
         {
-            Config.Volume = v;
+            Config.Volume = volume;
             Config.Save();
         }
         UpdateMonitorGuard();
@@ -459,6 +448,25 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.UpdateState();
         RaiseStateChanged();
     }
+
+    /// <summary>
+    /// The controller ended the session because another sender took the speaker (<see cref="StreamController.TakenOverText"/>):
+    /// nothing reconnects by itself any more (a network change, a wake from sleep), so the speaker is never taken back.
+    /// </summary>
+    internal static bool GivesUp(StreamState state, string statusText) =>
+        state == StreamState.Idle && statusText == L.T(StreamController.TakenOverText);
+
+    /// <summary>
+    /// The speaker's confirmed volume is saved as the selected speaker's volume (what the next connection starts with) only
+    /// while the session streaming is the selected one. Right after a profile or the list switched speakers the previous
+    /// one still streams until the queued restart has stopped it, and a change it reports meanwhile (a profile's lower cap
+    /// lowers it) must not become the new speaker's volume: a later reconnect would send it there.
+    /// </summary>
+    /// <param name="volume">The controller's volume, read once (it may change on another thread).</param>
+    /// <param name="pendingVolume">A key or hotkey volume waits to be saved (its debounce saves it instead).</param>
+    internal static bool SavesStreamingVolume(StreamController c, double? volume, AppConfig cfg, bool pendingVolume) =>
+        c.State == StreamState.Streaming && volume is { } v && cfg.Volume != v && !pendingVolume
+        && c.OwnSession.IsLiveFor(OwnSession.KeyOf(cfg));
 
     private bool _quitting;
 

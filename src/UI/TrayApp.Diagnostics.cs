@@ -5,17 +5,12 @@ namespace HomePodCast.UI;
 
 internal sealed partial class TrayApp
 {
-    private readonly Queue<DateTimeOffset> _glitchMarkers = new();
-    private DateTimeOffset? _lastGlitchMarker;
+    private readonly GlitchMarkers _glitchMarkers = new();
 
     public void MarkAudibleGlitch()
     {
-        if (Controller.State != StreamState.Streaming) return;
         var now = DateTimeOffset.Now;
-        if (_lastGlitchMarker is { } last && now - last < TimeSpan.FromSeconds(1)) return;
-        _lastGlitchMarker = now;
-        _glitchMarkers.Enqueue(now);
-        while (_glitchMarkers.Count > 100) _glitchMarkers.Dequeue();
+        if (!_glitchMarkers.TryMark(Controller.State == StreamState.Streaming, now)) return;
         Log.Info($"audible glitch marked by user at {now:O}: latency={Controller.EffectiveLatencyMs}ms " +
             $"fifoTarget={Controller.Fifo.TargetMs:F0}ms underruns={Controller.Fifo.Underruns} " +
             $"rtxMiss={Controller.ActiveSender?.RetransmitMisses ?? 0}");

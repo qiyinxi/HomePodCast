@@ -587,4 +587,65 @@ public class TakeoverControllerTests : IDisposable
         Assert.False(c.OwnSession.IsRecent(OwnSession.KeyOf(Plan), DateTime.UtcNow));
         Assert.Equal(2, Members().Count);
     }
+
+    // ---------------------------------------------------------------- taken after the 15 s grace: no ping-pong
+
+    [Theory]
+    [InlineData(true)]  // the Apple TV took its home-theater HomePod back (it played something)
+    [InlineData(false)] // an iPhone took the speaker
+    public async Task A_speaker_taken_after_the_grace_ends_the_connection_for_good_and_nothing_takes_it_back(bool appleTv)
+    {
+        var (c, reader) = Controller();
+        c.TakeoverGrace = TimeSpan.Zero;                          // "more than 15 s after connecting", without the wait
+        if (appleTv)
+        {
+            reader.HeldBy = Tv;
+            reader.Set("卧室");
+        }
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        Assert.Equal(appleTv ? "电视" : null, c.TakenFromAppleTv);
+
+        reader.HeldBy = appleTv ? Tv : null;
+        reader.Set("卧室");                                        // the other sender holds it now
+        int reads = reader.Reads;
+        Members().Last(m => m.Name == "A").Lose(EventChannel.ClosedBySpeaker);
+        await Until(() => c.StatusText == "已断开（音箱可能被其他设备占用）", "backing off");
+        Assert.Equal(StreamState.Idle, c.State);
+        Assert.False(c.WaitingForSpeaker);
+        Assert.True(UI.TrayApp.GivesUp(c.State, c.StatusText));   // the app stops wanting the connection: no reconnect
+                                                                   // on a network change or a wake from sleep
+        await Task.Delay(200);                                     // ten poll intervals: nothing reads, nothing connects
+        Assert.Equal(reads, reader.Reads);
+        Assert.Equal(2, Members().Count);
+        Assert.All(Members(), m => Assert.True(m.Disposed));
+        Assert.Null(c.Capture);                                    // nothing captured or sent any more
+        Assert.False(c.OwnSession.IsRecent(OwnSession.KeyOf(Plan), DateTime.UtcNow)); // the flag is the other sender's
+    }
+
+    [Fact]
+    public void Only_the_taken_over_state_makes_the_app_give_up_the_connection()
+    {
+        Assert.True(UI.TrayApp.GivesUp(StreamState.Idle, StreamController.TakenOverText));
+        Assert.False(UI.TrayApp.GivesUp(StreamState.Idle, "未连接"));
+        Assert.False(UI.TrayApp.GivesUp(StreamState.Idle, "卧室正在被其他设备使用，空闲后自动连接")); // waiting: still wanted
+        Assert.False(UI.TrayApp.GivesUp(StreamState.Retrying, StreamController.TakenOverText));
+        Assert.Contains("占用", L.T(StreamController.TakenOverText)); // what the tray tip shows
+    }
+
+    [Fact]
+    public async Task After_a_short_sleep_the_reconnect_at_wake_connects_without_waiting_for_its_own_stale_session()
+    {
+        var (c, reader) = Controller();
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        int reads = reader.Reads;
+
+        c.OwnSession.Suspending(DateTime.UtcNow);                  // TrayApp.OnSuspending
+        reader.Set("卧室", "客厅");                                  // our session, not ended yet on the speakers
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Reconnect); // TrayApp: a few seconds after the wake
+        await Until(() => Members().Count == 4 && c.State == StreamState.Streaming, "streaming again");
+        Assert.Equal(reads, reader.Reads);                         // its own flag: not read, not waited for
+        Assert.True(c.OwnSession.Live);
+    }
 }
