@@ -60,6 +60,9 @@ internal sealed partial class TrayApp
             click?.Invoke();
         };
         _updateTimer.Tick += OnUpdateTimer;
+        // The window was built before this (TrayApp's constructor): its 软件更新 section still shows the GitHub rows.
+        // Seen 2026-10-12 in the Store package: 检查更新 and 更新渠道 stayed until something else refreshed them.
+        RaiseUpdateChanged();
 
         // Download folders of earlier updates (and what their helper wrote). Never from a test profile: the real
         // instance may be in the middle of one.
