@@ -548,7 +548,7 @@ public class HomeNetworkTextTests
     public void The_homepods_hop_leads_with_the_band_and_placement_comes_second()
     {
         var capped = HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null));
-        Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 3 次）", capped);
+        Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 3 次）", capped); // says what the 3 are
         Assert.Contains("2.4G", capped);
         Assert.True(capped.IndexOf("5G", StringComparison.Ordinal) < capped.IndexOf("摆放位置", StringComparison.Ordinal));
 
@@ -561,6 +561,29 @@ public class HomeNetworkTextTests
         Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Unknown, null)));
         // The PC's own Wi-Fi: its own advice, unchanged.
         Assert.EndsWith("试试关掉无线网卡的节能，或改用网线", HomePage.NetworkHintText(Threatened(NetworkHop.Pc, null)));
+    }
+
+    [Fact]
+    public void A_homepod_taken_over_from_its_apple_tv_hears_about_the_home_theater_not_the_band()
+    {
+        // 2026-10-12: the HomePod and its Apple TV both spiked every 2.1 s while it was the Apple TV's home theater
+        // speaker; the stutters stopped when the Apple TV's audio went back to the TV. On 5 GHz already.
+        foreach (var hop in new[] { NetworkHop.Speaker, NetworkHop.Unknown })
+        {
+            var suggested = HomePage.NetworkHintText(Threatened(hop, 135), "客厅");
+            Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 3 次），建议把延迟调到 135 ms。", suggested);
+            Assert.Contains("Apple TV「客厅」的家庭影院音箱", suggested);
+            Assert.EndsWith("在 Apple TV 上把音频输出改回电视更管用", suggested);
+            Assert.DoesNotContain("5G", suggested);
+
+            var capped = HomePage.NetworkHintText(Threatened(hop, null), "客厅");
+            Assert.EndsWith("在 Apple TV 上把音频输出改回电视最管用", capped);
+            Assert.DoesNotContain("5G", capped);
+        }
+        // The PC's own Wi-Fi is still the PC's.
+        Assert.StartsWith("电脑这边", HomePage.NetworkHintText(Threatened(NetworkHop.Pc, null), "客厅"));
+        // Not taken over: the band, as before.
+        Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null)));
     }
 
     [Theory]

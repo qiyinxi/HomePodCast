@@ -562,7 +562,7 @@ internal sealed class HomePage : ScrollPage
             return;
         }
 
-        _netHintText.Text = NetworkHintText(v!);
+        _netHintText.Text = NetworkHintText(v!, live ? c.TakenFromAppleTv : null);
         _netApply.Collapsed = v!.SuggestedMs is null;
         if (live && !_hintLogged)
         {
@@ -579,19 +579,29 @@ internal sealed class HomePage : ScrollPage
     /// put it there): ping median 21 ms, 4% lost, stutters even at 500 ms, and moving it changed nothing; on 5 GHz, 2 ms
     /// and nothing lost. The app can't see the band, hence "if".
     /// </summary>
-    internal static string NetworkHintText(NetworkVerdict v)
+    /// <param name="homeTheaterTv">The Apple TV the HomePod was taken over from (<see cref="StreamController.TakenFromAppleTv"/>):
+    /// on the HomePod's hop that, not the band, is the advice. 2026-10-12: with the HomePod taken over from its Apple TV,
+    /// both answered pings 60–90 ms late every 2.1 s, in step, and 120 ms stuttered; with the Apple TV's audio output set
+    /// back to the TV, the Apple TV went clean at once and the stutters stopped.</param>
+    internal static string NetworkHintText(NetworkVerdict v, string? homeTheaterTv = null)
     {
         int n = v.Threats; // not every episode: 2026-10-12 it said 38, every spike over 30 ms, most of them harmless
+        bool homeTheater = homeTheaterTv != null && v.Hop != NetworkHop.Pc;
         return ((v.Hop, v.SuggestedMs) switch
         {
-            (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms。" +
+            (_, { } ms) when homeTheater => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms。" +
+                                                "这台 HomePod 是 Apple TV「{2}」的家庭影院音箱，它们之间的连接会定时占用 Wi-Fi，" +
+                                                "在 Apple TV 上把音频输出改回电视更管用", n, ms, homeTheaterTv),
+            (_, null) when homeTheater => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次）。这台 HomePod 是 Apple TV「{1}」" +
+                                              "的家庭影院音箱，它们之间的连接会定时占用 Wi-Fi：在 Apple TV 上把音频输出改回电视最管用", n, homeTheaterTv),
+            (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms。" +
                                                  "HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
-            (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms", n, ms),
-            (_, { } ms) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次），建议把延迟调到 {1} ms。HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
-            (NetworkHop.Speaker, null) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了：" +
+            (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms", n, ms),
+            (_, { } ms) => L.F("Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms。HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
+            (NetworkHop.Speaker, null) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次）。延迟已经不低了：" +
                                               "HomePod 如果连在 2.4G 上（路由器开了双频合一时常见），改连 5G 最管用，其次才是摆放位置", n),
-            (NetworkHop.Pc, null) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线", n),
-            (_, null) => L.F("Wi-Fi 最近不太稳（10 分钟内 {0} 次）。延迟已经不低了：HomePod 如果连在 2.4G 上，改连 5G 最管用，其次再改善 Wi-Fi 信号", n),
+            (NetworkHop.Pc, null) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次）。延迟已经不低了，试试关掉无线网卡的节能，或改用网线", n),
+            (_, null) => L.F("Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次）。延迟已经不低了：HomePod 如果连在 2.4G 上，改连 5G 最管用，其次再改善 Wi-Fi 信号", n),
         }).Replace(" ms", "\u00A0ms").Replace(" GHz", "\u00A0GHz"); // "135 ms" and "5 GHz" stay on one line
     }
 
