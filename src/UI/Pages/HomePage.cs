@@ -538,15 +538,23 @@ internal sealed class HomePage : ScrollPage
 
     /// <summary>
     /// The 网络 line (jitter episodes in the last 10 minutes) or, when they threaten the margin, the hint naming the
-    /// Wi-Fi hop with a suggested latency. Never changes anything by itself; hidden while not streaming.
+    /// Wi-Fi hop with a suggested latency; for a HomePod taken over from its home-theater Apple TV below
+    /// <see cref="HomeTheaterLatencyMs"/>, the home-theater notice right away. Never changes anything by itself; hidden
+    /// while not streaming.
     /// </summary>
     /// <param name="v">The current connection's verdict (or the demo's); null while not streaming.</param>
     /// <param name="live">Assessed from a real connection (logged), not the demo.</param>
     private void ShowNetwork(NetworkVerdict? v, bool live)
     {
         var c = _app.Controller;
-        bool show = v is { Threatened: true } && c.Health.Session != _appliedSession;
-        _suggestedMs = show ? v!.SuggestedMs : null;
+        string? theaterTv = live ? c.TakenFromAppleTv : null;
+        bool applied = c.Health.Session == _appliedSession;
+        bool threatened = v is { Threatened: true } && !applied;
+        // Taken over from its Apple TV at a latency the home theater's link can't leave alone: say so at once, before
+        // the dropouts add up (and suggest the latency that absorbs it, not 15 ms more).
+        bool theater = theaterTv != null && !applied && c.EffectiveLatencyMs < HomeTheaterLatencyMs;
+        bool show = threatened || theater;
+        _suggestedMs = theater ? HomeTheaterLatencyMs : threatened ? v!.SuggestedMs : null;
         _netLine.Collapsed = v == null || show;
         _netHint.Collapsed = !show;
         if (v != null && !show)
@@ -562,16 +570,35 @@ internal sealed class HomePage : ScrollPage
             return;
         }
 
-        _netHintText.Text = NetworkHintText(v!, live ? c.TakenFromAppleTv : null);
-        _netApply.Collapsed = v!.SuggestedMs is null;
+        _netHintText.Text = threatened
+            ? NetworkHintText(theater ? v! with { SuggestedMs = HomeTheaterLatencyMs } : v!, theaterTv)
+            : HomeTheaterNotice(_app.Config.DeviceName ?? "HomePod", theaterTv!);
+        _netApply.Collapsed = _suggestedMs is null;
         if (live && !_hintLogged)
         {
             _hintLogged = true;
             string pc = c.PcNetwork is { } p ? NetworkProfile.KindName(p.Kind) : "unknown";
-            Log.Info($"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v.Threats} of {v.Episodes} episodes in " +
-                     $"10 min beyond its {v.MarginMs} ms margin, hop: {v.Hop}, PC on {pc}); suggesting {v.SuggestedMs?.ToString() ?? "-"} ms");
+            Log.Info(threatened
+                ? $"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v!.Threats} of {v.Episodes} episodes in " +
+                  $"10 min beyond its {v.MarginMs} ms margin, hop: {v.Hop}, PC on {pc}); suggesting {_suggestedMs?.ToString() ?? "-"} ms"
+                : $"network: taken over from its home-theater Apple TV at {c.EffectiveLatencyMs} ms: their link takes up the Wi-Fi " +
+                  $"at regular intervals; suggesting {HomeTheaterLatencyMs} ms or the Apple TV's audio back on the TV");
         }
     }
+
+    /// <summary>
+    /// The latency a HomePod taken over from its home-theater Apple TV needs. 2026-10-12 (HomePod 2, Apple TV 4K): with
+    /// the home theater on, the two answered pings 60–90 ms late every 2.1 s in step (up to ~145 ms now and then), also
+    /// with nothing streaming and whatever our session SETUP said; 105–135 ms stuttered, 500 ms played clean. 200 ms
+    /// leaves 110 ms for it (not yet heard on the device).
+    /// </summary>
+    internal const int HomeTheaterLatencyMs = NetworkHealth.MaxSuggestedMs;
+
+    /// <summary>Shown as soon as such a HomePod streams below <see cref="HomeTheaterLatencyMs"/>, before any dropout.</summary>
+    internal static string HomeTheaterNotice(string speaker, string appleTv) =>
+        L.F("{0}是 Apple TV「{1}」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 {2} ms 时可能断音。" +
+            "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 {2} ms", speaker, appleTv, HomeTheaterLatencyMs)
+            .Replace(" ms", " ms");
 
     /// <summary>
     /// The hint for a threatened verdict. On the HomePod's hop (always, with a wired PC) it leads with the band: on

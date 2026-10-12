@@ -586,6 +586,16 @@ public class HomeNetworkTextTests
         Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null)));
     }
 
+    [Fact]
+    public void The_home_theater_notice_names_both_and_the_latency_that_absorbs_it()
+    {
+        // Shown at once while such a HomePod streams below 200 ms, before any dropout is counted.
+        Assert.Equal(200, HomePage.HomeTheaterLatencyMs);
+        Assert.Equal("卧室是 Apple TV「客厅」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 200 ms 时可能断音。" +
+                     "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 200 ms",
+            HomePage.HomeTheaterNotice("卧室", "客厅"));
+    }
+
     [Theory]
     [InlineData(120, 80)]  // 推荐: a suggestion (135 ms)
     [InlineData(200, 250)] // at the cap: no suggestion
