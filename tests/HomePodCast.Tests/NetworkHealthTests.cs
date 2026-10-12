@@ -653,4 +653,74 @@ public class HomeNetworkTextTests
         Assert.Equal(NetworkHop.Speaker, v.Hop);
         Assert.Equal("≈40", HomePage.DropoutValue(0, v.ConnectionThreats));
     }
+
+    // ---------------------------------------------------------------- which of the line and the hint 首页 shows
+
+    private static readonly NetworkVerdict Calm = new(0, 0, false, NetworkHop.Speaker, 30, null, 0);
+
+    [Fact]
+    public void The_network_line_says_stable_or_counts_the_jitter_of_the_last_10_minutes()
+    {
+        var quiet = new NetworkHealth().Assess(10 * 60 * 1000, 120, 85, routerWatched: true);
+        Assert.Equal("网络：稳定", HomePage.NetworkLine(quiet.Episodes));
+        Assert.False(HomePage.NoticeFor(quiet, null, false, 120, "卧室").Show);
+
+        var h = new NetworkHealth();
+        foreach (var (at, rtt) in new (long, long)[] { (60_000, 35), (250_000, 48) }) h.AddPing(PingTarget.Speaker, at, rtt);
+        var jittery = h.Assess(500_000, 120, 85, routerWatched: true);
+        Assert.False(HomePage.NoticeFor(jittery, null, false, 120, "卧室").Show); // absorbed: only the line counts it
+        Assert.Equal("网络：最近 10 分钟抖动 2 次", HomePage.NetworkLine(jittery.Episodes));
+        Assert.Equal("网络：最近 10 分钟抖动 1 次", HomePage.NetworkLine(1));
+    }
+
+    [Fact]
+    public void A_threatening_verdict_shows_the_hint_with_its_suggestion_until_it_was_applied_on_this_connection()
+    {
+        var threatened = new NetworkVerdict(12, 4, true, NetworkHop.Speaker, 15, 135, 4);
+        var hint = HomePage.NoticeFor(threatened, null, applied: false, 120, "卧室");
+        Assert.True(hint.Show);
+        Assert.Equal(135, hint.SuggestedMs);                      // 应用 sets 135 ms (LatencyTuner.UseCustom: 自定义, one reconnect)
+        Assert.Equal(HomePage.NetworkHintText(threatened), hint.Text);
+        Assert.False(HomePage.NoticeFor(threatened, null, applied: true, 135, "卧室").Show); // gone after 应用
+
+        var capped = threatened with { SuggestedMs = null };       // already at the most the hint suggests
+        var noButton = HomePage.NoticeFor(capped, null, false, 200, "卧室");
+        Assert.True(noButton.Show);
+        Assert.Null(noButton.SuggestedMs);                         // advice only: no 应用, the latency is never changed
+    }
+
+    [Fact]
+    public void A_homepod_taken_over_from_its_apple_tv_gets_the_home_theater_notice_below_200_ms_at_once()
+    {
+        foreach (int latency in new[] { 105, 120, 199 })
+        {
+            var notice = HomePage.NoticeFor(Calm, "客厅", applied: false, latency, "卧室");
+            Assert.True(notice.Show);                              // before any dropout is counted
+            Assert.True(notice.HomeTheater);
+            Assert.False(notice.Threatened);
+            Assert.Equal(200, notice.SuggestedMs);
+            Assert.Equal(HomePage.HomeTheaterNotice("卧室", "客厅"), notice.Text);
+        }
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 200, "卧室").Show);   // at 200 ms: the plain line
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 500, "卧室").Show);
+        Assert.False(HomePage.NoticeFor(Calm, null, false, 105, "卧室").Show);     // not taken from an Apple TV
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", applied: true, 105, "卧室").Show); // 应用 pressed on this connection
+    }
+
+    [Fact]
+    public void Once_dropouts_threaten_a_homepod_taken_from_its_apple_tv_the_hint_names_the_home_theater_and_suggests_200_ms()
+    {
+        var threatened = new NetworkVerdict(12, 4, true, NetworkHop.Speaker, 15, 135, 4);
+        var hint = HomePage.NoticeFor(threatened, "客厅", false, 120, "卧室");
+        Assert.True(hint.Threatened && hint.HomeTheater);
+        Assert.Equal(200, hint.SuggestedMs);                      // not 135: that would still stutter
+        Assert.Contains("建议把延迟调到 200 ms", hint.Text);
+        Assert.Contains("Apple TV「客厅」的家庭影院音箱", hint.Text);
+        Assert.DoesNotContain("5G", hint.Text);
+
+        // At 200 ms or more the verdict's own suggestion stands.
+        var above = HomePage.NoticeFor(threatened with { SuggestedMs = 250 }, "客厅", false, 200, "卧室");
+        Assert.False(above.HomeTheater);
+        Assert.Equal(250, above.SuggestedMs);
+    }
 }

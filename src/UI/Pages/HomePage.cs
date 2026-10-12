@@ -303,15 +303,33 @@ internal sealed class HomePage : ScrollPage
     {
         UpdateFloor();
         _tuner.ReloadFromConfig();
-        var cfg = _app.Config;
-        if (cfg.DeviceId != null && !_devices.Any(d => StreamController.Normalize(d.DeviceId).Equals(
-            StreamController.Normalize(cfg.DeviceId), StringComparison.OrdinalIgnoreCase)))
-            _devices.Add(new AirPlayDevice(cfg.DeviceName ?? "?", cfg.DeviceId,
-                System.Net.IPAddress.TryParse(cfg.Host, out var address) ? address : System.Net.IPAddress.None,
-                7000, "", new Dictionary<string, string>()));
-        SetDevices(_devices.ToList());
+        SetDevices(WithSelected(_devices, _app.Config));
         LoadFromConfig();
         ShowProfiles();
+    }
+
+    /// <summary>
+    /// The picker's list after the selection changed outside it (a profile): the selected speaker is in it, added (with
+    /// the address the config has now) when the last scan didn't list it, so the picker can show it.
+    /// </summary>
+    internal static List<AirPlayDevice> WithSelected(IReadOnlyList<AirPlayDevice> devices, AppConfig cfg)
+    {
+        var list = devices.ToList();
+        if (cfg.DeviceId != null && SelectedIndex(list, cfg.DeviceId) < 0)
+            list.Add(new AirPlayDevice(cfg.DeviceName ?? "?", cfg.DeviceId,
+                System.Net.IPAddress.TryParse(cfg.Host, out var address) ? address : System.Net.IPAddress.None,
+                7000, "", new Dictionary<string, string>()));
+        return list;
+    }
+
+    /// <summary>The entry of the selected speaker however its id is written; -1 for none.</summary>
+    internal static int SelectedIndex(IReadOnlyList<AirPlayDevice> devices, string? deviceId)
+    {
+        for (int i = 0; i < devices.Count; i++)
+            if (deviceId != null && StreamController.Normalize(devices[i].DeviceId).Equals(StreamController.Normalize(deviceId),
+                    StringComparison.OrdinalIgnoreCase))
+                return i;
+        return -1;
     }
 
     // ---------------------------------------------------------------- state
@@ -402,9 +420,7 @@ internal sealed class HomePage : ScrollPage
         _device.Items.Clear();
         var scan = _app.LastScan;
         foreach (var d in devices) _device.Items.Add(DeviceLabel(d, scan));
-        var cfgId = _app.Config.DeviceId;
-        _device.SelectedIndex = devices.FindIndex(d =>
-            cfgId != null && StreamController.Normalize(d.DeviceId).Equals(StreamController.Normalize(cfgId), StringComparison.OrdinalIgnoreCase));
+        _device.SelectedIndex = SelectedIndex(devices, _app.Config.DeviceId);
         ShowSpeaker();
     }
 
@@ -553,30 +569,19 @@ internal sealed class HomePage : ScrollPage
         var c = _app.Controller;
         string? theaterTv = live ? c.TakenFromAppleTv : null;
         bool applied = c.Health.Session == _appliedSession;
-        bool threatened = v is { Threatened: true } && !applied;
-        // Taken over from its Apple TV at a latency the home theater's link can't leave alone: say so at once, before
-        // the dropouts add up (and suggest the latency that absorbs it, not 15 ms more).
-        bool theater = theaterTv != null && !applied && c.EffectiveLatencyMs < HomeTheaterLatencyMs;
-        bool show = threatened || theater;
-        _suggestedMs = theater ? HomeTheaterLatencyMs : threatened ? v!.SuggestedMs : null;
+        var notice = NoticeFor(v, theaterTv, applied, c.EffectiveLatencyMs, _app.Config.DeviceName ?? "HomePod");
+        bool threatened = notice.Threatened, show = notice.Show;
+        _suggestedMs = notice.SuggestedMs;
         _netLine.Collapsed = v == null || show;
         _netHint.Collapsed = !show;
-        if (v != null && !show)
-            _netStatus.Text = v.Episodes switch
-            {
-                0 => L.T("网络：稳定"),
-                1 => L.T("网络：最近 10 分钟抖动 1 次"), // its own text, for languages with a singular
-                int count => L.F("网络：最近 10 分钟抖动 {0} 次", count),
-            };
+        if (v != null && !show) _netStatus.Text = NetworkLine(v.Episodes);
         if (!show)
         {
             _hintLogged = false;
             return;
         }
 
-        _netHintText.Text = threatened
-            ? NetworkHintText(theater ? v! with { SuggestedMs = HomeTheaterLatencyMs } : v!, theaterTv)
-            : HomeTheaterNotice(_app.Config.DeviceName ?? "HomePod", theaterTv!);
+        _netHintText.Text = notice.Text!;
         _netApply.Collapsed = _suggestedMs is null;
         if (live && !_hintLogged)
         {
@@ -589,6 +594,41 @@ internal sealed class HomePage : ScrollPage
                   $"at regular intervals; suggesting {HomeTheaterLatencyMs} ms or the Apple TV's audio back on the TV");
         }
     }
+
+    /// <summary>What <see cref="ShowNetwork"/> shows instead of the 网络 line (nothing when <see cref="Show"/> is false).</summary>
+    /// <param name="Threatened">The jitter threatens the latency's margin (and its suggestion was not applied on this connection).</param>
+    /// <param name="HomeTheater">A HomePod taken over from its home-theater Apple TV streams below <see cref="HomeTheaterLatencyMs"/>.</param>
+    /// <param name="SuggestedMs">What the hint's 应用 sets (null: no button).</param>
+    /// <param name="Text">The hint's text (null when nothing is shown).</param>
+    internal sealed record NetworkNotice(bool Threatened, bool HomeTheater, int? SuggestedMs, string? Text)
+    {
+        public bool Show => Threatened || HomeTheater;
+    }
+
+    /// <summary>
+    /// The hint's decision. A HomePod taken over from its Apple TV (<paramref name="homeTheaterTv"/>) at a latency the home
+    /// theater's link can't leave alone gets the notice at once, before the dropouts add up, suggesting the latency that
+    /// absorbs it (not 15 ms more); once dropouts threaten too, the network hint says so with that same suggestion. After 应用
+    /// (<paramref name="applied"/>: on this connection) nothing is shown until it reconnects.
+    /// </summary>
+    internal static NetworkNotice NoticeFor(NetworkVerdict? v, string? homeTheaterTv, bool applied, int effectiveLatencyMs, string speaker)
+    {
+        bool threatened = v is { Threatened: true } && !applied;
+        bool theater = homeTheaterTv != null && !applied && effectiveLatencyMs < HomeTheaterLatencyMs;
+        int? suggested = theater ? HomeTheaterLatencyMs : threatened ? v!.SuggestedMs : null;
+        string? text = threatened
+            ? NetworkHintText(theater ? v! with { SuggestedMs = HomeTheaterLatencyMs } : v!, homeTheaterTv)
+            : theater ? HomeTheaterNotice(speaker, homeTheaterTv!) : null;
+        return new NetworkNotice(threatened, theater, suggested, text);
+    }
+
+    /// <summary>The 网络 line while nothing threatens: 稳定, or how many jitter episodes the last 10 minutes had.</summary>
+    internal static string NetworkLine(int episodes) => episodes switch
+    {
+        0 => L.T("网络：稳定"),
+        1 => L.T("网络：最近 10 分钟抖动 1 次"), // its own text, for languages with a singular
+        int count => L.F("网络：最近 10 分钟抖动 {0} 次", count),
+    };
 
     /// <summary>
     /// The latency a HomePod taken over from its home-theater Apple TV needs. 2026-10-12 (HomePod 2, Apple TV 4K): with

@@ -101,6 +101,20 @@ The checks read everything through the GitHub API, so they run locally too, read
 
 Tags made before these rules aren't checked again: re-running one of their workflow runs uses the workflow file of their own commit. By rule 3, `v0.2.1` (no beta) and `v0.2.0` (changes after beta 8) would not pass today; that is expected, and the rule stays strict for every new tag.
 
+### The in-app update in CI
+
+Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and the `release` job waits for it, so a tag whose update path is broken publishes nothing. `tools/ci/update-e2e.ps1`, on the runner:
+
+1. builds an older MSI from the same source (version `0.0.1-e2e.1`, MSI 0.0.1.1; it never leaves the runner) and installs it silently;
+2. serves a fake release list in the GitHub API's shape (with the asset's `digest`) and the build's own MSI on `127.0.0.1` (`tools/ci/fake-release-feed.ps1`), so nothing goes to GitHub and the real releases are never touched;
+3. runs the installed old exe's `update-selftest --feed http://127.0.0.1:<port>/releases`: the code of 设置 → 软件更新 「更新」 (`src/Update/UpdateFlow.cs`, shared with the button) without UI: check, pick, download, SHA-256, installer helper, exit;
+4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
+5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
+
+Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person, per release (`docs/device-test-checklist.zh-CN.md`, section 七): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
+
+`update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
+
 ### Release notes
 
 - English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
@@ -232,6 +246,20 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 有这些规则之前打的标签不会再被检查：重跑它们的工作流时，用的是它们自己提交里的工作流文件。按第 3 条，`v0.2.1`（没有测试版）和 `v0.2.0`（beta 8 之后还有改动）今天都过不了；这是预期的，规则对每个新标签都严格执行。
 
+### CI 里的软件更新测试
+
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `update-e2e` 作业，`release` 作业要等它通过，所以更新流程坏了的标签什么都不会发布。`tools/ci/update-e2e.ps1` 在运行器上：
+
+1. 用同一份源码构建一个更旧的 MSI（版本 `0.0.1-e2e.1`，MSI 版本 0.0.1.1；它不会离开运行器），并静默安装；
+2. 在 `127.0.0.1` 上提供一个假的发布列表（和 GitHub API 的格式一样，带安装包的 `digest`）和这次构建自己的 MSI（`tools/ci/fake-release-feed.ps1`），所以不会访问 GitHub，也绝不会碰真实的发布；
+3. 运行已安装旧版的 `update-selftest --feed http://127.0.0.1:<端口>/releases`：就是 设置 → 软件更新 「更新」 的代码（`src/Update/UpdateFlow.cs`，和按钮共用），只是没有界面：检查、选版本、下载、SHA-256 校验、启动安装助手、退出；
+4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
+5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
+
+它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。每次发布仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 第七节）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
+
+`update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
+
 ### 发布说明
 
 - 先英文，然后在 `## 简体中文` 标题下写同样内容的中文。说明文件里没有中文或以中文开头时，`release.ps1` 会警告。
@@ -246,6 +274,6 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 标签保留：推送过的标签永远不移动、不删除，构建失败的也一样。用 `gh run list --branch <标签>` 找到那次运行。
 
 - **「Release checks」失败，因为标签在分支 CI 跑完之前就推送了**：分支那次运行通过后，重跑标签构建（`gh run rerun <运行 id>`），它会正常发布，编号不会浪费。如果分支那次运行失败了，就在 `dev` 上修好，发下一个测试版。
-- **基础设施偶发问题**（运行器或网络抖动、NuGet 故障、繁忙运行器上的计时测试、界面冒烟测试等窗口等超时）：`gh run rerun <运行 id> --failed`。因为 `release.ps1` 在失败处已经停下，之后要手动检查发布并应用说明（`gh release view <标签>`、`gh release edit <标签> --notes-file <说明.md>`）。
+- **基础设施偶发问题**（运行器或网络抖动、NuGet 故障、繁忙运行器上的计时测试、界面冒烟测试等窗口时超时）：`gh run rerun <运行 id> --failed`。因为 `release.ps1` 在失败处已经停下，之后要手动检查发布并应用说明（`gh release view <标签>`、`gh release edit <标签> --notes-file <说明.md>`）。
 - **代码有问题**：在 `dev` 上修好、推送、等 CI，然后发下一个测试版（`-Beta` 会自动用下一个编号）。失败的标签占着编号，没有发布页；2026-10-11 的 `v0.2.2-beta.2` 和 `beta.3` 就是这样（在 `dev` 的 CI 跑完之前打了标签，而那次 CI 失败了），`beta.4` 才是第一个好的。
 - **正式版标签构建失败**：它的源码就是一个构建通过的测试版，所以几乎一定是基础设施问题：重跑失败的作业。万一真是代码问题，`vX.Y.Z` 这个号就用掉了：在 `dev` 上修好，设置下一个补丁版本号，先作为测试版发布，再转正。
