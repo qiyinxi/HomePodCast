@@ -25,15 +25,17 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     /// <summary>An idle HomePod (2nd generation), read on 2026-10-11.</summary>
     public const long HomePodFlags = 0x80404;
 
-    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly TcpListener _listener;
     private readonly TcpListener _events = new(IPAddress.Loopback, 0);
     private readonly ConcurrentDictionary<string, byte[]> _controllers = new();
     private readonly List<TcpClient> _connections = [];
     private volatile bool _closed;
     private int _verifications;
 
-    public FakeAirPlayReceiver(bool appleTv)
+    /// <param name="port">The RTSP port on 127.0.0.1: any free one (tests), or 7000, where the app connects (the GUI smoke test).</param>
+    public FakeAirPlayReceiver(bool appleTv, int port = 0)
     {
+        _listener = new TcpListener(IPAddress.Loopback, port);
         AppleTv = appleTv;
         StatusFlags = appleTv ? AppleTvFlags : HomePodFlags;
         AccessoryPublicKey = Ed25519.PublicKey(AccessorySeed);
@@ -51,7 +53,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
 
     public string Pin { get; set; } = "0482";
     public string DeviceId { get; } = "3E:B7:8E:9F:64:72";
-    public string Name { get; } = "客厅 Apple TV";
+    public string Name { get; init; } = "客厅 Apple TV";
     public int ArrivalToRenderMs { get; set; } = 140;
 
     /// <summary>The identifier in M6 and pair-verify M2.</summary>

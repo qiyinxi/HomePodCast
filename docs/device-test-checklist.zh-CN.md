@@ -7,13 +7,25 @@
 
 测试时 HomePod 音量不超过 25%。每一项打勾或写下现象；有问题的项写清楚“做了什么 → 看到/听到什么”。
 
+**界面截图**：每次构建（推送到 dev、PR、发布标签）CI 都会跑 `gui-smoke`：用这次构建的 Release 版程序，把每一页（整页滚动）、托盘面板和主要窗口，用中文、English、Deutsch 在 100 % 和 150 % 缩放下各截一遍图（另有最小窗口宽度、深色模式、等待重试和连着假 HomePod 时的截图）。发布前在 GitHub 上打开这次构建（Actions → build → 这次运行，测试版就看它的标签构建），在页面底部 Artifacts 里下载 `gui-screenshots`，解压后打开 `index.html` 扫一眼。程序崩溃、日志里有 ERROR、窗口没出来、控件被裁掉或互相重叠、按钮没有文字、English / Deutsch 里有没翻译的中文，这些 CI 会直接报错、构建不通过。下面标了「（CI 自动测试：gui-smoke）」的项不用再手动测。
+
 「（单元测试：…）」里写的是 `tests/HomePodCast.Tests` 里的测试类：程序自己的逻辑已经用模拟的音箱、Apple TV、播放器和接口测过，每次 CI 构建都会跑；后面写「仍需实机」的部分（声音、画面、真实设备的反应）还要人来看。
 
 ## 每版回归（每个测试版发布后）
 
 1. - [ ] 设置 →「软件更新」→「检查更新」→「更新」，在 UAC 里点「是」：新版自己重新打开，托盘提示「已更新到 x」。下载、校验、安装、重新打开这几步 CI 每次都自动测过，这里只是你平时装新版的操作；UAC 弹框本身只有人能看到。
 2. - [ ] 连上 HomePod，用平时的延迟放一两分钟：听不到断音，首页没有黄色提示。
-3. - [ ] 看一眼这一版 CI 存下的界面截图（工作流运行页面的 gui-screenshots）：有没有错位、缺字、文字被截断。
+3. - [ ] 看一眼这一版 CI 存下的界面截图（见上面「界面截图」：标签构建的 gui-screenshots 工件里的 index.html）：有没有错位、缺字、文字被截断。被省略号截断的文字和没有无障碍名称的控件，作业摘要里列为警告。
+
+## 界面（CI 自动测试：gui-smoke）
+
+不用手动测，出问题时构建会失败；这里只是列出 CI 测了什么。
+
+- [x] 首页、混音器、麦克风与音效、设置，托盘面板，全局快捷键、使用配置、多音箱（实验性）窗口都能打开，程序不退出，日志里没有 ERROR（CI 自动测试：gui-smoke）
+- [x] 找不到音箱、等待重试（「找不到音箱：请确认它已通电、和电脑在同一网络，N 秒后重试」）时，首页和托盘面板的按钮是「连接」不是「断开」；这时点「连接」马上开始连接（CI 自动测试：gui-smoke）
+- [x] 连着 HomePod 时（CI 里是假的 HomePod）首页按钮是「断开」，缓冲、音箱处理、实际延迟、断音、重传都有数值；设置 → 音箱信息读得到音箱；退出时发 TEARDOWN（CI 自动测试：gui-smoke）
+- [x] 首页没有「刚才卡了」「导出诊断」；设置 → 工具 有「导出诊断」；全局快捷键里有「标记刚才的卡顿」，默认「未设置」（CI 自动测试：gui-smoke）
+- [x] 中文、English、Deutsch，100 % 和 150 % 缩放，以及最小窗口宽度：控件没有超出所在区域被裁掉、没有互相重叠，按钮都有文字（CI 自动测试：gui-smoke）
 
 ## 使用配置、校准和独立音量（新增）
 
@@ -116,8 +128,8 @@
 
 CI 每次构建都会跑 `update-e2e`（`tools/ci/update-e2e.ps1`，见 `docs/RELEASING.md`「CI 里的软件更新测试」）：在运行器上装一个旧版 MSI，用和「更新」按钮相同的代码从 `127.0.0.1` 上的假发布列表下载这次构建的 MSI，校验 SHA-256，退出，安装助手通过 msiexec（Verb runas）安装，再带 `--updated-from=` 重新启动新版；默认目录和自定义目录各一遍，并确认只装了一个、目录没变、`%TEMP%` 里的 `HomePodCast-update-*` 被清掉、损坏的安装包会被拒绝。下面标「CI 已覆盖」的部分不用再手动测，只看人才能看到的东西。CI 测不到、仍要实机测的：**UAC 弹窗本身**（运行器是管理员，UAC 不弹窗）和在 UAC 里点「否」、用浏览器下载 MSI 时的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
 
-- [ ] 新装或旧配置升级后：「设置 → 软件更新」里「自动检查更新」是关的；日志里只有 `update: automatic checks are off`，没有任何 `GET https://api.github.com/...`（单元测试：UpdateViewTests、UpdateConfigTests）
-- [ ] 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」（单元测试：ReleaseSelectionTests、UpdateViewTests）
+- [ ] 新装或旧配置升级后：「设置 → 软件更新」里「自动检查更新」是关的；日志里只有 `update: automatic checks are off`，没有任何 `GET https://api.github.com/...`（单元测试：UpdateViewTests、UpdateConfigTests）。新装的配置（CI 自动测试：gui-smoke）；旧配置升级后仍要实机看
+- [ ] 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」（单元测试：ReleaseSelectionTests、UpdateViewTests）（CI 自动测试：gui-smoke：每次构建检查它自己的版本，测试版和 PR 构建是「测试版」，正式版标签构建是「正式版」）
 - [ ] 点「检查更新」：状态行变成「已是最新版本」或「发现新版本 x」；日志有一行 `update: manual check ... GET https://api.github.com/repos/qiyinxi/HomePodCast/releases?per_page=20`（单元测试：UpdateViewTests、GitHubRequestTests；仍需实机：真的连上 GitHub）
 - [ ] 在测试版上切到「正式版」再检查（最新正式版比本机旧时）：显示「当前测试版比最新正式版新……」，没有「更新」按钮（单元测试：UpdateViewTests、ReleaseSelectionTests）
 - [ ] 推流时点「更新」：确认框里有「正在推流：推送会停止大约一分钟。」；点「否」什么都不发生（单元测试：UpdateViewTests，确认框的文字；仍需实机：点「否」）
@@ -132,7 +144,7 @@ CI 每次构建都会跑 `update-e2e`（`tools/ci/update-e2e.ps1`，见 `docs/RE
 
 - [x] 睡眠唤醒后自动重连（用户 2026-10-08 反馈：日常使用中没问题）（单元测试：TakeoverControllerTests、TakeoverPolicyTests）
 - [x] iPhone 抢占 HomePod 后，电脑端不抢回；托盘显示被占用（用户 2026-10-08 反馈：日常使用中没问题）（单元测试：TakeoverControllerTests、GroupRunnerTests）
-- [ ] 设置 → 语言切换到 Svenska / English 看一眼，有没有明显不通的翻译
+- [ ] 设置 → 语言切换到 Svenska / English 看一眼，有没有明显不通的翻译。English 和 Deutsch 每一页的截图、界面里没翻译的中文（CI 自动测试：gui-smoke）；翻译通不通顺、Svenska、在设置里切换后重新启动，仍要实机看
 
 ## 九、Apple TV（第 7 代，接上后再测）
 

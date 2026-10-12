@@ -26,8 +26,9 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
     /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
     /// <param name="updatedFrom">The version before an update (<c>--updated-from=</c>, passed by the update helper).</param>
+    /// <param name="flyoutSignal">Set by a second <c>gui --flyout</c> (a test switch): open the flyout in this running instance.</param>
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
-        string? updatedFrom = null)
+        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -79,8 +80,10 @@ internal sealed partial class TrayApp : ApplicationContext
             OnNetworkAddressChanged(); // a new network may be Public (TrayApp.Firewall.cs)
         }, null);
 
-        // Bring the existing window forward when a second instance is launched.
+        // Bring the existing window forward when a second instance is launched (its flyout for a second gui --flyout).
         ThreadPool.RegisterWaitForSingleObject(showSignal, (_, _) => _ui.Post(_ => ShowMain(), null), null, -1, false);
+        if (flyoutSignal != null)
+            ThreadPool.RegisterWaitForSingleObject(flyoutSignal, (_, _) => _ui.Post(_ => { if (!_quitting) ShowFlyout(); }, null), null, -1, false);
 
         OnControllerChanged();
         if (!startHidden) ShowMain();

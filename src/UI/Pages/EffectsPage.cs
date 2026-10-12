@@ -75,6 +75,10 @@ internal sealed class EffectsPage : ScrollPage
     {
         var title = Ui.Header(L.T("麦克风"));
         var head = Ui.Row(12, title, title, _micOn);
+        // A FieldRow names the row of controls after its caption; the control in it gets the caption too (screen readers).
+        _micDevice.AccessibleName = L.T("设备");
+        _gateThreshold.AccessibleName = L.T("噪声门");
+        _destination.AccessibleName = L.T("送到");
         var device = new FieldRow(L.T("设备"), Ui.Row(6, _micDevice, _micDevice, _refresh));
         var level = new FieldRow(L.T("电平"), _meter);
         var gain = new FieldRow(L.T("增益"), _gain, _gainValue);
@@ -390,6 +394,7 @@ internal sealed class EffectsPage : ScrollPage
                 bands.Add(_values[i], _bands[i], label);
                 _bands[i].Scroll += (_, _) => OnBandChanged();
             }
+            _preset.AccessibleName = L.T("预设");
             var preset = new FieldRow(L.T("预设"), Ui.Row(0, null, _preset));
             Card = Ui.Card(Ui.Header(title), preset, bands);
             Card.Gap = 10;

@@ -52,10 +52,13 @@ public static class Program
 
         var suffix = AppConfig.Profile is { } p ? "." + p : "";
         using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
+        using var flyout = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Flyout" + suffix);
         using var single = new Mutex(true, SingleInstanceName, out bool first);
         if (!first)
         {
-            show.Set(); // ask the running instance to show its window
+            // Ask the running instance to show its window; the hidden test switch --flyout opens its tray flyout instead
+            // (the GUI smoke test in CI, tests/HomePodCast.GuiSmoke, has no tray icon it could right-click reliably).
+            (openFlyout ? flyout : show).Set();
             return 0;
         }
 
@@ -85,7 +88,8 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
+            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout));
         if (UI.LanguageMenu.RestartRequested)
         {
             // The Store version starts again through its package (Explorer), so the new copy has package identity too.

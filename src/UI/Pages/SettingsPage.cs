@@ -70,6 +70,7 @@ internal sealed class SettingsPage : ScrollPage
         _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
+        _cap.AccessibleName = L.T("音量上限"); // the row is named after its title; the slider in it too
         var capRow = Ui.Row(10, _cap, _cap, _capValue);
         capRow.FixedWidths[_cap] = 180;
         capRow.FixedWidths[_capValue] = 44;

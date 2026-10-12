@@ -375,6 +375,14 @@ internal class RowPanel : LayoutPanel
         int fixedSum = items.Where(c => c != Fill).Sum(WidthOf);
         int fillWidth = Math.Max(0, width - gaps - fixedSum);
         var widths = items.Select(c => c == Fill ? fillWidth : WidthOf(c)).ToList();
+        int over = widths.Sum() + gaps - width;
+        if (Fill == null && over > 0)
+        {
+            // Too narrow (the window's minimum width, long words): the widest child gives way instead of the last ones being
+            // cut off (German 「Löschen」 after the VLC password, English 「Send to」; found by the GUI smoke test).
+            int widest = widths.IndexOf(widths.Max());
+            widths[widest] = Math.Max(0, widths[widest] - over);
+        }
         var heights = items.Select((c, i) => HeightFor(c, widths[i])).ToList();
         int height = Math.Max(Dp(MinHeight), heights.Max());
         if (apply)
@@ -413,7 +421,13 @@ internal class Card : LayoutPanel, ISurface
         foreach (Control c in Controls)
         {
             int h = HeightFor(c, inner.Width);
-            if (h <= 0) continue;
+            if (h <= 0)
+            {
+                // Out of the way, as StackPanel does: never placed, a panel kept its default 200x100 at the card's corner
+                // and painted over it (麦克风与音效: the row of the collapsed 打开麦克风隐私设置 link, found by the GUI smoke test).
+                if (apply && c.Height != 0 && !IsCollapsed(c)) Place(c, inner.X, y, inner.Width, 0);
+                continue;
+            }
             if (!first) y += Dp(Gap);
             if (apply) Place(c, inner.X, y, inner.Width, h);
             y += h;
