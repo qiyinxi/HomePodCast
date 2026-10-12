@@ -24,6 +24,8 @@ Both flows below are done by `tools/release.ps1` (PowerShell 7, git and an authe
 
 The version is `<Version>` in `src/HomePodCast.csproj`. It is set on `dev` in a commit of its own, "Version X.Y.Z", after the previous stable release; every beta and the stable release of X.Y.Z are built from it.
 
+**Experimental features.** A feature first released in a 1.Y.z version is marked experimental in the app, the README and the release notes for the whole 1.Y line. The next minor version, 1.(Y+1).0, drops the label, unless a known problem keeps it; its release notes say which features are no longer experimental. Each label in the code has a `// experimental since 1.Y` comment next to it, so that `git grep "experimental since 1.Y"` finds them all when the minor version goes up. Labels that say a feature has never been tested on real hardware (stereo pairs, multi-room, Apple TV pairing) are a different matter: they stay until it has been.
+
 ### Making a beta
 
 1. Commit on `dev` and push: `git push origin dev`.
@@ -86,7 +88,7 @@ The messages it fails with:
 - `Stable tag vX.Y.Z is on commit <sha>, which is not on main. A stable release is tagged on the merge commit that tools/release.ps1 -Promote makes on main (release/X.Y.Z -> main), after main's CI for it has passed.`
 - `Stable tag vX.Y.Z: no published vX.Y.Z-beta.N prerelease has the same source tree as <sha> (tree …). Checked: …. A stable release is a promotion of a tested beta: release this source as a beta first (tools/release.ps1 -Beta), test it, then promote it (tools/release.ps1 -Promote vX.Y.Z-beta.N).`
 
-Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the `build` check, and the branch up to date with `main`.
+Branch and PR builds don't run these checks. `main`'s branch protection adds its own: a PR, the checks `build`, `update-e2e`, `msi-e2e`, `msix-e2e` and `extension-e2e`, and the branch up to date with `main`.
 
 The checks read everything through the GitHub API, so they run locally too, read-only:
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f` (passes), and `./tools/release-checks.ps1 -SelfTest` runs them for known tags of this repository against the results they must give.
@@ -188,6 +190,8 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 版本号是 `src/HomePodCast.csproj` 里的 `<Version>`。上一个正式版发布后，在 `dev` 上用一个单独的提交 "Version X.Y.Z" 设置；X.Y.Z 的所有测试版和正式版都用它构建。
 
+**实验性功能。** 在 1.Y.z 版本里第一次发布的功能，在整个 1.Y 系列里都在程序、README 和发布说明里标成「实验性」。到下一个次版本 1.(Y+1).0 去掉这个标注，除非还有已知问题；1.(Y+1).0 的发布说明要写明哪些功能不再是实验性的。代码里每处标注旁边都加一条 `// experimental since 1.Y` 注释，升次版本时用 `git grep "experimental since 1.Y"` 就能全部找到。因为「还没在真实设备上测过」而标的实验性（立体声对、多房间、Apple TV 配对）是另一回事：要等实机测过才去掉。
+
 ### 发测试版
 
 1. 在 `dev` 上提交并推送：`git push origin dev`。
@@ -244,7 +248,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 失败时的提示就是上面英文部分列出的那几条（CI 日志是英文的）。
 
-分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR、`build` 检查通过、分支和 `main` 保持最新。
+分支和 PR 构建不跑这些检查。`main` 的分支保护另外要求：通过 PR；`build`、`update-e2e`、`msi-e2e`、`msix-e2e`、`extension-e2e` 这几项检查通过；分支和 `main` 保持最新。
 
 这些检查全部通过 GitHub API 读取，所以也可以在本地只读地运行：
 `./tools/release-checks.ps1 -Tag v0.2.2-beta.4 -Sha 549e83f`（通过）；`./tools/release-checks.ps1 -SelfTest` 用本仓库已知的标签运行检查，并和应得的结果对比。
