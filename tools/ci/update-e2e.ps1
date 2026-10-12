@@ -91,11 +91,8 @@ function Get-MsiFileProperty([string] $msi, [string] $name) {
 # Every installed product with our UpgradeCode, as Windows Installer reports it (what UpdateInstaller.IsMsiInstall reads).
 function Get-InstalledProducts {
     $installer = New-Object -ComObject WindowsInstaller.Installer
-    $list = $null
     try {
-        $list = $installer.RelatedProducts($UpgradeCode)
-        for ($i = 0; $i -lt $list.Count; $i++) {
-            $code = $list.Item($i)
+        foreach ($code in @($installer.RelatedProducts($UpgradeCode))) { # a StringList: enumerated, it has no Count here
             [pscustomobject]@{
                 ProductCode = $code
                 Version     = $installer.ProductInfo($code, 'VersionString')
@@ -103,7 +100,7 @@ function Get-InstalledProducts {
             }
         }
     }
-    finally { Close-Com $list $installer }
+    finally { Close-Com $installer }
 }
 
 # Add/Remove Programs entries named HomePodCast (Settings → Apps).
