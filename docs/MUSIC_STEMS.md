@@ -1,5 +1,21 @@
 # Music separation / 音乐分轨（实验性）
 
+## English
+
+Mixer → Music separation separates the captured music into estimated vocals and accompaniment locally. Mix them independently for HomePod and a local headphone output. For singing practice, set HomePod vocals 0 / accompaniment 100 and local vocals 100 / accompaniment 0. The microphone is mixed after separation and does not inherit the separation wait.
+
+Extract the optional `HomePodCast-stems-<version>.zip` CI/release attachment and select its folder. The core app carries no ONNX dependency or model, never downloads it automatically, and starts no worker while separation is off. The module uses the same .NET 10 Runtime. Enable switches are session-only; disconnecting ends separation.
+
+Choose an output that is not captured. Monitoring pauses if it would feed back into capture. Windows still plays the original: use existing per-app HomePod-only routing or a dedicated capture device. Separation applies to the captured mix, so use per-app routing to isolate a music app if required.
+
+The MIT-licensed StemgenRT 0.7.0 vocal branch estimates vocals; accompaniment is the original minus that estimate. Processing is local without audio recording/upload. Model and runtime notices ship in the optional module. Stems may leak instruments, vocals or reverberation and are not promised to work for arbitrary dialogue/game audio.
+
+The fixed 8192-frame wait adds about 185.8 ms to normal HomePod latency, including the model's previous-hop alignment. Video compensation includes it; calibrate with separation off. Local stems additionally wait the negotiated AirPlay delay to approximate speaker alignment; actual headphone and speaker delays still need listening tests. Late model output mutes unequal-gain stem mixes instead of sending unseparated audio. Counters show missed frames and dropped work. Equal stem gains reconstruct the delayed original directly.
+
+Build with the commands above. Downloads are pinned and hash-checked; pruning preserves the independent vocal weights. CI compares eight real ONNX cases against the publisher's independent native PyTorch reference within 1e-5, then benchmarks non-silent inference. The benchmark is not an end-to-end latency or separation quality measurement.
+
+Model source and license: [StemgenRT](https://github.com/sweetspotsoundsystem/stemgen-rt/tree/85e715f1a1982b29204e11595d6fa3f0bde9810a). Runtime: [ONNX Runtime](https://github.com/microsoft/onnxruntime/tree/v1.26.0).
+
 ## 简体中文
 
 混音器 → 音乐分轨：在电脑上实时分离已采集音乐的人声和伴奏，分别调整 HomePod 与耳机的混合比例。例如，HomePod 人声 0 / 伴奏 100，本机人声 100 / 伴奏 0，用耳机听原唱练唱。麦克风在分轨之后混入，不会被分离，也不会增加分轨的 186 ms 等待。
@@ -25,18 +41,3 @@ dotnet test tests/HomePodCast.Tests --no-restore --filter FullyQualifiedName~Ste
 
 脚本校验完整模型 SHA-256，裁出人声图，再校验裁剪后 SHA-256；真实 ONNX 输出与发布者的独立 PyTorch 参考比较（8 组，含短片段、部分尾块、重置与 EOF flush，误差 ≤ 1e-5），随后运行非静音性能测试。基准反映此电脑的推理速度，不代表音乐质量或 HomePod 的端到端延迟。
 
-## English
-
-Mixer → Music separation separates the captured music into estimated vocals and accompaniment locally. Mix them independently for HomePod and a local headphone output. For singing practice, set HomePod vocals 0 / accompaniment 100 and local vocals 100 / accompaniment 0. The microphone is mixed after separation and does not inherit the separation wait.
-
-Extract the optional `HomePodCast-stems-<version>.zip` CI/release attachment and select its folder. The core app carries no ONNX dependency or model, never downloads it automatically, and starts no worker while separation is off. The module uses the same .NET 10 Runtime. Enable switches are session-only; disconnecting ends separation.
-
-Choose an output that is not captured. Monitoring pauses if it would feed back into capture. Windows still plays the original: use existing per-app HomePod-only routing or a dedicated capture device. Separation applies to the captured mix, so use per-app routing to isolate a music app if required.
-
-The MIT-licensed StemgenRT 0.7.0 vocal branch estimates vocals; accompaniment is the original minus that estimate. Processing is local without audio recording/upload. Model and runtime notices ship in the optional module. Stems may leak instruments, vocals or reverberation and are not promised to work for arbitrary dialogue/game audio.
-
-The fixed 8192-frame wait adds about 185.8 ms to normal HomePod latency, including the model's previous-hop alignment. Video compensation includes it; calibrate with separation off. Local stems additionally wait the negotiated AirPlay delay to approximate speaker alignment; actual headphone and speaker delays still need listening tests. Late model output mutes unequal-gain stem mixes instead of sending unseparated audio. Counters show missed frames and dropped work. Equal stem gains reconstruct the delayed original directly.
-
-Build with the commands above. Downloads are pinned and hash-checked; pruning preserves the independent vocal weights. CI compares eight real ONNX cases against the publisher's independent native PyTorch reference within 1e-5, then benchmarks non-silent inference. The benchmark is not an end-to-end latency or separation quality measurement.
-
-Model source and license: [StemgenRT](https://github.com/sweetspotsoundsystem/stemgen-rt/tree/85e715f1a1982b29204e11595d6fa3f0bde9810a). Runtime: [ONNX Runtime](https://github.com/microsoft/onnxruntime/tree/v1.26.0).

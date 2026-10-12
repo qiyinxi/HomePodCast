@@ -201,16 +201,17 @@ public sealed class LiveStemMixer : IAudioEffect, ITapSource, IDisposable
                 Ready = true;
                 deadline.CancelAfter(Timeout.InfiniteTimeSpan);
                 var input = process.StandardInput.BaseStream; var output = process.StandardOutput.BaseStream;
-                var response = new byte[8 + BlockFrames * 8]; var sequenceBytes = new byte[8];
+                var response = new byte[8 + BlockFrames * 8]; var request = new byte[8 + BlockFrames * 8];
                 long previousEnd = -1;
                 while (!_stopped)
                 {
                     int read = _read;
                     if (read == Volatile.Read(ref _write)) { _signal.WaitOne(100); continue; }
                     long first = _sequences[read % Slots];
-                    BitConverter.TryWriteBytes(sequenceBytes, first);
+                    BitConverter.TryWriteBytes(request, first);
+                    MemoryMarshal.AsBytes(_requests[read % Slots].AsSpan()).CopyTo(request.AsSpan(8));
                     long began = Stopwatch.GetTimestamp();
-                    input.Write(sequenceBytes); input.Write(MemoryMarshal.AsBytes(_requests[read % Slots].AsSpan())); input.Flush();
+                    input.Write(request); input.Flush();
                     deadline.CancelAfter(TimeSpan.FromSeconds(2));
                     output.ReadExactlyAsync(response, deadline.Token).AsTask().GetAwaiter().GetResult();
                     deadline.CancelAfter(Timeout.InfiniteTimeSpan);

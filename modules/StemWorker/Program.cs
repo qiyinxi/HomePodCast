@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -106,16 +107,22 @@ try
     using var writer = new BinaryWriter(Console.OpenStandardOutput());
     writer.Write(0x31535448); writer.Write(frames); writer.Write(hop); writer.Write(44100); writer.Flush();
     long expected = 0;
+    var inputBytes = new byte[frames * 8];
+    var outputBytes = new byte[8 + frames * 8];
     while (true)
     {
         long sequence;
         try { sequence = reader.ReadInt64(); } catch (EndOfStreamException) { break; }
         if (sequence != expected) foreach (var state in states) Array.Clear(state);
         expected = sequence + frames;
-        for (int i = 0; i < pcm.Length; i++) pcm[i] = reader.ReadSingle();
+        // Console pipe streams have no FileStream buffering: scalar ReadSingle/Write(float) performed thousands
+        // of kernel calls per block, despite fast inference. Keep one bulk read/write per 1024-frame block.
+        reader.BaseStream.ReadExactly(inputBytes);
+        MemoryMarshal.Cast<byte, float>(inputBytes).CopyTo(pcm);
         for (int at = 0; at < frames; at += hop) Infer(pcm.AsSpan(at * 2, hop * 2), result.AsSpan(at * 2, hop * 2));
-        writer.Write(sequence - hop);
-        foreach (float sample in result) writer.Write(sample);
+        BitConverter.TryWriteBytes(outputBytes, sequence - hop);
+        MemoryMarshal.AsBytes(result.AsSpan()).CopyTo(outputBytes.AsSpan(8));
+        writer.BaseStream.Write(outputBytes);
         writer.Flush();
     }
 }
