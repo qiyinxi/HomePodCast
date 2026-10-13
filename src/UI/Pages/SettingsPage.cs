@@ -66,8 +66,10 @@ internal sealed class SettingsPage : ScrollPage
         var theme = new SettingRow(Glyph.Appearance, L.T("外观"), L.T("浅色或深色；默认跟随 Windows。"), _theme);
         var autostart = _autostartRow = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T(AutostartText), _autostart);
         var autoconnect = new SettingRow(Glyph.Sync, L.T("启动后自动连接"), L.T("启动时连接上次用的音箱。"), _autoconnect);
-        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时");
-        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
+        // Experimental until it has been tried on a real Apple TV (AGENTS.md: a hardware-untested label, not a version
+        // one): whether the Apple TV takes its HomePod back after we disconnect is still unverified.
+        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）");
+        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）"), "", _homeTheater);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
         _cap.AccessibleName = L.T("音量上限"); // the row is named after its title; the slider in it too

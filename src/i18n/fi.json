@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, kotiteatteri: {1})",
   "临时接管": "Ota tilapäisesti",
   "先询问": "Kysy ensin",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Kun HomePod on Apple TV:n kotiteatterikaiutin",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Kun HomePod on Apple TV:n kotiteatterikaiutin (kokeellinen)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Yhdistettäessä HomePod otetaan suoraan Apple TV:ltä (sekä automaattisessa yhdistämisessä käynnistyksen yhteydessä että \"Yhdistä\"-painiketta napsautettaessa), ja Apple TV:n toisto keskeytyy. Kun HomePodCast on yhdistetty, Apple TV:n ääni ei kuulu tästä HomePodista; kun yhteys on katkaistu, Apple TV yhdistää siihen uudelleen, kun se seuraavan kerran toistaa jotain.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "\"Yhdistä\"-painiketta napsautettaessa kysytään ensin; automaattiset yhteydet odottavat, kunnes HomePod vapautuu, ja Apple TV on yleensä yhdistettynä siihen.",
   "分组": "Ryhmä",

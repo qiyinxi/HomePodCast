@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, hjemmebiograf: {1})",
   "临时接管": "Overtag midlertidigt",
   "先询问": "Spørg først",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Når en HomePod er hjemmebiografhøjttaler for et Apple TV",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Når en HomePod er hjemmebiografhøjttaler for et Apple TV (eksperimentelt)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Ved forbindelse overtages HomePod direkte fra Apple TV (både ved automatisk forbindelse ved start og når du klikker på \"Opret forbindelse\"), og det, Apple TV afspiller, afbrydes. Mens HomePodCast er forbundet, kommer lyden fra Apple TV ikke ud af denne HomePod; når du har afbrudt, forbinder Apple TV til den igen, næste gang den afspiller noget.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Når du klikker på \"Opret forbindelse\", bliver du spurgt først; automatiske forbindelser venter, til HomePod er ledig, og Apple TV er som regel forbundet til den.",
   "分组": "Gruppe",

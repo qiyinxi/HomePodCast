@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0}（Apple TV、ホームシアター：{1}）",
   "临时接管": "一時的に引き継ぐ",
   "先询问": "先に確認する",
-  "HomePod 当 Apple TV 家庭影院音箱时": "HomePod が Apple TV のホームシアター用スピーカーのとき",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "HomePod が Apple TV のホームシアター用スピーカーのとき（実験的）",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "接続時に HomePod を Apple TV から直接引き継ぎます（起動時の自動接続でも「接続」をクリックしたときも同じ）。Apple TV で再生中の音は途切れます。HomePodCast の接続中は Apple TV の音がこの HomePod から出ません。切断後、Apple TV は次に再生するときに再び接続します。",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "「接続」をクリックしたときは先に確認します。自動接続は HomePod が空くまで待ちますが、Apple TV は通常ずっと接続しています。",
   "分组": "グループ",

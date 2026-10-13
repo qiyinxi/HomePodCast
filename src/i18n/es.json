@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, cine en casa: {1})",
   "临时接管": "Tomar temporalmente",
   "先询问": "Preguntar antes",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Cuando un HomePod es el altavoz de cine en casa de un Apple TV",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Cuando un HomePod es el altavoz de cine en casa de un Apple TV (experimental)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Al conectar se toma el HomePod directamente del Apple TV (tanto al conectar al iniciar como al hacer clic en \"Conectar\"), y se corta lo que el Apple TV esté reproduciendo. Mientras HomePodCast esté conectado, el sonido del Apple TV no sale por este HomePod; al desconectar, el Apple TV volverá a conectarse a él la próxima vez que reproduzca algo.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Al hacer clic en \"Conectar\" se te pregunta antes; las conexiones automáticas esperan a que el HomePod quede libre, y el Apple TV suele seguir conectado a él.",
   "分组": "Grupo",
