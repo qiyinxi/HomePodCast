@@ -22,9 +22,9 @@
 
 Both flows below are done by `tools/release.ps1` (PowerShell 7, git and an authenticated `gh`; run it from the repository, any worktree). CI enforces rules 1 and 2 for every pushed tag on its own (see [What CI enforces](#what-ci-enforces)), so a tag made by hand can't get around them either. `./tools/release.ps1 -Status` shows where things stand: the version on `dev`, the latest tags, whether `dev`'s CI is green and which betas can be promoted.
 
-The version is `<Version>` in `src/HomePodCast.csproj`. It is set on `dev` in a commit of its own, "Version X.Y.Z", after the previous stable release; every beta and the stable release of X.Y.Z are built from it.
+The version is `<Version>` in `src/HomePodCast.csproj`. It is set on `dev` in a commit of its own, "Version X.Y.Z", after the previous stable release; every beta and the stable release of X.Y.Z are built from it. CI builds of branches and PRs take it too, as prereleases of X.Y.Z: `X.Y.Z-dev.<run>` for a push to `dev` (other branches by their name likewise) and `X.Y.Z-pr.<n>.<run>` for a PR, with the MSI version X.Y.Z.<run> (see [The installer in CI](#the-installer-in-ci)). Until 2026-10-13 they were `0.2.0-…` whatever the version.
 
-**Experimental features.** A feature first released in a 1.Y.z version is marked experimental in the app, the README and the release notes for the whole 1.Y line. The next minor version, 1.(Y+1).0, drops the label, unless a known problem keeps it; its release notes say which features are no longer experimental. Each label in the code has a `// experimental since 1.Y` comment next to it, so that `git grep "experimental since 1.Y"` finds them all when the minor version goes up. Labels that say a feature has never been tested on real hardware (stereo pairs, multi-room, Apple TV pairing) are a different matter: they stay until it has been.
+**Experimental features.** A feature first released in a 1.Y.z version is marked experimental in the app, the README and the release notes for the whole 1.Y line. The next minor version, 1.(Y+1).0, drops the label, unless a known problem keeps it; its release notes say which features are no longer experimental. Each label in the code has a `// experimental since 1.Y` comment next to it, so that `git grep "experimental since 1.Y"` finds them all when the minor version goes up. Labels that say a feature has never been tested on real hardware (stereo pairs, multi-room, Apple TV pairing, the home-theater takeover) are a different matter: they stay until it has been; `docs/device-test-checklist.zh-CN.md` lists those tests under 「实验性功能」.
 
 ### Making a beta
 
@@ -43,7 +43,7 @@ The script:
 
 It warns when `main` is not an ancestor of `dev`: such a beta can't be promoted (see below). Without `-NotesFile` the release keeps GitHub's generated notes; apply real ones later with `gh release edit vX.Y.Z-beta.N --notes-file <notes.md>`.
 
-Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md`. Before that, glance through the screenshots of the GUI smoke test: download the `gui-screenshots` artifact of the beta's tag build (Actions → build → the run → Artifacts) and open its `index.html`. The checklist's items marked 「（CI 自动测试：gui-smoke）」 are covered by that job and need no testing by hand.
+Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md`. Before that, glance through the screenshots of the GUI smoke test: download the `gui-screenshots` artifact of the beta's tag build (Actions → build → the run → Artifacts) and open its `index.html`. What that job and the other CI jobs and unit tests cover is in the checklist's list 「已自动化（不用手测）」 and needs no testing by hand; of the rest, the short per-release regression (「每版回归」) is done for every beta, and each one-time check (「一次性验证」) only once, and again when the code it names has changed.
 
 ### The GUI smoke test
 
@@ -70,7 +70,7 @@ The script:
 - waits for `main`'s CI on the merge commit, then tags it `vX.Y.Z` ("HomePodCast X.Y.Z") and pushes the tag;
 - waits for the tag build, checks that the release is not a prerelease and has the `.msi` and the `-win-x64.zip`, and applies the notes;
 - merges `main` back into `dev` and pushes `dev` (see below). From any other checkout it prints the commands instead:
-  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z" -m "dev contains main's merge commit again (no file changes)." origin/main; git push origin dev`
 
 Afterwards set the next version on `dev` ("Version X.Y.Z+1" or the next minor) before the next beta; `-Beta` refuses a version that is already released.
 
@@ -105,12 +105,12 @@ Tags made before these rules aren't checked again: re-running one of their workf
 
 ### The installer in CI
 
-Every build (push, PR and tag) also runs the job `msi-e2e` after `build`, and the `release` job waits for it, so a tag whose MSI is broken publishes nothing: fix it on `dev` and release the next beta. It replaces the installer part of `docs/device-test-checklist.zh-CN.md` (section 七). `tools/ci/msi-e2e.ps1`, on the runner:
+Every build (push, PR and tag) also runs the job `msi-e2e` after `build`, and the `release` job waits for it, so a tag whose MSI is broken publishes nothing: fix it on `dev` and release the next beta. It replaces the installer part of `docs/device-test-checklist.zh-CN.md` (listed under 「已自动化」 there; 「安装包（MSI）」 keeps what only a person sees). `tools/ci/msi-e2e.ps1`, on the runner:
 
 1. reads the MSI's tables: every language of `installer/build.ps1` is an embedded transform with its own finish-page text, and the zh-CN wizard is Chinese (「启动 HomePodCast」 included) with the license in English;
 2. installs it silently into the default folder and checks the files, exactly one Start menu shortcut, exactly one entry in Programs and Features, and exactly one firewall rule for that exe (inbound, allow, Private, LocalSubnet: what the app adds itself); the installed exe's own startup check (`HomePodCast.exe firewall`, read-only) must find it and decide on no firewall prompt;
 3. uninstalls it: files, shortcut, firewall rule and Programs entry gone, a seeded `%APPDATA%\HomePodCast` untouched; then the same in a custom `INSTALLFOLDER` with a space and Chinese characters;
-4. installs v0.2.0-beta.8, v0.2.0, v0.2.1, v0.2.2 and the latest release (`gh release download`), one at a time, and the new MSI over each: one HomePodCast afterwards, the new version, same folder, one correct rule, with the two installs in different wizard languages (`TRANSFORMS=:2052`, which the msiexec log must show applied). A branch or PR build is MSI 0.2.0.<run>: it upgrades v0.2.0-beta.8 and v0.2.0, but v0.2.1 and later are newer, so for those it checks that the MSI refuses the downgrade with its message and leaves the release installed. The tag build tests the real upgrade from all of them.
+4. installs v0.2.0-beta.8, v0.2.0, v0.2.1, v0.2.2, v1.0.0-beta.6, v1.0.0 and the latest release (`gh release download`), one at a time, and the new MSI over each: one HomePodCast afterwards, the new version, same folder, one correct rule, with the two installs in different wizard languages (`TRANSFORMS=:2052`, which the msiexec log must show applied). A branch or PR build is MSI X.Y.Z.<run> with X.Y.Z from the csproj (1.0.0.<run> now), so it really upgrades every release up to X.Y.Z, X.Y.Z itself and its betas included: Windows Installer compares only the first three fields, and the MSI replaces the same version (`AllowSameVersionUpgrades`). A release newer than the build (a beta of the next version, seen from a build of `main`) is checked the other way: the MSI must refuse the downgrade with its message and leave the release installed. Every build also checks that refusal against a copy of its own MSI that says it is the next major version (a newer release as the MSI sees it).
 
 Each check is an `ok` line in the log, and the job summary lists them; when it fails, msiexec's logs are the `msi-e2e-logs` artifact. The script refuses to run outside GitHub Actions; `./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` runs step 1 anywhere, without installing anything.
 
@@ -124,19 +124,19 @@ Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and
 4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
 5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
 
-Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person, per release (`docs/device-test-checklist.zh-CN.md`, section 七): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
+Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person (`docs/device-test-checklist.zh-CN.md`: the per-release regression, 「软件更新」 and 「安装包（MSI）」): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
 
 `update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
 ### The browser extension in CI
 
-Every build (push, PR and tag) also runs the job `extension-e2e` (Ubuntu, a few minutes, independent of `build`), and the `release` job waits for it. It loads the browser extension unpacked into Chromium (Puppeteer's Chrome for Testing, headless) and drives it on local stand-ins for a YouTube and a bilibili player (also bilibili's WASM `<bwp-video>` canvas player) and a bare `<video>`, against a fake HomePodCast API that the tests switch between streaming, idle and not running (`extension/test/e2e`; host names other than `*.localhost` don't resolve, so nothing leaves the runner and the real sites are never opened). It checks the in-page controls, sync fullscreen, the ±5/±20 ms buttons and Alt shortcuts with the saved site offset and its bounds, the delayed picture through the frame numbers the test video carries (pause, seek, fullscreen, web fullscreen, streaming off), and the popup. Screenshots of failed tests are the `extension-e2e-screenshots` artifact. The items it covers are marked 「CI 自动测试：extension-e2e」 in `docs/device-test-checklist.zh-CN.md` (section 五 and the top); the real sites, lip sync and 60 fps smoothness stay with a person.
+Every build (push, PR and tag) also runs the job `extension-e2e` (Ubuntu, a few minutes, independent of `build`), and the `release` job waits for it. It loads the browser extension unpacked into Chromium (Puppeteer's Chrome for Testing, headless) and drives it on local stand-ins for a YouTube and a bilibili player (also bilibili's WASM `<bwp-video>` canvas player) and a bare `<video>`, against a fake HomePodCast API that the tests switch between streaming, idle and not running (`extension/test/e2e`; host names other than `*.localhost` don't resolve, so nothing leaves the runner and the real sites are never opened). It checks the in-page controls, sync fullscreen, the ±5/±20 ms buttons and Alt shortcuts with the saved site offset and its bounds, the delayed picture through the frame numbers the test video carries (pause, seek, fullscreen, web fullscreen, streaming off), and the popup. Screenshots of failed tests are the `extension-e2e-screenshots` artifact. What it covers is listed under 「已自动化」 in `docs/device-test-checklist.zh-CN.md`; the real sites, lip sync and 60 fps smoothness stay with a person (「浏览器插件」 there).
 
 To run it locally: `npm ci`, then `npm test` in `extension/test/e2e` (ffmpeg makes the test video). When HomePodCast holds port 47100, the fake API takes another port and the test uses a copy of the extension that asks that port; `HPC_E2E_HEADED=1` shows the browser.
 
 ### The Store package in CI
 
-Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is marked 「（CI 自动测试：msix-e2e）」 in `docs/device-test-checklist.zh-CN.md`, section 十一; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
+Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is listed under 「已自动化」 in `docs/device-test-checklist.zh-CN.md`, and 「Microsoft Store 版」 there keeps the rest; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
 
 ### Release notes
 
@@ -196,9 +196,9 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 下面两个流程都由 `tools/release.ps1` 完成（需要 PowerShell 7、git 和已登录的 `gh`；在仓库里运行，任何工作树都行）。CI 对每个推送的标签另外强制执行第 1、2 条（见「[CI 强制检查什么](#ci-强制检查什么)」），所以手动打的标签也绕不过去。`./tools/release.ps1 -Status` 显示当前情况：`dev` 上的版本、最新的标签、`dev` 的 CI 是否通过、哪些测试版可以转正。
 
-版本号是 `src/HomePodCast.csproj` 里的 `<Version>`。上一个正式版发布后，在 `dev` 上用一个单独的提交 "Version X.Y.Z" 设置；X.Y.Z 的所有测试版和正式版都用它构建。
+版本号是 `src/HomePodCast.csproj` 里的 `<Version>`。上一个正式版发布后，在 `dev` 上用一个单独的提交 "Version X.Y.Z" 设置；X.Y.Z 的所有测试版和正式版都用它构建。分支和 PR 的 CI 构建也用它，作为 X.Y.Z 的预发布版本：推送到 `dev` 是 `X.Y.Z-dev.<运行号>`（其他分支同样用分支名），PR 是 `X.Y.Z-pr.<PR 号>.<运行号>`，MSI 版本是 X.Y.Z.<运行号>（见「[CI 里的安装包测试](#ci-里的安装包测试)」）。2026-10-13 之前它们不管版本号是多少都是 `0.2.0-…`。
 
-**实验性功能。** 在 1.Y.z 版本里第一次发布的功能，在整个 1.Y 系列里都在程序、README 和发布说明里标成「实验性」。到下一个次版本 1.(Y+1).0 去掉这个标注，除非还有已知问题；1.(Y+1).0 的发布说明要写明哪些功能不再是实验性的。代码里每处标注旁边都加一条 `// experimental since 1.Y` 注释，升次版本时用 `git grep "experimental since 1.Y"` 就能全部找到。因为「还没在真实设备上测过」而标的实验性（立体声对、多房间、Apple TV 配对）是另一回事：要等实机测过才去掉。
+**实验性功能。** 在 1.Y.z 版本里第一次发布的功能，在整个 1.Y 系列里都在程序、README 和发布说明里标成「实验性」。到下一个次版本 1.(Y+1).0 去掉这个标注，除非还有已知问题；1.(Y+1).0 的发布说明要写明哪些功能不再是实验性的。代码里每处标注旁边都加一条 `// experimental since 1.Y` 注释，升次版本时用 `git grep "experimental since 1.Y"` 就能全部找到。因为「还没在真实设备上测过」而标的实验性（立体声对、多房间、Apple TV 配对、家庭影院临时接管）是另一回事：要等实机测过才去掉；要测的项在 `docs/device-test-checklist.zh-CN.md` 的「实验性功能」里。
 
 ### 发测试版
 
@@ -217,7 +217,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 如果 `main` 不是 `dev` 的祖先，脚本会警告：这样的测试版不能转正（见下文）。不给 `-NotesFile` 时，发布页保留 GitHub 自动生成的说明，之后用 `gh release edit vX.Y.Z-beta.N --notes-file <说明.md>` 换成正式的。
 
-然后用 `docs/device-test-checklist.zh-CN.md` 在真实 HomePod 上测试这个测试版。在那之前先扫一眼界面冒烟测试的截图：下载这个测试版标签构建的 `gui-screenshots` 工件（Actions → build → 这次运行 → Artifacts），打开里面的 `index.html`。清单里标了「（CI 自动测试：gui-smoke）」的项由这个作业测过，不用再手动测。
+然后用 `docs/device-test-checklist.zh-CN.md` 在真实 HomePod 上测试这个测试版。在那之前先扫一眼界面冒烟测试的截图：下载这个测试版标签构建的 `gui-screenshots` 工件（Actions → build → 这次运行 → Artifacts），打开里面的 `index.html`。这个作业和其他 CI 作业、单元测试覆盖的，列在清单的「已自动化（不用手测）」里，不用再手动测；其余的，「每版回归」每个测试版都做，「一次性验证」只测一次，它写明的代码改了才重测。
 
 ### 界面冒烟测试
 
@@ -244,7 +244,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 - 等 `main` 上这个合并提交的 CI，然后打标签 `vX.Y.Z`（"HomePodCast X.Y.Z"）并推送；
 - 等标签构建完成，检查发布不是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明；
 - 把 `main` 合并回 `dev` 并推送 `dev`（原因见下）。在其他检出里运行时，脚本改为打印这些命令：
-  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z" -m "dev contains main's merge commit again (no file changes)." origin/main; git push origin dev`
 
 之后在 `dev` 上设置下一个版本号（"Version X.Y.Z+1" 或下一个次版本），再发下一个测试版；`-Beta` 会拒绝已经发布过的版本号。
 
@@ -273,12 +273,12 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 ### CI 里的安装包测试
 
-每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msi-e2e` 作业，`release` 作业要等它通过，所以 MSI 坏了的标签什么都不会发布：在 `dev` 上修好，发下一个测试版。它代替 `docs/device-test-checklist.zh-CN.md` 第七节里安装包的部分。`tools/ci/msi-e2e.ps1` 在运行器上：
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msi-e2e` 作业，`release` 作业要等它通过，所以 MSI 坏了的标签什么都不会发布：在 `dev` 上修好，发下一个测试版。它代替 `docs/device-test-checklist.zh-CN.md` 里安装包的部分（列在那里的「已自动化」里；「安装包（MSI）」一节只留只有人能看到的）。`tools/ci/msi-e2e.ps1` 在运行器上：
 
 1. 读 MSI 的表：`installer/build.ps1` 的每种语言都是一个嵌入的转换，完成页文字是它自己的；zh-CN 的向导是中文（包括「启动 HomePodCast」），许可协议是英文；
 2. 静默安装到默认目录，检查程序文件、开始菜单里正好一个快捷方式、「程序和功能」里正好一个条目、正好一条指向这个 exe 的防火墙规则（入站、允许、专用网络、本地子网，和程序自己添加的一样）；装好的 exe 自己的启动检查（`HomePodCast.exe firewall`，只读）要找到它、判断不弹防火墙提示；
 3. 卸载：程序文件、快捷方式、防火墙规则和「程序和功能」里的条目都没了，预先放好的 `%APPDATA%\HomePodCast` 原样保留；然后在带空格和中文的自定义 `INSTALLFOLDER` 里再来一遍；
-4. 逐个安装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2 和最新发布的版本（`gh release download`），再在上面装新 MSI：之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条且正确，新旧两次安装用不同的向导语言（`TRANSFORMS=:2052`，msiexec 日志里要能看到转换已应用）。分支或 PR 构建的 MSI 版本是 0.2.0.<运行号>：能真正升级 v0.2.0-beta.8 和 v0.2.0，但 v0.2.1 及以后的发布比它新，对这些版本检查的是 MSI 拒绝降级、给出提示、旧版原样保留。从所有这些版本的真正升级由标签构建测。
+4. 逐个安装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2、v1.0.0-beta.6、v1.0.0 和最新发布的版本（`gh release download`），再在上面装新 MSI：之后只有一个 HomePodCast，是新版本、目录不变、规则只有一条且正确，新旧两次安装用不同的向导语言（`TRANSFORMS=:2052`，msiexec 日志里要能看到转换已应用）。分支或 PR 构建的 MSI 版本是 X.Y.Z.<运行号>，X.Y.Z 取自 csproj（现在是 1.0.0.<运行号>），所以它能真正升级 X.Y.Z 及以前的所有发布，包括 X.Y.Z 本身和它的测试版：Windows Installer 只比较前三段，相同版本由 MSI 替换（`AllowSameVersionUpgrades`）。比这次构建新的发布（比如从 `main` 的构建看，下一个版本的测试版）反过来检查：MSI 必须拒绝降级、给出提示、旧版原样保留。每次构建还会用自己 MSI 的一个副本（改成下一个主版本号，也就是 MSI 眼里更新的发布）检查这种拒绝。
 
 日志里每项检查是一行 `ok`，作业摘要里也列出所有检查；失败时 msiexec 的日志在 `msi-e2e-logs` 产物里。脚本在 GitHub Actions 之外拒绝运行；`./tools/ci/msi-e2e.ps1 -Msi <msi> -StaticOnly` 只做第 1 步，在哪里都能跑，不安装任何东西。
 
@@ -292,19 +292,19 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
 5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
 
-它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。每次发布仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 第七节）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
+它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 的「每版回归」「软件更新」和「安装包（MSI）」）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
 
 `update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
 
 ### CI 里的浏览器插件测试
 
-每次构建（推送、PR 和标签）还会跑 `extension-e2e` 作业（Ubuntu，几分钟，不依赖 `build`），`release` 作业也要等它通过。它把浏览器插件以解压方式加载进 Chromium（Puppeteer 自带的 Chrome for Testing，无头模式），在本地仿制的 YouTube、bilibili 播放器页面（也有 bilibili 的 WASM 播放器 `<bwp-video>`）和一个裸 `<video>` 页面上操作，连的是假的 HomePodCast 本地接口，测试中会把它切换成推流中、未推流和没在运行（`extension/test/e2e`；`*.localhost` 以外的主机名都解析不了，所以不会访问运行器以外的地址，也绝不会打开真实网站）。它检查页面上的插件按钮、同步全屏、±5／±20 ms 按钮和 Alt 快捷键（含保存的网站偏移和上下限）、按测试视频每帧里的帧号检查延迟画面（暂停、拖进度条、全屏、网页全屏、停止推流），以及插件弹窗。失败的测试会留下截图，在 `extension-e2e-screenshots` 产物里。它覆盖的项目在 `docs/device-test-checklist.zh-CN.md` 里标了「CI 自动测试：extension-e2e」（第五节和开头）；真实网站、口型和 60 帧流畅度仍要人测。
+每次构建（推送、PR 和标签）还会跑 `extension-e2e` 作业（Ubuntu，几分钟，不依赖 `build`），`release` 作业也要等它通过。它把浏览器插件以解压方式加载进 Chromium（Puppeteer 自带的 Chrome for Testing，无头模式），在本地仿制的 YouTube、bilibili 播放器页面（也有 bilibili 的 WASM 播放器 `<bwp-video>`）和一个裸 `<video>` 页面上操作，连的是假的 HomePodCast 本地接口，测试中会把它切换成推流中、未推流和没在运行（`extension/test/e2e`；`*.localhost` 以外的主机名都解析不了，所以不会访问运行器以外的地址，也绝不会打开真实网站）。它检查页面上的插件按钮、同步全屏、±5／±20 ms 按钮和 Alt 快捷键（含保存的网站偏移和上下限）、按测试视频每帧里的帧号检查延迟画面（暂停、拖进度条、全屏、网页全屏、停止推流），以及插件弹窗。失败的测试会留下截图，在 `extension-e2e-screenshots` 产物里。它覆盖的项目列在 `docs/device-test-checklist.zh-CN.md` 的「已自动化」里；真实网站、口型和 60 帧流畅度仍要人测（那里的「浏览器插件」）。
 
 本地运行：在 `extension/test/e2e` 里 `npm ci`，再 `npm test`（用 ffmpeg 生成测试视频）。HomePodCast 占着 47100 端口时，假接口换一个端口，测试用一份改成这个端口的插件副本；设 `HPC_E2E_HEADED=1` 可以看到浏览器。
 
 ### CI 里的 Microsoft Store 版测试
 
-每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msix-e2e` 作业，`release` 作业要等它通过，所以 Microsoft Store 版的包在那里没通过的标签什么都不会发布。`packaging/msix/e2e-test.ps1` 安装 `msix` 产物的一个副本（用一次性证书签名；产物本身仍然不签名，Store 要的就是不签名的包），像开始菜单那样启动它，检查包标识、日志在包的存储里、从不访问 GitHub、清单里的防火墙规则和没有防火墙提示、对再次启动和 MSI 版的单实例锁、开机启动任务（用程序的 `autostart on|off|status` 命令，也就是开关的那段代码），然后卸载并检查什么都没留下。每项检查在作业日志里是一行 `PASS`；程序日志在 `msix-e2e-logs` 产物里。覆盖了哪些项，`docs/device-test-checklist.zh-CN.md` 第十一节里标着「（CI 自动测试：msix-e2e）」；细节见 `packaging/msix/README.md` 的 CI test 一节。这个脚本会安装证书、包和 MSI，所以在 GitHub Actions 之外不加 `-Force`（一次性的测试虚拟机）就拒绝运行。
+每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msix-e2e` 作业，`release` 作业要等它通过，所以 Microsoft Store 版的包在那里没通过的标签什么都不会发布。`packaging/msix/e2e-test.ps1` 安装 `msix` 产物的一个副本（用一次性证书签名；产物本身仍然不签名，Store 要的就是不签名的包），像开始菜单那样启动它，检查包标识、日志在包的存储里、从不访问 GitHub、清单里的防火墙规则和没有防火墙提示、对再次启动和 MSI 版的单实例锁、开机启动任务（用程序的 `autostart on|off|status` 命令，也就是开关的那段代码），然后卸载并检查什么都没留下。每项检查在作业日志里是一行 `PASS`；程序日志在 `msix-e2e-logs` 产物里。覆盖了哪些项，列在 `docs/device-test-checklist.zh-CN.md` 的「已自动化」里，其余的在那里的「Microsoft Store 版」；细节见 `packaging/msix/README.md` 的 CI test 一节。这个脚本会安装证书、包和 MSI，所以在 GitHub Actions 之外不加 `-Force`（一次性的测试虚拟机）就拒绝运行。
 
 ### 发布说明
 

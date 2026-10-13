@@ -25,7 +25,7 @@
   ./packaging/msix/build.ps1 -Version 1.0.0-local.1
 #>
 param(
-    # The CI version (build.yml "Version" step), e.g. 1.2.3, 0.2.0-beta.1, 0.2.0-dev.57.
+    # The CI version (build.yml "Version" step), e.g. 1.2.3, 1.2.3-beta.1, 1.2.3-dev.57.
     [Parameter(Mandatory)] [string] $Version,
     # Package/Identity/@Name ("Package/Identity/Name" in Partner Center, Product identity).
     [string] $IdentityName = 'qiyinxi.HomePodCast',

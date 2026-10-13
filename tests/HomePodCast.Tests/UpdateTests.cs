@@ -87,6 +87,23 @@ public class ReleaseVersionTests
     [InlineData("0.2.0-beta.1.2", false)]
     public void Only_tag_versions_are_release_builds(string version, bool release) => Assert.Equal(release, V(version).IsReleaseBuild);
 
+    [Theory]
+    [InlineData("1.0.0-dev.181")]
+    [InlineData("1.0.0-pr.21.250")]
+    [InlineData("1.0.0-release-1-0-0.12")]
+    public void Ci_builds_are_prereleases_of_the_csproj_version(string version)
+    {
+        // build.yml since 2026-10-13: a branch or PR build is X.Y.Z-<branch>.<run> or X.Y.Z-pr.<n>.<run>, X.Y.Z being the
+        // csproj's <Version> (it was 0.2.0 before). update-e2e offers it to a 0.0.1-e2e.1 install on the beta channel,
+        // and gui-smoke expects 测试版 as its default channel.
+        var v = V(version);
+        Assert.False(v.IsReleaseBuild);
+        Assert.True(v > V("0.0.1-e2e.1"));
+        Assert.True(v > V("0.2.2"));
+        Assert.True(v < V("1.0.0"));
+        Assert.Equal(UpdateChannel.Beta, GitHubReleases.EffectiveChannel(null, v));
+    }
+
     [Fact]
     public void Development_builds_and_test_profiles_never_check_by_themselves()
     {
