@@ -52,7 +52,9 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   or unused one. No brackets that can wrap alone at a line start in CJK text.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
-- **Commits**: plain descriptive messages, no Co-Authored-By or other attribution lines.
+- **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
+  a blank line, then the details: GitHub names each CI run after the subject, and a whole paragraph there gets cut
+  off. No Co-Authored-By or other attribution lines.
 - **Branches**: `dev` is daily work. Other work goes on its own branch with a PR to `dev` (PR builds run CI). `main`
   changes only through the release PR made by `tools/release.ps1`; never push to it. Tags only through
   `tools/release.ps1`; a pushed tag is never moved or deleted. Details: `docs/RELEASING.md`.
