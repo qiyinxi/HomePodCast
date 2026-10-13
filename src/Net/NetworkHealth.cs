@@ -19,8 +19,8 @@ public enum NetworkHop
 
 /// <param name="Episodes">Jitter episodes in the window: speaker ping spikes or lost pings, and resend requests or misses,
 /// merged when less than <see cref="NetworkHealth.EpisodeGapMs"/> apart.</param>
-/// <param name="Threats">Episodes that ate the margin: a speaker spike over it, a lost ping, a resend with too little
-/// margin for it, or a resend miss.</param>
+/// <param name="Threats">Episodes that ate the margin: a speaker spike over it, lost pings with a margin under the ping's
+/// timeout, a resend with too little margin for it, or a resend miss.</param>
 /// <param name="Threatened">Worth a hint: <see cref="NetworkHealth.ThreatEpisodes"/> threats, or any resend miss.</param>
 /// <param name="Hop">Where the threats came from (meaningful when <paramref name="Threatened"/>).</param>
 /// <param name="MarginMs">What the latency leaves for the network: latency − speaker processing − <see cref="NetworkHealth.ReserveMs"/>.</param>
@@ -46,10 +46,14 @@ public sealed record NetworkVerdict(int Episodes, int Threats, bool Threatened, 
 /// <item>Speaker spikes, lost speaker pings and resend activity less than <see cref="EpisodeGapMs"/> apart are one
 /// episode (one burst of Wi-Fi trouble is one stutter at most). Router spikes alone are not jitter: routers answer
 /// pings to themselves at low priority, and the audio does not wait for them.</item>
-/// <item>An episode threatens when its worst speaker round trip exceeds <see cref="SpikeMargins"/> margins,
-/// <see cref="LostPings"/> speaker pings were lost, the speaker asked for a resend while a round trip exceeded the margin
-/// (the copy likely came too late), or a resend missed (the packet was gone). A resend on a quiet network is the
-/// protocol working, not a threat.</item>
+/// <item>An episode threatens when its worst speaker round trip exceeds <see cref="SpikeMargins"/> margins, the speaker
+/// asked for a resend while a round trip exceeded the margin (the copy likely came too late), or a resend missed (the
+/// packet was gone). A resend on a quiet network is the protocol working, not a threat. <see cref="LostPings"/> lost
+/// speaker pings count as a round trip of <see cref="NetworkWatch.TimeoutMs"/>, all they show: a threat to margins
+/// below 250 ms, not to larger ones. 2026-10-12: at 500 ms (a 410 ms margin) a few lost pings among answers of 2 ms
+/// median and 98 ms at most made 断音 read ≈9 and raised the hint, with not one resend request. Most "lost" pings
+/// there (and on 2026-10-10's crowded 2.4 GHz band) were Windows reporting TimedOut after about 46 ms, the next ping
+/// answered in a few: no measure of a delay at all.</item>
 /// <item>A hint is due at <see cref="ThreatEpisodes"/> threats in the window, or at any resend miss.</item>
 /// <item>A threat with a router spike within <see cref="SameTimeMs"/> is the PC's Wi-Fi (both pings cross it);
 /// otherwise the HomePod's. The majority decides; a tie blames the HomePod (Wi-Fi 4 on the HomePod 2). A wired PC has
@@ -83,7 +87,10 @@ public sealed class NetworkHealth
     /// </summary>
     public const int SpikeMargins = 2;
 
-    /// <summary>Lost speaker pings in one episode that make it a threat (one lost ping on its own is common).</summary>
+    /// <summary>
+    /// Lost speaker pings in one episode that count as a round trip of <see cref="NetworkWatch.TimeoutMs"/> (one lost
+    /// ping on its own is common).
+    /// </summary>
     public const int LostPings = 2;
 
     public const int ThreatEpisodes = 3;
@@ -271,15 +278,21 @@ public sealed class NetworkHealth
     private readonly record struct Episode(long Start, long End, long WorstMs, int LostPings, long Requests, long Misses)
     {
         /// <summary>
-        /// The margin that would have absorbed it: it threatens every margin below this (the rules above). A resend miss
-        /// or <see cref="NetworkHealth.LostPings"/> lost pings: no margin does. A resend while a round trip exceeded the
-        /// margin likely came too late: the round trip. Otherwise a round trip beyond <see cref="SpikeMargins"/> margins:
-        /// the round trip / that.
+        /// The margin that would have absorbed it: it threatens every margin below this (the rules above). A resend miss:
+        /// no margin does. A resend while a round trip exceeded the margin likely came too late: the round trip.
+        /// Otherwise a round trip beyond <see cref="SpikeMargins"/> margins: the round trip / that. Lost pings count as a
+        /// round trip of <see cref="NetworkWatch.TimeoutMs"/> (<see cref="RoundTripMs"/>).
         /// </summary>
         public double Need =>
-            LostPings >= NetworkHealth.LostPings || Misses > 0 ? double.PositiveInfinity
-            : Requests > 0 ? WorstMs
-            : (double)WorstMs / SpikeMargins;
+            Misses > 0 ? double.PositiveInfinity
+            : Requests > 0 ? RoundTripMs
+            : (double)RoundTripMs / SpikeMargins;
+
+        /// <summary>
+        /// The worst round trip, <see cref="NetworkWatch.TimeoutMs"/> at least when <see cref="NetworkHealth.LostPings"/>
+        /// pings went unanswered: all they show is a round trip past the timeout (or a ping dropped on the way).
+        /// </summary>
+        private long RoundTripMs => LostPings >= NetworkHealth.LostPings ? Math.Max(WorstMs, NetworkWatch.TimeoutMs) : WorstMs;
 
         public bool Threatens(int marginMs) => marginMs < Need;
 

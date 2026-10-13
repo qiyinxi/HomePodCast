@@ -32,7 +32,8 @@ internal sealed class GroupForm : FluentDialog
         if (form.ShowDialog(owner) != DialogResult.OK) return;
         app.Config.Save();
         // Reconnect only if what plays actually changed; a single speaker is never interrupted for nothing.
-        if (PlayLayout(app.Config) != before && app.Controller.State != StreamState.Idle) app.Connect();
+        if (PlayLayout(app.Config) != before && (app.Controller.State != StreamState.Idle || app.Controller.WaitingForSpeaker))
+            app.Connect(ConnectTrigger.Reconnect);
     }
 
     /// <summary>Edits <paramref name="config"/> in place when OK is pressed; the caller saves it.</summary>
@@ -237,7 +238,7 @@ internal sealed class GroupForm : FluentDialog
     private string LeaderOnlyState()
     {
         var pair = StereoPairs.Members(_found, _tsid!);
-        if (pair.Count == 0) return L.T("找不到音箱（是否通电、和电脑在同一网络？）");
+        if (pair.Count == 0) return L.T("找不到音箱：请确认它已通电、和电脑在同一网络");
         return StereoPairs.Leader(pair) is { } leader
             ? L.F("只连接主音箱「{0}」。另一只会不会一起响，需要实测。", leader.Name)
             : L.F("这对音箱都没有标出主音箱，将只连接「{0}」。", pair[0].Name);
@@ -266,7 +267,8 @@ internal sealed class GroupForm : FluentDialog
         }
     }
 
-    private static string PlayLayout(AppConfig cfg) => GroupPlan.FromConfig(cfg) is { } p
+    /// <summary>What a group plays with (members, pair, split/swap, offsets): a change needs a reconnect.</summary>
+    internal static string PlayLayout(AppConfig cfg) => GroupPlan.FromConfig(cfg) is { } p
         ? $"{p.Kind}|{p.PairTsid}|{p.PairLeaderOnly}|{string.Join(",", p.Members.Select(m => m.DeviceId))}|{p.SplitChannels}|{p.SwapChannels}|" +
           string.Join(",", p.VolumeOffsets.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}"))
         : "single";

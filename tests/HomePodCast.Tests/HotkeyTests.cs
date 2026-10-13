@@ -38,13 +38,25 @@ public class HotkeyTests
     [Fact]
     public void Defaults_parse_and_stay_off_the_combinations_games_and_rdp_use()
     {
-        foreach (var (action, text) in Hotkey.Defaults)
+        Assert.Equal(Enum.GetValues<HotkeyAction>(), Hotkey.Defaults.Keys.Order());
+        var bound = Hotkey.Defaults.Where(d => d.Key != HotkeyAction.MarkStutter).ToList();
+        foreach (var (action, text) in bound)
         {
             Assert.True(Hotkey.TryParse(text, out var hk), $"{action}: {text}");
             Assert.True((hk.Modifiers & Keys.Control) != 0 && (hk.Modifiers & Keys.Alt) != 0, text);
             Assert.DoesNotContain(hk.Key, new[] { Keys.Up, Keys.Down, Keys.Left, Keys.Right, Keys.End, Keys.Home, Keys.Delete });
         }
-        Assert.Equal(Enum.GetValues<HotkeyAction>().Length, Hotkey.Defaults.Values.Distinct().Count());
+        Assert.Equal(bound.Count, bound.Select(d => d.Value).Distinct().Count());
+    }
+
+    [Fact]
+    public void Marking_a_stutter_has_no_key_until_one_is_set()
+    {
+        var cfg = new AppConfig();
+        Assert.Equal("", Hotkey.ConfigText(cfg, HotkeyAction.MarkStutter));
+        Assert.Null(Hotkey.FromConfig(cfg, HotkeyAction.MarkStutter));
+        cfg.Hotkeys = new() { [HotkeyAction.MarkStutter] = "Ctrl+Alt+G" };
+        Assert.Equal("Ctrl+Alt+G", Hotkey.FromConfig(cfg, HotkeyAction.MarkStutter)?.ToString());
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 namespace HomePodCast;
 
-public enum HotkeyAction { VolumeUp, VolumeDown, Mute, NextScene }
+public enum HotkeyAction { VolumeUp, VolumeDown, Mute, NextScene, MarkStutter }
 
 /// <summary>A global key combination such as Ctrl+Alt+PageUp, in the text form stored in the config.</summary>
 public readonly record struct Hotkey(Keys Modifiers, Keys Key)
@@ -15,6 +15,7 @@ public readonly record struct Hotkey(Keys Modifiers, Keys Key)
         [HotkeyAction.VolumeDown] = "Ctrl+Alt+PageDown",
         [HotkeyAction.Mute] = "Ctrl+Alt+Insert",
         [HotkeyAction.NextScene] = "Ctrl+Alt+N",
+        [HotkeyAction.MarkStutter] = "", // off: for diagnosing a stutter, not for every day (it was a button on 首页)
     };
 
     /// <summary>Needs Ctrl or Alt, so plain typing and Shift+letter are never taken from other programs.</summary>

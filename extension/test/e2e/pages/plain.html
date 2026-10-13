@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>E2E: video without a player</title>
+<!-- A bare <video> inside an article: no element frames it, so the extension's sync fullscreen takes its parent. -->
+<style>
+  body { margin: 0; font: 15px/1.6 Georgia, serif; background: #fafafa; color: #222; }
+  article { max-width: 760px; margin: 24px auto; padding: 0 24px; }
+  video { display: block; width: 640px; height: 360px; background: #000; }
+</style>
+</head>
+<body>
+<article>
+  <h1>An article with a video</h1>
+  <p>Some text above the video.</p>
+  <video src="/media/test.webm" muted loop playsinline controls preload="auto"></video>
+  <p>Some text below the video.</p>
+</article>
+<script>document.querySelector('video').play().catch(() => {});</script>
+</body>
+</html>

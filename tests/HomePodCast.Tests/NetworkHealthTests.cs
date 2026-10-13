@@ -99,6 +99,34 @@ public class NetworkHealthTests
     }
 
     [Fact]
+    public void Lost_pings_only_threaten_a_margin_under_half_the_pings_timeout()
+    {
+        // 2026-10-12 at 500 ms (a 410 ms margin): a few lost pings among answers of 2 ms made 断音 read ≈9, with no
+        // resend request. All a lost ping shows is a round trip past the 500 ms timeout: twice a 250 ms margin.
+        NetworkHealth Pairs() => Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1), (200_000, -1), (200_100, -1));
+        var at500 = Pairs().Assess(300 * S, 500, A2R, true);
+        Assert.Equal(3, at500.Episodes);
+        Assert.Equal(0, at500.Threats);
+        Assert.False(at500.Threatened);
+        Assert.Equal(0, at500.ConnectionThreats);
+
+        Assert.Equal(0, Pairs().Assess(300 * S, 340, A2R, true).Threats); // margin 250: twice it is the timeout
+        var at339 = Pairs().Assess(300 * S, 339, A2R, true);
+        Assert.Equal(3, at339.Threats);
+        Assert.Equal(3, at339.ConnectionThreats);
+
+        // A resend among them may have come too late: the round trip itself is the margin it needed.
+        var resend = new NetworkHealth();
+        resend.AddPing(PingTarget.Speaker, 10_000, -1);
+        resend.AddPing(PingTarget.Speaker, 10_100, -1);
+        resend.AddResends(10_300, 1, 0);
+        var v = resend.Assess(300 * S, 500, A2R, true);
+        Assert.Equal(1, v.Threats);
+        Assert.Equal(1, v.ConnectionThreats);
+        Assert.Equal(0, resend.Assess(300 * S, 600, A2R, true).Threats); // margin 510
+    }
+
+    [Fact]
     public void Any_resend_miss_is_worth_a_hint_at_once()
     {
         var h = new NetworkHealth();
@@ -287,6 +315,7 @@ public class NetworkHealthTests
         Same(Spikes((10_000, 70), (10_100, 90), (10_700, 40), (11_600, 35), (12_500, 31)), 30 * S, 120, A2R, 1); // one bad second
         Same(Spikes((10 * S, -1), (100 * S, -1), (200 * S, -1)), 300 * S, 300, A2R, 0);                     // single lost pings
         Same(Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1)), 300 * S, 300, A2R, 2);       // lost pairs
+        Same(Spikes((10_000, -1), (10_100, -1), (100_000, -1), (100_100, -1)), 300 * S, 500, A2R, 0);       // not at 500 ms
         Same(Spikes((100 * S, 150), (200 * S, 250), (300_000, -1), (300_100, -1)), 400 * S, 200, A2R, 2);  // 影视: 150 absorbed
 
         var quiet = new NetworkHealth();
@@ -512,13 +541,14 @@ public class NetworkHealthFeedTests
 /// </summary>
 public class HomeNetworkTextTests
 {
-    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(3, 3, true, hop, 30, suggestedMs, 3);
+    // 38 episodes, 3 of them threats: the hint counts the threats ("10 分钟内 3 次").
+    private static NetworkVerdict Threatened(NetworkHop hop, int? suggestedMs) => new(38, 3, true, hop, 30, suggestedMs, 3);
 
     [Fact]
     public void The_homepods_hop_leads_with_the_band_and_placement_comes_second()
     {
         var capped = HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null));
-        Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内 3 次）", capped);
+        Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 3 次）", capped); // says what the 3 are
         Assert.Contains("2.4G", capped);
         Assert.True(capped.IndexOf("5G", StringComparison.Ordinal) < capped.IndexOf("摆放位置", StringComparison.Ordinal));
 
@@ -531,6 +561,39 @@ public class HomeNetworkTextTests
         Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Unknown, null)));
         // The PC's own Wi-Fi: its own advice, unchanged.
         Assert.EndsWith("试试关掉无线网卡的节能，或改用网线", HomePage.NetworkHintText(Threatened(NetworkHop.Pc, null)));
+    }
+
+    [Fact]
+    public void A_homepod_taken_over_from_its_apple_tv_hears_about_the_home_theater_not_the_band()
+    {
+        // 2026-10-12: the HomePod and its Apple TV both spiked every 2.1 s while it was the Apple TV's home theater
+        // speaker; the stutters stopped when the Apple TV's audio went back to the TV. On 5 GHz already.
+        foreach (var hop in new[] { NetworkHop.Speaker, NetworkHop.Unknown })
+        {
+            var suggested = HomePage.NetworkHintText(Threatened(hop, 135), "客厅");
+            Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 3 次），建议把延迟调到 135 ms。", suggested);
+            Assert.Contains("Apple TV「客厅」的家庭影院音箱", suggested);
+            Assert.EndsWith("在 Apple TV 上把音频输出改回电视更管用", suggested);
+            Assert.DoesNotContain("5G", suggested);
+
+            var capped = HomePage.NetworkHintText(Threatened(hop, null), "客厅");
+            Assert.EndsWith("在 Apple TV 上把音频输出改回电视最管用", capped);
+            Assert.DoesNotContain("5G", capped);
+        }
+        // The PC's own Wi-Fi is still the PC's.
+        Assert.StartsWith("电脑这边", HomePage.NetworkHintText(Threatened(NetworkHop.Pc, null), "客厅"));
+        // Not taken over: the band, as before.
+        Assert.Contains("改连 5G", HomePage.NetworkHintText(Threatened(NetworkHop.Speaker, null)));
+    }
+
+    [Fact]
+    public void The_home_theater_notice_names_both_and_the_latency_that_absorbs_it()
+    {
+        // Shown at once while such a HomePod streams below 200 ms, before any dropout is counted.
+        Assert.Equal(200, HomePage.HomeTheaterLatencyMs);
+        Assert.Equal("卧室是 Apple TV「客厅」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 200 ms 时可能断音。" +
+                     "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 200 ms",
+            HomePage.HomeTheaterNotice("卧室", "客厅"));
     }
 
     [Theory]
@@ -589,5 +652,75 @@ public class HomeNetworkTextTests
         Assert.Equal(20, v.Threats);           // the hint's last 10 minutes
         Assert.Equal(NetworkHop.Speaker, v.Hop);
         Assert.Equal("≈40", HomePage.DropoutValue(0, v.ConnectionThreats));
+    }
+
+    // ---------------------------------------------------------------- which of the line and the hint 首页 shows
+
+    private static readonly NetworkVerdict Calm = new(0, 0, false, NetworkHop.Speaker, 30, null, 0);
+
+    [Fact]
+    public void The_network_line_says_stable_or_counts_the_jitter_of_the_last_10_minutes()
+    {
+        var quiet = new NetworkHealth().Assess(10 * 60 * 1000, 120, 85, routerWatched: true);
+        Assert.Equal("网络：稳定", HomePage.NetworkLine(quiet.Episodes));
+        Assert.False(HomePage.NoticeFor(quiet, null, false, 120, "卧室").Show);
+
+        var h = new NetworkHealth();
+        foreach (var (at, rtt) in new (long, long)[] { (60_000, 35), (250_000, 48) }) h.AddPing(PingTarget.Speaker, at, rtt);
+        var jittery = h.Assess(500_000, 120, 85, routerWatched: true);
+        Assert.False(HomePage.NoticeFor(jittery, null, false, 120, "卧室").Show); // absorbed: only the line counts it
+        Assert.Equal("网络：最近 10 分钟抖动 2 次", HomePage.NetworkLine(jittery.Episodes));
+        Assert.Equal("网络：最近 10 分钟抖动 1 次", HomePage.NetworkLine(1));
+    }
+
+    [Fact]
+    public void A_threatening_verdict_shows_the_hint_with_its_suggestion_until_it_was_applied_on_this_connection()
+    {
+        var threatened = new NetworkVerdict(12, 4, true, NetworkHop.Speaker, 15, 135, 4);
+        var hint = HomePage.NoticeFor(threatened, null, applied: false, 120, "卧室");
+        Assert.True(hint.Show);
+        Assert.Equal(135, hint.SuggestedMs);                      // 应用 sets 135 ms (LatencyTuner.UseCustom: 自定义, one reconnect)
+        Assert.Equal(HomePage.NetworkHintText(threatened), hint.Text);
+        Assert.False(HomePage.NoticeFor(threatened, null, applied: true, 135, "卧室").Show); // gone after 应用
+
+        var capped = threatened with { SuggestedMs = null };       // already at the most the hint suggests
+        var noButton = HomePage.NoticeFor(capped, null, false, 200, "卧室");
+        Assert.True(noButton.Show);
+        Assert.Null(noButton.SuggestedMs);                         // advice only: no 应用, the latency is never changed
+    }
+
+    [Fact]
+    public void A_homepod_taken_over_from_its_apple_tv_gets_the_home_theater_notice_below_200_ms_at_once()
+    {
+        foreach (int latency in new[] { 105, 120, 199 })
+        {
+            var notice = HomePage.NoticeFor(Calm, "客厅", applied: false, latency, "卧室");
+            Assert.True(notice.Show);                              // before any dropout is counted
+            Assert.True(notice.HomeTheater);
+            Assert.False(notice.Threatened);
+            Assert.Equal(200, notice.SuggestedMs);
+            Assert.Equal(HomePage.HomeTheaterNotice("卧室", "客厅"), notice.Text);
+        }
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 200, "卧室").Show);   // at 200 ms: the plain line
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 500, "卧室").Show);
+        Assert.False(HomePage.NoticeFor(Calm, null, false, 105, "卧室").Show);     // not taken from an Apple TV
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", applied: true, 105, "卧室").Show); // 应用 pressed on this connection
+    }
+
+    [Fact]
+    public void Once_dropouts_threaten_a_homepod_taken_from_its_apple_tv_the_hint_names_the_home_theater_and_suggests_200_ms()
+    {
+        var threatened = new NetworkVerdict(12, 4, true, NetworkHop.Speaker, 15, 135, 4);
+        var hint = HomePage.NoticeFor(threatened, "客厅", false, 120, "卧室");
+        Assert.True(hint.Threatened && hint.HomeTheater);
+        Assert.Equal(200, hint.SuggestedMs);                      // not 135: that would still stutter
+        Assert.Contains("建议把延迟调到 200 ms", hint.Text);
+        Assert.Contains("Apple TV「客厅」的家庭影院音箱", hint.Text);
+        Assert.DoesNotContain("5G", hint.Text);
+
+        // At 200 ms or more the verdict's own suggestion stands.
+        var above = HomePage.NoticeFor(threatened with { SuggestedMs = 250 }, "客厅", false, 200, "卧室");
+        Assert.False(above.HomeTheater);
+        Assert.Equal(250, above.SuggestedMs);
     }
 }

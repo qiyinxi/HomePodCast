@@ -39,5 +39,42 @@
   "videosDrm": { "message": "protégée contre la copie (DRM), impossible à retarder" },
   "videosFullscreen": { "message": "impossible à retarder quand l'élément vidéo lui-même est en plein écran" },
   "videosPlayerUnsupported": { "message": "le lecteur de cette page ne prend pas en charge le retard de l'image" },
-  "videosNotDelayed": { "message": "non retardée" }
+  "videosNotDelayed": { "message": "non retardée" },
+  "syncFullscreen": {
+    "message": "Plein écran synchronisé"
+  },
+  "syncExitFullscreen": {
+    "message": "Quitter le plein écran"
+  },
+  "syncFullscreenTitle": {
+    "message": "Garder la vidéo et le son HomePod synchronisés en plein écran."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→ : ±5 ms · Alt+Maj+←/→ : ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Retard vidéo $DELAY$ ms · Décalage du site $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Le plein écran est indisponible. Quittez le plein écran actuel ou autorisez-le pour ce lecteur, puis réessayez."
+  },
+  "syncPopupHint": {
+    "message": "Passez le pointeur sur une vidéo (ou appuyez sur Alt) pour afficher « Plein écran synchronisé ». En plein écran, Alt+←/→ ajuste de 5 ms ; ajoutez Maj pour 20 ms. Les réglages sont enregistrés pour ce site."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Ajuster le décalage du site de $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

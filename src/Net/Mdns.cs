@@ -159,20 +159,8 @@ public static class Mdns
                     break;
                 }
                 case 16: // TXT
-                {
-                    var txt = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    int p = data;
-                    while (p < data + len)
-                    {
-                        int l = msg[p++];
-                        var kv = Encoding.UTF8.GetString(msg, p, l);
-                        p += l;
-                        int eq = kv.IndexOf('=');
-                        if (eq > 0) txt[kv[..eq]] = kv[(eq + 1)..];
-                    }
-                    rec.Txt[name] = txt;
+                    rec.Txt[name] = TxtRecord.Parse(msg, data, len);
                     break;
-                }
                 case 1 when len == 4: // A
                     rec.A[name] = new IPAddress(msg.AsSpan(data, 4));
                     break;

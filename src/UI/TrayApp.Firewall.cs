@@ -14,7 +14,7 @@ internal sealed partial class TrayApp
     /// <summary>After Settings was opened: how often, and how long, to look for the network becoming Private.</summary>
     private const int ProfileWatchMs = 3000, ProfileWatchTimes = 60;
 
-    private readonly FirewallAdvisor _firewall = new(Firewall.Inspect, NetworkProfile.ForSpeaker);
+    private readonly FirewallAdvisor _firewall = new(Firewall.Inspect, NetworkProfile.ForSpeaker, AppEnvironment.IsPackaged);
     private System.Windows.Forms.Timer? _networkSettle;
     private CancellationTokenSource? _profileWatch;
 
@@ -72,14 +72,11 @@ internal sealed partial class TrayApp
                 case FirewallPrompt.PublicNetwork:
                     OfferNetworkSettings(network);
                     break;
-                case FirewallPrompt.AddRule:
+                case FirewallPrompt.AddRule when !AppEnvironment.IsPackaged: // the Store version's package brings its rules
                     OfferFirewallRule();
                     break;
                 case FirewallPrompt.OtherBlocker:
-                    MessageBox.Show(
-                        L.T("Windows 防火墙里已经有放行 HomePodCast 的规则，但音箱的连接还是到不了本程序。\n\n" +
-                            "可能是其他防火墙或安全软件拦截了 HomePodCast.exe，也可能是 Windows 防火墙里另有一条阻止它的规则。请在对应的程序或防火墙设置里放行 HomePodCast.exe。"),
-                        L.T("需要防火墙放行"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(OtherBlockerText(AppEnvironment.IsPackaged), L.T("需要防火墙放行"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     break;
             }
         }
@@ -88,6 +85,19 @@ internal sealed partial class TrayApp
             _firewall.Close();
         }
     }
+
+    /// <summary>
+    /// Blocked although Windows Firewall lets us in. The Store version's rules come with its package, for the exe in its
+    /// version folder under WindowsApps, a path that changes with every update: a rule another firewall keeps for that
+    /// path has to be made again after an update; a deleted rule comes back when the app is installed again.
+    /// </summary>
+    internal static string OtherBlockerText(bool packaged) => packaged
+        ? L.T("HomePodCast 安装时已经在 Windows 防火墙里添加了放行规则（专用网络），但音箱的连接还是到不了本程序。\n\n" +
+              "可能是其他防火墙或安全软件拦截了 HomePodCast，也可能是 Windows 防火墙里另有一条阻止它的规则，或者安装时添加的规则被删掉了。\n\n" +
+              "请在安全软件里放行 HomePodCast。Microsoft Store 版的程序路径每次更新都会变，按路径放行的话，每次更新后要重新放行。" +
+              "规则被删掉时，从 Microsoft Store 重新安装 HomePodCast 就会加回来。")
+        : L.T("Windows 防火墙里已经有放行 HomePodCast 的规则，但音箱的连接还是到不了本程序。\n\n" +
+              "可能是其他防火墙或安全软件拦截了 HomePodCast.exe，也可能是 Windows 防火墙里另有一条阻止它的规则。请在对应的程序或防火墙设置里放行 HomePodCast.exe。");
 
     private void OfferFirewallRule()
     {
@@ -99,7 +109,7 @@ internal sealed partial class TrayApp
         if (Firewall.RequestRule())
         {
             Log.Info("firewall rule added");
-            if (_wantConnected) Connect();
+            if (_wantConnected) Connect(ConnectTrigger.Reconnect);
         }
         else
         {
@@ -158,7 +168,7 @@ internal sealed partial class TrayApp
                 if (_quitting || !_wantConnected || Controller.State is StreamState.Streaming or StreamState.Idle) return;
                 if (Controller.State == StreamState.Retrying)
                 {
-                    Connect();
+                    Connect(ConnectTrigger.Reconnect);
                     return;
                 }
                 // Connecting: an attempt begun before the change may still fail; look again next time.

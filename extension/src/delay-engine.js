@@ -38,7 +38,7 @@
   const root = globalThis;
   if (root.HPCDelay && typeof root.HPCDelay.attach === 'function') return;
 
-  const VERSION = '0.2.1';
+  const VERSION = '1.0.0';
   const FRAME_MS = 16.7;
   const MAX_FRAMES = 40;
   // 从 <video> 创建的 VideoFrame 直接引用解码器的输出缓冲（零拷贝）。实测 Chrome 154 + D3D11

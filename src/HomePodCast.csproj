@@ -10,7 +10,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HomePodCast</RootNamespace>
     <AssemblyName>HomePodCast</AssemblyName>
-    <Version>0.2.2</Version>
+    <Version>1.0.0</Version>
     <ServerGarbageCollector>false</ServerGarbageCollector>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="HomePodCast.Tests" />
+    <!-- The GUI smoke test hosts the tests' fake AirPlay receiver (tests/HomePodCast.GuiSmoke). -->
+    <InternalsVisibleTo Include="HomePodCast.GuiSmoke" />
   </ItemGroup>
 
   <!-- UI translations (source string → text), read by L.cs as i18n.<language>.json -->

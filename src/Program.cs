@@ -29,6 +29,9 @@ public static class Program
                 "routetest" => RouteTest.Run(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
+                "firewall" => FirewallCommand.Run(), // CI: tools/ci/msi-e2e.ps1
+                Update.UpdateSelfTest.Command => Update.UpdateSelfTest.Run(args), // CI: tools/ci/update-e2e.ps1
+                "autostart" => AutostartCommand(args), // CI: packaging/msix/e2e-test.ps1
                 _ => Help(),
             };
         }
@@ -39,6 +42,9 @@ public static class Program
         }
     }
 
+    /// <summary>The window's single-instance mutex (one per test profile); update-selftest checks it for a running app.</summary>
+    internal static string SingleInstanceName => @"Local\HomePodCast.Single" + (AppConfig.Profile is { } p ? "." + p : "");
+
     /// <param name="testOsd">Hidden test switch <c>--osd</c> / <c>--osd-muted</c>: show the volume-key OSD once running.</param>
     private static int RunGui(bool startHidden, bool openMixer, bool openFlyout, string? testOsd)
     {
@@ -46,18 +52,29 @@ public static class Program
 
         var suffix = AppConfig.Profile is { } p ? "." + p : "";
         using var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Show" + suffix);
-        using var single = new Mutex(true, @"Local\HomePodCast.Single" + suffix, out bool first);
+        using var flyout = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\HomePodCast.Flyout" + suffix);
+        using var single = new Mutex(true, SingleInstanceName, out bool first);
         if (!first)
         {
-            show.Set(); // ask the running instance to show its window
+            // Ask the running instance to show its window; the hidden test switch --flyout opens its tray flyout instead
+            // (the GUI smoke test in CI, tests/HomePodCast.GuiSmoke, has no tray icon it could right-click reliably).
+            (openFlyout ? flyout : show).Set();
             return 0;
         }
 
         // Only the running instance opens the log: it keeps the file open for writing, so a second launch opening it
         // first threw, exited with 1 and never showed the window.
-        Log.OpenFile(Path.Combine(AppConfig.Directory, "homepodcast.log"));
+        Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName));
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
-        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : ""));
+        Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
+                 (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
+        // The Store version's startup task passes --tray (packaging/msix/AppxManifest.xml); if Windows didn't, the
+        // activation kind still says it was the startup task.
+        if (!startHidden && Autostart.StartedByStartupTask())
+        {
+            Log.Info("started by the startup task: into the tray");
+            startHidden = true;
+        }
         Autostart.Repair();
         // When an installer's Restart Manager closes us for an upgrade, it may start us again afterwards (into the
         // tray). Not after crashes, hangs or reboots, and never for test copies.
@@ -71,14 +88,17 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone() : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom));
+        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
+            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout));
         if (UI.LanguageMenu.RestartRequested)
         {
-            Log.Info("restarting to apply the UI language");
+            // The Store version starts again through its package (Explorer), so the new copy has package identity too.
+            var (file, arguments) = AppEnvironment.Relaunch;
+            Log.Info("restarting to apply the UI language" + (AppEnvironment.IsPackaged ? $": {file} {arguments}" : ""));
             Log.CloseFile(); // the new copy opens the same log file
             single.ReleaseMutex();
             single.Dispose(); // ...and must be able to create the single-instance mutex
-            Process.Start(Environment.ProcessPath!);
+            Process.Start(file, arguments);
         }
         return 0;
     }
@@ -89,11 +109,60 @@ public static class Program
             HomePodCast
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
               info --host IP                         dump the speaker's /info (read-only)
-              stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone] [--verbose]
+              stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
+                     [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
+              autostart on|off|status                the Microsoft Store version's startup task (tests: see packaging/msix)
+              firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
+    }
+
+    /// <summary>
+    /// <c>autostart on|off|status</c>: the Microsoft Store version's startup task, switched by the same code as 设置 →
+    /// 开机自动启动 (Autostart.SetStartupTask) and read as that switch reads it. The package has no command line of its
+    /// own (Start passes no arguments), so this is for tests: CI's msix-e2e job activates the installed package with
+    /// these arguments (packaging/msix/e2e-test.ps1). The lines go to the app's log as well, unless a running copy
+    /// holds it. Exit code: 0 when the task is as asked (status: when it could be read), 2 when Windows keeps it
+    /// otherwise (turned off by the user in Windows, or a policy), 1 on failure. An unpackaged copy has no startup task
+    /// (its switch writes the Run value): it fails and touches neither the Run value nor the log.
+    /// </summary>
+    private static int AutostartCommand(string[] args)
+    {
+        var what = args.Where(a => !a.StartsWith("--")).Skip(1).FirstOrDefault();
+        if (what is not ("on" or "off" or "status"))
+        {
+            Console.WriteLine("usage: HomePodCast autostart on|off|status");
+            return 1;
+        }
+        if (Autostart.Method != AutostartMethod.StartupTask)
+        {
+            Log.Warn("autostart: only the Microsoft Store version has a startup task; this copy's 开机自动启动 is the Run value");
+            return 1;
+        }
+        try { Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName)); }
+        catch (Exception) { } // the running copy holds the log: the outcome is only in the exit code
+        try
+        {
+            if (what == "status")
+            {
+                Log.Info($"autostart: startup task {StartupTaskApi.GetState(AppEnvironment.StartupTaskId)}");
+                return 0;
+            }
+            bool on = what == "on";
+            return Autostart.ViewOf(Autostart.SetStartupTask(on)).On == on ? 0 : 2;
+        }
+        catch (Exception ex)
+        {
+            if (what == "status") Log.Warn($"autostart: the startup task can't be read: {ex.Message}");
+            return 1; // on, off: Autostart.SetStartupTask logged it
+        }
+        finally
+        {
+            Log.CloseFile();
+        }
     }
 
     private static string? Opt(string[] args, string name) =>
@@ -193,6 +262,7 @@ public static class Program
             if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
         }
         foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
+        foreach (var line in HomeTheater.Describe(devices)) Console.WriteLine(line); // Apple TVs and their home-theater HomePods
         return 0;
     }
 
@@ -204,7 +274,11 @@ public static class Program
         var reply = rtsp.Rtsp("GET", "/info");
         Console.WriteLine($"{host}: {reply.StartLine}");
         if (reply.IsSuccess && reply.Body.Length > 0)
-            foreach (var line in InfoDump.Lines(Protocol.BPlist.ReadDict(reply.Body))) Console.WriteLine("  " + line);
+        {
+            var info = Protocol.BPlist.ReadDict(reply.Body);
+            foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
+            Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info)); // bit 17: another sender's (or our) session is active
+        }
         return 0;
     }
 
@@ -215,24 +289,33 @@ public static class Program
         int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
         double? volume = Opt(args, "--volume") is { } v ? double.Parse(v) : null;
         bool tone = args.Contains("--tone");
+        bool silent = args.Contains("--silent"); // nothing captured: the sender fills the stream with silence
 
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60);
-        using var capture = tone ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
-        using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
+        using var capture = tone || silent ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
+        using var toneGen = tone && !silent ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         capture?.Start();
         toneGen?.Start();
 
-        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys; integers, true/false or text.
-        var overrides = new Dictionary<string, object?>();
-        for (int i = 0; i < args.Length - 1; i++)
+        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session
+        // SETUP keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
+        Dictionary<string, object?>? Overrides(string option)
         {
-            if (args[i] != "--setup" || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
-            overrides[key] = long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+            var overrides = new Dictionary<string, object?>();
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+                overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                    : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+            }
+            return overrides.Count > 0 ? overrides : null;
         }
         var options = new StreamOptions(latency, volume)
         {
             VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
-            StreamSetupOverrides = overrides.Count > 0 ? overrides : null,
+            StreamSetupOverrides = Overrides("--setup"),
+            SessionSetupExtras = Overrides("--session"),
+            Pairings = PairingStore.Default, // an Apple TV paired in the app: pair-verify with that pairing (never a new PIN)
         };
 
         var sw = Stopwatch.StartNew();

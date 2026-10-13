@@ -59,6 +59,66 @@ internal static class RouteTest
             Report("routed (speaker=HomePod, both=Both, local=default Local)", reader, local, capture);
             LogVolumes(children);
 
+            if (args.Contains("--send-volumes"))
+            {
+                routing.SetSendVolume(Names[0], 60);
+                routing.SetSendVolume(Names[1], 60);
+                bool passed = true;
+                foreach (float windowsLevel in new[] { 0.2f, 0.4f })
+                {
+                    foreach (var app in AppAudio.Enumerate())
+                    {
+                        try
+                        {
+                            if (app.ExeKey == Names[0] || app.ExeKey == Names[1]) app.Volume = windowsLevel;
+                        }
+                        finally { app.Dispose(); }
+                    }
+                    Thread.Sleep(700); // settle volume notifications and drain old capture packets
+                    var sent = reader.Take();
+                    var heard = local.Take();
+                    Log.Info($"independent send 60 %, Windows {windowsLevel:P0}: FIFO {Describe(sent)}; local {Describe(heard)}");
+                    // Tone source = 0.05; independent HomePod copy must stay 0.03 as Windows changes.
+                    bool stage = Math.Abs(sent[0] - 0.03) < 0.0075 && Math.Abs(sent[1] - 0.03) < 0.0075;
+                    int checkedSessions = 0;
+                    foreach (var app in AppAudio.Enumerate())
+                    {
+                        try
+                        {
+                            if (app.ExeKey != Names[0] && app.ExeKey != Names[1]) continue;
+                            float expectedRaw = windowsLevel * (app.ExeKey == Names[0] ? SessionAttenuation.Epsilon : 1f);
+                            stage &= Math.Abs(app.RawVolume - expectedRaw) <= Math.Max(1e-8f, expectedRaw * 0.01f);
+                            checkedSessions++;
+                        }
+                        finally { app.Dispose(); }
+                    }
+                    stage &= checkedSessions == 2;
+                    bool isolatedEndpoint = heard[0] < 0.0005 && Math.Abs(heard[1] - 0.05 * windowsLevel) < 0.005;
+                    Log.Info(isolatedEndpoint ? "endpoint isolated-tone check passed" :
+                        "endpoint isolated-tone check inconclusive: endpoint contains other audio or virtual-device effects; see measured amplitudes");
+                    passed &= stage;
+                    Log.Info(stage ? "independent send check passed" : "independent send check FAILED");
+                }
+                capture.Dispose();
+                capture = null;
+                Thread.Sleep(100);
+                LogVolumes(children); // the HomePod-only test session must be restored to its logical Windows level
+                int restored = 0;
+                foreach (var app in AppAudio.Enumerate())
+                {
+                    try
+                    {
+                        if (app.ExeKey != Names[0] && app.ExeKey != Names[1]) continue;
+                        passed &= Math.Abs(app.RawVolume - 0.4f) < 0.001f;
+                        restored++;
+                    }
+                    finally { app.Dispose(); }
+                }
+                passed &= restored == 2;
+                Log.Info(passed ? "send, Windows-level preservation and restore checks passed" : "send/restore checks FAILED");
+                return passed ? 0 : 1;
+            }
+
             routing.Set(Names[0], AudioRoute.Local);
             Thread.Sleep(2000);
             Report("speaker switched to Local while running", reader, local, capture);

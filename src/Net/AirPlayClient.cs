@@ -21,14 +21,24 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
     /// <summary>
     /// Group members only (stereo pair / multi-room): keys added to or replaced in the session SETUP, such as
     /// the group's shared "groupUUID". Null for a single speaker, whose session SETUP stays as it always was.
+    /// Also experiments (`stream --session key=value`).
     /// </summary>
     public IReadOnlyDictionary<string, object?>? SessionSetupExtras { get; init; }
+
+    /// <summary>
+    /// Stored HAP pairings (receivers that need a PIN pairing, such as an Apple TV), looked up by <see cref="DeviceId"/>.
+    /// Null: no stored pairing is used (a receiver that needs one then fails with <see cref="PairingRequiredException"/>).
+    /// </summary>
+    public PairingStore? Pairings { get; init; }
+
+    /// <summary>The receiver's device id (TXT "deviceid"); null: the one its /info reports ("deviceID").</summary>
+    public string? DeviceId { get; init; }
 }
 
 /// <summary>
 /// One AirPlay 2 realtime audio session to one speaker:
-/// transient pair-setup → encrypted RTSP → SETUP (session) → event channel → SETUP (stream)
-/// → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
+/// transient pair-setup (HomePods) or pair-verify with a stored PIN pairing (Apple TV) → encrypted RTSP → SETUP (session)
+/// → event channel → SETUP (stream) → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
 /// </summary>
 public sealed class AirPlayClient : IDisposable, IGroupMember
 {
@@ -103,7 +113,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         try
         {
             client.StreamTarget = await client.NegotiateAsync(options, ct) with { Channels = channels };
-            Log.Info($"group member {client.Name} ({host}): {channels}, /info keys: {string.Join(',', client.Info.Keys)}");
+            Log.Info($"group member {Log.Name(client.Name)} ({host}): {channels}, /info keys: {string.Join(',', client.Info.Keys)}");
             client.StartFeedback();
             return client;
         }
@@ -131,17 +141,17 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         SetVolumeDb(volumeDb);
     }
 
-    /// <summary>/info, transient pairing, encrypted session SETUP, event channel and stream SETUP.</summary>
+    /// <summary>/info, pairing (<see cref="Pair"/>), encrypted session SETUP, event channel and stream SETUP.</summary>
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
         VolumeCapPercent = options.VolumeCapPercent;
         var info = _rtsp.Rtsp("GET", "/info");
         if (info.IsSuccess && info.Body.Length > 0)
             Info = BPlist.ReadDict(info.Body);
-        Log.Info($"connected to {Info.GetValueOrDefault("name")} ({Info.GetValueOrDefault("model")}, " +
+        Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 
-        var shared = PairTransient();
+        var shared = Pair(options);
         _rtsp.EnableEncryption(
             HapKeys.Derive(shared, "Control-Salt", "Control-Write-Encryption-Key"),
             HapKeys.Derive(shared, "Control-Salt", "Control-Read-Encryption-Key"));
@@ -278,8 +288,44 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         }
     }
 
+    /// <summary>
+    /// The secret the session keys come from. A receiver with a stored pairing: pair-verify. One that needs a PIN pairing
+    /// (<see cref="PairingFlags"/>) and has none: <see cref="PairingRequiredException"/> before anything is sent to it, so an
+    /// automatic connect never shows a PIN on the TV. Everything else (HomePods): the transient pairing, exactly as before.
+    /// </summary>
+    private byte[] Pair(StreamOptions options)
+    {
+        string? deviceId = options.DeviceId ?? Info.GetValueOrDefault("deviceID") as string;
+        var stored = deviceId != null ? options.Pairings?.Find(deviceId) : null;
+        if (stored != null)
+        {
+            try
+            {
+                var secret = HapHttp.Verify(_rtsp, stored);
+                Log.Info("pairing: pair-verify with the stored pairing ok");
+                return secret;
+            }
+            catch (HapPairingException ex) when (ex.Error == HapError.Authentication)
+            {
+                Log.Warn($"pairing: pair-verify refused: {ex.Message}");
+                throw new PairingRequiredException(Name, deviceId, PairingReason.PairingRejected);
+            }
+            catch (HapPairingException ex)
+            {
+                throw new AirPlayException($"pair-verify failed: {ex.Message}");
+            }
+        }
+        if (PairingFlags.NeedsPinPairing(Info))
+        {
+            string flags = StatusFlags.FromInfo(Info) is { } f ? StatusFlags.Hex(f) : "(from TXT)";
+            Log.Info($"pairing: statusFlags {flags} ask for a one-time PIN pairing, and none is stored");
+            throw new PairingRequiredException(Name, deviceId, PairingReason.NotPaired);
+        }
+        return PairTransient(deviceId);
+    }
+
     /// <summary>HAP transient pairing (pair-setup M1..M4 with PIN 3939); returns the SRP session key.</summary>
-    private byte[] PairTransient()
+    private byte[] PairTransient(string? deviceId)
     {
         var headers = new KeyValuePair<string, string>[]
         {
@@ -290,8 +336,14 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
 
         _rtsp.Http("POST", "/pair-pin-start", PairUserAgent, octet, null, headers);
 
-        var m2 = Expect(_rtsp.Http("POST", "/pair-setup", PairUserAgent, octet,
-            Tlv8.Write((Tlv8.Method, [0]), (Tlv8.State, [1]), (Tlv8.Flags, [Tlv8.FlagTransient])), headers), "pair-setup M1");
+        var m2 = _rtsp.Http("POST", "/pair-setup", PairUserAgent, octet,
+            Tlv8.Write((Tlv8.Method, [0]), (Tlv8.State, [1]), (Tlv8.Flags, [Tlv8.FlagTransient])), headers);
+        if (m2.StatusCode == 470) // Connection Authorization Required: a receiver whose flags didn't say it needs a pairing
+        {
+            Log.Info("pairing: transient pair-setup refused with 470");
+            throw new PairingRequiredException(Name, deviceId, PairingReason.NotPaired);
+        }
+        Expect(m2, "pair-setup M1");
         var t2 = Tlv8.Read(m2.Body);
         ThrowIfTlvError(t2, "M2");
 
@@ -368,16 +420,30 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     }
 }
 
-public class AirPlayException(string message) : Exception(message);
+public class AirPlayException(string message) : Exception(message)
+{
+    /// <summary>
+    /// The message for the log when the user's <see cref="Exception.Message"/> names a speaker: the same with the names
+    /// marked by <see cref="Log.Name"/>, so that a diagnostic report leaves them out (Message never has the markers).
+    /// </summary>
+    public string? LogMessage { get; init; }
+
+    /// <summary>What the log says about <paramref name="ex"/>.</summary>
+    public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;
+}
 
 /// <param name="network">
 /// The network the speaker is reached through: when it is Public and the firewall doesn't let us in there (it reads
 /// the rules), the message says so, which is what the main window and the tray show.
 /// </param>
-public sealed class FirewallBlockedException(NetworkProfile? network = null) : AirPlayException(Describe(network))
+public sealed class FirewallBlockedException(NetworkProfile? network = null) : AirPlayException(Describe(network, AppEnvironment.IsPackaged))
 {
-    private static string Describe(NetworkProfile? network) =>
+    /// <param name="packaged">The Store version: its package brings the Windows Firewall rules, so on a Private network the
+    /// usual cause is another firewall or security program, and it has no exe path worth naming.</param>
+    internal static string Describe(NetworkProfile? network, bool packaged) =>
         network is { Category: NetworkCategory.Public } && !Firewall.Inspect().PublicAllowed
             ? L.F("网络「{0}」是公用网络，Windows 防火墙拦截了音箱连回本程序的连接", network.DisplayName)
-            : L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
+            : packaged
+                ? L.T("音箱发来的对时请求没有到达本程序，可能是防火墙或安全软件拦截了 HomePodCast 的入站连接")
+                : L.T("音箱发来的对时请求没有到达本程序，通常是 Windows 防火墙拦截了 HomePodCast.exe 的入站连接");
 }

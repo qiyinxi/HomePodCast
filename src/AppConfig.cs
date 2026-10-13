@@ -13,6 +13,15 @@ public sealed class AppConfig
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;
     public int? MeasuredAvOffsetMs { get; set; }
+    public Dictionary<string, AvCalibration> SyncCalibrations { get; set; } = [];
+    public List<UsageProfile> UsageProfiles { get; set; } = [];
+
+    /// <summary>
+    /// The profile applied last, which 首页's picker shows (UsageProfiles.PickerIndex); null: none yet, or it was deleted.
+    /// Never part of a profile itself.
+    /// </summary>
+    public string? LastUsageProfileId { get; set; }
+
     public int? ArrivalToRenderMs { get; set; }
 
     /// <summary>
@@ -114,6 +123,13 @@ public sealed class AppConfig
 
     /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
+    public Dictionary<string, int> AppSendVolumes { get; set; } = [];
+
+    /// <summary>
+    /// The level each app's independent HomePod volume had when it was turned off (same keys): offered again when it
+    /// is turned back on, but never above the app's Windows level then (MixerPage.SeedSendPercent).
+    /// </summary>
+    public Dictionary<string, int> AppSendVolumesOff { get; set; } = [];
 
     /// <summary>The user confirmed once that per-app routing adds about 35 ms of latency (asked on first use).</summary>
     public bool RoutingNoticeAccepted { get; set; }
@@ -146,6 +162,21 @@ public sealed class AppConfig
     /// <summary>The version an automatic check already showed a tray balloon for (once per version).</summary>
     public string? UpdateNotified { get; set; }
 
+    // ---- Busy speakers (TakeoverPolicy, UI/TrayApp.Takeover.cs) ----
+
+    /// <summary>
+    /// This PC's last session: which selection, when it was last known alive, whether we ended it ourselves. After a crash
+    /// the speaker may still show it as active for a while, and the next start must not take it for another sender's.
+    /// Saved while streaming about once a minute, and when a session starts or ends.
+    /// </summary>
+    public OwnSessionRecord? LastOwnSession { get; set; }
+
+    /// <summary>
+    /// 「HomePod 当 Apple TV 家庭影院音箱时」: 临时接管 (the default: every connect takes the HomePod over from its Apple TV
+    /// until this PC disconnects) or 先询问 (like any other sender: a click asks, automatic connects wait).
+    /// </summary>
+    public HomeTheaterMode HomeTheaterTakeover { get; set; } = HomeTheaterMode.TakeOver;
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
@@ -161,6 +192,9 @@ public sealed class AppConfig
         Profile is null ? "HomePodCast" : "HomePodCast-" + Profile);
 
     private static string FilePath => Path.Combine(Directory, "config.json");
+
+    /// <summary>The log's file name in <see cref="Directory"/> (Program.RunGui opens it; 设置 → 工具 → 日志 shows its folder).</summary>
+    public const string LogFileName = "homepodcast.log";
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -180,6 +214,12 @@ public sealed class AppConfig
                 if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
                 cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
                 cfg.ForwardVolumeKeys = null;
+                cfg.AppRoutes ??= [];
+                cfg.AppSendVolumes ??= [];
+                cfg.AppSendVolumesOff ??= [];
+                cfg.Effects ??= new();
+                AvCalibrations.Normalize(cfg);
+                HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }
         }
@@ -204,6 +244,37 @@ public sealed class AppConfig
     }
 }
 
+/// <summary>How 开机自动启动 works for this copy.</summary>
+public enum AutostartMethod
+{
+    /// <summary>The MSI, the zip, development builds: the app's own HKCU Run value, <c>"&lt;exe&gt;" --tray</c>.</summary>
+    RunKey,
+
+    /// <summary>
+    /// The Microsoft Store version: the manifest's startup task (packaging/msix/AppxManifest.xml, which passes --tray),
+    /// switched through the StartupTask API. A package's HKCU writes go to its private hive, where Windows never looks
+    /// for Run values.
+    /// </summary>
+    StartupTask,
+}
+
+/// <summary>Why the 开机自动启动 switch is as it is, when the user needs to know.</summary>
+internal enum AutostartNote
+{
+    None,
+
+    /// <summary>Turned off in Windows (Settings → Apps → Startup, Task Manager): only the user can turn it on there.</summary>
+    OffInWindows,
+
+    /// <summary>On or off by an administrator's policy.</summary>
+    Policy,
+}
+
+/// <summary>What the 开机自动启动 switch shows for the startup task.</summary>
+/// <param name="On">The switch is on.</param>
+/// <param name="CanChange">The switch can be flipped (not while a policy rules it).</param>
+internal readonly record struct AutostartView(bool On, bool CanChange, AutostartNote Note);
+
 public static class Autostart
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -211,6 +282,68 @@ public static class Autostart
 
     private static string Command => $"\"{Environment.ProcessPath}\" --tray";
 
+    /// <summary>The Run value (unpackaged) or the startup task (the Store version).</summary>
+    public static AutostartMethod Method => MethodFor(AppEnvironment.IsPackaged);
+
+    internal static AutostartMethod MethodFor(bool packaged) => packaged ? AutostartMethod.StartupTask : AutostartMethod.RunKey;
+
+    /// <summary>Only an unpackaged copy that is no test copy keeps the Run value pointing at itself.</summary>
+    internal static bool RepairsRunKey(string? profile, bool packaged) => profile == null && MethodFor(packaged) == AutostartMethod.RunKey;
+
+    /// <summary>The switch for a startup task state. Turned off in Windows: the switch can still be flipped, which explains.</summary>
+    internal static AutostartView ViewOf(StartupTaskState state) => state switch
+    {
+        StartupTaskState.Enabled => new(true, true, AutostartNote.None),
+        StartupTaskState.EnabledByPolicy => new(true, false, AutostartNote.Policy),
+        StartupTaskState.DisabledByPolicy => new(false, false, AutostartNote.Policy),
+        StartupTaskState.DisabledByUser => new(false, true, AutostartNote.OffInWindows),
+        _ => new(false, true, AutostartNote.None),
+    };
+
+    /// <summary>
+    /// The Store version's switch: asks Windows to turn the startup task on or off and logs the outcome. 设置 → 开机自动启动
+    /// and the <c>autostart on|off</c> command (Program) both go through here. Blocks for a few milliseconds: call it off
+    /// the UI thread. Returns the state afterwards; throws, after logging, what the StartupTask API throws (also outside
+    /// a package).
+    /// </summary>
+    public static StartupTaskState SetStartupTask(bool on)
+    {
+        try
+        {
+            var state = on ? StartupTaskApi.RequestEnable(AppEnvironment.StartupTaskId) : StartupTaskApi.Disable(AppEnvironment.StartupTaskId);
+            Log.Info($"autostart: startup task {(on ? "enable requested" : "disabled")}, now {state}");
+            return state;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: switching the startup task {(on ? "on" : "off")} failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The Store version started by its startup task at sign-in: the manifest passes --tray, and when Windows doesn't the
+    /// activation kind still tells (AppInstance). Never throws; false when it can't tell.
+    /// </summary>
+    public static bool StartedByStartupTask()
+    {
+        if (Method != AutostartMethod.StartupTask) return false;
+        try
+        {
+            // At every start of the Store version, before the window: never wait long for it.
+            var check = Task.Run(StartupTaskApi.LaunchedByStartupTask);
+            if (check.Wait(2000)) return check.Result;
+            Log.Warn("autostart: activation kind unknown (no answer in 2 s)");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: activation kind unknown ({ex.GetBaseException().Message})");
+            return false;
+        }
+    }
+
+    /// <summary>The Run value (<see cref="AutostartMethod.RunKey"/> only).</summary>
     public static bool Enabled
     {
         get
@@ -229,11 +362,12 @@ public static class Autostart
     /// <summary>
     /// Autostart is on but its exe no longer exists (the app was moved, or uninstalled and installed elsewhere):
     /// point it at this copy. A copy that still exists is left alone, so two installs don't fight over it.
-    /// Test copies (HOMEPODCAST_PROFILE) never touch the user's entry.
+    /// Test copies (HOMEPODCAST_PROFILE) never touch the user's entry, and neither does the Store version: its writes
+    /// would only reach its private hive, and its reads see the real one, so an MSI's or zip's value would look like its own.
     /// </summary>
     public static void Repair()
     {
-        if (AppConfig.Profile != null) return;
+        if (!RepairsRunKey(AppConfig.Profile, AppEnvironment.IsPackaged)) return;
         try
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);

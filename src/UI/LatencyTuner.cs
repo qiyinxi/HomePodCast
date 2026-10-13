@@ -179,6 +179,26 @@ internal sealed class LatencyTuner
         _apply(ms);
     }
 
+    /// <summary>Save the shown settings now, even while a slider or scene reconnect is still debounced.</summary>
+    public void FlushPending()
+    {
+        if (!Pending) return;
+        int ms = _slider.Enabled ? Value : _pendingSceneMs;
+        _slider.Stop();
+        _scene.Stop();
+        _apply(ms);
+        Changed?.Invoke();
+    }
+
+    /// <summary>A complete profile was restored: discard pending slider/scene changes and redraw its saved value.</summary>
+    public void ReloadFromConfig()
+    {
+        _slider.Stop();
+        _scene.Stop();
+        Value = Clamp(_config.LatencyMs);
+        Changed?.Invoke();
+    }
+
     /// <summary>Latency quality hint for a value.</summary>
     public static string Hint(int ms) => ms switch
     {
@@ -193,8 +213,23 @@ internal sealed class LatencyTuner
     /// speaker-side extra, plus what the capture path adds (per-app routing). The local API reports the same.
     /// </summary>
     public static int SoundLagMs(int effectiveLatencyMs, AppConfig config, int captureExtraMs,
-        double fifoTargetMs = CalibratedFifoMs) =>
-        effectiveLatencyMs + config.VideoDelayExtraMs + captureExtraMs + (int)Math.Round(fifoTargetMs - CalibratedFifoMs);
+        double fifoTargetMs = CalibratedFifoMs, AvCalibrationContext? context = null)
+    {
+        int estimate = EstimatedSoundLagMs(effectiveLatencyMs, config, captureExtraMs, fifoTargetMs);
+        int residual = AvCalibrations.Get(config, context)?.ResidualMs ?? 0;
+        return Math.Clamp(estimate + residual, 0, AvCalibrations.MaxEstimatedMs);
+    }
+
+    /// <summary>The uncalibrated estimate used as the reference when storing a new measurement.</summary>
+    public static int EstimatedSoundLagMs(int effectiveLatencyMs, AppConfig config, int captureExtraMs,
+        double fifoTargetMs = CalibratedFifoMs)
+    {
+        if (!double.IsFinite(fifoTargetMs) || fifoTargetMs < 0 || fifoTargetMs > AvCalibrations.MaxEstimatedMs)
+            fifoTargetMs = CalibratedFifoMs;
+        double estimate = (double)effectiveLatencyMs + config.VideoDelayExtraMs + captureExtraMs
+            + Math.Round(fifoTargetMs - CalibratedFifoMs);
+        return (int)Math.Clamp(estimate, 0, AvCalibrations.MaxEstimatedMs);
+    }
 
     /// <summary>The capture FIFO target in place when VideoDelayExtraMs (36) was measured; the FIFO now adapts.</summary>
     public const double CalibratedFifoMs = 20;

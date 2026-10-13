@@ -30,14 +30,21 @@ public sealed record RouteRules(AudioRoute Default, IReadOnlyDictionary<string, 
 {
     public static readonly RouteRules Today = new(AudioRoute.HomePod, new Dictionary<string, AudioRoute>());
 
+    /// <summary>Explicit independent HomePod send levels; even 100 % opts into per-app capture.</summary>
+    public IReadOnlyDictionary<string, int> SendVolumes { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>Runtime-only capture mode pin (e.g. while testing a scoped route).</summary>
+    internal bool ForceRouting { get; init; }
+
     public AudioRoute For(string key) => Apps.TryGetValue(key, out var r) ? r : Default;
 
     /// <summary>
     /// Whether per-app routing (process loopback, ~35 ms more latency) is needed: as soon as one app's
-    /// destination differs from the default, or nothing is sent by default. Otherwise the whole endpoint
+    /// destination differs from the default, a sent app has an independent send level, or nothing is sent by default. Otherwise the whole endpoint
     /// is captured exactly as before.
     /// </summary>
-    public bool NeedsRouting => Default == AudioRoute.Local || Apps.Values.Any(r => r != Default);
+    public bool NeedsRouting => ForceRouting || Default == AudioRoute.Local || Apps.Values.Any(r => r != Default) ||
+                                SendVolumes.Keys.Any(key => For(key) != AudioRoute.Local);
 
     /// <summary>Rule key for a process: lower-case executable name without ".exe".</summary>
     public static string KeyFor(string processOrExeName)
@@ -55,7 +62,16 @@ public readonly record struct SessionEntry(uint Pid, bool IsSystem);
 public readonly record struct ProcessEntry(uint Pid, uint ParentPid, string Key);
 
 /// <summary>One process-loopback capture: the tree under <paramref name="RootPid"/>.</summary>
-public sealed record RouteTarget(uint RootPid, string Key, bool Compensate);
+public sealed record RouteTarget(uint RootPid, string Key, bool Compensate)
+{
+    /// <summary>The app's independent HomePod level when the plan was made (the capture reads the live one).</summary>
+    public int? SendVolumePercent { get; init; }
+
+    /// <summary>Captured and checked the same way: the same app, destination, and independent level on or off (at any level).</summary>
+    public bool SameCapture(RouteTarget other) =>
+        RootPid == other.RootPid && Key == other.Key && Compensate == other.Compensate &&
+        SendVolumePercent.HasValue == other.SendVolumePercent.HasValue;
+}
 
 /// <summary>A session to silence locally, and the capture (target root) that carries it to the speaker.</summary>
 public readonly record struct Silence(uint SessionPid, uint TargetRoot);
@@ -65,8 +81,21 @@ public sealed record RoutePlan(bool Endpoint, IReadOnlyList<RouteTarget> Targets
 {
     public static readonly RoutePlan EndpointOnly = new(true, [], []);
 
-    public bool SameAs(RoutePlan other) =>
-        Endpoint == other.Endpoint && Targets.SequenceEqual(other.Targets) && Silenced.SequenceEqual(other.Silenced);
+    /// <summary>Sessions contributing to a target with an independent send level (read-only monitoring).</summary>
+    public IReadOnlyList<Silence> SendSessions { get; init; } = [];
+
+    /// <summary>
+    /// The same capture, silencing and checks. An independent HomePod level that only moved is not a change: the
+    /// capture applies it live, without a plan-change log line or re-opening anything.
+    /// </summary>
+    public bool SameAs(RoutePlan other)
+    {
+        if (Endpoint != other.Endpoint || Targets.Count != other.Targets.Count || !Silenced.SequenceEqual(other.Silenced) ||
+            !SendSessions.SequenceEqual(other.SendSessions)) return false;
+        for (int i = 0; i < Targets.Count; i++)
+            if (!Targets[i].SameCapture(other.Targets[i])) return false;
+        return true;
+    }
 }
 
 public static class RoutePlanner
@@ -100,7 +129,11 @@ public static class RoutePlanner
         {
             var owner = CapturedAncestor(root, roots, processes) ?? root;
             owners[root] = owner;
-            if (owner == root && route != AudioRoute.Local) targets.Add(new RouteTarget(root, key, route == AudioRoute.HomePod));
+            if (owner == root && route != AudioRoute.Local)
+                targets.Add(new RouteTarget(root, key, route == AudioRoute.HomePod)
+                {
+                    SendVolumePercent = rules.SendVolumes.TryGetValue(key, out var level) ? Math.Clamp(level, 0, 100) : null,
+                });
         }
 
         var silenced = sessionRoots
@@ -108,7 +141,10 @@ public static class RoutePlanner
             .Where(s => roots[s.TargetRoot].Route == AudioRoute.HomePod)
             .OrderBy(s => s.SessionPid)
             .ToList();
-        return new RoutePlan(false, targets, silenced);
+        var sends = sessionRoots.Select(kv => new Silence(kv.Key, owners[kv.Value]))
+            .Where(s => targets.Any(t => t.RootPid == s.TargetRoot && t.SendVolumePercent != null))
+            .OrderBy(s => s.SessionPid).ToList();
+        return new RoutePlan(false, targets, silenced) { SendSessions = sends };
     }
 
     private static uint RootOf(ProcessEntry p, IReadOnlyDictionary<uint, ProcessEntry> processes)

@@ -32,6 +32,19 @@ internal sealed class FluentComboBox : FluentControl
     /// <summary>Least width in 96-DPI units when sized to the items (<see cref="PreferredWidth"/> = 0).</summary>
     public int MinWidth { get; set; }
 
+    /// <summary>Shown in secondary text while nothing is selected (「选择配置…」); empty = an empty box.</summary>
+    public string Placeholder
+    {
+        get => _placeholder;
+        set
+        {
+            _placeholder = value ?? "";
+            Invalidate();
+        }
+    }
+
+    private string _placeholder = "";
+
     public int SelectedIndex
     {
         get => _selected;
@@ -63,8 +76,9 @@ internal sealed class FluentComboBox : FluentControl
     {
         int h = Dp(32);
         if (PreferredWidth > 0) return new Size(Dp(PreferredWidth), h);
-        int text = Items.Count == 0 ? Dp(80)
-            : Items.Max(t => TextRenderer.MeasureText(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
+        var texts = _placeholder.Length > 0 ? Items.Append(_placeholder) : Items;
+        int text = !texts.Any() ? Dp(80)
+            : texts.Max(t => TextRenderer.MeasureText(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
         return new Size(Math.Max(text + Dp(12 + 38), Dp(MinWidth)), h);
     }
 
@@ -153,7 +167,9 @@ internal sealed class FluentComboBox : FluentControl
         Shapes.FillRound(g, fill, r, radius);
         Shapes.BorderRound(g, P.ControlBorder, r, radius, Hairline);
         var textRect = new Rectangle(Dp(11), 0, Width - Dp(11 + 36), Height);
-        TextRenderer.DrawText(g, SelectedText ?? "", Theme.FontFor(TextStyle.Body, DeviceDpi, SelectedText), textRect, enabled ? P.Text : P.TextDisabled, TextFlags.Line);
+        string text = SelectedText ?? _placeholder;
+        var color = !enabled ? P.TextDisabled : SelectedText == null ? P.TextSecondary : P.Text;
+        TextRenderer.DrawText(g, text, Theme.FontFor(TextStyle.Body, DeviceDpi, text), textRect, color, TextFlags.Line);
         Shapes.Glyph(g, Glyph.ChevronDown, Theme.IconFont(12, DeviceDpi), new Rectangle(Width - Dp(32), 0, Dp(20), Height),
             enabled ? P.TextSecondary : P.TextDisabled);
         if (FocusVisible) DrawFocusRing(g, r, radius + Dp(1));
@@ -250,8 +266,12 @@ internal sealed class FluentMenuRenderer : ToolStripRenderer
 
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
-        e.TextColor = e.Item.Enabled ? P.Text : P.TextDisabled;
-        base.OnRenderItemText(e);
+        // Centred in the item's full height here: the ToolStrip's own text rectangle sat about 5 px (96-DPI) above the
+        // centre at 150 % (2026-10-11, every entry of the theme list; the first one touched the top edge), while the
+        // highlight and the accent pill, drawn from the item's bounds, were centred.
+        var r = new Rectangle(e.TextRectangle.X, 0, e.TextRectangle.Width, e.Item.Height);
+        var flags = (e.TextFormat & ~(TextFormatFlags.Top | TextFormatFlags.Bottom)) | TextFormatFlags.VerticalCenter;
+        TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, r, e.Item.Enabled ? P.Text : P.TextDisabled, flags);
     }
 
     protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)

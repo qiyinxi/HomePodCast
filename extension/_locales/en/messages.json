@@ -127,5 +127,42 @@
   },
   "videosNotDelayed": {
     "message": "not delayed"
+  },
+  "syncFullscreen": {
+    "message": "Sync fullscreen"
+  },
+  "syncExitFullscreen": {
+    "message": "Exit fullscreen"
+  },
+  "syncFullscreenTitle": {
+    "message": "Keep video and HomePod audio synchronized in fullscreen."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Shift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Picture delay $DELAY$ ms · Site offset $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "Fullscreen is unavailable. Exit the current fullscreen view or allow fullscreen for this player, then try again."
+  },
+  "syncPopupHint": {
+    "message": "Move the pointer over a video (or press Alt) to show “Sync fullscreen”. In fullscreen, Alt+←/→ adjusts by 5 ms; add Shift for 20 ms. Changes are saved for this site."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Adjust site offset by $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
   }
 }

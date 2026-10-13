@@ -245,6 +245,7 @@ internal sealed partial class TrayApp
                 _tray.ShowBalloonTip(2000, L.T("HomePod 音响"),
                     L.F("场景：{0}（{1} ms）", Scenes.Name(next), Scenes.LatencyMs(next, Scenes.CustomMs(Config))), ToolTipIcon.None);
                 break;
+            case HotkeyAction.MarkStutter: MarkAudibleGlitch(); break;
         }
     }
 

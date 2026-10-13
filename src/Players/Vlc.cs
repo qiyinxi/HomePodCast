@@ -126,8 +126,14 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
         UseCookies = false,
     })
     {
-        Timeout = TimeSpan.FromSeconds(2),
+        Timeout = System.Threading.Timeout.InfiniteTimeSpan, // per request: RequestTimeout
     };
+
+    /// <summary>
+    /// How long one request may take. Tests raise it: a CI runner once took over 2 s for a local fake VLC
+    /// (2026-10-11, the Release 0.2.2 merge on main), with the very source that had passed on dev.
+    /// </summary>
+    internal static TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(2);
 
     private readonly string? _playerPassword;
     private readonly Func<string?>? _manualPassword;
@@ -196,7 +202,9 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
         var host = Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{Address.Address}]" : Address.Address.ToString();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"http://{host}:{Address.Port}{pathAndQuery}");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", VlcHttp.BasicAuth(password));
-        using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        limit.CancelAfter(RequestTimeout);
+        using var response = await Http.SendAsync(request, limit.Token).ConfigureAwait(false);
         switch (response.StatusCode)
         {
             case HttpStatusCode.Unauthorized:
@@ -205,7 +213,7 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
                 return (null, PlayerProblem.NoPassword);
         }
         response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false), default);
+        return (await response.Content.ReadAsStringAsync(limit.Token).ConfigureAwait(false), default);
     }
 }
 

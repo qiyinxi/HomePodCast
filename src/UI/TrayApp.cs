@@ -26,8 +26,9 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <param name="openFlyout">Open the tray flyout once running (<c>gui --flyout</c>, for testing its look).</param>
     /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
     /// <param name="updatedFrom">The version before an update (<c>--updated-from=</c>, passed by the update helper).</param>
+    /// <param name="flyoutSignal">Set by a second <c>gui --flyout</c> (a test switch): open the flyout in this running instance.</param>
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
-        string? updatedFrom = null)
+        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -60,20 +61,8 @@ internal sealed partial class TrayApp : ApplicationContext
         InitUpdate(updatedFrom);
         try
         {
-            _api = new LocalApi(Config.LocalApiPort, () =>
-            {
-                bool streaming = Controller.State == StreamState.Streaming;
-                return new
-                {
-                    app = "HomePodCast",
-                    version = typeof(TrayApp).Assembly.GetName().Version?.ToString(3),
-                    streaming,
-                    device = Config.DeviceName,
-                    latencyMs = Controller.EffectiveLatencyMs,
-                    videoDelayMs = VideoDelayMs,
-                    videoDelaySource = "estimate",
-                };
-            });
+            _api = new LocalApi(Config.LocalApiPort, () => ApiStatus(Controller.State == StreamState.Streaming, Config.DeviceName,
+                Controller.EffectiveLatencyMs, VideoDelayMs, HasCurrentCalibration));
         }
         catch (System.Net.Sockets.SocketException ex)
         {
@@ -81,6 +70,8 @@ internal sealed partial class TrayApp : ApplicationContext
         }
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
+        InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
+        InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
@@ -89,8 +80,10 @@ internal sealed partial class TrayApp : ApplicationContext
             OnNetworkAddressChanged(); // a new network may be Public (TrayApp.Firewall.cs)
         }, null);
 
-        // Bring the existing window forward when a second instance is launched.
+        // Bring the existing window forward when a second instance is launched (its flyout for a second gui --flyout).
         ThreadPool.RegisterWaitForSingleObject(showSignal, (_, _) => _ui.Post(_ => ShowMain(), null), null, -1, false);
+        if (flyoutSignal != null)
+            ThreadPool.RegisterWaitForSingleObject(flyoutSignal, (_, _) => _ui.Post(_ => { if (!_quitting) ShowFlyout(); }, null), null, -1, false);
 
         OnControllerChanged();
         if (!startHidden) ShowMain();
@@ -119,7 +112,7 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
-            if (Config.AutoConnect) Connect();
+            if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
         }
         RefreshDevices();
     }
@@ -153,7 +146,9 @@ internal sealed partial class TrayApp : ApplicationContext
     /// </summary>
     private readonly LatestRequestQueue _connection = new("connection");
 
-    public void Connect()
+    /// <param name="trigger">Why: what a speaker busy with another sender means for this connection (TakeoverPolicy).</param>
+    /// <param name="takenFrom">仍然连接 on a HomePod its home-theater Apple TV held: that Apple TV's name (for the 已连接 line).</param>
+    public void Connect(ConnectTrigger trigger, string? takenFrom = null)
     {
         if (Config.DeviceId == null)
         {
@@ -169,10 +164,10 @@ internal sealed partial class TrayApp : ApplicationContext
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
         {
-            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf));
+            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf, trigger, takenFrom));
             return;
         }
-        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf));
+        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf, trigger, takenFrom));
     }
 
     public void Disconnect()
@@ -181,11 +176,18 @@ internal sealed partial class TrayApp : ApplicationContext
         _connection.Post(Controller.Stop);
     }
 
-    public void ToggleConnection()
+    /// <summary>连接 / 断开 (首页, the tray flyout). 连接 asks first when another device is playing to the speaker.</summary>
+    public void ToggleConnection(IWin32Window? owner = null)
     {
-        if (Controller.State == StreamState.Idle) Connect();
+        if (ShowsConnect(Controller.State)) ConnectManual(owner);
         else Disconnect();
     }
+
+    /// <summary>
+    /// The button says 连接 while nothing is connected: idle, and also waiting to retry (「找不到音箱…，30 秒后重试」), where
+    /// 断开 read as if something were connected (2026-10-12). There a click connects at once instead of waiting.
+    /// </summary>
+    public static bool ShowsConnect(StreamState state) => state is StreamState.Idle or StreamState.Retrying;
 
     public void SelectDevice(AirPlayDevice device)
     {
@@ -195,7 +197,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.Host = device.Address.ToString();
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
-        if (_wantConnected) Connect();
+        if (_wantConnected) Connect(ConnectTrigger.Automatic); // another speaker: never taken over without a click
     }
 
     public void SetLatency(int ms)
@@ -204,7 +206,7 @@ internal sealed partial class TrayApp : ApplicationContext
         if (Config.LatencyMs == ms) return;
         Config.LatencyMs = ms;
         Config.Save();
-        if (_wantConnected) Connect(); // latency is negotiated at SETUP, so reconnect
+        if (_wantConnected) Connect(ConnectTrigger.Reconnect); // latency is negotiated at SETUP, so reconnect
     }
 
     /// <summary>A volume chosen in the app (a page slider's debounce, the tray flyout): saved, sent, and Windows follows (跟随 Windows).</summary>
@@ -242,6 +244,9 @@ internal sealed partial class TrayApp : ApplicationContext
         try
         {
             var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            LastScan = found; // TXT records and pair members for 设置 → 音箱信息, home theaters for the busy check
+            Controller.RecheckSpeaker(); // a connect waiting for a HomePod may now see that its home-theater Apple TV holds it
+            var scan = found;
             found = StereoPairs.Merge(found); // a stereo pair shows as one entry (experimental)
             // Keep the configured speaker in the list even if it didn't answer this time.
             if (Config.DeviceId != null && !found.Any(d =>
@@ -251,10 +256,12 @@ internal sealed partial class TrayApp : ApplicationContext
                     L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
-            if (Config.DeviceId == null && found.FirstOrDefault(d => d.Model.StartsWith("AudioAccessory")) is { } homepod)
+            if (Config.DeviceId == null && FirstHomePod(found, scan) is { } homepod)
             {
                 SelectDevice(homepod);
-                if (Config.AutoConnect) Connect();
+                // A home theater's HomePod: taken over (临时接管), or the status names its Apple TV at once (先询问).
+                if (HomeTheater.HolderOf(homepod, scan) is { } tv) Log.Info($"first speaker: {Log.Name(homepod.Name)}, held by its home-theater Apple TV {Log.Name(tv.Name)}");
+                if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
                 _form.SetDevices(found);
             }
         }
@@ -268,6 +275,16 @@ internal sealed partial class TrayApp : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// The speaker a first start selects: a HomePod, one that is not an Apple TV's home-theater speaker if there is one
+    /// (connecting to that one takes it from the Apple TV); null when no HomePod was found.
+    /// </summary>
+    internal static AirPlayDevice? FirstHomePod(IReadOnlyList<AirPlayDevice> list, IReadOnlyList<AirPlayDevice> scan)
+    {
+        var homepods = list.Where(d => d.Model.StartsWith("AudioAccessory", StringComparison.Ordinal)).ToList();
+        return homepods.FirstOrDefault(d => HomeTheater.OwnerOf(d, scan) == null) ?? homepods.FirstOrDefault();
+    }
+
     public void RunSyncTest(IWin32Window owner)
     {
         if (Controller.State != StreamState.Streaming)
@@ -275,7 +292,17 @@ internal sealed partial class TrayApp : ApplicationContext
             MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
             return;
         }
-        using var test = new SyncTestForm(Config.MeasuredAvOffsetMs ?? 0);
+        if (!TryGetCalibrationSnapshot(out var snapshot))
+        {
+            MessageBox.Show(owner, L.T("无法播放测试音，请检查所选音源后重新测试。"), L.T("音画同步测试"));
+            return;
+        }
+        using var testRoute = Routing.BeginSyncTestRoute();
+        int predicted = LatencyTuner.SoundLagMs(snapshot.EffectiveLatencyMs, Config, snapshot.CaptureExtraMs,
+            snapshot.FifoTargetMs, snapshot.Context);
+        var expectedSender = Controller.ActiveSender;
+        using var test = new SyncTestForm(predicted, snapshot.Context.CaptureEndpointId, HasCurrentCalibration,
+            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.ActiveSender, expectedSender));
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
         var sender = Controller.ActiveSender;
@@ -297,15 +324,35 @@ internal sealed partial class TrayApp : ApplicationContext
             };
         }
 
-        var result = test.ShowDialog(owner);
-        if (sender != null) sender.OnsetSent = null;
-        if (local.Count > 0)
-            Log.Info($"probe summary: local pipeline median {local.Order().ElementAt(local.Count / 2):F1} ms over {local.Count} clicks");
-        if (result == DialogResult.OK)
+        DialogResult result;
+        try { result = test.ShowDialog(owner); }
+        finally { if (sender != null) sender.OnsetSent = null; }
+        double[] localTimes;
+        lock (local) localTimes = local.ToArray();
+        if (localTimes.Length > 0)
+            Log.Info($"probe summary: local pipeline median {localTimes.Order().ElementAt(localTimes.Length / 2):F1} ms over {localTimes.Length} clicks");
+        if (result == DialogResult.Retry && test.RequestedAction == SyncTestAction.Reset)
         {
-            Config.MeasuredAvOffsetMs = test.OffsetMs;
-            Config.Save();
-            Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            ResetSyncCalibration(snapshot.Context);
+        }
+        else if (result == DialogResult.OK)
+        {
+            bool current = test.CanUseMeasurement && IsCalibrationSnapshotCurrent(snapshot);
+            if (current)
+            {
+                Config.MeasuredAvOffsetMs = test.OffsetMs;
+                Config.Save();
+                Log.Info($"sync test: audio lags video by ~{test.OffsetMs} ms at latency {Config.LatencyMs} ms");
+            }
+            if (test.RequestedAction == SyncTestAction.Apply)
+            {
+                // Say what actually happened: the path may have changed after the click, or the click never reached the stream.
+                var outcome = !current ? SyncCalibrationOutcome.PathChanged
+                    : localTimes.Length == 0 ? SyncCalibrationOutcome.NoTestSound
+                    : ApplySyncCalibration(snapshot, test.OffsetMs);
+                if (outcome != SyncCalibrationOutcome.Applied) Log.Warn($"sync calibration not saved: {outcome}");
+                if (SyncCalibrationMessage(outcome) is { } message) MessageBox.Show(owner, message, L.T("音画同步测试"));
+            }
         }
     }
 
@@ -361,17 +408,19 @@ internal sealed partial class TrayApp : ApplicationContext
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
+        // Our session ends with the sleep: after a long one the speaker's flag is no longer ours (TrayApp.Takeover.cs).
+        if (e.Mode == PowerModes.Suspend) OnSuspending();
         if (e.Mode == PowerModes.Resume)
             _ui.Post(async _ =>
             {
                 await Task.Delay(3000); // let Wi-Fi come back
-                if (_wantConnected) Connect();
+                if (_wantConnected) Connect(ConnectTrigger.Reconnect);
             }, null);
     }
 
     private void KickIfWanted()
     {
-        if (_wantConnected && Controller.State is StreamState.Retrying) Connect();
+        if (_wantConnected && Controller.State is StreamState.Retrying) Connect(ConnectTrigger.Reconnect);
     }
 
     private void OnControllerChanged()
@@ -380,7 +429,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // machine as a NullReferenceException in NotifyIcon.UpdateIcon on every quit.
         if (_quitting) return;
         var c = Controller;
-        if (c.State == StreamState.Idle && _wantConnected && c.StatusText == L.T(StreamController.TakenOverText)) _wantConnected = false;
+        if (_wantConnected && GivesUp(c.State, c.StatusText)) _wantConnected = false;
 
         var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
@@ -391,9 +440,10 @@ internal sealed partial class TrayApp : ApplicationContext
             old?.Dispose();
             _lastIconState = c.State;
         }
-        if (c.State == StreamState.Streaming && c.Volume is { } v && Config.Volume != v && _pendingVolume is null)
+        var volume = c.Volume;
+        if (SavesStreamingVolume(c, volume, Config, _pendingVolume != null))
         {
-            Config.Volume = v;
+            Config.Volume = volume;
             Config.Save();
         }
         UpdateMonitorGuard();
@@ -401,6 +451,25 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.UpdateState();
         RaiseStateChanged();
     }
+
+    /// <summary>
+    /// The controller ended the session because another sender took the speaker (<see cref="StreamController.TakenOverText"/>):
+    /// nothing reconnects by itself any more (a network change, a wake from sleep), so the speaker is never taken back.
+    /// </summary>
+    internal static bool GivesUp(StreamState state, string statusText) =>
+        state == StreamState.Idle && statusText == L.T(StreamController.TakenOverText);
+
+    /// <summary>
+    /// The speaker's confirmed volume is saved as the selected speaker's volume (what the next connection starts with) only
+    /// while the session streaming is the selected one. Right after a profile or the list switched speakers the previous
+    /// one still streams until the queued restart has stopped it, and a change it reports meanwhile (a profile's lower cap
+    /// lowers it) must not become the new speaker's volume: a later reconnect would send it there.
+    /// </summary>
+    /// <param name="volume">The controller's volume, read once (it may change on another thread).</param>
+    /// <param name="pendingVolume">A key or hotkey volume waits to be saved (its debounce saves it instead).</param>
+    internal static bool SavesStreamingVolume(StreamController c, double? volume, AppConfig cfg, bool pendingVolume) =>
+        c.State == StreamState.Streaming && volume is { } v && cfg.Volume != v && !pendingVolume
+        && c.OwnSession.IsLiveFor(OwnSession.KeyOf(cfg));
 
     private bool _quitting;
 
@@ -430,6 +499,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // A Start still running would otherwise begin a stream after the Stop below (it never faults).
         connecting.Wait(TimeSpan.FromSeconds(10));
         Controller.Dispose();
+        DisposeTakeover(); // saves how our session ended (cleanly, by us)
         _tray.Dispose();
         ExitThread();
     }

@@ -32,6 +32,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly TextBlock _monitorCaptured = new(L.T(LocalMonitor.CapturedText), TextStyle.Body, TextRole.Caution, wrap: true) { Collapsed = true };
     private readonly TextBlock _delayHint = Ui.Note();
     private readonly TextBlock _micStatus = Ui.Note();
+    private readonly FluentButton _micPrivacy = new(L.T("打开麦克风隐私设置"), ButtonKind.Link, Glyph.OpenInNew) { Collapsed = true };
     private readonly TextBlock _routeStatus = Ui.Note();
 
     private readonly ToggleSwitch _reverbOn = new(L.T("开启混响"));
@@ -74,6 +75,10 @@ internal sealed class EffectsPage : ScrollPage
     {
         var title = Ui.Header(L.T("麦克风"));
         var head = Ui.Row(12, title, title, _micOn);
+        // A FieldRow names the row of controls after its caption; the control in it gets the caption too (screen readers).
+        _micDevice.AccessibleName = L.T("设备");
+        _gateThreshold.AccessibleName = L.T("噪声门");
+        _destination.AccessibleName = L.T("送到");
         var device = new FieldRow(L.T("设备"), Ui.Row(6, _micDevice, _micDevice, _refresh));
         var level = new FieldRow(L.T("电平"), _meter);
         var gain = new FieldRow(L.T("增益"), _gain, _gainValue);
@@ -82,7 +87,8 @@ internal sealed class EffectsPage : ScrollPage
         var monitor = new FieldRow(L.T("监听设备"), _monitorDevice);
         FieldRow.AlignCaptions(device, level, gain, gate, route, monitor);
         ShowDelayHint();
-        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus, _routeStatus);
+        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus,
+            Ui.Row(0, null, _micPrivacy), _routeStatus);
         card.Gap = 8;
         return card;
     }
@@ -109,6 +115,7 @@ internal sealed class EffectsPage : ScrollPage
     private void WireEvents()
     {
         _refresh.Click += (_, _) => LoadDevices();
+        _micPrivacy.Click += (_, _) => AppEnvironment.OpenUri(MicCapture.PrivacySettingsUri);
         _micOn.Toggled += (_, _) => SetMicOn(_micOn.Checked);
         _micDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MicDeviceId = Pick(_micDevice, _inputs, S.MicDeviceId));
         _monitorDevice.SelectionChangeCommitted += (_, _) => Edit(() => S.MonitorDeviceId = Pick(_monitorDevice, _outputs, S.MonitorDeviceId));
@@ -229,6 +236,13 @@ internal sealed class EffectsPage : ScrollPage
         UpdateStatus();
     }
 
+    public void ReloadConfiguration()
+    {
+        _saveDebounce.Stop();
+        LoadDevices();
+        LoadFromSettings();
+    }
+
     private static int Percent(double v) => Math.Clamp((int)Math.Round(v * 100), 0, 100);
 
     private void ShowValues()
@@ -280,6 +294,10 @@ internal sealed class EffectsPage : ScrollPage
             : L.F("{0} · {1} Hz · 周期 {2:F1} ms", mic.DeviceName, mic.DeviceRate, mic.PeriodMs) +
               (mic.LowLatency ? L.T("（低延迟模式）") : "");
         _micStatus.Role = mic?.Error != null ? TextRole.Critical : TextRole.Secondary;
+        // Refused by the privacy settings: the way to them, and what to do afterwards.
+        bool denied = mic?.AccessDenied == true;
+        if (denied) _micStatus.Text = L.T("Windows 的隐私设置不允许 HomePodCast 使用麦克风。允许之后，把麦克风关掉再打开。");
+        _micPrivacy.Collapsed = !denied;
 
         var lines = new List<string>();
         if (mic != null && S.Destination != MicDestination.Monitor)
@@ -376,6 +394,7 @@ internal sealed class EffectsPage : ScrollPage
                 bands.Add(_values[i], _bands[i], label);
                 _bands[i].Scroll += (_, _) => OnBandChanged();
             }
+            _preset.AccessibleName = L.T("预设");
             var preset = new FieldRow(L.T("预设"), Ui.Row(0, null, _preset));
             Card = Ui.Card(Ui.Header(title), preset, bands);
             Card.Gap = 10;

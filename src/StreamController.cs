@@ -14,7 +14,12 @@ public enum StreamState { Idle, Connecting, Streaming, Retrying }
 /// </summary>
 public sealed partial class StreamController : IDisposable
 {
-    private static readonly TimeSpan TakeoverGrace = TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// A session the speaker ends after streaming this long was taken by another sender: the controller backs off for good
+    /// (<see cref="TakenOverText"/>) instead of retrying. Ended sooner, it retries (and the takeover check decides). Tests
+    /// shorten it; the app always uses 15 s.
+    /// </summary>
+    internal TimeSpan TakeoverGrace { get; set; } = TimeSpan.FromSeconds(15);
 
     private readonly AudioFifo _fifo;
 
@@ -69,7 +74,10 @@ public sealed partial class StreamController : IDisposable
     /// <see cref="VolumeChanges"/> when the start was requested: a volume set after that (the request waited in a
     /// queue behind a slow Stop) is kept instead of <paramref name="volume"/>. Null: always use <paramref name="volume"/>.
     /// </param>
-    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null)
+    /// <param name="trigger">Why it connects: what a speaker busy with another sender means for it (<see cref="TakeoverPolicy"/>).</param>
+    /// <param name="takenFrom">With <see cref="ConnectTrigger.TakeOver"/>: the home-theater Apple TV the user takes the HomePod from.</param>
+    public void Start(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf = null,
+        ConnectTrigger trigger = ConnectTrigger.Manual, string? takenFrom = null)
     {
         lock (_lifecycle)
         {
@@ -78,7 +86,7 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, cts.Token));
+                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
             }
         }
     }
@@ -105,6 +113,7 @@ public sealed partial class StreamController : IDisposable
             TearDown();
             TearDownGroup();
             DisposeCapture();
+            _waitingForSpeaker = false;
             Set(StreamState.Idle, L.T("未连接"));
         }
     }
@@ -149,21 +158,31 @@ public sealed partial class StreamController : IDisposable
         }
     }
 
-    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, CancellationToken ct)
+    private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, ConnectTrigger trigger,
+        string? takenFrom, CancellationToken ct)
     {
         int attempt = 0;
+        bool streamed = false, endedBySpeaker = false;
+        string key = OwnSession.KeyOf(deviceId);
         TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();
             string? lostReason = null;
             AirPlayClient? mine = null;
+            bool live = false;
+            IPAddress? resolved = null;
+            PairingRequiredException? needsPairing = null;
             try
             {
                 Set(StreamState.Connecting, attempt == 0 ? L.T("正在连接…") : L.F("正在重连（第 {0} 次）…", attempt));
                 var address = await ResolveAsync(deviceId, host, ct);
+                resolved = address;
                 host = address.ToString();
                 HostResolved?.Invoke(host);
+                await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct,
+                    endedBySpeaker, takenFrom);
+                started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
                 EnsureCapture(ct);
 
@@ -171,7 +190,10 @@ public sealed partial class StreamController : IDisposable
                 EffectiveLatencyMs = SafeLatency(latencyMs);
                 if (EffectiveLatencyMs != latencyMs)
                     Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
-                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume) { VolumeCapPercent = VolumeCapPercent, Effects = Effects };
+                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume)
+                {
+                    VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,
+                };
                 var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
@@ -195,7 +217,9 @@ public sealed partial class StreamController : IDisposable
                 }
                 Volume ??= client.InitialVolumeDb is { } db ? VolumeLimit.Clamp(AirPlayClient.DbToPercent(db), VolumeCapPercent) : null;
                 attempt = 0;
-                Set(StreamState.Streaming, L.F("已连接 · {0}", client.Info.GetValueOrDefault("name")));
+                OwnSession.Began(key, UtcNow()); // before the change is announced: the UI saves it
+                live = streamed = true;
+                Set(StreamState.Streaming, ConnectedText(client.Info.GetValueOrDefault("name")));
 
                 using (var net = new NetworkWatch(address))
                 {
@@ -210,6 +234,11 @@ public sealed partial class StreamController : IDisposable
             {
                 break;
             }
+            catch (PairingRequiredException ex)
+            {
+                Log.Info($"stream: {AirPlayException.ForLog(ex)}");
+                needsPairing = ex;
+            }
             catch (Exception ex)
             {
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
@@ -218,11 +247,22 @@ public sealed partial class StreamController : IDisposable
             }
             finally
             {
+                // Ended by the speaker itself: another sender took over, so a set flag is not ours. Stopped by us: TEARDOWN.
+                if (live && lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget();
+                else if (live) OwnSession.Ended(UtcNow(), clean: ct.IsCancellationRequested);
+                if (live) endedBySpeaker = lostReason == EventChannel.ClosedBySpeaker; // a home theater's Apple TV is not fought
                 // Only this loop's own session (Stop may already have taken and disposed it).
                 if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }
 
             if (ct.IsCancellationRequested) break;
+
+            if (needsPairing != null && resolved != null)
+            {
+                // Retrying can't help: only a PIN pairing, which the user starts (StreamController.Pairing.cs).
+                StopForPairing(deviceId, resolved, needsPairing, trigger);
+                return;
+            }
 
             if (State == StreamState.Streaming && started.Elapsed > TakeoverGrace &&
                 lostReason == EventChannel.ClosedBySpeaker)
@@ -271,7 +311,7 @@ public sealed partial class StreamController : IDisposable
             return known;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var match = devices.FirstOrDefault(d => string.Equals(Normalize(d.DeviceId), Normalize(deviceId), StringComparison.OrdinalIgnoreCase));
-        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱（是否通电、和电脑在同一网络？）"));
+        return match?.Address ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
     }
 
     public static string Normalize(string id) => id.Replace(":", "").Replace("-", "");

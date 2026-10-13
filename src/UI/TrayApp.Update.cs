@@ -48,7 +48,9 @@ internal sealed partial class TrayApp
     /// <param name="updatedFrom">--updated-from=: the helper started us after installing (or trying to install) an update.</param>
     private void InitUpdate(string? updatedFrom)
     {
-        _store = UpdateInstaller.IsStorePackage();
+        // The Microsoft Store version (AppEnvironment.IsPackaged): the Store updates it, and Store policy wants the app's
+        // own update check off, so it never asks GitHub (its package has no internetClient capability).
+        _store = AppEnvironment.IsPackaged;
         _noAutomaticUpdates = _store ? "Microsoft Store package" : ReleaseVersion.WhyNotAutomatic(ReleaseVersion.CurrentText, AppConfig.Profile, DebugBuild);
         _updateStatus = _store ? L.T("Microsoft Store 版由 Microsoft Store 负责更新。") : LastCheckText();
         _tray.BalloonTipClicked += (_, _) =>
@@ -58,6 +60,9 @@ internal sealed partial class TrayApp
             click?.Invoke();
         };
         _updateTimer.Tick += OnUpdateTimer;
+        // The window was built before this (TrayApp's constructor): its 软件更新 section still shows the GitHub rows.
+        // Seen 2026-10-12 in the Store package: 检查更新 and 更新渠道 stayed until something else refreshed them.
+        RaiseUpdateChanged();
 
         // Download folders of earlier updates (and what their helper wrote). Never from a test profile: the real
         // instance may be in the middle of one.
@@ -100,7 +105,7 @@ internal sealed partial class TrayApp
 
     private Task<bool> MsiInstall() => _msiInstall ??= AppConfig.Profile != null
         ? Task.FromResult(false) // a test copy never installs over the real one
-        : Task.Run(() => UpdateInstaller.IsMsiInstall(Environment.ProcessPath ?? ""));
+        : Task.Run(UpdateFlow.IsMsiInstall);
 
     // ---------------------------------------------------------------- automatic checks
 
@@ -108,19 +113,9 @@ internal sealed partial class TrayApp
     private void ScheduleUpdateChecks()
     {
         _updateTimer.Stop();
-        if (_store)
+        if (NoAutomaticCheck(_store, Config.AutoUpdateCheck, _noAutomaticUpdates) is { } why)
         {
-            Log.Info("update: Microsoft Store package: never contacts GitHub (the Store updates it)");
-            return;
-        }
-        if (!Config.AutoUpdateCheck)
-        {
-            Log.Info("update: automatic checks are off (only 「检查更新」 contacts GitHub)");
-            return;
-        }
-        if (_noAutomaticUpdates != null)
-        {
-            Log.Info($"update: no automatic checks in this build ({_noAutomaticUpdates})");
+            Log.Info($"update: {why}");
             return;
         }
         _updateDue = UpdateSchedule.FirstDue(Config.UpdateLastCheck, DateTime.UtcNow);
@@ -165,12 +160,7 @@ internal sealed partial class TrayApp
             bool msi = await MsiInstall();
             Log.Info($"update: {(automatic ? "automatic" : "manual")} check (running {ReleaseVersion.CurrentText}, " +
                      $"{(msi ? "MSI install" : "portable")}): GET {GitHubReleases.ApiUrl}");
-            var json = await Task.Run(async () =>
-            {
-                using var http = GitHubReleases.CreateClient(ReleaseVersion.CurrentText, GitHubReleases.Timeout);
-                return await GitHubReleases.FetchAsync(http, CancellationToken.None);
-            });
-            var releases = GitHubReleases.Parse(json);
+            var releases = await UpdateFlow.FetchReleasesAsync(ReleaseFeed.GitHub, CancellationToken.None);
             var channel = UpdateChannel; // now: it may have been changed while the request was out
             var result = GitHubReleases.Pick(releases, channel, CurrentVersion, Config.UpdateSkipped, needMsi: msi);
             ok = true;
@@ -200,37 +190,59 @@ internal sealed partial class TrayApp
 
     private void ShowCheckResult(CheckResult result, bool automatic)
     {
-        var release = result.Release;
-        if (result.Outcome != CheckOutcome.UpdateAvailable)
+        var view = CheckView(result, automatic, _update, _updateBanner, Config.UpdateNotified);
+        _update = view.Update;
+        _updateBanner = view.Banner;
+        SetUpdateStatus(view.Status, view.Role);
+        if (view.Notify && view.Update is { } release)
         {
-            _update = null;
-            _updateBanner = false;
-        }
-        switch (result.Outcome)
-        {
-            case CheckOutcome.UpdateAvailable:
-                if (_update?.Version.Equals(release!.Version) != true) _updateBanner = false;
-                _update = release;
-                _updateBanner |= automatic;
-                SetUpdateStatus(L.F("发现新版本 {0}", release!.Version), TextRole.Accent);
-                if (automatic && Config.UpdateNotified != release.Version.ToString())
-                {
-                    Config.UpdateNotified = release.Version.ToString();
-                    Config.Save();
-                    ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, () => ShowMain(AppPage.Home));
-                }
-                break;
-            case CheckOutcome.Skipped:
-                SetUpdateStatus(L.F("已跳过 {0}，有更新的版本时会再提示", release!.Version), TextRole.Secondary);
-                break;
-            case CheckOutcome.PrereleaseAhead:
-                SetUpdateStatus(L.T("当前测试版比最新正式版新，下一个正式版发布后会提示更新"), TextRole.Secondary);
-                break;
-            default:
-                SetUpdateStatus(L.T("已是最新版本"), TextRole.Success);
-                break;
+            Config.UpdateNotified = release.Version.ToString();
+            Config.Save();
+            ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, () => ShowMain(AppPage.Home));
         }
     }
+
+    /// <summary>What a check's result does to 设置 → 软件更新 and 首页 (<see cref="ShowCheckResult"/> applies it).</summary>
+    /// <param name="Update">The release 「更新」 offers (null: no 更新 button, no banner).</param>
+    /// <param name="Banner">首页's banner: only for an update an automatic check found (a manual check answers in 设置).</param>
+    /// <param name="Notify">The tray balloon: an automatic check's first find of this version.</param>
+    internal readonly record struct UpdateCheckView(Release? Update, bool Banner, string Status, TextRole Role, bool Notify);
+
+    /// <param name="previous">The update offered before this check (its banner stays for the same version).</param>
+    /// <param name="previousBanner">Whether 首页 showed it.</param>
+    /// <param name="notified">The version the balloon announced last (<see cref="AppConfig.UpdateNotified"/>).</param>
+    internal static UpdateCheckView CheckView(CheckResult result, bool automatic, Release? previous, bool previousBanner, string? notified)
+    {
+        var release = result.Release;
+        return result.Outcome switch
+        {
+            CheckOutcome.UpdateAvailable => new(release,
+                (previous?.Version.Equals(release!.Version) == true && previousBanner) || automatic,
+                L.F("发现新版本 {0}", release!.Version), TextRole.Accent,
+                automatic && notified != release.Version.ToString()),
+            CheckOutcome.Skipped => new(null, false, L.F("已跳过 {0}，有更新的版本时会再提示", release!.Version), TextRole.Secondary, false),
+            // Never a downgrade and never a 「更新」 to an older stable release.
+            CheckOutcome.PrereleaseAhead => new(null, false, L.T("当前测试版比最新正式版新，下一个正式版发布后会提示更新"), TextRole.Secondary, false),
+            _ => new(null, false, L.T("已是最新版本"), TextRole.Success, false),
+        };
+    }
+
+    /// <summary>「更新」's confirmation (an MSI install); while a connection is up it says the stream stops for about a minute.</summary>
+    internal static string InstallConfirmation(ReleaseVersion version, StreamState state)
+    {
+        var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
+                       "HomePodCast 会先退出，装好后自动重新启动。", version);
+        if (state != StreamState.Idle) text += "\n\n" + L.T("正在推流：推送会停止大约一分钟。");
+        return text;
+    }
+
+    /// <summary>Why no automatic check is scheduled (logged as "update: …"), or null when one is.</summary>
+    /// <param name="notInThisBuild">Why this build never checks by itself (<see cref="NoAutomaticUpdates"/>).</param>
+    internal static string? NoAutomaticCheck(bool store, bool automaticOn, string? notInThisBuild) =>
+        store ? "Microsoft Store package: never contacts GitHub (the Store updates it)"
+        : !automaticOn ? "automatic checks are off (only 「检查更新」 contacts GitHub)"
+        : notInThisBuild != null ? $"no automatic checks in this build ({notInThisBuild})"
+        : null;
 
     // ---------------------------------------------------------------- settings
 
@@ -299,45 +311,38 @@ internal sealed partial class TrayApp
     public async void InstallUpdate(IWin32Window? owner)
     {
         if (_update is not { } release || _download != null || _checking || _quitting) return;
-        if (!await MsiInstall())
+        switch (UpdateFlow.Route(release, await MsiInstall()))
         {
-            Log.Info($"update: portable copy, so {release.Version} is not installed here: opening its release page");
-            OpenUrl(release.PageUrl);
-            SetUpdateStatus(L.T("便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。"), TextRole.Secondary);
-            return;
+            case InstallRoute.ReleasePage:
+                Log.Info($"update: portable copy, so {release.Version} is not installed here: opening its release page");
+                OpenUrl(release.PageUrl);
+                SetUpdateStatus(L.T("便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。"), TextRole.Secondary);
+                return;
+            case InstallRoute.NoChecksum:
+                Log.Warn($"update: {release.Version}: GitHub lists no SHA-256 for {release.Msi?.Name ?? "the MSI"}; not installing");
+                SetUpdateStatus(L.T("GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。"), TextRole.Critical);
+                return;
         }
-        if (release.Msi is not { Sha256: not null } asset)
-        {
-            Log.Warn($"update: {release.Version}: GitHub lists no SHA-256 for {release.Msi?.Name ?? "the MSI"}; not installing");
-            SetUpdateStatus(L.T("GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。"), TextRole.Critical);
-            return;
-        }
+        var asset = release.Msi!;
 
-        var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
-                       "HomePodCast 会先退出，装好后自动重新启动。", release.Version);
-        if (Controller.State != StreamState.Idle) text += "\n\n" + L.T("正在推流：推送会停止大约一分钟。");
+        var text = InstallConfirmation(release.Version, Controller.State);
         var answer = owner != null
             ? MessageBox.Show(owner, text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question)
             : MessageBox.Show(text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes || _quitting || _update != release || _download != null) return;
 
         using var cts = _download = new CancellationTokenSource();
-        string? folder = null;
+        string? folder = null; // the download's folder once it matched; removed again if the helper does not start
         try
         {
-            folder = UpdatePackage.CreateFolder();
             SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, 0), TextRole.Secondary);
             var progress = new Progress<double>(f =>
             {
                 if (_download == cts && !cts.IsCancellationRequested) SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, (int)(f * 100)), TextRole.Secondary);
             });
-            Log.Info($"update: downloading {asset.Url} ({asset.Size} bytes) to {folder}");
-            var msi = await Task.Run(async () =>
-            {
-                using var http = GitHubReleases.CreateClient(ReleaseVersion.CurrentText, TimeSpan.FromMinutes(10));
-                return await UpdatePackage.DownloadAsync(http, release, folder, progress, cts.Token);
-            }, cts.Token);
-            Log.Info($"update: {msi} matches GitHub's SHA-256 {asset.Sha256}");
+            // Removes its folder itself when the download fails, does not match or is cancelled.
+            var update = await UpdateFlow.DownloadAsync(ReleaseFeed.GitHub, release, progress, cts.Token);
+            folder = update.Folder;
             if (_quitting)
             {
                 UpdatePackage.TryDelete(folder);
@@ -347,9 +352,7 @@ internal sealed partial class TrayApp
             // Keep the channel the update came from (a beta user updated to a stable release still gets betas).
             Config.UpdateChannel ??= UpdateChannel;
             Config.Save();
-            var exe = Environment.ProcessPath!;
-            UpdateInstaller.StartHelper(new UpdateInstaller.Helper(Environment.ProcessId, msi, Path.Combine(folder, UpdatePackage.MsiLogFile),
-                Path.Combine(folder, UpdatePackage.ResultFile), exe, ReleaseVersion.CurrentText, Tray: !_form.Visible));
+            UpdateFlow.StartInstaller(update, tray: !_form.Visible);
             _installing = true;
             SetUpdateStatus(L.T("正在退出并安装更新…"), TextRole.Secondary);
             Log.Info($"update: quitting so that {release.Version} can be installed");

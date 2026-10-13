@@ -218,4 +218,46 @@ public class LatencyTunerTests
         Assert.Equal(156, LatencyTuner.SoundLagMs(120, cfg, captureExtraMs: 0));
         Assert.Equal(191, LatencyTuner.SoundLagMs(120, cfg, Audio.RoutedCapture.RoutedExtraLatencyMs));
     }
+
+    [Fact]
+    public void Reloading_a_profile_cancels_pending_edits_and_redraws_without_applying_latency()
+    {
+        var cfg = new AppConfig { Scene = Scene.Custom, LatencyMs = 120 };
+        var tuner = Tuner(cfg, floor: 125);
+        tuner.UserSet(145);
+        cfg.LatencyMs = 110;
+        cfg.Scene = Scene.Movie;
+        tuner.ReloadFromConfig();
+        Assert.Equal(125, tuner.Value);
+        Assert.Equal(Scene.Movie, tuner.Scene);
+        Assert.False(tuner.Pending);
+        _slider.Elapse();
+        _scene.Elapse();
+        Assert.Empty(_applied);
+    }
+
+    [Fact]
+    public void Saving_a_profile_flushes_the_visible_slider_value_once()
+    {
+        var cfg = new AppConfig { Scene = Scene.Custom, LatencyMs = 120 };
+        var tuner = Tuner(cfg);
+        tuner.UserSet(147);
+        tuner.FlushPending();
+        tuner.FlushPending();
+        _slider.Elapse();
+        Assert.Equal([147], _applied);
+        Assert.False(tuner.Pending);
+    }
+
+    [Fact]
+    public void Saving_a_profile_flushes_the_pending_scene_with_its_requested_value()
+    {
+        var cfg = new AppConfig { Scene = Scene.Custom, LatencyMs = 120 };
+        var tuner = Tuner(cfg, floor: 125);
+        tuner.SelectScene(Scene.Game);
+        tuner.FlushPending();
+        _scene.Elapse();
+        Assert.Equal([Scenes.GameMs], _applied);
+        Assert.False(tuner.Pending);
+    }
 }

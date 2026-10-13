@@ -39,5 +39,42 @@
   "videosDrm": { "message": "著作権保護（DRM）のため遅延できません" },
   "videosFullscreen": { "message": "動画要素だけを全画面表示しているときは遅延できません" },
   "videosPlayerUnsupported": { "message": "このページのプレーヤーは映像の遅延に対応していません" },
-  "videosNotDelayed": { "message": "遅延なし" }
+  "videosNotDelayed": { "message": "遅延なし" },
+  "syncFullscreen": {
+    "message": "同期フルスクリーン"
+  },
+  "syncExitFullscreen": {
+    "message": "フルスクリーンを終了"
+  },
+  "syncFullscreenTitle": {
+    "message": "フルスクリーンでも映像と HomePod の音声の同期を保ちます。"
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→：±5 ms · Alt+Shift+←/→：±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "映像遅延 $DELAY$ ms · サイト補正 $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "フルスクリーンを利用できません。現在のフルスクリーンを終了するか、このプレーヤーのフルスクリーンを許可して再試行してください。"
+  },
+  "syncPopupHint": {
+    "message": "動画の上でポインターを動かす（または Alt を押す）と「同期フルスクリーン」が表示されます。フルスクリーン中は Alt+←/→ で 5 ms、Shift を加えると 20 ms 調整します。変更はこのサイトに保存されます。"
+  },
+  "syncAdjustmentLabel": {
+    "message": "サイト補正を $DELTA$ ms 調整",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  }
 }

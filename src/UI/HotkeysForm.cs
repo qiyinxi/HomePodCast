@@ -48,6 +48,7 @@ internal sealed class HotkeysForm : FluentDialog
         HotkeyAction.VolumeUp => L.T("HomePod 音量 +"),
         HotkeyAction.VolumeDown => L.T("HomePod 音量 −"),
         HotkeyAction.Mute => L.T("HomePod 静音 / 取消静音"),
+        HotkeyAction.MarkStutter => L.T("标记刚才的卡顿"),
         _ => L.T("切换场景"),
     };
 

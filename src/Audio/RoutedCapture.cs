@@ -258,7 +258,7 @@ public sealed class RoutedCapture : ICaptureSource
                     }
                     if (drained.Count == 0) continue;
                     var span = CollectionsMarshal.AsSpan(drained);
-                    mixer.Push(Id(root), span, Gain(c, root, span, now));
+                    mixer.Push(Id(root), span, Gain(c, root, span, now)); // levels ramp per packet: no click
                 }
                 if (broken is { } b)
                 {
@@ -378,29 +378,58 @@ public sealed class RoutedCapture : ICaptureSource
     }
 
     /// <summary>
-    /// Gain for one drained batch: 1/epsilon for an app silenced here once the router confirmed it, but
-    /// never for audio that is too loud to be attenuated (a session we have not silenced yet, or a
-    /// volume raised elsewhere): that would come out 100 dB too loud.
+    /// Scaling for one drained batch (<see cref="ComposeGain"/>). Audio too loud to be attenuated from an app the
+    /// router confirmed silenced (a volume raised elsewhere) also holds the compensation off for a moment and has
+    /// the router check the volumes at once.
     /// </summary>
-    private float Gain(Client c, uint root, ReadOnlySpan<float> samples, long now)
+    private PacketGain Gain(Client c, uint root, ReadOnlySpan<float> samples, long now)
     {
-        if (!c.Target.Compensate) return 1f;
-        bool confirmed = now >= c.HoldUntil && _router.IsConfirmed(root, now);
-        if (!confirmed) return 1f;
+        var target = c.Target;
+        int? send = SendPercent(target);
+        bool confirmed = target.Compensate && now >= c.HoldUntil && _router.IsConfirmed(root, now);
         float peak = 0;
-        foreach (var s in samples) peak = Math.Max(peak, Math.Abs(s));
-        float gain = SessionAttenuation.CompensationGain(true, true, peak);
-        if (gain == 1f)
+        if (confirmed || send != null)
+            foreach (var s in samples) peak = Math.Max(peak, Math.Abs(s));
+        float normalization = send != null ? _router.SendNormalization(root, now) : 1f;
+        var gain = ComposeGain(send, target.Compensate, confirmed, normalization, peak);
+        if (confirmed && gain.Gain == 1f)
         {
             c.HoldUntil = now + GuardHold;
             if (now - c.LastWarning > Stopwatch.Frequency * 10)
             {
                 c.LastWarning = now;
-                Log.Warn($"routing: unattenuated audio from {c.Target.Key} (peak {peak:E1}); holding gain, re-checking volumes");
+                Log.Warn($"routing: unattenuated audio from {target.Key} (peak {peak:E1}); holding gain, re-checking volumes");
             }
             _router.Poke();
         }
         return gain;
+    }
+
+    /// <summary>
+    /// The target's independent HomePod level, or null. The plan says whether it has one (its sessions are then
+    /// checked); the level itself is read from the live rules, so moving the HomePod slider needs no new plan.
+    /// </summary>
+    private int? SendPercent(RouteTarget target) =>
+        target.SendVolumePercent is not { } planned ? null
+        : _routing.Rules.SendVolumes.TryGetValue(target.Key, out int live) ? live : planned;
+
+    /// <summary>
+    /// How one captured packet of a target is scaled (pure). Without an independent HomePod level exactly as before:
+    /// gain 1, or 1/epsilon for audio of a "HomePod only" app that the router confirmed silenced here and that is
+    /// quiet enough to be attenuated (never for audio that is not: that would come out 100 dB too loud). With one,
+    /// the level is the send level times the normalization (1 / the app's Windows level, <see cref="SendVolumeGain"/>),
+    /// ramped by the mixer; the normalization is left out, and that applied at once, for audio louder than it
+    /// allows (<see cref="SendVolumeGain.Guard"/>) and for a "HomePod only" app that is not confirmed silenced or
+    /// whose audio is not attenuated. Every fallback is quieter than set, never louder.
+    /// </summary>
+    internal static PacketGain ComposeGain(int? sendPercent, bool compensate, bool confirmed, float normalization, float peak)
+    {
+        float gain = compensate ? SessionAttenuation.CompensationGain(true, confirmed, peak) : 1f;
+        if (sendPercent is not { } percent) return new PacketGain(gain, 1f);
+        float send = Math.Clamp(percent, 0, 100) / 100f;
+        if (compensate && (!confirmed || gain == 1f)) return new PacketGain(1f, send, Snap: true);
+        float guarded = SendVolumeGain.Guard(normalization, peak * gain);
+        return new PacketGain(gain, send * guarded, Snap: guarded != normalization);
     }
 
     private static int MixRate(IMMDevice device)

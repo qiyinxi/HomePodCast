@@ -21,7 +21,11 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentComboBox _language = new();
     private readonly FluentComboBox _theme = new();
     private readonly ToggleSwitch _autostart = new();
+    private readonly SettingRow _autostartRow;
     private readonly ToggleSwitch _autoconnect = new();
+    private static readonly HomeTheaterMode[] HomeTheaterModes = [HomeTheaterMode.TakeOver, HomeTheaterMode.Ask];
+    private readonly Segmented _homeTheater = new(L.T("临时接管"), L.T("先询问"));
+    private readonly SettingRow _homeTheaterRow;
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
@@ -60,10 +64,15 @@ internal sealed class SettingsPage : ScrollPage
         var language = new SettingRow(Glyph.Globe, L.Language == "en" ? L.T("语言") : L.T("语言") + " / Language",
             L.T("切换后重新启动 HomePodCast 生效。"), _language);
         var theme = new SettingRow(Glyph.Appearance, L.T("外观"), L.T("浅色或深色；默认跟随 Windows。"), _theme);
-        var autostart = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T("登录 Windows 后在托盘里启动。"), _autostart);
+        var autostart = _autostartRow = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T(AutostartText), _autostart);
         var autoconnect = new SettingRow(Glyph.Sync, L.T("启动后自动连接"), L.T("启动时连接上次用的音箱。"), _autoconnect);
+        // Experimental until it has been tried on a real Apple TV (AGENTS.md: a hardware-untested label, not a version
+        // one): whether the Apple TV takes its HomePod back after we disconnect is still unverified.
+        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）");
+        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）"), "", _homeTheater);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
+        _cap.AccessibleName = L.T("音量上限"); // the row is named after its title; the slider in it too
         var capRow = Ui.Row(10, _cap, _cap, _capValue);
         capRow.FixedWidths[_cap] = 180;
         capRow.FixedWidths[_capValue] = 44;
@@ -88,12 +97,22 @@ internal sealed class SettingsPage : ScrollPage
             L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
 
         var tools = Ui.Section(L.T("工具"));
+        var profiles = new FluentButton(L.T("管理配置"));
+        var profilesRow = new SettingRow(Glyph.Settings, L.T("使用配置"),
+            L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), profiles);
+        var diagnostic = new FluentButton(L.T("导出诊断"));
+        var diagnosticRow = new SettingRow(Glyph.Info, L.T("诊断报告"),
+            L.T("导出脱敏日志、设备和网络统计；不包含配置文件、密码或录音，也不会上传。"), diagnostic);
         var group = new FluentButton(L.T("打开"));
         var groupRow = new SettingRow(Glyph.Devices, L.T("多音箱（实验性）"),
             L.T("立体声对、多房间同步、分声道和每台音箱的音量偏移。"), group);
         var sync = new FluentButton(L.T("开始"));
         var syncRow = new SettingRow(Glyph.Gauge, L.T("音画同步测试"),
             L.T("听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。"), sync);
+        // The folder Explorer has to open: for the Store version, the package's own storage (AppEnvironment.LogFolder).
+        var logs = new FluentButton(L.T("打开日志文件夹"), ButtonKind.Secondary, Glyph.Folder);
+        var logsRow = new SettingRow(Glyph.Folder, L.T("日志"),
+            L.F("报告问题时请附上这个文件夹里的 {0}：\n{1}", AppConfig.LogFileName, AppEnvironment.LogFolder), logs);
 
         // Not "更新": that is the button's text, and other languages need two words (Updates / Update).
         var updates = Ui.Section(L.T("软件更新"));
@@ -108,15 +127,17 @@ internal sealed class SettingsPage : ScrollPage
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, groupRow, syncRow,
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
+            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, groupRow, syncRow,
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
+                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
+        AddSpeakerInfo(before: updates);
+        AddPairings(before: updates);
 
         _language.SelectionChangeCommitted += (_, _) =>
         {
@@ -133,14 +154,26 @@ internal sealed class SettingsPage : ScrollPage
         };
         _autostart.Toggled += (_, _) =>
         {
+            if (Autostart.Method == AutostartMethod.StartupTask)
+            {
+                SetStartupTask(_autostart.Checked);
+                return;
+            }
             try { Autostart.Enabled = _autostart.Checked; }
             catch (Exception ex) { MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast"); }
             _autostart.Checked = SafeAutostart();
         };
+        logs.Click += (_, _) => AppEnvironment.OpenLogFolder();
         _autoconnect.Toggled += (_, _) =>
         {
             _app.Config.AutoConnect = _autoconnect.Checked;
             _app.Config.Save();
+        };
+        _homeTheater.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_homeTheater.SelectedIndex < 0) return;
+            _app.SetHomeTheaterMode(HomeTheaterModes[_homeTheater.SelectedIndex]);
+            ShowHomeTheater();
         };
         _cap.Scroll += (_, _) =>
         {
@@ -171,6 +204,8 @@ internal sealed class SettingsPage : ScrollPage
         _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
+        profiles.Click += (_, _) => _app.ShowProfiles(FindForm()!);
+        diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
         link.Click += (_, _) => OpenRepository();
         _check.Click += (_, _) => _app.CheckForUpdates();
@@ -193,10 +228,114 @@ internal sealed class SettingsPage : ScrollPage
 
     /// <summary>The cap was changed here (the volume sliders follow).</summary>
     public event Action? CapChanged;
+    /// <summary>A profile was applied: everything here, and 音箱信息 for the speaker it may have switched to.</summary>
+    public void ReloadConfiguration()
+    {
+        _capWait.Stop();
+        Load();
+        _speakerInfo?.SelectionChanged();
+    }
+    public void FlushPendingSettings()
+    {
+        if (!_capWait.Enabled) return;
+        _capWait.Stop();
+        _app.SetVolumeCap(_cap.Value);
+    }
+
+    private const string AutostartText = "登录 Windows 后在托盘里启动。";
 
     private static bool SafeAutostart()
     {
         try { return Autostart.Enabled; } catch { return false; }
+    }
+
+    /// <summary>The switch shows the autostart state: the Run value, or (the Store version) the startup task, read off the UI thread.</summary>
+    private void ShowAutostart()
+    {
+        if (Autostart.Method == AutostartMethod.StartupTask) ShowStartupTask();
+        else _autostart.Checked = SafeAutostart();
+    }
+
+    /// <summary>Counts the reads and switches of the startup task: an answer that a later one overtook is not shown.</summary>
+    private int _startupTaskRequest;
+
+    /// <summary>A switch of the startup task is under way (the switch is disabled meanwhile, and nothing is read).</summary>
+    private bool _settingStartupTask;
+
+    private async void ShowStartupTask()
+    {
+        if (_settingStartupTask) return;
+        int request = ++_startupTaskRequest;
+        try
+        {
+            var state = await Task.Run(() => StartupTaskApi.GetState(AppEnvironment.StartupTaskId));
+            if (!IsDisposed && request == _startupTaskRequest) ShowStartupTask(Autostart.ViewOf(state));
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"autostart: the startup task can't be read: {ex.Message}");
+            if (IsDisposed || request != _startupTaskRequest) return;
+            _autostart.Checked = false;
+            ShowAutostartNote(L.T("读不到开机启动的状态。也可以在 Windows 设置 → 应用 → 启动 里打开或关闭 HomePodCast。"), TextRole.Caution);
+        }
+    }
+
+    private void ShowStartupTask(AutostartView view)
+    {
+        _autostart.Checked = view.On;
+        _autostart.Enabled = view.CanChange;
+        switch (view.Note)
+        {
+            case AutostartNote.OffInWindows:
+                ShowAutostartNote(L.T("已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。"), TextRole.Caution);
+                break;
+            case AutostartNote.Policy:
+                ShowAutostartNote(L.T("开机启动由组织的策略管理。"), TextRole.Caution);
+                break;
+            default:
+                ShowAutostartNote(L.T(AutostartText), TextRole.Secondary);
+                break;
+        }
+    }
+
+    private void ShowAutostartNote(string text, TextRole role)
+    {
+        _autostartRow.DescriptionText.Text = text;
+        _autostartRow.DescriptionText.Role = role;
+    }
+
+    /// <summary>
+    /// The Store version's switch: asks Windows to turn the startup task on or off (off the UI thread). Turned off in
+    /// Windows' own settings, it can only be turned on there again: offer to open the page.
+    /// </summary>
+    private async void SetStartupTask(bool on)
+    {
+        _settingStartupTask = true;
+        ++_startupTaskRequest; // a read still under way is out of date
+        _autostart.Enabled = false;
+        StartupTaskState state;
+        try
+        {
+            state = await Task.Run(() => Autostart.SetStartupTask(on)); // logs the outcome, or the failure
+        }
+        catch (Exception ex)
+        {
+            _settingStartupTask = false;
+            if (IsDisposed) return;
+            _autostart.Enabled = true;
+            _autostart.Checked = !on;
+            MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast");
+            return;
+        }
+        _settingStartupTask = false;
+        if (IsDisposed) return;
+        var view = Autostart.ViewOf(state);
+        ShowStartupTask(view);
+        if (on && !view.On && view.Note == AutostartNote.OffInWindows &&
+            MessageBox.Show(FindForm(),
+                L.T("HomePodCast 的开机启动在 Windows 设置里被关掉了，只能在那里重新打开。\n\n点「是」打开 Windows 设置的“启动”页面，然后打开 HomePodCast。"),
+                L.T("开机自动启动"), MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+            AppEnvironment.OpenUri("ms-settings:startupapps");
     }
 
     private void Load()
@@ -205,8 +344,9 @@ internal sealed class SettingsPage : ScrollPage
         string current = LanguageMenu.Normalize(cfg.Language);
         _language.SelectedIndex = current == L.Auto ? 0 : Array.FindIndex(LanguageMenu.Choices, c => c.Value == current) + 1;
         _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(cfg.Theme));
-        _autostart.Checked = SafeAutostart();
+        ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
+        ShowHomeTheater();
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
         ShowSoundOptions();
@@ -321,6 +461,25 @@ internal sealed class SettingsPage : ScrollPage
         _capValue.Text = $"{_cap.Value}%";
     }
 
+    /// <summary>「HomePod 当 Apple TV 家庭影院音箱时」: the selected choice and what it does.</summary>
+    private void ShowHomeTheater()
+    {
+        var mode = _app.Config.HomeTheaterTakeover;
+        _homeTheater.SelectedIndex = Array.IndexOf(HomeTheaterModes, mode);
+        _homeTheaterRow.DescriptionText.Text = HomeTheaterModeDescription(mode);
+    }
+
+    /// <summary>
+    /// What 临时接管 / 先询问 do. That the Apple TV connects again the next time it plays is how Apple's home theater is
+    /// expected to behave, not yet seen on the user's own Apple TV (docs/device-test-checklist.zh-CN.md).
+    /// </summary>
+    internal static string HomeTheaterModeDescription(HomeTheaterMode mode) => mode switch
+    {
+        HomeTheaterMode.TakeOver => L.T("连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。" +
+                                        "HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。"),
+        _ => L.T("点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。"),
+    };
+
     private static string VolumeKeyModeName(VolumeKeyMode mode) => mode switch
     {
         VolumeKeyMode.WhileStreaming => L.T("推流时控制 HomePod"),
@@ -377,11 +536,13 @@ internal sealed class SettingsPage : ScrollPage
 
     public override void PageShown()
     {
-        _autostart.Checked = SafeAutostart();
+        ShowAutostart(); // the Store version's startup task may have been switched in Windows' settings meanwhile
         ShowSoundOptions();
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
+        _speakerInfo?.PageShown();
+        _pairings?.PageShown();
     }
 
     /// <summary>A password typed but not saved is not kept once the page is left.</summary>
@@ -389,6 +550,44 @@ internal sealed class SettingsPage : ScrollPage
     {
         _vlcPassword.Clear();
         ShowVlcPasswordButtons();
+        _speakerInfo?.PageHidden();
+        _pairings?.PageHidden();
+    }
+
+    // ---------------------------------------------------------------- 音箱信息 (SpeakerInfoPanel.cs)
+
+    private SpeakerInfoPanel? _speakerInfo;
+
+    /// <summary>The 音箱信息 section, just above <paramref name="before"/>: the selected speakers' details, read when shown.</summary>
+    private void AddSpeakerInfo(Control before)
+    {
+        var header = Ui.Section(L.T("音箱信息"));
+        _speakerInfo = new SpeakerInfoPanel(_app);
+        int at = Content.Controls.GetChildIndex(before);
+        Content.Controls.Add(header);
+        Content.Controls.Add(_speakerInfo);
+        Content.Controls.SetChildIndex(header, at);
+        Content.Controls.SetChildIndex(_speakerInfo, at + 1);
+        Content.GapBefore[header] = 20;
+        Content.GapBefore[_speakerInfo] = 4;
+    }
+
+    // ---------------------------------------------------------------- 已配对的电视 (PairingsPanel.cs)
+
+    private PairingsPanel? _pairings;
+
+    /// <summary>The paired TVs (Apple TV), just above <paramref name="before"/>; hidden while there are none.</summary>
+    private void AddPairings(Control before)
+    {
+        var header = Ui.Section(L.T("已配对的电视"));
+        _pairings = new PairingsPanel(_app, header);
+        int at = Content.Controls.GetChildIndex(before);
+        Content.Controls.Add(header);
+        Content.Controls.Add(_pairings);
+        Content.Controls.SetChildIndex(header, at);
+        Content.Controls.SetChildIndex(_pairings, at + 1);
+        Content.GapBefore[header] = 20;
+        Content.GapBefore[_pairings] = 4;
     }
 
     protected override void Dispose(bool disposing)

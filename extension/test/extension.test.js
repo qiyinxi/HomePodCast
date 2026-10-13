@@ -109,9 +109,9 @@ test('messages are non-empty and use only their declared placeholders', () => {
   }
 });
 
-test('the popup only uses message keys that exist', () => {
+test('the popup and in-page controls only use message keys that exist', () => {
   const html = read('src', 'popup.html');
-  const js = read('src', 'popup.js');
+  const js = read('src', 'popup.js') + read('src', 'sync-controls.js');
   const used = new Set([
     ...[...html.matchAll(/data-i18n(?:-title|-aria-label)?="([^"]+)"/g)].map((m) => m[1]),
     ...[...js.matchAll(/\bt\('([A-Za-z0-9_]+)'/g)].map((m) => m[1]),

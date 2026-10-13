@@ -30,6 +30,12 @@ internal sealed class GroupRunner(
     /// </summary>
     public event Action<SpeakerGroup>? Connected;
 
+    /// <summary>
+    /// Raised on the loop when a group that streamed has ended: the speaker's lost reason (null when it ended otherwise),
+    /// and whether it was stopped (cancelled, so its members get a TEARDOWN).
+    /// </summary>
+    public event Action<string?, bool>? StreamEnded;
+
     /// <summary>Runs until cancelled; returns true if it gave up because another sender took a speaker over.</summary>
     public async Task<bool> RunAsync(CancellationToken ct)
     {
@@ -61,11 +67,12 @@ internal sealed class GroupRunner(
             catch (Exception ex)
             {
                 lostText = Describe(ex);
-                Log.Warn($"group: {lostText}");
+                Log.Warn($"group failed: {DescribeForLog(ex)}");
                 if (Find<FirewallBlockedException>(ex) != null) FirewallBlocked?.Invoke();
             }
             finally
             {
+                if (streamed) StreamEnded?.Invoke(lostReason, ct.IsCancellationRequested);
                 TearDown();
             }
 
@@ -93,6 +100,14 @@ internal sealed class GroupRunner(
     {
         GroupMemberException g => L.F("{0}：{1}", g.Member, Describe(g.InnerException!)),
         AirPlayException => ex.Message,
+        _ => $"{ex.GetType().Name}: {ex.Message}",
+    };
+
+    /// <summary><see cref="Describe"/> for the log: speaker names marked (Log.Name), so a diagnostic report leaves them out.</summary>
+    internal static string DescribeForLog(Exception ex) => ex switch
+    {
+        GroupMemberException g => $"{Log.Name(g.Member)}: {DescribeForLog(g.InnerException!)}",
+        AirPlayException => AirPlayException.ForLog(ex),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
 

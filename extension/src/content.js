@@ -17,6 +17,7 @@
   const MIN_H = 112;
   const TICK_MS = 1000;
   const SCAN_DEBOUNCE_MS = 250;
+  const SAVE_DEBOUNCE_MS = 250;
   const GLOBAL_KEY = '__global__';
   const OFFSET_LIMIT = 500;
   const MAX_DELAY_MS = 2000;
@@ -33,6 +34,20 @@
   let scanTimer = 0;
   let quickTick = 0;
   let observer = null;
+  let saveTimer = 0;
+  let pendingSiteSave = null;
+  const controls = globalThis.HPCSyncControls && globalThis.HPCSyncControls.create({
+    getState: () => ({
+      enabled: settings.globalEnabled && settings.siteEnabled,
+      streaming: !!status && status.running !== false && !!status.streaming,
+      delayMs: desiredDelay(), offsetMs: settings.offsetMs,
+    }),
+    isEligible: (v) => {
+      const c = controllers.get(v);
+      return !!c && isEligible(v) && !['drm', 'unsupported', 'source-unsupported'].includes(c.stats().reason);
+    },
+    adjustOffset,
+  });
 
   // 设置按“顶层页面”的主机名保存：嵌入在别的网站里的播放器 iframe 跟随所在网站的设置
   function topHostname() {
@@ -59,6 +74,44 @@
       siteEnabled: s.enabled !== false,
       offsetMs: clamp(Math.round(Number(s.offsetMs) || 0), -OFFSET_LIMIT, OFFSET_LIMIT),
     };
+    // A pending in-page adjustment is newer than a storage callback from another frame.
+    if (pendingSiteSave) {
+      settings.offsetMs = pendingSiteSave.offsetMs;
+      pendingSiteSave.enabled = settings.siteEnabled;
+    }
+  }
+
+  // While streaming, the offset stops where it stops changing the picture delay (0 or MAX_DELAY_MS with the app's
+  // current delay): pressing on past it would only make the way back longer.
+  function offsetBounds() {
+    const base = status && status.running !== false && status.streaming ? Math.round(Number(status.videoDelayMs)) : NaN;
+    if (!Number.isFinite(base)) return [-OFFSET_LIMIT, OFFSET_LIMIT];
+    const lo = clamp(-base, -OFFSET_LIMIT, OFFSET_LIMIT);
+    return [lo, clamp(MAX_DELAY_MS - base, lo, OFFSET_LIMIT)];
+  }
+
+  function adjustOffset(delta) {
+    const [lo, hi] = offsetBounds();
+    const next = clamp(settings.offsetMs + delta, lo, hi);
+    if (next === settings.offsetMs) return;
+    settings.offsetMs = next;
+    pendingSiteSave = { enabled: settings.siteEnabled, offsetMs: next };
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSiteSave, SAVE_DEBOUNCE_MS);
+    applyAll();
+  }
+
+  function flushSiteSave() {
+    clearTimeout(saveTimer);
+    saveTimer = 0;
+    const value = pendingSiteSave;
+    pendingSiteSave = null;
+    if (!value) return;
+    try {
+      const done = () => { void chrome.runtime.lastError; };
+      if (value.enabled !== false && !value.offsetMs) chrome.storage.sync.remove(host, done);
+      else chrome.storage.sync.set({ [host]: value }, done);
+    } catch (e) { handleContextError(e); }
   }
 
   function loadSettings() {
@@ -96,6 +149,7 @@
   function applyAll() {
     if (dead) return;
     for (const [v, c] of controllers) applyOne(v, c, isEligible(v));
+    if (controls) controls.update();
   }
 
   function consider(v) {
@@ -104,6 +158,7 @@
     if (!isEligible(v)) return;
     const c = Engine.attach(v, { placement: 'overlay', delayMs: 0, enabled: false });
     controllers.set(v, c);
+    if (controls) controls.add(v);
     applyOne(v, c, true);
     if (!status && !quickTick) quickTick = setTimeout(() => { quickTick = 0; tick(); }, 0);
   }
@@ -116,6 +171,7 @@
     }
     for (const [v, c] of controllers) {
       if (!v.isConnected) {
+        if (controls) controls.remove(v);
         c.detach();
         controllers.delete(v);
       }
@@ -195,6 +251,9 @@
     clearTimeout(quickTick);
     if (observer) observer.disconnect();
     document.removeEventListener('play', onPlayCapture, true);
+    window.removeEventListener('pagehide', flushSiteSave);
+    flushSiteSave();
+    if (controls) controls.detach();
     for (const c of controllers.values()) c.detach();
     controllers.clear();
   }
@@ -234,6 +293,7 @@
   });
   observer.observe(document.documentElement || document, { childList: true, subtree: true });
   document.addEventListener('play', onPlayCapture, true); // 媒体事件不冒泡，用捕获阶段
+  window.addEventListener('pagehide', flushSiteSave);
 
   scan();
   timer = setInterval(tick, TICK_MS);

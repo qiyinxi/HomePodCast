@@ -20,13 +20,35 @@ internal sealed partial class TrayApp
     public IReadOnlyList<PlayerStatus> PlayerStatuses => _players?.Statuses ?? [];
 
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
-    public int VideoDelayMs => Controller.State == StreamState.Streaming
-        ? LatencyTuner.SoundLagMs(Controller.EffectiveLatencyMs, Config, Controller.Capture?.ExtraLatencyMs ?? 0,
-            Controller.Fifo.TargetMs)
+    public int VideoDelayMs => VideoDelayFor(Config, Controller.State, Controller.EffectiveLatencyMs,
+        Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext);
+
+    /// <summary>
+    /// The sound lag the local API (browser extension) and the players get: the estimate plus the calibration of the path
+    /// streaming now (<paramref name="context"/>, the same one 首页 uses), 0 when not streaming.
+    /// </summary>
+    internal static int VideoDelayFor(AppConfig cfg, StreamState state, int effectiveLatencyMs, int captureExtraMs,
+        double fifoTargetMs, AvCalibrationContext? context) => state == StreamState.Streaming
+        ? LatencyTuner.SoundLagMs(effectiveLatencyMs, cfg, captureExtraMs, fifoTargetMs, context)
         : 0;
 
-    private PlayerSyncInput PlayerInput() =>
-        new(Config.MoviePlayerSync && Config.Scene == Scene.Movie, Controller.State, VideoDelayMs);
+    private PlayerSyncInput PlayerInput() => PlayerInputFor(Config, Controller.State, VideoDelayMs);
+
+    /// <summary>What the players follow: on only in the 影视 scene with the setting on.</summary>
+    internal static PlayerSyncInput PlayerInputFor(AppConfig cfg, StreamState state, int videoDelayMs) =>
+        new(cfg.MoviePlayerSync && cfg.Scene == Scene.Movie, state, videoDelayMs);
+
+    /// <summary>GET /v1/status of the local API, which the browser extension reads (the same lag the players get).</summary>
+    internal static object ApiStatus(bool streaming, string? device, int latencyMs, int videoDelayMs, bool calibrated) => new
+    {
+        app = "HomePodCast",
+        version = typeof(TrayApp).Assembly.GetName().Version?.ToString(3),
+        streaming,
+        device,
+        latencyMs,
+        videoDelayMs,
+        videoDelaySource = calibrated ? "calibrated" : "estimate",
+    };
 
     /// <summary>The scene or the setting changed: adjust or restore the players now instead of at the next poll.</summary>
     public void KickPlayers() => _players?.Kick();
