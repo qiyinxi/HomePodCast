@@ -220,7 +220,7 @@ jobs:
           path: ${{ runner.temp }}/update-e2e/logs
           if-no-files-found: ignore
 
-  # The Microsoft Store package installed and run on the runner (docs/device-test-checklist.zh-CN.md section 十一,
+  # The Microsoft Store package installed and run on the runner (docs/device-test-checklist.zh-CN.md 「Microsoft Store 版」,
   # packaging/msix/e2e-test.ps1): a copy of the msix artifact signed with a throwaway certificate (the artifact stays
   # unsigned) is installed and started the way Start does; then package identity, the log in the package's storage,
   # no GitHub contact, the manifest's firewall rules, the startup task (through the app's own `autostart` command),
@@ -263,7 +263,7 @@ jobs:
             msix-e2e/*.log
           if-no-files-found: ignore
 
-  # End-to-end test of the MSI on the runner (tools/ci/msi-e2e.ps1; docs/device-test-checklist.zh-CN.md section 七):
+  # End-to-end test of the MSI on the runner (tools/ci/msi-e2e.ps1; docs/device-test-checklist.zh-CN.md 「安装包（MSI）」):
   # silent install into the default and a custom folder (files, Start menu shortcut, one Programs and Features entry, the
   # firewall rule, which the installed exe's own startup check must accept), uninstall (all gone, %APPDATA%\HomePodCast
   # kept), upgrades from published releases (gh release download), a refused downgrade, and the embedded wizard

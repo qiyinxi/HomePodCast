@@ -34,13 +34,13 @@ Don't install test packages on your everyday PC unless you mean to: a packaged H
 Add-AppxPackage -Register packaging\msix\obj\layout\AppxManifest.xml
 ```
 
-Remove it again with `Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`. What to check in a registered package is in `docs/device-test-checklist.zh-CN.md`, section 十一; CI checks what needs no person, speaker or microphone on every build (see [CI test](#ci-test-msix-e2e)). Installing the `.msix` file itself needs a signature from a certificate whose subject is exactly the `Publisher` below and which the PC trusts (for example a self-signed one in Trusted People, signed with `signtool sign /fd SHA256`); the CI test does that with a throwaway certificate.
+Remove it again with `Get-AppxPackage qiyinxi.HomePodCast | Remove-AppxPackage`. What to check in a registered package is in `docs/device-test-checklist.zh-CN.md`, section 「Microsoft Store 版」; CI checks what needs no person, speaker or microphone on every build (see [CI test](#ci-test-msix-e2e)). Installing the `.msix` file itself needs a signature from a certificate whose subject is exactly the `Publisher` below and which the PC trusts (for example a self-signed one in Trusted People, signed with `signtool sign /fd SHA256`); the CI test does that with a throwaway certificate.
 
 [Windows App Certification Kit](https://learn.microsoft.com/windows/uwp/debug-test-perf/windows-app-certification-kit) (`appcert.exe` in the Windows SDK) runs the Store's local checks; it installs the package to test it, so run it on a test PC too.
 
 ### CI test (msix-e2e)
 
-The `msix-e2e` job in `.github/workflows/build.yml` runs `e2e-test.ps1` on a GitHub-hosted Windows runner after every build (branches, PRs and tags), and the `release` job waits for it. It covers the items of `docs/device-test-checklist.zh-CN.md` section 十一 that need no person, speaker or microphone; they are marked 「（CI 自动测试：msix-e2e）」 there.
+The `msix-e2e` job in `.github/workflows/build.yml` runs `e2e-test.ps1` on a GitHub-hosted Windows runner after every build (branches, PRs and tags), and the `release` job waits for it. It covers the Microsoft Store items of `docs/device-test-checklist.zh-CN.md` that need no person, speaker or microphone; they are listed under 「已自动化（不用手测）」 there.
 
 1. **Install**: signs a copy of the `msix` artifact with a throwaway self-signed certificate whose subject is the manifest's `Publisher`, trusts it in LocalMachine\TrustedPeople and installs the copy with `Add-AppxPackage`. The artifact itself stays unsigned (checked: it has no `AppxSignature.p7x`).
 2. **Firewall**: the manifest's two rules exist for the package's exe: inbound, allow, enabled, Private, one for TCP and one for UDP.

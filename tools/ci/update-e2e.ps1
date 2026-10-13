@@ -25,7 +25,7 @@
   What only a person sees: the UAC dialog itself. GitHub-hosted runners run the job as an administrator with UAC not
   prompting, so the helper's Verb runas elevates without a dialog here; on a real PC Windows asks (and a declined
   prompt is exit code 1223, which the app reports as cancelled). Also SmartScreen on a downloaded MSI, and the
-  portable zip opening the release page (docs/device-test-checklist.zh-CN.md, section 七).
+  portable zip opening the release page (docs/device-test-checklist.zh-CN.md, 「软件更新」).
 
   It installs and uninstalls HomePodCast, so it refuses to run outside GitHub Actions (-AllowOutsideCi for a
   throwaway VM) and whenever HomePodCast is already installed. -NoInstall runs only the parts that install nothing:

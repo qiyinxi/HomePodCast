@@ -3,7 +3,8 @@
   End-to-end test of the HomePodCast MSI: the msi-e2e job of .github/workflows/build.yml.
 
 .DESCRIPTION
-  Automates section 七「安装包（MSI）」 of docs/device-test-checklist.zh-CN.md on a throwaway CI runner:
+  Automates the installer checks of docs/device-test-checklist.zh-CN.md (listed under 「已自动化」 there) on a throwaway
+  CI runner:
     1. silent install into the default folder: the files, one Start menu shortcut, one entry in Programs and Features,
        and one firewall rule for exactly that exe, matching the rule the app adds itself (Firewall.RuleScript: inbound,
        allow, any protocol, Private profile, LocalSubnet). The installed exe's own startup check ("HomePodCast.exe
