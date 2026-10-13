@@ -138,6 +138,20 @@ finally {
 $extraPri = @(Get-ChildItem $layout -Filter 'resources.*.pri')
 if ($extraPri.Count) { throw "makepri split the resources ($($extraPri.Name -join ', ')): check priconfig.xml" }
 
+# The Store resolves the manifest's logos (Assets\Name.png) through resources.pri, so each must be the named resource
+# Files/Assets/Name.png there. 2026-10-13: they were Files/Name.png; Windows installed that package without a word
+# (msix-e2e passed), Partner Center refused it: "can't find the images specified in appxManifest.xml".
+$priDump = Join-Path $work 'resources.pri.xml'
+& $makepri dump /if (Join-Path $layout 'resources.pri') /of $priDump /o | Out-Null
+if ($LASTEXITCODE) { throw 'makepri dump failed' }
+$priNames = @(([xml][System.IO.File]::ReadAllText($priDump, [System.Text.Encoding]::UTF8)).SelectNodes('//NamedResource') |
+    ForEach-Object { $_.uri -replace '^ms-resource://[^/]+/', '' })
+$logos = @([regex]::Matches($manifest, '"(Assets\\[^"]+\.png)"') | ForEach-Object { 'Files/' + ($_.Groups[1].Value -replace '\\', '/') } |
+    Sort-Object -Unique)
+$missing = @($logos | Where-Object { $_ -notin $priNames })
+if ($logos.Count -eq 0 -or $missing.Count) { throw "resources.pri lacks $($missing -join ', ') (it has $($priNames -join ', '))" }
+Write-Host "resources.pri resolves the manifest's $($logos.Count) logos"
+
 # 4. Pack; makeappx validates the manifest and the files it references.
 & $makeappx pack /d $layout /p $msix /o | Where-Object { $_ -notmatch '^Processing ".*" as a payload file' } # one line per file
 if ($LASTEXITCODE) { throw 'makeappx pack failed' }
