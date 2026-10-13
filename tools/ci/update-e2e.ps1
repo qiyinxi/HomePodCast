@@ -32,16 +32,16 @@
   the fake feed and `update-selftest --no-install` of -Exe (check, download, SHA-256 good and corrupted).
 
 .EXAMPLE
-  ./tools/ci/update-e2e.ps1 -NewMsi packages/HomePodCast-0.2.0-pr.5.100-x64.msi -NewVersion 0.2.0-pr.5.100
+  ./tools/ci/update-e2e.ps1 -NewMsi packages/HomePodCast-1.0.0-pr.5.100-x64.msi -NewVersion 1.0.0-pr.5.100
 
 .EXAMPLE
   # Safe anywhere: nothing is installed.
-  ./tools/ci/update-e2e.ps1 -NoInstall -Exe app/HomePodCast.exe -NewMsi publish/HomePodCast-0.2.0-local.1-x64.msi -NewVersion 9.9.9-local.1
+  ./tools/ci/update-e2e.ps1 -NoInstall -Exe app/HomePodCast.exe -NewMsi publish/HomePodCast-1.0.0-local.1-x64.msi -NewVersion 9.9.9-local.1
 #>
 param(
     # The build's MSI: the update offered to the old install.
     [Parameter(Mandatory)] [string] $NewMsi,
-    # The build's version (build.yml "Version" step), e.g. 0.2.0-pr.5.100, 1.0.0-beta.6, 1.0.0.
+    # The build's version (build.yml "Version" step), e.g. 1.0.0-pr.5.100, 1.0.0-beta.6, 1.0.0.
     [Parameter(Mandatory)] [string] $NewVersion,
     # The old install's version; below every real one. Built here from this source, never published.
     [string] $OldVersion = '0.0.1-e2e.1',

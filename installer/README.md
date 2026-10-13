@@ -86,9 +86,11 @@ An MSI version must be numeric (`major.minor.build`, at most 255.255.65535), so 
 | CI version (build.yml) | MSI ProductVersion | File name |
 | --- | --- | --- |
 | `1.2.3` (tag `v1.2.3`) | `1.2.3` | `HomePodCast-1.2.3-x64.msi` |
-| `0.2.0-beta.1` (tag `v0.2.0-beta.1`) | `0.2.0.<run number>` | `HomePodCast-0.2.0-beta.1-x64.msi` |
-| `0.2.0-dev.57` (branch build) | `0.2.0.<run number>` | `HomePodCast-0.2.0-dev.57-x64.msi` |
-| `0.2.0-pr.12.345` (pull request) | `0.2.0.<run number>` | `HomePodCast-0.2.0-pr.12.345-x64.msi` |
+| `1.2.3-beta.1` (tag `v1.2.3-beta.1`) | `1.2.3.<run number>` | `HomePodCast-1.2.3-beta.1-x64.msi` |
+| `1.2.3-dev.57` (branch build) | `1.2.3.<run number>` | `HomePodCast-1.2.3-dev.57-x64.msi` |
+| `1.2.3-pr.12.345` (pull request) | `1.2.3.<run number>` | `HomePodCast-1.2.3-pr.12.345-x64.msi` |
+
+Branch and PR builds take X.Y.Z from `<Version>` in `src/HomePodCast.csproj`, the version their branch is working on.
 
 Windows Installer ignores the fourth field when it compares versions. Builds that share `major.minor.build`, such as prereleases, CI builds and the final release, therefore replace each other in either direction (`AllowSameVersionUpgrades`). Only a lower `major.minor.build` counts as a downgrade.
 

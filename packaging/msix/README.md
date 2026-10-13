@@ -77,7 +77,7 @@ The Store ID (product id) is **9N9FTNR9HBG2** (https://apps.microsoft.com/detail
 | `1.2.3` (tag `v1.2.3`) | `1.2.3.0` | submitted by the `store` job |
 | `1.3.0-beta.1` (tag `v1.3.0-beta.1`) | `1.3.0.0` | no, artifact only |
 | `0.2.2` (tag `v0.2.2`) | `0.2.2.0` | no: the Store refuses a first field of 0 |
-| `0.2.0-dev.57`, `0.2.0-pr.12.345` | `0.2.0.0` | no, artifact only |
+| `1.3.0-dev.57`, `1.3.0-pr.12.345` (branch and PR builds: `<Version>` of the csproj) | `1.3.0.0` | no, artifact only |
 
 The Store reserves the fourth field (it must be 0 in what you upload) and refuses packages whose first field is 0, so **the first Store release has to be 1.0.0 or later**. `build.ps1` warns about a 0.x version, and the `store` job skips 0.x tags. Every package submitted must have a higher version than the one in the Store, which stable tags give naturally.
 
