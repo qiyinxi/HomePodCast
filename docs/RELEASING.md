@@ -24,7 +24,7 @@ Both flows below are done by `tools/release.ps1` (PowerShell 7, git and an authe
 
 The version is `<Version>` in `src/HomePodCast.csproj`. It is set on `dev` in a commit of its own, "Version X.Y.Z", after the previous stable release; every beta and the stable release of X.Y.Z are built from it. CI builds of branches and PRs take it too, as prereleases of X.Y.Z: `X.Y.Z-dev.<run>` for a push to `dev` (other branches by their name likewise) and `X.Y.Z-pr.<n>.<run>` for a PR, with the MSI version X.Y.Z.<run> (see [The installer in CI](#the-installer-in-ci)). Until 2026-10-13 they were `0.2.0-…` whatever the version.
 
-**Experimental features.** A feature first released in a 1.Y.z version is marked experimental in the app, the README and the release notes for the whole 1.Y line. The next minor version, 1.(Y+1).0, drops the label, unless a known problem keeps it; its release notes say which features are no longer experimental. Each label in the code has a `// experimental since 1.Y` comment next to it, so that `git grep "experimental since 1.Y"` finds them all when the minor version goes up. Labels that say a feature has never been tested on real hardware (stereo pairs, multi-room, Apple TV pairing) are a different matter: they stay until it has been.
+**Experimental features.** A feature first released in a 1.Y.z version is marked experimental in the app, the README and the release notes for the whole 1.Y line. The next minor version, 1.(Y+1).0, drops the label, unless a known problem keeps it; its release notes say which features are no longer experimental. Each label in the code has a `// experimental since 1.Y` comment next to it, so that `git grep "experimental since 1.Y"` finds them all when the minor version goes up. Labels that say a feature has never been tested on real hardware (stereo pairs, multi-room, Apple TV pairing, the home-theater takeover) are a different matter: they stay until it has been; `docs/device-test-checklist.zh-CN.md` lists those tests under 「实验性功能」.
 
 ### Making a beta
 
@@ -198,7 +198,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 版本号是 `src/HomePodCast.csproj` 里的 `<Version>`。上一个正式版发布后，在 `dev` 上用一个单独的提交 "Version X.Y.Z" 设置；X.Y.Z 的所有测试版和正式版都用它构建。分支和 PR 的 CI 构建也用它，作为 X.Y.Z 的预发布版本：推送到 `dev` 是 `X.Y.Z-dev.<运行号>`（其他分支同样用分支名），PR 是 `X.Y.Z-pr.<PR 号>.<运行号>`，MSI 版本是 X.Y.Z.<运行号>（见「[CI 里的安装包测试](#ci-里的安装包测试)」）。2026-10-13 之前它们不管版本号是多少都是 `0.2.0-…`。
 
-**实验性功能。** 在 1.Y.z 版本里第一次发布的功能，在整个 1.Y 系列里都在程序、README 和发布说明里标成「实验性」。到下一个次版本 1.(Y+1).0 去掉这个标注，除非还有已知问题；1.(Y+1).0 的发布说明要写明哪些功能不再是实验性的。代码里每处标注旁边都加一条 `// experimental since 1.Y` 注释，升次版本时用 `git grep "experimental since 1.Y"` 就能全部找到。因为「还没在真实设备上测过」而标的实验性（立体声对、多房间、Apple TV 配对）是另一回事：要等实机测过才去掉。
+**实验性功能。** 在 1.Y.z 版本里第一次发布的功能，在整个 1.Y 系列里都在程序、README 和发布说明里标成「实验性」。到下一个次版本 1.(Y+1).0 去掉这个标注，除非还有已知问题；1.(Y+1).0 的发布说明要写明哪些功能不再是实验性的。代码里每处标注旁边都加一条 `// experimental since 1.Y` 注释，升次版本时用 `git grep "experimental since 1.Y"` 就能全部找到。因为「还没在真实设备上测过」而标的实验性（立体声对、多房间、Apple TV 配对、家庭影院临时接管）是另一回事：要等实机测过才去掉；要测的项在 `docs/device-test-checklist.zh-CN.md` 的「实验性功能」里。
 
 ### 发测试版
 
