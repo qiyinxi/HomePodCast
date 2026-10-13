@@ -70,7 +70,7 @@ The script:
 - waits for `main`'s CI on the merge commit, then tags it `vX.Y.Z` ("HomePodCast X.Y.Z") and pushes the tag;
 - waits for the tag build, checks that the release is not a prerelease and has the `.msi` and the `-win-x64.zip`, and applies the notes;
 - merges `main` back into `dev` and pushes `dev` (see below). From any other checkout it prints the commands instead:
-  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z" -m "dev contains main's merge commit again (no file changes)." origin/main; git push origin dev`
 
 Afterwards set the next version on `dev` ("Version X.Y.Z+1" or the next minor) before the next beta; `-Beta` refuses a version that is already released.
 
@@ -244,7 +244,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 - 等 `main` 上这个合并提交的 CI，然后打标签 `vX.Y.Z`（"HomePodCast X.Y.Z"）并推送；
 - 等标签构建完成，检查发布不是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明；
 - 把 `main` 合并回 `dev` 并推送 `dev`（原因见下）。在其他检出里运行时，脚本改为打印这些命令：
-  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z: dev contains main's merge commit again (no file changes)" origin/main; git push origin dev`
+  `git switch dev; git pull --ff-only; git merge --no-ff -m "Merge main after Release X.Y.Z" -m "dev contains main's merge commit again (no file changes)." origin/main; git push origin dev`
 
 之后在 `dev` 上设置下一个版本号（"Version X.Y.Z+1" 或下一个次版本），再发下一个测试版；`-Beta` 会拒绝已经发布过的版本号。
 

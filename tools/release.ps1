@@ -541,12 +541,14 @@ Made by ``tools/release.ps1 -Promote $betaTag`` ([docs/RELEASING.md](docs/RELEAS
 # main, and the merge into main must not add anything to the beta's files.
 function Merge-MainIntoDev([string] $version) {
     Write-Step 'main back into dev'
-    $message = "Merge main after Release ${version}: dev contains main's merge commit again (no file changes)"
-    $manual = "git switch dev; git pull --ff-only; git merge --no-ff -m `"$message`" $Remote/main; git push $Remote dev"
+    # A short subject line, the why in the body (each -m is a paragraph of its own).
+    $subject = "Merge main after Release $version"
+    $body = "dev contains main's merge commit again (no file changes)."
+    $manual = "git switch dev; git pull --ff-only; git merge --no-ff -m `"$subject`" -m `"$body`" $Remote/main; git push $Remote dev"
     $branch = "$(Invoke-Git branch --show-current)"
     $cleanDev = $branch -eq 'dev' -and -not (Get-DirtyFile) -and (Get-RevParse HEAD) -eq (Get-RevParse "$Remote/dev")
     if ($WhatIf) {
-        if ($cleanDev) { Write-Plan "merge $Remote/main into dev ('$message'), check that no file changed and push dev" }
+        if ($cleanDev) { Write-Plan "merge $Remote/main into dev ('$subject'), check that no file changed and push dev" }
         else { Write-Plan "print the commands to merge main into dev, since this checkout is not a clean dev at $Remote/dev: $manual" }
         return
     }
@@ -554,7 +556,7 @@ function Merge-MainIntoDev([string] $version) {
     if (Test-Ancestor "$Remote/main" "$Remote/dev") { Write-Info 'dev already contains main'; return }
     $cleanDev = $branch -eq 'dev' -and -not (Get-DirtyFile) -and (Get-RevParse HEAD) -eq (Get-RevParse "$Remote/dev")
     if (-not $cleanDev) { Write-Caution "dev not touched (this checkout is not a clean dev at $Remote/dev); do it by hand: $manual"; return }
-    & git merge --no-ff --no-edit -m $message "$Remote/main" | Out-Host
+    & git merge --no-ff --no-edit -m $subject -m $body "$Remote/main" | Out-Host
     if ($LASTEXITCODE) {
         & git merge --abort
         throw "merging $Remote/main into dev failed and was aborted; nothing was pushed. Do it by hand: $manual"
