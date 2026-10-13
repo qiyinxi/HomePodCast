@@ -58,9 +58,8 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - **Branches**: `dev` is daily work. Other work goes on its own branch with a PR to `dev` (PR builds run CI). `main`
   changes only through the release PR made by `tools/release.ps1`; never push to it. Tags only through
   `tools/release.ps1`; a pushed tag is never moved or deleted. Details: `docs/RELEASING.md`.
-- **Releases**: a beta doesn't have to be stable. Publish one without asking whenever dev's CI is green and there is
-  something worth trying; the per-release regression on it and the promotion to stable are where stability is
-  checked. A stable 1.0.0 or later needs the maintainer's OK.
+- **Releases**: don't ask before publishing a beta. Publish one whenever dev's CI is green and there is something
+  worth trying, and tell the maintainer afterwards. A stable 1.0.0 or later needs the maintainer's OK.
 - **Experimental features**: a feature first released in 1.Y.z is labelled experimental (UI, README, release notes)
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never
