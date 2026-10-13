@@ -42,8 +42,9 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
   the extension) and `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact). The
   `release` job needs all of them; main requires them.
-- What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression and
-  one-time verifications. Mark items you automate there (「CI 自动测试：…」 or 「单元测试：…」).
+- What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression, one-time
+  verifications (each says which change makes it worth re-testing), experimental features, and a list of what is
+  already automated. When you automate an item, move it to that list with its CI job or test class.
 
 ## Conventions
 
