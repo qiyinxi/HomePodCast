@@ -195,6 +195,7 @@ public class UsageProfileTests
         [nameof(AppConfig.MeasuredAvOffsetMs)] = "calibration",
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
+        [nameof(AppConfig.Stems)] = "optional experimental module path and stem mixes; enabling is session-only",
         [nameof(AppConfig.LastUsageProfileId)] = "which profile was applied last",
         [nameof(AppConfig.ArrivalToRenderMs)] = "measured by the speaker at every connection",
         [nameof(AppConfig.FifoTargetMs)] = "tuned for this PC",
