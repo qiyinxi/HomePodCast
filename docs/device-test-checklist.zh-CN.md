@@ -130,6 +130,15 @@
 
 - [ ] 设置 → 语言切换到 Svenska / English 看一眼：翻译通不通顺、Svenska、在设置里切换后重新启动（English 和 Deutsch 每一页的截图和没翻译的中文：CI 自动测试：gui-smoke）。改了 `src/i18n/*.json` 里较多的文字或 `src/UI/LanguageMenu.cs` 才需要重测
 
+### 十二、夜间自动断开（1.1 新增）
+
+设置 → 常规 →「夜间自动断开（实验性）」。测之前把「闲置多久后断开」设成 5 分钟，时段设成包含现在的一段（比如现在 22:10，就设 22:00 到 23:00）。音量不超过 25%。本节各项：改了 `src/NightDisconnectPolicy.cs`、`src/Audio/SoundActivity.cs`、`src/UI/TrayApp.NightDisconnect.cs` 或 `src/Native.cs` 的 `SinceLastInput` 才需要重测。
+
+1. - [ ] 推流时关掉显示器（虚拟屏照常开着），不碰键鼠、不放声音：约 5 分钟后断开（检查每 30 秒一次，最多晚 30 秒），首页和托盘提示「夜间已自动断开，23:00 自动重新连接」，日志里有 `night disconnect: no keyboard or mouse input for … min, no sound for … min`；这时 iPhone 能直接隔空播放到 HomePod（单元测试：NightDisconnectTests；仍需实机：真实的键鼠空闲时间）
+2. - [ ] 不碰键鼠、但一直放视频或音乐：不断开；停掉播放 5 分钟后才断开（仍需实机：−60 dBFS 的门限对真实声音合不合适，很小声的背景音算不算有声音）
+3. - [ ] 等到时段结束：30 秒内自动重新连接；如果这时 iPhone 正在用 HomePod，电脑端等它停下才连，不打断 iPhone
+4. - [ ] 夜间断开后手动点「连接」：马上连上，之后再闲置 5 分钟又会断开；夜间断开后手动点过「连接」再「断开」：时段结束时不再自动连接
+
 ### 实验性功能（实机测过才去掉实验性）
 
 这些功能在程序、README 和发布说明里标着「实验性」，因为还没在真实设备上测过；这种标注不随次版本号去掉，要等下面对应的部分实机测过、没有问题（`docs/RELEASING.md` 的「实验性功能」）。
@@ -215,6 +224,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - 「仅在 Windows 静音时」：Windows 静音时按音量 +/−、静音键，HomePod 音量跟着变，Windows 保持静音（VolumeKeyForwardingTests、VolumeKeyModeTests）
   - 快捷键 Ctrl+Alt+PageUp / PageDown / Insert / N（HotkeyTests、GlitchMarkerTests；用户 2026-10-08 实机确认过）
   - 睡眠唤醒后自动重连；iPhone 抢占 HomePod 后电脑端不抢回、托盘显示被占用（TakeoverControllerTests、TakeoverPolicyTests、GroupRunnerTests；用户 2026-10-08 实机确认过）
+  - 夜间自动断开（实验性）：默认关；时段可以跨午夜（23:00–07:00 含 23:00、不含 07:00），开始和结束相同时从不断开；键鼠和声音都闲置够了才断开，只放声音或只动键鼠都不断开，时段开始前就闲置的时间也算；时段结束时只重连它自己断开的，中间手动连接或断开过就不重连，关掉这个设置也不重连；声音在所有音效之后测（HomePod 实际播放的），门限 −60 dBFS；断开后状态写「夜间已自动断开，07:00 自动重新连接」；设置能保存，旧配置没有这一项时是关的（NightDisconnectTests）
   - 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」；在测试版上切到「正式版」再检查（最新正式版比本机旧时）显示「当前测试版比最新正式版新……」，没有「更新」按钮（ReleaseSelectionTests、UpdateViewTests）
   - Apple TV 家庭影院（实验性）：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；设置 → 音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
 

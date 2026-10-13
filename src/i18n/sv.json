@@ -466,5 +466,16 @@
   "已配对的电视": "Parkopplade tv-apparater",
   "忘记配对": "Glöm parkoppling",
   "配对于 {0}": "Parkopplad {0}",
-  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Glömma parkopplingen med {0}? Nästa gång du ansluter måste du ange nya siffror från tv:n."
+  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Glömma parkopplingen med {0}? Nästa gång du ansluter måste du ange nya siffror från tv:n.",
+  "夜间自动断开（实验性）": "Koppla från på natten (experimentellt)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "För när skärmarna är avstängda men datorn är på: under tiderna nedan kopplas HomePod från när tangentbord, mus och ljud har varit inaktiva en stund, så att andra enheter kan använda den. När tiden är slut ansluter den igen, som den automatiska anslutningen vid start: en enhet som spelar avbryts aldrig.",
+  "开始时间": "Starttid",
+  "结束时间": "Sluttid",
+  "时段": "Tider",
+  "到": "till",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Koppla från efter inaktivitet i",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen inmatning med tangentbord eller mus och inget ljud i HomePod under så lång tid.",
+  "开始和结束时间相同，不会断开。": "Start och slut är samma, så den kopplas aldrig från.",
+  "夜间已自动断开，{0} 自动重新连接": "Frånkopplad för natten; ansluter igen kl. {0}"
 }

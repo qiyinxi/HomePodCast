@@ -466,5 +466,16 @@
   "已配对的电视": "Gekoppelte Fernseher",
   "忘记配对": "Kopplung entfernen",
   "配对于 {0}": "Gekoppelt am {0}",
-  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Kopplung mit {0} entfernen? Beim nächsten Verbinden müssen erneut Ziffern vom Fernseher eingegeben werden."
+  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Kopplung mit {0} entfernen? Beim nächsten Verbinden müssen erneut Ziffern vom Fernseher eingegeben werden.",
+  "夜间自动断开（实验性）": "Nachts trennen (experimentell)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Für Nächte, in denen die Bildschirme aus sind, der PC aber läuft: In den Stunden unten wird der HomePod getrennt, sobald Tastatur, Maus und Ton eine Weile ruhen, damit andere Geräte ihn nutzen können. Am Ende verbindet er sich wieder, wie die automatische Verbindung beim Start: Ein Gerät, das gerade abspielt, wird nie unterbrochen.",
+  "开始时间": "Beginn",
+  "结束时间": "Ende",
+  "时段": "Zeitraum",
+  "到": "bis",
+  "{0} 分钟": "{0} Min.",
+  "闲置多久后断开": "Trennen nach Inaktivität von",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "So lange keine Eingabe mit Tastatur oder Maus und kein Ton auf dem HomePod.",
+  "开始和结束时间相同，不会断开。": "Beginn und Ende sind gleich, daher wird nie getrennt.",
+  "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder"
 }

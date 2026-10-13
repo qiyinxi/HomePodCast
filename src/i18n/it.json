@@ -466,5 +466,16 @@
   "已配对的电视": "TV abbinate",
   "忘记配对": "Dimentica abbinamento",
   "配对于 {0}": "Abbinato il {0}",
-  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Dimenticare l'abbinamento con {0}? Alla prossima connessione dovrai inserire di nuovo le cifre mostrate sulla TV."
+  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Dimenticare l'abbinamento con {0}? Alla prossima connessione dovrai inserire di nuovo le cifre mostrate sulla TV.",
+  "夜间自动断开（实验性）": "Disconnetti di notte (sperimentale)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Per quando gli schermi sono spenti ma il PC resta acceso: nella fascia oraria qui sotto, l'HomePod viene disconnesso quando tastiera, mouse e audio restano inattivi per un po', così altri dispositivi possono usarlo. Alla fine della fascia si riconnette, come la connessione automatica all'avvio: non interrompe mai un dispositivo che sta riproducendo.",
+  "开始时间": "Inizio",
+  "结束时间": "Fine",
+  "时段": "Fascia oraria",
+  "到": "a",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Disconnetti dopo un'inattività di",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Nessun uso di tastiera o mouse e nessun suono sull'HomePod per questo tempo.",
+  "开始和结束时间相同，不会断开。": "Inizio e fine coincidono, quindi non si disconnette mai.",
+  "夜间已自动断开，{0} 自动重新连接": "Disconnesso per la notte; si riconnette alle {0}"
 }
