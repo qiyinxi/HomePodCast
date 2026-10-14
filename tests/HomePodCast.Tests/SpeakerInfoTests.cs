@@ -199,6 +199,68 @@ public class SpeakerInfoTests
         Assert.Equal("192.168.50.11", multi[1].Address?.ToString()); // no saved host: the scan's
     }
 
+    /// <summary>
+    /// A third-party AirPlay 1 receiver as the scan saw it: RAOP only, on port 7001 (as the CI fake of gui-smoke's
+    /// compatibility run). Its kind needs the RAOP service: with AirPlay alone the same TXT is an unknown device.
+    /// </summary>
+    private static AirPlayDevice Projector() => new("投影仪", "02:43:4F:4D:50:54", IPAddress.Parse("192.168.50.30"), 7001, "ShairportSync",
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["am"] = "ShairportSync", ["srcvers"] = "105.1" })
+        { HasAirPlay = false, RaopPort = 7001 };
+
+    /// <summary>The projector selected and its preferences saved, as TrayApp.SelectDevice does, then saved and loaded again.</summary>
+    private static AppConfig Selected(AirPlayDevice device, string? host = "192.168.50.30")
+    {
+        var cfg = new AppConfig { DeviceId = device.DeviceId, DeviceName = device.Name, Host = host };
+        cfg.ReceiverSettings[RaopPassword.Key(device.DeviceId)] = ReceiverPreferences.Of(device);
+        return System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(cfg))!;
+    }
+
+    [Fact]
+    public void A_receiver_missing_from_the_scan_is_described_by_its_saved_preferences()
+    {
+        var projector = Projector();
+        Assert.Equal(ReceiverKind.ThirdPartyAirPlay1, projector.Kind);
+        Assert.Equal(ReceiverKind.Unknown, ReceiverKinds.Classify(projector.Model, projector.Txt));
+
+        var offline = Assert.Single(SpeakerSelection.Of(Selected(projector), [Kitchen]));
+        Assert.Equal(("投影仪", "192.168.50.30", 7001), (offline.Name, offline.Address?.ToString(), offline.Port));
+        Assert.Equal(("ShairportSync", false, (int?)7001), (offline.Model, offline.HasAirPlay, offline.RaopPort));
+        Assert.Equal("105.1", offline.Txt?["srcvers"]);
+        Assert.Equal(ReceiverKind.ThirdPartyAirPlay1,
+            ReceiverKinds.Classify(offline.Model, offline.Txt, offline.HasAirPlay, offline.RaopPort != null));
+        Assert.Equal("192.168.50.30", Assert.Single(SpeakerSelection.Of(Selected(projector, host: null), [])).Address?.ToString());
+
+        // Found by the scan: the scan's, as before.
+        var moved = projector with { Address = IPAddress.Parse("192.168.50.31"), Port = 7002 };
+        var scanned = Assert.Single(SpeakerSelection.Of(Selected(projector, host: null), [moved]));
+        Assert.Equal(("192.168.50.31", 7002), (scanned.Address?.ToString(), scanned.Port));
+    }
+
+    [Fact]
+    public void HomePods_and_manual_devices_are_selected_as_before()
+    {
+        // A HomePod has no saved preferences (TrayApp.SelectDevice): offline, port 7000 and nothing from a scan.
+        var cfg = Selected(Projector());
+        cfg.DeviceId = "CC"; cfg.DeviceName = "书房"; cfg.Host = null;
+        var unseen = Assert.Single(SpeakerSelection.Of(cfg, [Kitchen]));
+        Assert.Equal(("书房", 7000, "", true, (int?)null), (unseen.Name, unseen.Port, unseen.Model, unseen.HasAirPlay, unseen.RaopPort));
+        Assert.Null(unseen.Address);
+        Assert.Null(unseen.Txt);
+        cfg.DeviceId = Kitchen.DeviceId;
+        var kitchen = Assert.Single(SpeakerSelection.Of(cfg, [Kitchen]));
+        Assert.Equal((7000, "AudioAccessory6,1", true, (int?)null), (kitchen.Port, kitchen.Model, kitchen.HasAirPlay, kitchen.RaopPort));
+        Assert.Equal("26.1", kitchen.Txt?["osvers"]);
+        Assert.All(SpeakerSelection.Of(new AppConfig { DeviceId = "pair:T1" }, [Right, Left]), s => Assert.Equal("AudioAccessory6,1", s.Model));
+
+        // A manual device: its own port, even with other saved preferences.
+        var manual = ManualAirPlayDevice.FromInfo(IPAddress.Parse("192.168.50.40"), 7003,
+            SpeakerInfoReader.Parse(Encoding.UTF8.GetBytes(ReceiverDiscoveryTests.ProjectorPlist)));
+        var withManual = Selected(Projector() with { DeviceId = manual.DeviceId }, host: null);
+        withManual.ManualDevices = [manual];
+        var selected = Assert.Single(SpeakerSelection.Of(withManual, []));
+        Assert.Equal(("192.168.50.40", 7003, "AppleTV3,2"), (selected.Address?.ToString(), selected.Port, selected.Model));
+    }
+
     // ---------------------------------------------------------------- the cache
 
     private sealed class FakeInfo
@@ -365,6 +427,31 @@ public class SpeakerInfoTests
         speakers = [new("BB:00:00:00:00:01", "厨房", null, new Dictionary<string, string> { ["model"] = "AudioAccessory5,1", ["igl"] = "1" })];
         panel.PageShown();
         Assert.DoesNotContain(Texts(panel), t => t.StartsWith("家庭影院") || t.StartsWith("立体声对")); // in no group: no 分组 line
+    });
+
+    [Fact]
+    public void An_offline_receiver_shows_its_saved_kind_and_is_read_on_its_saved_port() => OnSta(() =>
+    {
+        var cfg = Selected(Projector());
+        var port = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cache = new SpeakerInfoCache((_, _) => throw new InvalidOperationException("read without a port"))
+        {
+            ReadPort = (_, p, _) =>
+            {
+                port.TrySetResult(p);
+                return Task.FromException<IReadOnlyDictionary<string, object?>>(new IOException("connection refused"));
+            },
+        };
+        using var panel = new UI.Pages.SpeakerInfoPanel(cache, () => SpeakerSelection.Of(cfg, []), () => false, () => null, () => []);
+
+        panel.PageShown();
+        var texts = Texts(panel);
+        Assert.Contains(ReceiverKinds.Label(ReceiverKind.ThirdPartyAirPlay1), texts); // as 连接方式 shows it
+        Assert.DoesNotContain(ReceiverKinds.Label(ReceiverKind.Unknown), texts);
+        Assert.Contains("ShairportSync", texts);
+        Assert.True(port.Task.Wait(TimeSpan.FromSeconds(5)));
+        Assert.Equal(7001, port.Task.Result);
+        Assert.Equal(ReceiverKind.ThirdPartyAirPlay1, cfg.ReceiverSettings[RaopPassword.Key(cfg.DeviceId!)].Device(cfg.DeviceId!)!.Kind);
     });
 
     [Fact]
