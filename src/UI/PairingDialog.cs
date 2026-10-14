@@ -25,15 +25,16 @@ internal sealed class PairingDialog : FluentDialog
     private CancellationTokenSource? _starting;
     private PinPairingSession? _session;
     private Step _step = Step.Intro;
+    private readonly bool _thirdParty;
 
     /// <param name="owner">The main window when it is visible; null from the tray (the dialog then stays on top).</param>
     /// <param name="start">Asks the receiver to show a PIN and begins pair-setup (PinPairingSession.StartAsync).</param>
     /// <param name="save">Stores the finished pairing (UI thread); may throw.</param>
     /// <returns>True: paired and stored.</returns>
     public static bool Run(IWin32Window? owner, string speaker, PairingReason reason,
-        Func<CancellationToken, Task<PinPairingSession>> start, Action<HapPairing> save)
+        Func<CancellationToken, Task<PinPairingSession>> start, Action<HapPairing> save, bool thirdParty = false)
     {
-        using var dialog = new PairingDialog(speaker, reason, start, save);
+        using var dialog = new PairingDialog(speaker, reason, start, save, thirdParty);
         if (owner != null) return dialog.ShowDialog(owner) == DialogResult.OK;
         dialog.StartPosition = FormStartPosition.CenterScreen;
         dialog.TopMost = true;
@@ -41,15 +42,23 @@ internal sealed class PairingDialog : FluentDialog
     }
 
     private PairingDialog(string speaker, PairingReason reason, Func<CancellationToken, Task<PinPairingSession>> start,
-        Action<HapPairing> save) : base(L.T("在电视上配对"))
+        Action<HapPairing> save, bool thirdParty = false) : base(thirdParty
+            ? L.T("AirPlay 设备配对（实验性，未在实机上测试）") // experimental since 1.1
+            : L.T("在电视上配对"))
     {
         _start = start;
+        _thirdParty = thirdParty;
         _save = save;
         ContentWidth = 460;
         var rejected = new TextBlock(reason == PairingReason.PairingRejected
-            ? L.T("电视上的配对已失效（Apple TV 可能重置过，或在设置里移除了这台电脑）。") : "", wrap: true);
-        var intro = new TextBlock(L.F("要在电视上配对 {0}：点「开始」后，电视会显示 4 位数字，把它输入到这里。", speaker), wrap: true);
-        var note = Ui.Note(L.T("配对只需一次。之后推送声音时，Apple TV 可能会顺带打开电视。"));
+            ? thirdParty ? L.T("这台接收端上的配对已失效，请重新配对。")
+                : L.T("电视上的配对已失效（Apple TV 可能重置过，或在设置里移除了这台电脑）。") : "", wrap: true);
+        var intro = new TextBlock(thirdParty
+            ? L.F("配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。", speaker)
+            : L.F("要在电视上配对 {0}：点「开始」后，电视会显示 4 位数字，把它输入到这里。", speaker), wrap: true);
+        var note = Ui.Note(thirdParty
+            ? L.T("配对只需一次。只接受 MFi 认证的接收端不受支持。")
+            : L.T("配对只需一次。之后推送声音时，Apple TV 可能会顺带打开电视。"));
         _pin = new TextBox
         {
             MaxLength = 4,
@@ -58,6 +67,7 @@ internal sealed class PairingDialog : FluentDialog
             AccessibleName = L.T("输入电视上显示的 4 位数字"),
             ImeMode = ImeMode.Disable,
         };
+        if (thirdParty) _pinLabel.Text = _pin.AccessibleName = L.T("输入接收端显示的 4 位数字");
         _pinRow = Ui.Row(12, null, _pinLabel, _pin);
         _pinRow.FixedWidths[_pin] = 96;
         _pinRow.Collapsed = true;
@@ -104,7 +114,7 @@ internal sealed class PairingDialog : FluentDialog
         _step = Step.Starting;
         _pinRow.Collapsed = true;
         _pin.Clear();
-        ShowStatus(L.T("正在请电视显示数字…"), TextRole.Secondary);
+        ShowStatus(_thirdParty ? L.T("正在请接收端显示数字…") : L.T("正在请电视显示数字…"), TextRole.Secondary);
         UpdateAction();
         var cts = _starting = new CancellationTokenSource();
         try

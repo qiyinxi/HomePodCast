@@ -7,6 +7,8 @@ public class AirPlayException(string message) : Exception(message)
     /// marked by <see cref="Log.Name"/>, so that a diagnostic report leaves them out (Message never has the markers).
     /// </summary>
     public string? LogMessage { get; init; }
+    public int? ResponseStatusCode { get; init; }
+    public string? RequestName { get; init; }
 
     /// <summary>What the log says about <paramref name="ex"/>.</summary>
     public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;

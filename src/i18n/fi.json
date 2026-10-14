@@ -498,5 +498,22 @@
   "AirPlay 密码": "AirPlay-salasana",
   "AirPlay 设备密码（实验性）": "AirPlay-vastaanottimen salasana (kokeellinen)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Anna laitteen ”{0}” AirPlay-salasana. Se tallennetaan salattuna vain tälle tietokoneelle.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1 -yhteensopivuusvastaanottimet eivät voi liittyä usean kaiuttimen ryhmiin."
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1 -yhteensopivuusvastaanottimet eivät voi liittyä usean kaiuttimen ryhmiin.",
+  "自动": "Automaattinen",
+  "AirPlay 2 低延迟（实验性）": "AirPlay 2 reaaliaikainen (kokeellinen)",
+  "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 puskuroitu (kokeellinen, ei testattu laitteistolla)",
+  "AirPlay 1 兼容（实验性）": "AirPlay 1 yhteensopiva (kokeellinen)",
+  "这台设备需要缓冲连接；当前缓冲发送器不可用。": "Vastaanotin vaatii puskuroitua ääntä; kyseinen lähetin ei ole käytettävissä.",
+  "这台设备没有接受可用的连接方式：{0}": "Vastaanotin ei hyväksynyt käytettävissä olevaa yhteystapaa: {0}",
+  "这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。": "Käsittelyaika ylittää pienen viiveen alueen. Käytä yhteensopivuutta tai puskuroitua ääntä.",
+  "正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…": "Yhdistetään kolmannen osapuolen AirPlay-vastaanottimeen (kokeellinen, ei testattu laitteistolla)…",
+  "{0} · {1}": "{0} · {1}",
+  "连接方式（实验性）": "Yhteystapa (kokeellinen)",
+  "自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。": "Kokeile tuettuja tapoja automaattisesti; kolmannen osapuolen AirPlay 2:ta ei ole testattu laitteistolla.",
+  "AirPlay 设备配对（实验性，未在实机上测试）": "AirPlay-pariliitos (kokeellinen, ei testattu laitteistolla)",
+  "这台接收端上的配对已失效，请重新配对。": "Vastaanottimen pariliitos ei enää kelpaa. Muodosta se uudelleen.",
+  "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Muodosta pariliitos laitteeseen ”{0}”: valitse Aloita ja anna vastaanottimen näyttämät neljä numeroa.",
+  "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Pariliitos tehdään kerran. Pelkästään MFi-todennettuja lähettimiä hyväksyviä vastaanottimia ei tueta.",
+  "输入接收端显示的 4 位数字": "Anna vastaanottimen näyttämät neljä numeroa",
+  "正在请接收端显示数字…": "Pyydetään vastaanotinta näyttämään numerot…"
 }

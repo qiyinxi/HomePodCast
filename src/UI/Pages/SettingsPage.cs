@@ -163,6 +163,10 @@ internal sealed class SettingsPage : ScrollPage
         Content.Controls.SetChildIndex(manualAirPlayRow, Content.Controls.GetChildIndex(updates));
         Content.GapBefore[manualAirPlayRow] = 4;
         manualAirPlay.Click += (_, _) => _app.AddManualAirPlayDevice(FindForm());
+        _receiverConnection = new ReceiverConnectionPanel(_app);
+        Content.Controls.Add(_receiverConnection);
+        Content.Controls.SetChildIndex(_receiverConnection, Content.Controls.GetChildIndex(updates));
+        _receiverConnection.RefreshSelection();
         AddSpeakerInfo(before: updates);
         AddPairings(before: updates);
 
@@ -264,6 +268,7 @@ internal sealed class SettingsPage : ScrollPage
     {
         _capWait.Stop();
         Load();
+        _receiverConnection?.RefreshSelection();
         _speakerInfo?.SelectionChanged();
     }
     public void FlushPendingSettings()
@@ -610,6 +615,7 @@ internal sealed class SettingsPage : ScrollPage
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
+        _receiverConnection?.RefreshSelection();
         _speakerInfo?.PageShown();
         _pairings?.PageShown();
     }
@@ -625,6 +631,7 @@ internal sealed class SettingsPage : ScrollPage
 
     // ---------------------------------------------------------------- 音箱信息 (SpeakerInfoPanel.cs)
 
+    private ReceiverConnectionPanel? _receiverConnection;
     private SpeakerInfoPanel? _speakerInfo;
 
     /// <summary>The 音箱信息 section, just above <paramref name="before"/>: the selected speakers' details, read when shown.</summary>

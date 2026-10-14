@@ -498,5 +498,22 @@
   "AirPlay 密码": "Contraseña AirPlay",
   "AirPlay 设备密码（实验性）": "Contraseña del receptor AirPlay (experimental)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Introduce la contraseña AirPlay de «{0}». Solo se guarda cifrada en este PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Los receptores en modo de compatibilidad AirPlay 1 no pueden unirse a grupos de varios altavoces."
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Los receptores en modo de compatibilidad AirPlay 1 no pueden unirse a grupos de varios altavoces.",
+  "自动": "Automático",
+  "AirPlay 2 低延迟（实验性）": "AirPlay 2 en tiempo real (experimental)",
+  "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 con búfer (experimental, sin pruebas en hardware)",
+  "AirPlay 1 兼容（实验性）": "AirPlay 1 compatible (experimental)",
+  "这台设备需要缓冲连接；当前缓冲发送器不可用。": "Este receptor necesita audio con búfer; el emisor correspondiente no está disponible.",
+  "这台设备没有接受可用的连接方式：{0}": "Este receptor no aceptó ningún modo de conexión disponible: {0}",
+  "这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。": "El tiempo de procesamiento supera el rango de baja latencia. Usa el modo compatible o con búfer.",
+  "正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…": "Conectando con un receptor AirPlay de terceros (experimental, sin pruebas en hardware)…",
+  "{0} · {1}": "{0} · {1}",
+  "连接方式（实验性）": "Modo de conexión (experimental)",
+  "自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。": "Probar automáticamente los modos compatibles; AirPlay 2 de terceros no se ha probado en hardware.",
+  "AirPlay 设备配对（实验性，未在实机上测试）": "Emparejamiento AirPlay (experimental, sin pruebas en hardware)",
+  "这台接收端上的配对已失效，请重新配对。": "El emparejamiento de este receptor ya no es válido. Vuelve a emparejarlo.",
+  "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Emparejar «{0}»: pulsa Iniciar y escribe aquí los cuatro dígitos que muestra el receptor.",
+  "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Solo hay que emparejar una vez. No se admiten receptores que solo acepten emisores autenticados con MFi.",
+  "输入接收端显示的 4 位数字": "Introduce los cuatro dígitos que muestra el receptor",
+  "正在请接收端显示数字…": "Pidiendo al receptor que muestre los dígitos…"
 }

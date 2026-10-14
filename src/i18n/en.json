@@ -498,5 +498,22 @@
   "AirPlay 密码": "AirPlay password",
   "AirPlay 设备密码（实验性）": "AirPlay receiver password (experimental)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Enter the AirPlay password for “{0}”. It is stored encrypted only on this PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1 compatibility receivers cannot join multi-speaker groups."
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1 compatibility receivers cannot join multi-speaker groups.",
+  "自动": "Automatic",
+  "AirPlay 2 低延迟（实验性）": "AirPlay 2 realtime (experimental)",
+  "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 buffered (experimental, not tested on hardware)",
+  "AirPlay 1 兼容（实验性）": "AirPlay 1 compatibility (experimental)",
+  "这台设备需要缓冲连接；当前缓冲发送器不可用。": "This receiver needs buffered audio; the buffered sender is currently unavailable.",
+  "这台设备没有接受可用的连接方式：{0}": "This receiver did not accept an available connection mode: {0}",
+  "这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。": "This receiver's processing time exceeds the realtime range. Use compatibility or buffered audio.",
+  "正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…": "Connecting to a third-party AirPlay receiver (experimental, not tested on hardware)…",
+  "{0} · {1}": "{0} · {1}",
+  "连接方式（实验性）": "Connection mode (experimental)",
+  "自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。": "Automatically try supported modes; third-party AirPlay 2 has not been tested on hardware.",
+  "AirPlay 设备配对（实验性，未在实机上测试）": "AirPlay receiver pairing (experimental, not tested on hardware)",
+  "这台接收端上的配对已失效，请重新配对。": "This receiver's pairing is no longer valid. Pair again.",
+  "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Pair “{0}”: select Start, then find the four digits on the receiver and enter them here.",
+  "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Pair once. Receivers accepting only MFi-authenticated senders are unsupported.",
+  "输入接收端显示的 4 位数字": "Enter the four digits shown by the receiver",
+  "正在请接收端显示数字…": "Asking the receiver to show digits…"
 }
