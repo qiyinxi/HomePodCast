@@ -87,11 +87,14 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Fields: Status (待办 / 进行中 / 等你决定 / 已完成 / 搁置), 负责人 (Claude / Codex / 维护者), 领域, 优先级, 链接.
   - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
     `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
-  - **The maintainer assigns the work.** A new need goes on the board first, with no 负责人 and the status 待办; a
-    question only the maintainer can answer gets the status 等你决定. Then ask the maintainer whether Claude or Codex
-    does it, and start nothing (no subagents either) until they have assigned it (2026-10-15).
-  - Exceptions: work the maintainer told you to do in your own session, and keeping your own assigned PRs green
-    (CI failures, merge conflicts).
+  - **Bugs first, and without waiting** (the maintainer, 2026-10-15). A bug is something broken: a regression, a crash
+    or a CI failure. The agent that finds or is told about one fixes it right away, unless the maintainer says not
+    to. Put it on the board as well: yourself as 负责人, status 进行中.
+  - **Requirements wait for the maintainer.** A requirement is a new feature, a change of behaviour or an idea. It goes
+    on the board first, with no 负责人 and the status 待办. Then ask the maintainer whether Claude or Codex does it,
+    and start nothing (no subagents either) until they have assigned it. Work the maintainer asked for in your own
+    session counts as assigned. When it's unclear whether something is a bug or a requirement, ask.
+  - A question only the maintainer can answer gets the status 等你决定.
   - When you start an assigned item, set it to 进行中. When it is finished, set 已完成 and add the result and links to its
     body.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
