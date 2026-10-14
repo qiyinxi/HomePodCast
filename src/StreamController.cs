@@ -87,9 +87,11 @@ public sealed partial class StreamController : IDisposable
             {
                 _run = cts;
                 var receiver = ReceiverLookup?.Invoke(deviceId);
-                _loop = UsesRaop(receiver)
-                    ? Task.Run(() => RunRaopAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
-                    : Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
+                _loop = UsesThirdPartyPath(receiver)
+                    ? Task.Run(() => RunThirdPartyAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
+                    : UsesRaop(receiver)
+                        ? Task.Run(() => RunRaopAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
+                        : Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
             }
         }
     }
@@ -358,6 +360,7 @@ public sealed partial class StreamController : IDisposable
         var client = Interlocked.Exchange(ref _client, null);
         client?.Dispose();
         Interlocked.Exchange(ref _raopClient, null)?.Dispose();
+        Interlocked.Exchange(ref _receiverSession, null)?.Dispose();
     }
 
     private void Set(StreamState state, string text)

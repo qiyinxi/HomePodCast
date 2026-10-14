@@ -556,5 +556,22 @@
   "AirPlay 密码": "Password AirPlay",
   "AirPlay 设备密码（实验性）": "Password del ricevitore AirPlay (sperimentale)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Inserisci la password AirPlay per «{0}». Viene salvata cifrata solo su questo PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "I ricevitori in modalità compatibilità AirPlay 1 non possono partecipare a gruppi con più altoparlanti."
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "I ricevitori in modalità compatibilità AirPlay 1 non possono partecipare a gruppi con più altoparlanti.",
+  "自动": "Automatico",
+  "AirPlay 2 低延迟（实验性）": "AirPlay 2 in tempo reale (sperimentale)",
+  "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 con buffer (sperimentale, non testato su hardware)",
+  "AirPlay 1 兼容（实验性）": "AirPlay 1 compatibile (sperimentale)",
+  "这台设备需要缓冲连接；当前缓冲发送器不可用。": "Questo ricevitore richiede audio con buffer; il relativo mittente non è disponibile.",
+  "这台设备没有接受可用的连接方式：{0}": "Questo ricevitore non ha accettato alcuna modalità disponibile: {0}",
+  "这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。": "Il tempo di elaborazione supera l’intervallo a bassa latenza. Usa la modalità compatibile o con buffer.",
+  "正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…": "Connessione a un ricevitore AirPlay di terze parti (sperimentale, non testato su hardware)…",
+  "{0} · {1}": "{0} · {1}",
+  "连接方式（实验性）": "Modalità di connessione (sperimentale)",
+  "自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。": "Prova automaticamente le modalità supportate; AirPlay 2 di terze parti non è stato testato su hardware.",
+  "AirPlay 设备配对（实验性，未在实机上测试）": "Abbinamento AirPlay (sperimentale, non testato su hardware)",
+  "这台接收端上的配对已失效，请重新配对。": "L’abbinamento di questo ricevitore non è più valido. Ripeti l’abbinamento.",
+  "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Abbina «{0}»: scegli Avvia e inserisci qui le quattro cifre mostrate dal ricevitore.",
+  "配对只需一次。只接受 MFi 认证的接收端不受支持。": "L’abbinamento si fa una sola volta. I ricevitori che accettano solo mittenti autenticati MFi non sono supportati.",
+  "输入接收端显示的 4 位数字": "Inserisci le quattro cifre mostrate dal ricevitore",
+  "正在请接收端显示数字…": "Richiesta al ricevitore di mostrare le cifre…"
 }

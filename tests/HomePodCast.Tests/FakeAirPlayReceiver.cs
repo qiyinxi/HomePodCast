@@ -53,6 +53,8 @@ internal sealed class FakeAirPlayReceiver : IDisposable
 
     public string Pin { get; set; } = "0482";
     public string DeviceId { get; } = "3E:B7:8E:9F:64:72";
+    public string? ModelOverride { get; init; }
+    public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
     public int ArrivalToRenderMs { get; set; } = 140;
 
@@ -164,7 +166,12 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 Reply reply;
                 try
                 {
-                    reply = Handle(req, c);
+                    if (RefuseRequest?.Invoke(req) is { } status)
+                    {
+                        Record(req.StartLine + " refused", c.Session != null);
+                        reply = new Reply(status + " Refused", []);
+                    }
+                    else reply = Handle(req, c);
                 }
                 catch (Exception ex)
                 {
@@ -219,7 +226,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
                 {
                     ["name"] = Name,
-                    ["model"] = AppleTv ? "AppleTV14,1" : "AudioAccessory6,1",
+                    ["model"] = ModelOverride ?? (AppleTv ? "AppleTV14,1" : "AudioAccessory6,1"),
                     ["deviceID"] = DeviceId,
                     ["statusFlags"] = StatusFlags,
                     ["sourceVersion"] = AppleTv ? "980.77.2" : "900.7.1",
