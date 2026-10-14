@@ -25,6 +25,29 @@ public sealed partial class StreamController
     /// <summary>Speaker muted by us (hotkey, tray, mute key); <see cref="Volume"/> is kept for unmuting.</summary>
     public bool Muted { get; private set; }
 
+    /// <summary>
+    /// A ceiling for as long as a measurement runs (the wireless cinema's speaker alignment, at most 25 %): the speakers
+    /// play at most this, <see cref="Volume"/> stays what the user set and comes back with <see cref="EndMeasurementCap"/>.
+    /// </summary>
+    public double? MeasurementCapPercent { get; private set; }
+
+    public void SetMeasurementCap(double capPercent)
+    {
+        MeasurementCapPercent = Math.Clamp(capPercent, 0, 100);
+        PushVolume();
+    }
+
+    public void EndMeasurementCap()
+    {
+        if (MeasurementCapPercent == null) return;
+        MeasurementCapPercent = null;
+        PushVolume();
+    }
+
+    /// <summary>What the speaker is sent for <paramref name="percent"/>: within the cap and a measurement's ceiling.</summary>
+    private double SentVolume(double percent) =>
+        VolumeLimit.Clamp(percent, Math.Min(VolumeCapPercent, MeasurementCapPercent ?? 100));
+
     public void SetVolumeCap(double capPercent)
     {
         VolumeCapPercent = Math.Clamp(capPercent, 0, 100);
@@ -71,7 +94,7 @@ public sealed partial class StreamController
                 {
                     double? percent = Muted ? 0 : Volume;
                     if (percent is null) continue;
-                    double capped = VolumeLimit.Clamp(percent.Value, VolumeCapPercent);
+                    double capped = SentVolume(percent.Value);
                     try
                     {
                         if (_groupRunner?.Current is { } group) group.SetVolumePercent(capped); // linked, plus per-speaker offsets

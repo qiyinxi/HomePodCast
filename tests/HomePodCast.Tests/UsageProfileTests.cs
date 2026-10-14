@@ -199,6 +199,7 @@ public class UsageProfileTests
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
         [nameof(AppConfig.Stems)] = "optional experimental module path and stem mixes; enabling is session-only",
+        [nameof(AppConfig.Cinema)] = "physical surround layout and room-specific acoustic alignment; file playback is session-only",
         [nameof(AppConfig.LastUsageProfileId)] = "which profile was applied last",
         [nameof(AppConfig.ArrivalToRenderMs)] = "measured by the speaker at every connection",
         [nameof(AppConfig.FifoTargetMs)] = "tuned for this PC",
