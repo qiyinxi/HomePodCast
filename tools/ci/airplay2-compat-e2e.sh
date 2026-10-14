@@ -29,6 +29,7 @@ run_case() {
     "$root/tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll" \
     --airplay2 "$host" 7000 "$latency" "$fixture" "$results/$label.pcm" "$mode" 2>&1 | tee "$results/$label-sender.log"; then
     docker logs "$receiver" > "$results/$label.log" 2>&1
+    grep -E "starting frame|Dropping|too_soon|decod|anchor|latency|timing|time difference" "$results/$label.log" | tail -n 100 || true
     tail -n 100 "$results/$label.log"
     tail -n 60 "$results/$label-ptp.log" || true
     {

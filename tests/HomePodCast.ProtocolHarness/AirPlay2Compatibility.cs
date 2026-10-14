@@ -100,7 +100,11 @@ internal static class AirPlay2Compatibility
         try { await reader; } catch (OperationCanceledException) { }
         Console.WriteLine($"AirPlay 2 diagnostics: realtime={realtime}, packets={packets}, decoded={received.Count}, marker={offset}, lost={client.LostReason}");
         if (client.LostReason != null) throw new Exception(client.LostReason);
-        if (offset < 0 || offset % 4 != 0) throw new Exception("AirPlay 2 PCM marker missing or unaligned");
+        if (offset < 0 || offset % 4 != 0)
+        {
+            Diagnose(reference, received.ToArray());
+            throw new Exception("AirPlay 2 PCM marker missing or unaligned");
+        }
         double actual = MediaClock.ToMs(arrived - began) - markerFrame * 1000.0 / 44100;
         if (Math.Abs(actual - latency) > 50) throw new Exception($"AirPlay 2 latency {actual:F1} ms, expected {latency} ±50 ms");
         int bytes = Math.Min(6 * 44100 * 4, received.Count - offset);
@@ -108,5 +112,40 @@ internal static class AirPlay2Compatibility
         if (!received.ToArray().AsSpan(offset, bytes).SequenceEqual(reference.AsSpan(markerFrame * 4, bytes)))
             throw new Exception("AirPlay 2 decoded PCM differs from the independent reference or has gaps");
         Console.WriteLine($"PASS: AirPlay 2 {(realtime ? "realtime" : "buffered")}, {bytes / 4} exact decoded frames, latency={actual:F1} ms");
+    }
+
+    private static void Diagnose(byte[] reference, byte[] received)
+    {
+        int first = -1, peak = 0;
+        for (int i = 0; i + 1 < received.Length; i += 2)
+        {
+            int value = BinaryPrimitives.ReadInt16LittleEndian(received.AsSpan(i));
+            peak = Math.Max(peak, Math.Abs(value));
+            if (first < 0 && Math.Abs(value) > 100) first = i / 4;
+        }
+        Console.WriteLine($"PCM analysis: frames={received.Length / 4}, firstSignal={first}, peak={peak}");
+        foreach (int frame in new[] { 22050, 88200, 176400 })
+        {
+            long best = long.MaxValue; int at = -1;
+            for (int i = 0; i < received.Length / 4 - 512; i++)
+            {
+                long error = 0;
+                for (int sample = 0; sample < 512; sample += 32)
+                {
+                    long delta = BinaryPrimitives.ReadInt16LittleEndian(reference.AsSpan((frame + sample) * 4))
+                        - BinaryPrimitives.ReadInt16LittleEndian(received.AsSpan((i + sample) * 4));
+                    error += delta * delta;
+                    if (error >= best) break;
+                }
+                if (error < best) { best = error; at = i; }
+            }
+            int exact = received.AsSpan().IndexOf(reference.AsSpan(frame * 4, 512));
+            Console.WriteLine($"PCM reference frame={frame}: exactByte={exact}, bestFrame={at}, squaredError={best}");
+            if (at >= 0)
+            {
+                Console.WriteLine("reference samples=" + string.Join(',', Enumerable.Range(0, 12).Select(i => BinaryPrimitives.ReadInt16LittleEndian(reference.AsSpan((frame + i) * 4)))));
+                Console.WriteLine("receiver samples=" + string.Join(',', Enumerable.Range(0, 12).Select(i => BinaryPrimitives.ReadInt16LittleEndian(received.AsSpan((at + i) * 4)))));
+            }
+        }
     }
 }
