@@ -355,6 +355,12 @@ internal class RowPanel : LayoutPanel
     public Dictionary<Control, int> FixedWidths { get; } = new();
     public int MinHeight { get; set; }
 
+    /// <summary>
+    /// Without <see cref="Fill"/>: when the children don't fit on one line, they go on to the next (each at its own width)
+    /// instead of the widest giving way. For a few buttons with long texts (German) at the window's minimum width.
+    /// </summary>
+    public bool Wrap { get; set; }
+
     private int WidthOf(Control c) => FixedWidths.TryGetValue(c, out var w) ? Dp(w) : WidthFor(c);
 
     /// <summary>With no width proposed: the natural width (every child at its preferred or fixed width).</summary>
@@ -376,6 +382,7 @@ internal class RowPanel : LayoutPanel
         int fillWidth = Math.Max(0, width - gaps - fixedSum);
         var widths = items.Select(c => c == Fill ? fillWidth : WidthOf(c)).ToList();
         int over = widths.Sum() + gaps - width;
+        if (Fill == null && over > 0 && Wrap) return ArrangeLines(items, widths, width, apply);
         if (Fill == null && over > 0)
         {
             // Too narrow (the window's minimum width, long words): the widest child gives way instead of the last ones being
@@ -395,6 +402,42 @@ internal class RowPanel : LayoutPanel
             }
         }
         return height;
+    }
+
+    /// <summary><see cref="Wrap"/>: as many children per line as fit, lines <see cref="Gap"/> apart, each vertically centred.</summary>
+    private int ArrangeLines(List<Control> items, List<int> widths, int width, bool apply)
+    {
+        int gap = Dp(Gap);
+        var lines = new List<List<int>> { new() };
+        int x = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            widths[i] = Math.Min(widths[i], width); // one child wider than the line has it to itself
+            if (lines[^1].Count > 0 && x + widths[i] > width)
+            {
+                lines.Add([]);
+                x = 0;
+            }
+            lines[^1].Add(i);
+            x += widths[i] + gap;
+        }
+        var heights = items.Select((c, i) => HeightFor(c, widths[i])).ToList();
+        int y = 0;
+        foreach (var line in lines)
+        {
+            int lineHeight = Math.Max(Dp(MinHeight), line.Max(i => heights[i]));
+            if (apply)
+            {
+                x = 0;
+                foreach (int i in line)
+                {
+                    Place(items[i], x, y + (lineHeight - heights[i]) / 2, widths[i], heights[i]);
+                    x += widths[i] + gap;
+                }
+            }
+            y += lineHeight + gap;
+        }
+        return y - gap;
     }
 }
 

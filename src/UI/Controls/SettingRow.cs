@@ -46,7 +46,13 @@ internal sealed class SettingRow : Card
         }
         int textW = right - x - (contentW > 0 ? contentW + Dp(16) : 0);
         bool stacked = contentW > 0 && textW < Dp(180);
-        if (stacked) textW = right - x;
+        if (stacked)
+        {
+            textW = right - x;
+            // Under the text the content gets at most the text's width, and its height there (a row of buttons that wraps).
+            contentW = Math.Min(contentW, right - x);
+            contentH = HeightFor(Content!, contentW);
+        }
 
         int titleH = HeightFor(TitleText, textW);
         int descH = HeightFor(DescriptionText, textW);
@@ -60,7 +66,7 @@ internal sealed class SettingRow : Card
             {
                 Place(TitleText, x, top, textW, titleH);
                 Place(DescriptionText, x, top + titleH + Dp(2), textW, descH);
-                Place(Content!, x, y, Math.Min(contentW, right - x), contentH);
+                Place(Content!, x, y, contentW, contentH);
                 _icon?.SetBounds(left, top, iconSize, Math.Max(iconSize, titleH));
             }
             height = y + contentH + Dp(Padding.Bottom);

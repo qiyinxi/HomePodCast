@@ -42,14 +42,9 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentButton _vlcClear = new(L.T("清除"), ButtonKind.Subtle);
     private readonly SettingRow _vlcPasswordRow;
 
-    // 更新: the version and the check's status, the new version's actions, the channel, automatic checks
+    // 更新: one row for the version, the check's status and its actions (UpdateStatusRow), the channel, automatic checks
     private static readonly UpdateChannel[] Channels = [UpdateChannel.Stable, UpdateChannel.Beta];
-    private readonly FluentButton _check = new(L.T("检查更新"));
-    private readonly SettingRow _checkRow;
-    private readonly FluentButton _install = new(L.T("更新"), ButtonKind.Primary) { MinWidth = 72 };
-    private readonly FluentButton _notes = new(L.T("查看说明"), ButtonKind.Secondary, Glyph.OpenInNew);
-    private readonly FluentButton _skip = new(L.T("跳过此版本"), ButtonKind.Subtle);
-    private readonly SettingRow _availableRow;
+    private readonly UpdateStatusRow _updateRow;
     private readonly Segmented _channel = new(L.T("正式版"), L.T("测试版"));
     private readonly SettingRow _channelRow;
     private readonly ToggleSwitch _autoUpdate = new();
@@ -135,8 +130,11 @@ internal sealed class SettingsPage : ScrollPage
 
         // Not "更新": that is the button's text, and other languages need two words (Updates / Update).
         var updates = Ui.Section(L.T("软件更新"));
-        _checkRow = new SettingRow(Glyph.UpdateRestore, L.F("当前版本 {0}", ReleaseVersion.CurrentText), "", _check);
-        _availableRow = new SettingRow(Glyph.Download, "", "", Ui.Row(8, null, _install, _notes, _skip)) { Collapsed = true };
+        _updateRow = new UpdateStatusRow(() => _app.CheckForUpdates(), () =>
+        {
+            if (_app.UpdateState.Downloading) _app.CancelUpdateDownload();
+            else _app.InstallUpdate(FindForm());
+        }, _app.ShowReleaseNotes, _app.SkipUpdate);
         _channelRow = new SettingRow(Glyph.Flag, L.T("更新渠道"),
             L.T("正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。"), _channel);
         _autoUpdateRow = new SettingRow(Glyph.Recent, L.T("自动检查更新"), "", _autoUpdate);
@@ -148,12 +146,12 @@ internal sealed class SettingsPage : ScrollPage
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
             sound, cap, _volumeKeysRow, _hotkeysRow, players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
-            updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
+            updates, _updateRow.Row, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
                      cap, _volumeKeysRow, _hotkeysRow,
                      playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
-                     _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
+                     _updateRow.Row, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
         AddSpeakerInfo(before: updates);
@@ -232,14 +230,6 @@ internal sealed class SettingsPage : ScrollPage
         diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
         link.Click += (_, _) => OpenRepository();
-        _check.Click += (_, _) => _app.CheckForUpdates();
-        _install.Click += (_, _) =>
-        {
-            if (_app.UpdateState.Downloading) _app.CancelUpdateDownload();
-            else _app.InstallUpdate(FindForm());
-        };
-        _notes.Click += (_, _) => _app.ShowReleaseNotes();
-        _skip.Click += (_, _) => _app.SkipUpdate();
         _channel.AccessibleName = L.T("更新渠道");
         _channel.SelectionChangeCommitted += (_, _) =>
         {
@@ -381,36 +371,16 @@ internal sealed class SettingsPage : ScrollPage
     }
 
     /// <summary>
-    /// 更新: the check's status under the version, the new version's row with 更新 / 查看说明 / 跳过此版本 while there is
-    /// one (更新 turns into 取消 while it downloads), the channel, and automatic checks (or why this build has none).
+    /// 更新: the version's row (its status, and 检查更新 or, while a new version is offered, 更新 / 查看说明 / 跳过此版本;
+    /// UpdateStatusRow), the channel, and automatic checks (or why this build has none).
     /// </summary>
     public void ShowUpdate()
     {
         var u = _app.UpdateState;
-        var status = _checkRow.DescriptionText;
-        status.Text = u.Status;
-        status.Role = u.Role;
-        _check.Enabled = !u.Checking && !u.Downloading;
+        _updateRow.Show(u);
         // The Microsoft Store version: the Store updates it; nothing here contacts GitHub.
-        _check.Collapsed = _channelRow.Collapsed = _autoUpdateRow.Collapsed = u.Store;
-        if (u.Store)
-        {
-            _availableRow.Collapsed = true;
-            return;
-        }
-
-        _availableRow.Collapsed = u.Available == null;
-        if (u.Available is { } release)
-        {
-            _availableRow.TitleText.Text = L.F("新版本 {0}", release.Version);
-            _availableRow.DescriptionText.Text = u.MsiInstall == false
-                ? L.T("便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。")
-                : L.T("「更新」会下载安装包、用 GitHub 提供的 SHA-256 校验，然后退出 HomePodCast 安装（Windows 会请求管理员权限），装好后自动重新启动。");
-            _install.Text = u.Downloading ? L.T("取消") : L.T("更新");
-            _install.Kind = u.Downloading ? ButtonKind.Secondary : ButtonKind.Primary;
-            _install.Enabled = !u.Checking;
-            _skip.Enabled = !u.Downloading && !u.Checking;
-        }
+        _channelRow.Collapsed = _autoUpdateRow.Collapsed = u.Store;
+        if (u.Store) return;
 
         _channel.SelectedIndex = Array.IndexOf(Channels, _app.UpdateChannel);
         _autoUpdate.Checked = _app.Config.AutoUpdateCheck;

@@ -226,6 +226,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - 睡眠唤醒后自动重连；iPhone 抢占 HomePod 后电脑端不抢回、托盘显示被占用（TakeoverControllerTests、TakeoverPolicyTests、GroupRunnerTests；用户 2026-10-08 实机确认过）
   - 夜间自动断开（实验性）：默认关；时段可以跨午夜（23:00–07:00 含 23:00、不含 07:00），开始和结束相同时从不断开；键鼠和声音都闲置够了才断开，只放声音或只动键鼠都不断开，时段开始前就闲置的时间也算；时段结束时只重连它自己断开的，中间手动连接或断开过就不重连，关掉这个设置也不重连；声音在所有音效之后测（HomePod 实际播放的），门限 −60 dBFS；断开后状态写「夜间已自动断开，07:00 自动重新连接」；设置能保存，旧配置没有这一项时是关的（NightDisconnectTests）
   - 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」；在测试版上切到「正式版」再检查（最新正式版比本机旧时）显示「当前测试版比最新正式版新……」，没有「更新」按钮（ReleaseSelectionTests、UpdateViewTests）
+  - 设置 → 软件更新只有一行「当前版本 x」：下面是状态，右边是「检查更新」；有新版本时同一行里换成「更新」「查看说明」「跳过此版本」（下载时「更新」变成「取消」、「跳过此版本」不能点），跳过后换回「检查更新」，下面不会多出或少掉一行；中文在默认窗口宽度下行高不变，最小宽度和德语里按钮放到文字下面，放不下时换行，都不被挤小；商店版只有状态、没有按钮（UpdateStatusRowTests；gui-smoke 检查「检查更新」在这一行里）
   - Apple TV 家庭影院（实验性）：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；设置 → 音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
 
 ## 测试记录
