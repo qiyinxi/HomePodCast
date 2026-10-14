@@ -109,6 +109,11 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - A question only the maintainer can answer gets the status 等你决定.
   - When you start an assigned item, set it to 进行中. When it is finished, set 已完成 and add the result and links to its
     body.
+  - Don't archive items. Views keep finished work apart (2026-10-15):
+    - 「待办与进行中」 (table) and 「看板」 (board) hide 已完成 and 搁置;
+    - 「等你决定」 lists the questions for the maintainer;
+    - 「已完成与搁置」 holds the rest.
+    The status alone decides which view an item is in.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
   fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
   one: tell the maintainer, and build on it only if they say so.
