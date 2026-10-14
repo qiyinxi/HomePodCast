@@ -79,6 +79,9 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentButton _updateSkip = new(L.T("跳过此版本"), ButtonKind.Subtle);
     private readonly Card _updateBanner;
 
+    // .NET was replaced under the running app: 「立即重启」 (RuntimeRestartNotice), above everything else
+    private readonly RuntimeRestartNotice _runtimeNotice;
+
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
     private long _underrunsAtStart;
@@ -103,7 +106,8 @@ internal sealed class HomePage : ScrollPage
         _netLine.Collapsed = true;
         _netHint = BuildNetworkHint();
         _updateBanner = BuildUpdateBanner();
-        Content.Controls.AddRange([_updateBanner, columns, statsHeader, tiles, _netLine, _netHint]);
+        _runtimeNotice = new RuntimeRestartNotice(_app.RestartForRuntime);
+        Content.Controls.AddRange([_runtimeNotice.Card, _updateBanner, columns, statsHeader, tiles, _netLine, _netHint]);
         Content.GapBefore[statsHeader] = 20;
 
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
@@ -122,6 +126,7 @@ internal sealed class HomePage : ScrollPage
         _statsTimer.Tick += (_, _) => UpdateStats();
         LoadFromConfig();
         ShowUpdate();
+        ShowRuntimeNotice();
     }
 
     // ---------------------------------------------------------------- layout
@@ -261,6 +266,9 @@ internal sealed class HomePage : ScrollPage
         _updateInstall.Enabled = !u.Checking;
         _updateSkip.Enabled = !u.Downloading && !u.Checking;
     }
+
+    /// <summary>The restart notice: shown once the runtime is gone, saying so too while streaming that the sound stops briefly.</summary>
+    public void ShowRuntimeNotice() => _runtimeNotice.Show(_app.RuntimeRemoved, _app.Controller.State == StreamState.Streaming);
 
     /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
     private void ApplyNetworkSuggestion()
@@ -491,6 +499,7 @@ internal sealed class HomePage : ScrollPage
         UpdateFloor();
         ShowLatency();
         UpdateStats();
+        ShowRuntimeNotice();
     }
 
     private void UpdateStats()
@@ -778,7 +787,7 @@ internal sealed class HomePage : ScrollPage
     }
 
     /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning, the update banner's).</summary>
-    private sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
+    internal sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));
 
