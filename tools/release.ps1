@@ -411,6 +411,9 @@ function Complete-Release([string] $tag, [bool] $prerelease) {
     if ($problems) { throw "the release $tag is not right: $($problems -join '; '): $($release.url)" }
     Write-Info "published as ${kind}: $($release.url)"
     Write-Info "assets: $($assets -join ', ')"
+    if (-not ($assets -like 'HomePodCast-stems-*.zip')) {
+        Write-Caution "no HomePodCast-stems zip: job stem-module couldn't reach upstream (StemgenRT) for the music separation module; re-run that job when it is back (docs/RELEASING.md)"
+    }
     if ($NotesFile) {
         Invoke-Gh release edit $tag @R --notes-file $NotesFile | Out-Null
         Write-Info "notes applied from $NotesFile"
