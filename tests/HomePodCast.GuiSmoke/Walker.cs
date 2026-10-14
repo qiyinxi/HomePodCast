@@ -76,6 +76,7 @@ internal sealed class Walker
                 case "idle": RunIdle(); break;
                 case "retrying": RunRetrying(); break;
                 case "streaming": RunStreaming(); break;
+                case "compatibility": RunCompatibility(); break;
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -120,6 +121,46 @@ internal sealed class Walker
         WalkEverything(connected: false);
         Quit();
         CheckLog(idle: true);
+    }
+
+    private void RunCompatibility()
+    {
+        const string id = "02:43:4F:4D:50:54";
+        var config = BaseConfig();
+        config["DeviceId"] = id; config["DeviceName"] = "CI compatibility receiver"; config["Host"] = "127.0.0.1";
+        config["ReceiverSettings"] = new Dictionary<string, object?>
+        {
+            [id.Replace(":", "")] = new Dictionary<string, object?>
+            {
+                ["Name"] = "CI compatibility receiver", ["Host"] = "127.0.0.1", ["Port"] = 7001,
+                ["Model"] = "AppleTV3,2", ["Txt"] = new Dictionary<string, string> { ["srcvers"] = "220.68" },
+                ["HasAirPlay"] = true, ["RaopPort"] = 7001, ["CompatibilityLatencyMs"] = 2000,
+                ["CompatibilityNoticeShown"] = true,
+            },
+        };
+        _userData.Add("CI compatibility receiver");
+        Start(config); // AutoConnect stays false: these checks render controls without starting a session.
+        foreach (var page in Pages)
+        {
+            Navigate(page);
+            var tree = Uia.Snapshot(MainWindow());
+            CheckNavigation(tree);
+            if (page == "首页")
+            {
+                CheckHome(tree, false);
+                Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), page,
+                    "compatibility latency selector is missing");
+                Expect(Has(tree, "2000 ms"), page, "compatibility default is not 2000 ms");
+            }
+            if (page == "设置")
+            {
+                tree = CheckSettings(false, compatibility: true);
+            }
+            Layout(tree, page); ShootPage(page, "");
+            if (page == "首页") Flyout(false, compatibility: true);
+        }
+        WalkNarrow();
+        Quit(); CheckLog(idle: true);
     }
 
     private void RunRetrying()
@@ -225,6 +266,11 @@ internal sealed class Walker
         Dialog("cinema", ButtonInRow("无线影院（实验性）", "打开"), "无线影院（实验性）", "关闭", CheckCinema);
         if (VideoWindowDir != null) ViewingWindow(connected);
 
+        WalkNarrow();
+    }
+
+    private void WalkNarrow()
+    {
         if (_s.Narrow)
         {
             var main = MainWindow();
@@ -290,7 +336,7 @@ internal sealed class Walker
         }
     }
 
-    private Node CheckSettings(bool connected)
+    private Node CheckSettings(bool connected, bool compatibility = false)
     {
         // 音箱信息 reads the speaker when the page is shown: wait for 读取中… to go.
         var tree = Uia.Snapshot(MainWindow());
@@ -309,6 +355,13 @@ internal sealed class Walker
         {
             Expect(Has(page, _fake!.Name), "设置", $"音箱信息 doesn't name 「{_fake.Name}」");
             Expect(!Has(page, T("无法读取（音箱不在线？）")), "设置", "音箱信息 could not read the speaker");
+        }
+        else if (compatibility)
+        {
+            Expect(Has(page, "CI compatibility receiver"), "设置", "音箱信息 doesn't name the selected receiver");
+            Expect(!Has(page, T("还没有选择音箱")), "设置", "音箱信息 lost the selected receiver");
+            Expect(Has(page, T("连接方式（实验性）")), "设置", "connection override is missing"); // experimental since 1.1
+            Expect(Has(page, T("未连接；连接后显示实际协议。")), "设置", "disconnected protocol status is missing");
         }
         else
         {
@@ -522,7 +575,7 @@ internal sealed class Walker
 
     // ---------------------------------------------------------------- flyout
 
-    private void Flyout(bool connected)
+    private void Flyout(bool connected, bool compatibility = false)
     {
         var flyout = OpenFlyout();
         Thread.Sleep(500);
@@ -530,8 +583,14 @@ internal sealed class Walker
         Dump(tree, "flyout");
         string expected = connected ? T("断开") : T("连接");
         Expect(tree.Descendants().Any(n => n.Type == "Button" && n.Says(expected)), "flyout", $"no 「{expected}」 button");
-        string name = connected ? _fake!.Name : T("还没有选择音箱");
+        string name = compatibility ? "CI compatibility receiver" : connected ? _fake!.Name : T("还没有选择音箱");
         Expect(Has(tree, name), "flyout", $"doesn't show 「{name}」");
+        if (compatibility)
+        {
+            Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), "flyout",
+                "compatibility latency selector is missing"); // experimental since 1.1
+            Expect(Has(tree, "2000 ms"), "flyout", "compatibility default is not 2000 ms");
+        }
         Shoot(flyout, "flyout", "tray flyout");
         Layout(tree, "flyout");
         Checks.OnScreen(flyout, Where("flyout"), _report);

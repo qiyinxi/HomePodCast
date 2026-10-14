@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Lydforsinkelsen overstiger billedgrænsen på 2000 ms. Billedet kan ikke forsinkes nok til at passe."
   }
 }

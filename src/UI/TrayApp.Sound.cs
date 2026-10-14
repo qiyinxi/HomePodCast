@@ -80,7 +80,11 @@ internal sealed partial class TrayApp
     // ---------------------------------------------------------------- actions
 
     /// <summary>Switch scene; the main window owns the reconnect debounce (same rule as the latency slider).</summary>
-    public void SelectScene(Scene scene) => _form.SelectScene(scene);
+    public void SelectScene(Scene scene)
+    {
+        if (ReceiverSelection != null) return; // receiver choices must not overwrite saved HomePod scenes
+        _form.SelectScene(scene);
+    }
 
     public void SetNightMode(bool on)
     {

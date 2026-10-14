@@ -76,5 +76,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Die Tonverzögerung überschreitet die Bildgrenze von 2000 ms. Das Bild kann nicht weit genug verzögert werden, um übereinzustimmen."
   }
 }

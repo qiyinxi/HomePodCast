@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Opóźnienie dźwięku przekracza limit obrazu 2000 ms. Obrazu nie można opóźnić wystarczająco, aby go dopasować."
   }
 }

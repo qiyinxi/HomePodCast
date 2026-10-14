@@ -51,6 +51,8 @@ internal sealed class SettingsPage : ScrollPage
     private readonly ToggleSwitch _autoUpdate = new();
     private readonly SettingRow _autoUpdateRow;
 
+    public void RefreshReceiverInfo() => _receiverConnection?.RefreshSelection();
+
     public SettingsPage(TrayApp app) : base(L.T("设置"))
     {
         _app = app;
