@@ -103,7 +103,9 @@ jobs:
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:Version=${{ steps.ver.outputs.version }} -o publish/HomePodCast
 
-      - name: Publish optional viewing window and verify native readback without a GUI
+      # The synchronized viewing window (modules/VideoWindow, experimental since 1.1), its own zip: --self-test runs
+      # its GPU path (scaling up to 8K, WinRT surface interop) on WARP, without a window or a capture.
+      - name: Publish the viewing window module and test its GPU path
         shell: pwsh
         run: ./tools/build-video-window.ps1 -Version '${{ steps.ver.outputs.version }}'
 
@@ -353,8 +355,10 @@ jobs:
   # the dialogs (全局快捷键, 使用配置, 多音箱, 设置 → 音箱信息), in Chinese, English and German, at 100 % (also at the
   # window's minimum width) and 150 % scale, idle, waiting to retry a speaker that doesn't answer, and connected to the
   # tests' fake HomePod on 127.0.0.1. Fails on a crash, an ERROR in the log, a window that doesn't appear, clipped or
-  # overlapping controls, unnamed buttons or untranslated text. Every screenshot is in the gui-screenshots artifact
-  # (index.html), for a look through before a release.
+  # overlapping controls, unnamed buttons or untranslated text. Also the synchronized viewing window from this build's
+  # module zip: started from Settings, then on its own with generated 4K pictures through its GPU queue and swap chain
+  # (never the window picker or a capture). Every screenshot is in the gui-screenshots artifact (index.html), for a look
+  # through before a release.
   gui-smoke:
     needs: build
     runs-on: windows-latest
@@ -377,6 +381,9 @@ jobs:
           $zip = @(Get-ChildItem packages -Filter '*-win-x64.zip')
           if ($zip.Count -ne 1) { throw "expected one -win-x64.zip, found $($zip.Count)" }
           Expand-Archive $zip[0].FullName -DestinationPath smoke-app
+          $module = @(Get-ChildItem packages -Filter 'HomePodCast-video-window-*.zip')
+          if ($module.Count -ne 1) { throw "expected one HomePodCast-video-window-*.zip, found $($module.Count)" }
+          Expand-Archive $module[0].FullName -DestinationPath smoke-video-window
 
       - name: Build the smoke test
         run: dotnet build tests/HomePodCast.GuiSmoke -c Release
@@ -384,7 +391,7 @@ jobs:
       - name: GUI smoke test
         shell: pwsh
         run: |
-          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --out gui-screenshots
+          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --video-window smoke-video-window --out gui-screenshots
           if ($LASTEXITCODE) { throw 'GUI smoke test failed: see the job summary, and the gui-screenshots artifact (index.html)' }
 
       - name: Upload screenshots
