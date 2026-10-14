@@ -99,7 +99,7 @@ public class ReceiverDiscoveryTests
         var group = new IPEndPoint(IPAddress.Parse("239.255.77.77"), ((IPEndPoint)responder.Client.LocalEndPoint!).Port);
         responder.JoinMulticastGroup(group.Address, IPAddress.Loopback);
         responder.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, IPAddress.Loopback.GetAddressBytes());
-        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var stop = new CancellationTokenSource(Guard);
         var respond = Task.Run(async () =>
         {
             while (true)
@@ -115,6 +115,12 @@ public class ReceiverDiscoveryTests
         await respond;
         Assert.Equal("Multicast only", Assert.Single(found).Name);
     }
+
+    /// <summary>
+    /// Only a guard against a hang: 2026-10-14, a CI run passed 5 s before the first request was written (a busy runner),
+    /// and the token closed the connection under it.
+    /// </summary>
+    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
 
     internal const string ProjectorPlist = "<?xml version=\"1.0\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>model</key><string>AppleTV3,2</string><key>features</key><integer>10879</integer><key>protovers</key><string>1.0</string><key>srcvers</key><string>220.68</string><key>vv</key><integer>2</integer></dict></plist>";
 
@@ -134,7 +140,7 @@ public class ReceiverDiscoveryTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var stop = new CancellationTokenSource(Guard);
         var requests = new List<string>();
         var server = Task.Run(async () =>
         {
