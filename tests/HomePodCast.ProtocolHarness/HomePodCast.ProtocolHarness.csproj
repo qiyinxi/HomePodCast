@@ -18,6 +18,7 @@
     <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
     <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
     <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
+    <Compile Include="../../src/Protocol/ChaChaPoly.cs" Link="Protocol/ChaChaPoly.cs" />
     <Compile Include="../../src/Protocol/BPlist.cs" Link="Protocol/BPlist.cs" />
     <Compile Include="../../src/Protocol/Curve25519.cs" Link="Protocol/Curve25519.cs" />
   </ItemGroup>
