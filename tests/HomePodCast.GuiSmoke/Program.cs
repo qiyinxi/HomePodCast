@@ -16,7 +16,7 @@ internal static class Program
     /// <summary>
     /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
     /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
-    /// HomePod, which also walk everything while connected.
+    /// HomePod, which also walk everything while connected; once, the scale goes 150 % → 100 % → 150 % while the app runs.
     /// </summary>
     private static readonly Scenario[] Matrix =
     [
@@ -27,7 +27,7 @@ internal static class Program
         new("retrying", "zh-CN", 100),
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
-        new("idle", "zh-CN", 150),
+        new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),
     ];
