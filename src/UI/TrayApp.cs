@@ -247,7 +247,8 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.SetScanning(true);
         try
         {
-            var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            var found = ManualAirPlayDevice.Include(await Mdns.BrowseAsync(TimeSpan.FromSeconds(3)), Config.ManualDevices);
+            foreach (var d in found) Log.Info($"receiver: {Log.Name(d.Name)} {d.Address}:{d.Port} kind={d.Kind} raop={d.RaopPort}");
             LastScan = found; // TXT records and pair members for 设置 → 音箱信息, home theaters for the busy check
             Controller.RecheckSpeaker(); // a connect waiting for a HomePod may now see that its home-theater Apple TV holds it
             var scan = found;

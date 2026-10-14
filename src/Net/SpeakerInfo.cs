@@ -39,33 +39,6 @@ public static class StatusFlags
     public static string Describe(long flags) => $"{Hex(flags)} (bit 17 sessionActive={SessionActive(flags)})";
 }
 
-/// <summary>TXT record data: length-prefixed "key=value" strings (mDNS answers; /info's "txtAirPlay" is the same bytes).</summary>
-public static class TxtRecord
-{
-    public static Dictionary<string, string> Parse(byte[] data) => Parse(data, 0, data.Length);
-
-    /// <summary>The entries in <paramref name="data"/>[start..start+length]; stops at an entry that runs past the end.</summary>
-    public static Dictionary<string, string> Parse(byte[] data, int start, int length)
-    {
-        var txt = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int end = Math.Min(data.Length, start + length);
-        for (int p = start; p < end;)
-        {
-            int l = data[p++];
-            if (p + l > end) break;
-            var kv = Encoding.UTF8.GetString(data, p, l);
-            p += l;
-            int eq = kv.IndexOf('=');
-            if (eq > 0) txt[kv[..eq]] = kv[(eq + 1)..];
-        }
-        return txt;
-    }
-
-    /// <summary>The TXT record a speaker's /info carries ("txtAirPlay"); null when it has none.</summary>
-    public static Dictionary<string, string>? FromInfo(IReadOnlyDictionary<string, object?>? info) =>
-        info?.GetValueOrDefault("txtAirPlay") is byte[] bytes ? Parse(bytes) : null;
-}
-
 /// <summary>
 /// Model identifiers in plain words ("AudioAccessory6,1" → "HomePod 第二代"). Apple TV identifiers as theapplewiki.com
 /// (Models/Apple TV), appledb.dev and everymac.com list them: AppleTV5,3 Apple TV HD (2015), AppleTV6,2 Apple TV 4K
@@ -140,7 +113,7 @@ public sealed record SpeakerDetails(
             Info("name") ?? name,
             Info("model") ?? Txt("model"),
             SystemVersionText(Txt("osvers"), Info("osBuildVersion")),
-            Txt("srcvers") ?? Info("sourceVersion"),
+            Txt("srcvers") ?? Info("sourceVersion") ?? Info("srcvers"),
             known ? address!.ToString() : null,
             Info("macAddress")?.ToUpperInvariant(),
             Txt("btaddr")?.ToUpperInvariant(),
@@ -150,20 +123,6 @@ public sealed record SpeakerDetails(
     }
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-}
-
-/// <summary>GET /info on a connection of its own: no pairing, no session, nothing changed on the speaker.</summary>
-public static class SpeakerInfoReader
-{
-    public static async Task<IReadOnlyDictionary<string, object?>> ReadAsync(IPAddress address, CancellationToken ct)
-    {
-        using var rtsp = await RtspConnection.ConnectAsync(address, 7000, ct);
-        using var close = ct.Register(rtsp.Dispose); // the request below blocks on the socket: closing it ends the wait
-        var reply = await Task.Run(() => rtsp.Rtsp("GET", "/info"), CancellationToken.None);
-        ct.ThrowIfCancellationRequested();
-        if (!reply.IsSuccess || reply.Body.Length == 0) throw new AirPlayException($"GET /info: {reply.StartLine}");
-        return BPlist.ReadDict(reply.Body);
-    }
 }
 
 public enum SpeakerInfoState { Reading, Ready, Failed }
@@ -186,6 +145,8 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
     private readonly Dictionary<string, SpeakerInfoEntry> _entries = new();
     private readonly Dictionary<string, Task<SpeakerInfoEntry>> _reading = new();
 
+    public Func<IPAddress, int, CancellationToken, Task<IReadOnlyDictionary<string, object?>>>? ReadPort { get; init; }
+
     public TimeSpan Timeout { get; } = timeout ?? DefaultTimeout;
 
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
@@ -202,7 +163,7 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
 
     /// <param name="label">The speaker's name for the log.</param>
     /// <param name="log">One log line for this read (the takeover check's repeated reads log only what they decide).</param>
-    public Task<SpeakerInfoEntry> RefreshAsync(string deviceId, string label, IPAddress? address, bool log = true)
+    public Task<SpeakerInfoEntry> RefreshAsync(string deviceId, string label, IPAddress? address, bool log = true, int port = 7000)
     {
         string key = Key(deviceId);
         Task<SpeakerInfoEntry> task;
@@ -211,14 +172,14 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
             if (_reading.TryGetValue(key, out var running)) return running;
             var previous = _entries.GetValueOrDefault(key);
             _entries[key] = new SpeakerInfoEntry(SpeakerInfoState.Reading, previous?.Info, previous?.ReadUtc, null);
-            task = Task.Run(() => ReadAsync(key, label, address, previous, log));
+            task = Task.Run(() => ReadAsync(key, label, address, previous, log, port));
             _reading[key] = task;
         }
         Changed?.Invoke(key);
         return task;
     }
 
-    private async Task<SpeakerInfoEntry> ReadAsync(string key, string label, IPAddress? address, SpeakerInfoEntry? previous, bool log)
+    private async Task<SpeakerInfoEntry> ReadAsync(string key, string label, IPAddress? address, SpeakerInfoEntry? previous, bool log, int port)
     {
         var sw = Stopwatch.StartNew();
         SpeakerInfoEntry entry;
@@ -227,7 +188,7 @@ public sealed class SpeakerInfoCache(Func<IPAddress, CancellationToken, Task<IRe
             if (address == null || address.Equals(IPAddress.None) || address.Equals(IPAddress.Any))
                 throw new AirPlayException("address unknown");
             using var cts = new CancellationTokenSource(Timeout);
-            var reading = read(address, cts.Token);
+            var reading = ReadPort is { } portReader ? portReader(address, port, cts.Token) : read(address, cts.Token);
             _ = reading.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted); // given up on below
             var info = await reading.WaitAsync(Timeout);
             entry = new SpeakerInfoEntry(SpeakerInfoState.Ready, info, UtcNow(), null);

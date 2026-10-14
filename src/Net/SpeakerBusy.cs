@@ -3,7 +3,7 @@ using System.Net;
 namespace HomePodCast.Net;
 
 /// <summary>A speaker to check before connecting: its device id, a name for when /info can't be read, its address.</summary>
-public sealed record BusyTarget(string DeviceId, string Name, IPAddress? Address);
+public sealed record BusyTarget(string DeviceId, string Name, IPAddress? Address, int Port = 7000);
 
 /// <summary>
 /// The "receiver session is active" flag of every speaker a connection would use: Busy if any member is, else Unknown
@@ -95,7 +95,7 @@ public sealed class InfoBusyReader(SpeakerInfoCache cache, Func<IReadOnlyList<Ai
 {
     public async Task<BusyReading> ReadAsync(IReadOnlyList<BusyTarget> targets, CancellationToken ct)
     {
-        var entries = await Task.WhenAll(targets.Select(t => cache.RefreshAsync(t.DeviceId, t.Name, t.Address, log: false))).WaitAsync(ct);
+        var entries = await Task.WhenAll(targets.Select(t => cache.RefreshAsync(t.DeviceId, t.Name, t.Address, log: false, port: t.Port))).WaitAsync(ct);
         var devices = scan?.Invoke() ?? [];
         return BusyReading.Combine(targets.Zip(entries, (t, e) => BusyReading.Of(t, e, devices)).ToList());
     }

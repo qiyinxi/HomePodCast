@@ -477,5 +477,16 @@
   "闲置多久后断开": "Disconnect after idle for",
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "No keyboard or mouse input and no sound on the HomePod for this long.",
   "开始和结束时间相同，不会断开。": "Start and end are the same, so it never disconnects.",
-  "夜间已自动断开，{0} 自动重新连接": "Disconnected for the night; connects again at {0}"
+  "夜间已自动断开，{0} 自动重新连接": "Disconnected for the night; connects again at {0}",
+  "Apple TV（实验性）": "Apple TV (experimental)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Compatibility mode (experimental)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Third-party (experimental, not tested on hardware)",
+  "未知 AirPlay 设备（实验性）": "Unknown AirPlay receiver (experimental)",
+  "设备类型": "Receiver type",
+  "手动添加 AirPlay 设备（实验性）": "Add AirPlay receiver manually (experimental)",
+  "端口（默认 7000）": "Port (default 7000)",
+  "添加": "Add",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "Enter the receiver's IP address and port; only device information is read.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Enter a valid IPv4 address and a port between 1 and 65535.",
+  "发现不到设备时，填写 IP 地址和端口。": "If discovery cannot find the receiver, enter its IP address and port."
 }
