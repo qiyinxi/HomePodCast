@@ -14,7 +14,8 @@ docker run --rm --entrypoint ffmpeg -v "$fixture:/fixture" homepodcast-airplay2-
   -hide_banner -loglevel error -i /fixture/signal.aac -f s16le -acodec pcm_s16le /fixture/reference.pcm
 dotnet build "$root/tests/HomePodCast.ProtocolHarness" -c Release
 run_case() {
-  local mode="$1" latency="$2" label="$mode-$latency"
+  local mode="$1" latency="$2"
+  local label="$mode-$latency"
   receiver="$(docker run -d -e GITHUB_ACTIONS=true -v "$results:/results" homepodcast-airplay2-ci "$label")"
   local host
   host="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$receiver")"
@@ -26,10 +27,18 @@ run_case() {
   touch "$results/$label.pcm"
   if ! sudo env GITHUB_ACTIONS=true "$(command -v dotnet)" \
     "$root/tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll" \
-    --airplay2 "$host" 7000 "$latency" "$fixture" "$results/$label.pcm" "$mode"; then
+    --airplay2 "$host" 7000 "$latency" "$fixture" "$results/$label.pcm" "$mode" 2>&1 | tee "$results/$label-sender.log"; then
     docker logs "$receiver" > "$results/$label.log" 2>&1
     tail -n 100 "$results/$label.log"
-    tail -n 60 "$results/$label-ptp.log"
+    tail -n 60 "$results/$label-ptp.log" || true
+    {
+      echo "### AirPlay 2 software receiver failure: $label"
+      echo '```text'
+      tail -n 80 "$results/$label-sender.log"
+      tail -n 100 "$results/$label.log"
+      tail -n 60 "$results/$label-ptp.log" || true
+      echo '```'
+    } >> "$GITHUB_STEP_SUMMARY"
     return 1
   fi
   docker logs "$receiver" > "$results/$label.log" 2>&1
