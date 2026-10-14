@@ -28,7 +28,7 @@
   - [x] 场景「游戏」（105 ms）：声音比画面晚 **118 ms**（8 下，115–125；目标 ≤ 145）。手机录像本身约 ±10 ms 误差（用户 2026-10-08 录像）
   - [x] 场景「推荐」（120 ms）：**137 ms**（10 下，124–144；上次 156）。当时缓冲被误涨到 20 ms（beta.4 已修），修好后应再少约 4 ms（用户 2026-10-08 录像）
   - [ ] 混音器里给任意一个程序单独设去处（启用按程序分流），再录一段 120 ms：____ ms（预计比上一条多约 35 ms）。另外改了 `src/Audio/RoutedCapture.cs` 或 `src/Audio/ProcessLoopback.cs` 也要重测
-- [ ] Windows 10（2004–22H2）上连上 HomePod 并正常出声：日志开头的 starting 行写着「no ChaCha20-Poly1305 in Windows: using our own」。Windows 10 没有系统自带的 ChaCha20-Poly1305，之前一连接就报 PlatformNotSupportedException（用户 2026-10-14 反馈）；算法本身由 ChaChaPolyTests 覆盖（RFC 8439 向量、和 Windows 自带的逐字节对比），CI 只有 Windows Server 2025，所以要有人在 Windows 10 上实测一次。改了 `src/Protocol/ChaChaPoly.cs` 才需要重测
+- [ ] Windows 10（2004–22H2）上连上 HomePod 并正常出声：日志开头 starting 行的下一行写着「Windows 10.0.19045…: no ChaCha20-Poly1305 in Windows, using our own」。Windows 10 没有系统自带的 ChaCha20-Poly1305，之前一连接就报 PlatformNotSupportedException（用户 2026-10-14 反馈）；算法本身由 ChaChaPolyTests 覆盖（RFC 8439 向量、和 Windows 自带的逐字节对比），CI 只有 Windows Server 2025，所以要有人在 Windows 10 上实测一次。改了 `src/Protocol/ChaChaPoly.cs` 才需要重测
 
 ### 二、长时间游戏与网络
 
