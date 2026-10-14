@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, Heimkino: {1})",
   "临时接管": "Vorübergehend übernehmen",
   "先询问": "Erst fragen",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Wenn ein HomePod Heimkino-Lautsprecher eines Apple TV ist",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Wenn ein HomePod Heimkino-Lautsprecher eines Apple TV ist (experimentell)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Beim Verbinden wird der HomePod direkt vom Apple TV übernommen (beim automatischen Verbinden nach dem Start wie beim Klick auf \"Verbinden\"); was das Apple TV gerade abspielt, wird unterbrochen. Solange HomePodCast verbunden ist, kommt der Ton des Apple TV nicht aus diesem HomePod; nach dem Trennen verbindet sich das Apple TV beim nächsten Abspielen wieder mit ihm.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Beim Klick auf \"Verbinden\" wird zuerst gefragt; automatische Verbindungen warten, bis der HomePod frei ist, und das Apple TV bleibt meist mit ihm verbunden.",
   "分组": "Gruppe",
@@ -494,5 +494,16 @@
   "影院：{0} · {1} 声道 · {2:F1} 秒": "Kino: {0} · {1} Kanäle · {2:F1} Sekunden",
   "播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。": "Während der Wiedergabe gibt jeder Lautsprecher kurz einen Testton aus. Das Mikrofon misst vorübergehend relative Laufzeiten; Aufnahmen werden nicht gespeichert. Bei einem Fehler bleiben bisherige Einstellungen erhalten.",
   "系统默认": "Systemstandard",
-  "这里只播放文件音轨，不显示视频。": "Hier wird nur die Tonspur abgespielt, kein Video angezeigt."
+  "这里只播放文件音轨，不显示视频。": "Hier wird nur die Tonspur abgespielt, kein Video angezeigt.",
+  "夜间自动断开（实验性）": "Nachts trennen (experimentell)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Für Nächte, in denen die Bildschirme aus sind, der PC aber läuft: In den Stunden unten wird der HomePod getrennt, sobald Tastatur, Maus und Ton eine Weile ruhen, damit andere Geräte ihn nutzen können. Am Ende verbindet er sich wieder, wie die automatische Verbindung beim Start: Ein Gerät, das gerade abspielt, wird nie unterbrochen.",
+  "开始时间": "Beginn",
+  "结束时间": "Ende",
+  "时段": "Zeitraum",
+  "到": "bis",
+  "{0} 分钟": "{0} Min.",
+  "闲置多久后断开": "Trennen nach Inaktivität von",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "So lange keine Eingabe mit Tastatur oder Maus und kein Ton auf dem HomePod.",
+  "开始和结束时间相同，不会断开。": "Beginn und Ende sind gleich, daher wird nie getrennt.",
+  "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder"
 }

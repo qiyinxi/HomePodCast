@@ -214,6 +214,10 @@ public class UsageProfileTests
         [nameof(AppConfig.UpdateNotified)] = "updates",
         [nameof(AppConfig.LastOwnSession)] = "a record of this PC's last session",
         [nameof(AppConfig.HomeTheaterTakeover)] = "how the household's Apple TV and HomePod share, the same whatever the use",
+        [nameof(AppConfig.NightDisconnect)] = "the household's night, like the auto-connect at startup",
+        [nameof(AppConfig.NightDisconnectFrom)] = "the household's night",
+        [nameof(AppConfig.NightDisconnectUntil)] = "the household's night",
+        [nameof(AppConfig.NightDisconnectIdleMinutes)] = "the household's night",
         [nameof(AppConfig.AppSendVolumesOff)] = "where an app's own HomePod volume starts when turned on again; the levels in use are AppSendVolumes",
     };
 

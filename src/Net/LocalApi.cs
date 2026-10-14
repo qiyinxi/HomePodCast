@@ -16,7 +16,11 @@ public sealed class LocalApi : IDisposable
     public const int DefaultPort = 47100;
 
     private const int MaxHeadBytes = 8192;
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// How long a client gets to send its request head; then the connection closes without an answer. Tests allow
+    /// more: on a busy CI runner the 2 s ran out once before the test's own request was read (the v1.0.0 tag build).
+    /// </summary>
+    internal TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
     private readonly TcpListener _listener;
     private readonly Func<object> _status;

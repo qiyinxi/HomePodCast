@@ -3,7 +3,8 @@
   End-to-end test of the HomePodCast MSI: the msi-e2e job of .github/workflows/build.yml.
 
 .DESCRIPTION
-  Automates section 七「安装包（MSI）」 of docs/device-test-checklist.zh-CN.md on a throwaway CI runner:
+  Automates the installer checks of docs/device-test-checklist.zh-CN.md (listed under 「已自动化」 there) on a throwaway
+  CI runner:
     1. silent install into the default folder: the files, one Start menu shortcut, one entry in Programs and Features,
        and one firewall rule for exactly that exe, matching the rule the app adds itself (Firewall.RuleScript: inbound,
        allow, any protocol, Private profile, LocalSubnet). The installed exe's own startup check ("HomePodCast.exe
@@ -13,9 +14,12 @@
        seeded in %APPDATA%\HomePodCast (config.json, the log) are untouched;
     4. upgrades from published releases (gh release download; GH_TOKEN): afterwards one HomePodCast in Programs and
        Features, the new version, in the same folder, and still one correct firewall rule. The old and new installs use
-       different wizard languages (TRANSFORMS=:2052), which MajorUpgrade IgnoreLanguage must not mind. A release newer
-       than this build can't be upgraded from (branch and PR builds are MSI version 0.2.0.<run>): then this MSI must
-       refuse the downgrade with its message and leave the release installed;
+       different wizard languages (TRANSFORMS=:2052), which MajorUpgrade IgnoreLanguage must not mind. A branch or PR
+       build is MSI X.Y.Z.<run>, X.Y.Z being <Version> in src/HomePodCast.csproj, so it upgrades every release up to
+       X.Y.Z, X.Y.Z itself and its betas included: Windows Installer compares only three fields, and AllowSameVersionUpgrades
+       replaces the same version. A release newer than this build (a beta of the next version, seen from a build of main)
+       can't be upgraded from: then this MSI must refuse the downgrade with its message and leave the release installed.
+       Every build also tests that refusal against a copy of this MSI that says it is a later version;
     5. wizard languages: every culture of installer/build.ps1 is an embedded language transform, each one has its own
        finish-page text from installer/i18n, and the zh-CN one shows the wizard in Chinese (「启动 HomePodCast」 on the
        finish page), with the license page in English as expected.
@@ -25,13 +29,13 @@
   HomePodCast is not installed. -StaticOnly runs check 5 alone: it only reads the MSI and runs anywhere.
 
 .EXAMPLE
-  ./tools/ci/msi-e2e.ps1 -Msi publish/HomePodCast-0.2.0-local.1-x64.msi -StaticOnly
+  ./tools/ci/msi-e2e.ps1 -Msi publish/HomePodCast-1.0.0-local.1-x64.msi -StaticOnly
 #>
 param(
     [Parameter(Mandatory)] [string] $Msi,
-    # Releases to upgrade from; 'latest' is the newest published release (prereleases included).
-    # v0.2.0-beta.8 and v0.2.0 are MSI 0.2.0.x and 0.2.0, which even a branch or PR build (0.2.0.<run>) upgrades.
-    [string[]] $OldReleases = @('v0.2.0-beta.8', 'v0.2.0', 'v0.2.1', 'v0.2.2', 'latest'),
+    # Releases to upgrade from; 'latest' is the newest published release (prereleases included). v1.0.0-beta.6
+    # (MSI 1.0.0.x) and v1.0.0 (MSI 1.0.0) have the same three fields as a 1.0.0 build (MSI 1.0.0.<run>).
+    [string[]] $OldReleases = @('v0.2.0-beta.8', 'v0.2.0', 'v0.2.1', 'v0.2.2', 'v1.0.0-beta.6', 'v1.0.0', 'latest'),
     [string] $Repo = $(if ($env:GITHUB_REPOSITORY) { $env:GITHUB_REPOSITORY } else { 'qiyinxi/HomePodCast' }),
     [string] $WorkDir = (Join-Path $(if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }) 'msi-e2e'),
     [switch] $StaticOnly
@@ -539,6 +543,45 @@ function Get-ReleaseMsi([string] $tag) {
     [pscustomobject]@{ Tag = $tag; Path = $files[0].FullName }
 }
 
+# A copy of this build's MSI that says it is the next major version: another product (new product and package code) with
+# the same upgrade code and a higher ProductVersion, which is what a newer release looks like to this MSI. Branch and PR
+# builds have the csproj's version, so no published release is newer than them, and this is how they test the refusal.
+function New-NewerMsi([pscustomobject] $info) {
+    $version = "$($info.Version3.Major + 1).0.0"
+    $path = Join-Path $WorkDir "newer-$version.msi"
+    Copy-Item $info.Path $path -Force
+    $db = $summary = $null
+    try {
+        $db = $Installer.OpenDatabase($path, 1) # msiOpenDatabaseModeTransact
+        $set = [ordered]@{ ProductVersion = $version; ProductCode = [guid]::NewGuid().ToString('B').ToUpperInvariant() }
+        foreach ($name in $set.Keys) {
+            $view = $db.OpenView("UPDATE ``Property`` SET ``Value`` = '$($set[$name])' WHERE ``Property`` = '$name'")
+            try { [void]$view.Execute(); [void]$view.Close() } finally { Close-Com $view }
+        }
+        $summary = $db.SummaryInformation(1)
+        $summary.Property(9) = [guid]::NewGuid().ToString('B').ToUpperInvariant() # PID_REVNUMBER: the package code
+        [void]$summary.Persist()
+        [void]$db.Commit()
+    }
+    finally {
+        Close-Com $summary $db
+    }
+    $path
+}
+
+# A newer version is installed, and this MSI must refuse to replace it: exit code 1603 with its downgrade message, and
+# the newer version still installed as it was.
+function Test-RefusedDowngrade([pscustomobject] $newer, [string] $name) {
+    Invoke-Msiexec "install-$name" "/i `"$($newer.Path)`"" | Out-Null
+    Assert-Installed $newer $DefaultFolder 1033
+    $result = Invoke-Msiexec "downgrade-over-$name" "/i `"$Msi`"" -expect 1603
+    $message = (Get-WxlStrings 'en-US')['DowngradeError']
+    Check ([bool](Select-String -Path $result.Log -SimpleMatch $message -Quiet)) "refused with its message: '$message'"
+    Assert-Installed $newer $DefaultFolder 1033
+    Invoke-Msiexec "uninstall-$name" "/x $($newer.ProductCode)" | Out-Null
+    Assert-Uninstalled $New.UpgradeCode $DefaultFolder
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 Write-Section 'Setup'
@@ -584,6 +627,7 @@ foreach ($release in $OldReleases) {
     Check ($oldInfo.UpgradeCode -eq $New.UpgradeCode) "$($old.Tag) has the same upgrade code $($oldInfo.UpgradeCode)"
     Check ($oldInfo.ProductCode -ne $New.ProductCode) "$($old.Tag) is another product ($($oldInfo.ProductCode))"
 
+    # The same three fields (v1.0.0 under a 1.0.0.<run> build) are an upgrade too: AllowSameVersionUpgrades.
     if ($oldInfo.Version3 -le $New.Version3) {
         # Alternate the languages: old English -> new Chinese, then old Chinese -> new English, ...
         $newLanguage = if ($upgrades % 2 -eq 0) { 2052 } else { 1033 }
@@ -600,18 +644,16 @@ foreach ($release in $OldReleases) {
         Assert-Uninstalled $New.UpgradeCode $DefaultFolder
     }
     else {
-        Write-Host "  $($old.Tag) (MSI $($oldInfo.ProductVersion)) is newer than this build (MSI $($New.ProductVersion)): the upgrade from it is tested on builds of a later version (tags); here the MSI must refuse the downgrade"
-        Invoke-Msiexec "install-$($old.Tag)" "/i `"$($old.Path)`"" | Out-Null
-        Assert-Installed $oldInfo $DefaultFolder 1033
-        $result = Invoke-Msiexec "downgrade-over-$($old.Tag)" "/i `"$Msi`"" -expect 1603
-        $message = (Get-WxlStrings 'en-US')['DowngradeError']
-        Check ([bool](Select-String -Path $result.Log -SimpleMatch $message -Quiet)) "refused with its message: '$message'"
-        Assert-Installed $oldInfo $DefaultFolder 1033
-        Invoke-Msiexec "uninstall-$($old.Tag)" "/x $($oldInfo.ProductCode)" | Out-Null
-        Assert-Uninstalled $New.UpgradeCode $DefaultFolder
+        Write-Host "  $($old.Tag) (MSI $($oldInfo.ProductVersion)) is newer than this build (MSI $($New.ProductVersion)): the upgrade from it is tested on builds of its version or later; here the MSI must refuse the downgrade"
+        Test-RefusedDowngrade $oldInfo $old.Tag
     }
 }
 Check ($upgrades -gt 0) "$upgrades real upgrade(s) tested"
+
+$newer = Get-MsiInfo (New-NewerMsi $New)
+Write-Section "4. Downgrade refused (a copy of this MSI as version $($newer.ProductVersion))"
+Check ($newer.UpgradeCode -eq $New.UpgradeCode -and $newer.ProductCode -ne $New.ProductCode -and $newer.Version3 -gt $New.Version3) "the copy is product $($newer.ProductCode), MSI $($newer.ProductVersion), with the same upgrade code: a newer release as this MSI sees it"
+Test-RefusedDowngrade $newer "newer-$($newer.ProductVersion)"
 
 Write-Host ''
 Write-Host "All $($script:Passed.Count) checks passed."

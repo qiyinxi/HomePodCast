@@ -42,8 +42,9 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
   the extension) and `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact). The
   `release` job needs all of them; main requires them.
-- What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression and
-  one-time verifications. Mark items you automate there (「CI 自动测试：…」 or 「单元测试：…」).
+- What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression, one-time
+  verifications (each says which change makes it worth re-testing), experimental features, and a list of what is
+  already automated. When you automate an item, move it to that list with its CI job or test class.
 
 ## Conventions
 
@@ -52,11 +53,14 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   or unused one. No brackets that can wrap alone at a line start in CJK text.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
-- **Commits**: plain descriptive messages, no Co-Authored-By or other attribution lines.
+- **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
+  a blank line, then the details: GitHub names each CI run after the subject, and a whole paragraph there gets cut
+  off. No Co-Authored-By or other attribution lines.
 - **Branches**: `dev` is daily work. Other work goes on its own branch with a PR to `dev` (PR builds run CI). `main`
   changes only through the release PR made by `tools/release.ps1`; never push to it. Tags only through
   `tools/release.ps1`; a pushed tag is never moved or deleted. Details: `docs/RELEASING.md`.
-- **Releases**: any beta may be published without asking; a stable 1.0.0 or later needs the maintainer's OK.
+- **Releases**: don't ask before publishing a beta. Publish one whenever dev's CI is green and there is something
+  worth trying, and tell the maintainer afterwards. A stable 1.0.0 or later needs the maintainer's OK.
 - **Experimental features**: a feature first released in 1.Y.z is labelled experimental (UI, README, release notes)
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never

@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, cinema em casa: {1})",
   "临时接管": "Tomar temporariamente",
   "先询问": "Perguntar primeiro",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Quando um HomePod é a coluna de cinema em casa de uma Apple TV",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Quando um HomePod é a coluna de cinema em casa de uma Apple TV (experimental)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Ao ligar, o HomePod é tomado diretamente da Apple TV (tanto ao ligar automaticamente no arranque como ao clicar em \"Ligar\"), e o que a Apple TV estiver a reproduzir é interrompido. Enquanto o HomePodCast estiver ligado, o som da Apple TV não sai deste HomePod; depois de desligar, a Apple TV volta a ligar-se a ele da próxima vez que reproduzir algo.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Ao clicar em \"Ligar\", é perguntado primeiro; as ligações automáticas esperam até o HomePod ficar livre, e a Apple TV costuma ficar ligada a ele.",
   "分组": "Grupo",
@@ -494,5 +494,16 @@
   "影院：{0} · {1} 声道 · {2:F1} 秒": "Cinema: {0} · {1} canais · {2:F1} segundos",
   "播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。": "Durante a reprodução cada coluna emite um tom curto à vez. O microfone mede temporariamente os atrasos relativos; não guarda gravações. Se falhar, mantém as definições anteriores.",
   "系统默认": "Predefinição do sistema",
-  "这里只播放文件音轨，不显示视频。": "Reproduz apenas a faixa de áudio do ficheiro; não apresenta vídeo."
+  "这里只播放文件音轨，不显示视频。": "Reproduz apenas a faixa de áudio do ficheiro; não apresenta vídeo.",
+  "夜间自动断开（实验性）": "Desligar à noite (experimental)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Para quando os ecrãs estão desligados mas o PC continua ligado: no horário abaixo, o HomePod é desligado quando o teclado, o rato e o som ficam inativos durante algum tempo, para que outros dispositivos o possam usar. No fim do horário volta a ligar-se, como a ligação automática ao iniciar: nunca interrompe um dispositivo que esteja a reproduzir.",
+  "开始时间": "Início",
+  "结束时间": "Fim",
+  "时段": "Horário",
+  "到": "a",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Desligar após uma inatividade de",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Sem usar o teclado nem o rato e sem som no HomePod durante este tempo.",
+  "开始和结束时间相同，不会断开。": "O início e o fim são iguais, por isso nunca desliga.",
+  "夜间已自动断开，{0} 自动重新连接": "Desligado durante a noite; volta a ligar-se às {0}"
 }

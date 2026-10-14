@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, home theater: {1})",
   "临时接管": "Prendi temporaneamente",
   "先询问": "Chiedi prima",
-  "HomePod 当 Apple TV 家庭影院音箱时": "Quando un HomePod è l'altoparlante home theater di una Apple TV",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "Quando un HomePod è l'altoparlante home theater di una Apple TV (sperimentale)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Connettendosi, l'HomePod viene preso direttamente dall'Apple TV (sia alla connessione automatica all'avvio sia facendo clic su \"Connetti\"), interrompendo ciò che l'Apple TV sta riproducendo. Finché HomePodCast è connesso, l'audio dell'Apple TV non esce da questo HomePod; dopo la disconnessione, l'Apple TV si ricollega la prossima volta che riproduce qualcosa.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Facendo clic su \"Connetti\" viene chiesto prima; le connessioni automatiche aspettano che l'HomePod sia libero, e di solito l'Apple TV resta connessa.",
   "分组": "Gruppo",
@@ -494,5 +494,16 @@
   "影院：{0} · {1} 声道 · {2:F1} 秒": "Cinema: {0} · {1} canali · {2:F1} secondi",
   "播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。": "Durante la riproduzione ogni altoparlante emette un breve tono a turno. Il microfono misura temporaneamente i ritardi relativi; le registrazioni non vengono salvate. In caso di errore restano le impostazioni precedenti.",
   "系统默认": "Predefinito di sistema",
-  "这里只播放文件音轨，不显示视频。": "Riproduce solo la traccia audio del file, senza mostrare il video."
+  "这里只播放文件音轨，不显示视频。": "Riproduce solo la traccia audio del file, senza mostrare il video.",
+  "夜间自动断开（实验性）": "Disconnetti di notte (sperimentale)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Per quando gli schermi sono spenti ma il PC resta acceso: nella fascia oraria qui sotto, l'HomePod viene disconnesso quando tastiera, mouse e audio restano inattivi per un po', così altri dispositivi possono usarlo. Alla fine della fascia si riconnette, come la connessione automatica all'avvio: non interrompe mai un dispositivo che sta riproducendo.",
+  "开始时间": "Inizio",
+  "结束时间": "Fine",
+  "时段": "Fascia oraria",
+  "到": "a",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Disconnetti dopo un'inattività di",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Nessun uso di tastiera o mouse e nessun suono sull'HomePod per questo tempo.",
+  "开始和结束时间相同，不会断开。": "Inizio e fine coincidono, quindi non si disconnette mai.",
+  "夜间已自动断开，{0} 自动重新连接": "Disconnesso per la notte; si riconnette alle {0}"
 }

@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, hemmabio: {1})",
   "临时接管": "Ta över tillfälligt",
   "先询问": "Fråga först",
-  "HomePod 当 Apple TV 家庭影院音箱时": "När en HomePod är hemmabiohögtalare för en Apple TV",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "När en HomePod är hemmabiohögtalare för en Apple TV (experimentellt)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Vid anslutning tas HomePod direkt över från Apple TV (både vid automatisk anslutning vid start och när du klickar på \"Anslut\"), och det som Apple TV spelar avbryts. Medan HomePodCast är ansluten hörs inte ljudet från Apple TV i den här HomePod; när du har kopplat från ansluter Apple TV till den igen nästa gång den spelar upp något.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "När du klickar på \"Anslut\" får du en fråga först; automatiska anslutningar väntar tills HomePod är ledig, och Apple TV är oftast ansluten till den.",
   "分组": "Grupp",
@@ -494,5 +494,16 @@
   "影院：{0} · {1} 声道 · {2:F1} 秒": "Bio: {0} · {1} kanaler · {2:F1} sekunder",
   "播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。": "Under uppspelning ger varje högtalare en kort testton i turordning. Mikrofonen mäter tillfälligt relativa fördröjningar; inspelningar sparas inte. Misslyckad kalibrering behåller tidigare inställningar.",
   "系统默认": "Systemstandard",
-  "这里只播放文件音轨，不显示视频。": "Endast filens ljudspår spelas; video visas inte."
+  "这里只播放文件音轨，不显示视频。": "Endast filens ljudspår spelas; video visas inte.",
+  "夜间自动断开（实验性）": "Koppla från på natten (experimentellt)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "För när skärmarna är avstängda men datorn är på: under tiderna nedan kopplas HomePod från när tangentbord, mus och ljud har varit inaktiva en stund, så att andra enheter kan använda den. När tiden är slut ansluter den igen, som den automatiska anslutningen vid start: en enhet som spelar avbryts aldrig.",
+  "开始时间": "Starttid",
+  "结束时间": "Sluttid",
+  "时段": "Tider",
+  "到": "till",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Koppla från efter inaktivitet i",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen inmatning med tangentbord eller mus och inget ljud i HomePod under så lång tid.",
+  "开始和结束时间相同，不会断开。": "Start och slut är samma, så den kopplas aldrig från.",
+  "夜间已自动断开，{0} 自动重新连接": "Frånkopplad för natten; ansluter igen kl. {0}"
 }

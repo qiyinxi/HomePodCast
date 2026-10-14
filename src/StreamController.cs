@@ -97,7 +97,10 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     private readonly object _lifecycle = new();
 
-    public void Stop()
+    public void Stop() => Stop(L.T("未连接"));
+
+    /// <param name="statusText">What <see cref="StatusText"/> says afterwards (translated), e.g. why it was stopped.</param>
+    public void Stop(string statusText)
     {
         lock (_lifecycle)
         {
@@ -114,7 +117,7 @@ public sealed partial class StreamController : IDisposable
             TearDownGroup();
             DisposeCapture();
             _waitingForSpeaker = false;
-            Set(StreamState.Idle, L.T("未连接"));
+            Set(StreamState.Idle, statusText);
         }
     }
 

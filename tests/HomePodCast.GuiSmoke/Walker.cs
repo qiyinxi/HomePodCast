@@ -289,6 +289,13 @@ internal sealed class Walker
             Expect(Has(page, T("还没有选择音箱")), "设置", $"音箱信息 doesn't say 「{T("还没有选择音箱")}」");
         }
 
+        // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
+        // connection to the fake HomePod that the next steps check.
+        var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
+        Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
+            $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+
         // Updates on a fresh config: no automatic checks; the channel follows the build (a prerelease: 测试版).
         var auto = Find(page, n => n.Name == T("自动检查更新") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
         var autoState = auto == null ? null : Native.MsaaState(auto.Hwnd);

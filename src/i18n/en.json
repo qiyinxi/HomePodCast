@@ -433,7 +433,7 @@
   "{0}（Apple TV，家庭影院：{1}）": "{0} (Apple TV, home theater: {1})",
   "临时接管": "Take over temporarily",
   "先询问": "Ask first",
-  "HomePod 当 Apple TV 家庭影院音箱时": "When a HomePod is an Apple TV's home theater speaker",
+  "HomePod 当 Apple TV 家庭影院音箱时（实验性）": "When a HomePod is an Apple TV's home theater speaker (experimental)",
   "连接时直接从 Apple TV 接过 HomePod（启动时自动连接、点「连接」都一样），Apple TV 正在播放的声音会被打断。HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。": "Connecting takes the HomePod straight over from the Apple TV (both when connecting on startup and when you click \"Connect\"), cutting off anything the Apple TV is playing. While HomePodCast is connected, the Apple TV's sound doesn't come out of this HomePod; after you disconnect, the Apple TV reconnects to it the next time it plays.",
   "点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。": "Clicking \"Connect\" asks you first; automatic connections wait until the HomePod is free, and the Apple TV usually stays connected to it.",
   "分组": "Group",
@@ -494,5 +494,16 @@
   "影院：{0} · {1} 声道 · {2:F1} 秒": "Cinema: {0} · {1} channels · {2:F1} seconds",
   "播放后可测量：每台音箱依次发出短测试音，麦克风临时测量相对延迟；不保存录音。校准失败会保留原来的设置。": "While playing, each speaker emits a short test chirp. The microphone temporarily measures relative arrival delays; recordings are not saved. Failed calibration keeps previous settings.",
   "系统默认": "System default",
-  "这里只播放文件音轨，不显示视频。": "This plays the file audio track only; video is not displayed."
+  "这里只播放文件音轨，不显示视频。": "This plays the file audio track only; video is not displayed.",
+  "夜间自动断开（实验性）": "Disconnect at night (experimental)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "For when the screens are off but the PC stays on: during the hours below, the HomePod is disconnected once the keyboard, mouse and sound have all been idle for a while, so other devices can use it. When the hours end it connects again, like the auto-connect at startup: it never cuts off a device that is playing.",
+  "开始时间": "Start time",
+  "结束时间": "End time",
+  "时段": "Hours",
+  "到": "to",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Disconnect after idle for",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "No keyboard or mouse input and no sound on the HomePod for this long.",
+  "开始和结束时间相同，不会断开。": "Start and end are the same, so it never disconnects.",
+  "夜间已自动断开，{0} 自动重新连接": "Disconnected for the night; connects again at {0}"
 }
