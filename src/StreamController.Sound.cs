@@ -52,6 +52,7 @@ public sealed partial class StreamController
     {
         VolumeCapPercent = Math.Clamp(capPercent, 0, 100);
         if (_client is { } client) client.VolumeCapPercent = VolumeCapPercent;
+        if (_raopClient is { } raop) raop.VolumeCapPercent = VolumeCapPercent;
         var group = _groupRunner?.Current;
         if (group != null)
             foreach (var m in group.Members)
@@ -96,6 +97,7 @@ public sealed partial class StreamController
                     try
                     {
                         if (_groupRunner?.Current is { } group) group.SetVolumePercent(capped); // linked, plus per-speaker offsets
+                        else if (_raopClient is { } raop) raop.SetVolume(capped);
                         else _client?.SetVolumePercent(capped);
                     }
                     catch (Exception ex) { Log.Warn($"set volume: {ex.Message}"); }

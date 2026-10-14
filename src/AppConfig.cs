@@ -10,6 +10,8 @@ public sealed class AppConfig
     public string? DeviceName { get; set; }
     public string? Host { get; set; }
     public List<Net.ManualAirPlayDevice> ManualDevices { get; set; } = [];
+    public Dictionary<string, Net.ReceiverPreferences> ReceiverSettings { get; set; } = [];
+    public Dictionary<string, string> RaopPasswordsProtected { get; set; } = [];
     public int LatencyMs { get; set; } = 120;
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;

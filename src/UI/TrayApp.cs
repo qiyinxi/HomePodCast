@@ -71,6 +71,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
+        InitRaop();
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
         InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
 
@@ -199,6 +200,8 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.DeviceId = device.DeviceId;
         Config.DeviceName = device.Name;
         Config.Host = device.Address.ToString();
+        if (StreamController.UsesRaop(device))
+            Config.ReceiverSettings[RaopPassword.Key(device.DeviceId)] = ReceiverPreferences.Of(device);
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
         if (_wantConnected) Connect(ConnectTrigger.Automatic); // another speaker: never taken over without a click

@@ -54,6 +54,11 @@ public sealed partial class StreamController
         lock (_lifecycle)
         {
             Stop();
+            if (plan.Members.Any(m => UsesRaop(ReceiverLookup?.Invoke(m.DeviceId))))
+            {
+                Set(StreamState.Idle, L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"));
+                return;
+            }
             var cts = new CancellationTokenSource();
             Volatile.Write(ref _groupSource, source); // Stop disposes it (TearDownGroup)
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source);

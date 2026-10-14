@@ -40,8 +40,9 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   speaker and make no sound. Every change keeps them green, and new behaviour gets a test.
 - CI (`.github/workflows/build.yml`, every push and PR to dev/main/release) also runs, on its own runners:
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
-  the extension) and `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact). The
-  `release` job needs all of them; main requires them.
+  the extension), `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact) and
+  `airplay-compat-e2e` (third-party AirPlay: a shairport-sync receiver on Linux). The `release` job needs all of them; main requires
+  them.
 - What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression, one-time
   verifications (each says which change makes it worth re-testing), experimental features, and a list of what is
   already automated. When you automate an item, move it to that list with its CI job or test class.
@@ -65,6 +66,44 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never
   tested on real hardware (stereo pairs, multi-room, Apple TV pairing) stay until it has been.
+
+## Working alongside the other agent
+
+Claude and Codex both follow this file (CLAUDE.md only imports it), often on the same day, and they can't talk to each
+other: what they share is git, GitHub and the maintainer. 2026-10-14: #22 (Codex) and #30 (Claude) built the same
+feature, and #30 conflicted with #27, which was merged into dev while #30 was in review. These rules keep that rare.
+
+- **Your prefix, your branches.** Claude's branches start with `claude/`, Codex's with `codex/`. Commit and push only
+  to your own, never to the other agent's branch, not even a merge or a one-line fix. A problem in the other agent's
+  open PR goes in a review comment on that PR, or to the maintainer.
+- **Your worktrees.** Claude works in `.claude/worktrees/<name>`, Codex in `.worktrees/<name>` or its own worktree
+  folder. Don't edit, build, commit in or remove a worktree the other agent made. Remove your own
+  (`git worktree remove`) once its PR is merged or closed. The main checkout stays on `dev` (hard rules above).
+- **Look before you start.** Run `git fetch` and `gh pr list --state open` first. If an open PR or a fresh branch of the
+  other agent covers the same feature or the same files, don't start a parallel one: tell the maintainer, and build
+  on it only if they say so.
+- **Claim with a draft PR.** Push the branch and open a draft PR to `dev` with your first commit. Its description
+  gives the scope and the files it will change, so the other agent can see the area is taken. Mark it ready for review
+  when CI is green.
+- **Superseding** another agent's PR needs the maintainer's OK. The new PR then says `Supersedes #N` and what it keeps
+  and changes, and the old PR gets a comment linking to it. Closing the old PR is left to the maintainer.
+- **Stay close to dev.** Keep PRs small and merge them within a day or two. When `dev` moves, merge `origin/dev` into
+  your branch: never rebase a pushed branch, never force-push. Resolve each conflict so that both sides' intent
+  survives. If that needs a product decision, ask the maintainer. These files conflict most:
+  - `.github/workflows/build.yml`: every new job also goes into the `release` job's `needs`.
+  - `src/i18n/*.json`
+  - `src/Program.cs` (its commands)
+  - `src/UI/Pages/SettingsPage.cs`
+  - the READMEs, `docs/device-test-checklist.zh-CN.md` and this file
+- **Merging.** The author merges its own PR into `dev` once CI is green on a branch that is up to date with dev. Merge
+  the other agent's PR only when the maintainer asks.
+- **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
+  and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
+- **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
+  `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order. Progress goes in
+  the PRs, not in the plan.
+- **Real speakers, one agent at a time.** Only the agent the maintainer asked, in its own session, talks to the HomePod
+  or any other speaker, even with `stream --silent`. Subagents never do; their tests stay with the in-process fakes.
 
 ## Where things are
 

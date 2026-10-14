@@ -86,7 +86,10 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
+                var receiver = ReceiverLookup?.Invoke(deviceId);
+                _loop = UsesRaop(receiver)
+                    ? Task.Run(() => RunRaopAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
+                    : Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
             }
         }
     }
@@ -354,6 +357,7 @@ public sealed partial class StreamController : IDisposable
     {
         var client = Interlocked.Exchange(ref _client, null);
         client?.Dispose();
+        Interlocked.Exchange(ref _raopClient, null)?.Dispose();
     }
 
     private void Set(StreamState state, string text)

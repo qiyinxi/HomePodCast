@@ -306,6 +306,7 @@
   "上次检查：{0}": "Last checked: {0}",
   "正在检查更新…": "Checking for updates…",
   "检查失败，请稍后再试（详情见日志）": "Couldn't check for updates. Try again later (details in the log)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET has been updated. Restart HomePodCast and try again.",
   "已是最新版本": "HomePodCast is up to date",
   "发现新版本 {0}": "New version available: {0}",
   "发现新版本 {0}。点这里查看。": "New version available: {0}. Click here to see it.",
@@ -546,5 +547,14 @@
   "添加": "Add",
   "填写接收端的 IP 地址和端口；只读取设备信息。": "Enter the receiver's IP address and port; only device information is read.",
   "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Enter a valid IPv4 address and a port between 1 and 65535.",
-  "发现不到设备时，填写 IP 地址和端口。": "If discovery cannot find the receiver, enter its IP address and port."
+  "发现不到设备时，填写 IP 地址和端口。": "If discovery cannot find the receiver, enter its IP address and port.",
+  "这台 AirPlay 设备需要密码。": "This AirPlay receiver requires a password.",
+  "这台 AirPlay 设备正在被其他发送端使用。": "Another sender is using this AirPlay receiver.",
+  "这台设备要求 Apple 的加密，HomePodCast 不支持。": "This receiver requires Apple encryption that HomePodCast does not support.",
+  "正在连接 AirPlay 1 兼容模式（实验性）…": "Connecting in AirPlay 1 compatibility mode (experimental)…",
+  "{0} · AirPlay 1 兼容模式（实验性）": "{0} · AirPlay 1 compatibility mode (experimental)",
+  "AirPlay 密码": "AirPlay password",
+  "AirPlay 设备密码（实验性）": "AirPlay receiver password (experimental)",
+  "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Enter the AirPlay password for “{0}”. It is stored encrypted only on this PC.",
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1 compatibility receivers cannot join multi-speaker groups."
 }

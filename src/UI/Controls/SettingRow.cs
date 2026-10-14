@@ -42,11 +42,16 @@ internal sealed class SettingRow : Card
         if (Content != null && !IsCollapsed(Content))
         {
             contentW = ContentWidth > 0 ? Dp(ContentWidth) : WidthFor(Content);
-            contentH = HeightFor(Content, contentW);
         }
         int textW = right - x - (contentW > 0 ? contentW + Dp(16) : 0);
-        bool stacked = contentW > 0 && textW < Dp(180);
-        if (stacked) textW = right - x;
+        // Keep descriptions readable in compact windows instead of squeezing them beside a wide picker.
+        bool stacked = contentW > 0 && textW < Dp(240);
+        if (stacked)
+        {
+            textW = right - x;
+            contentW = Math.Max(0, Math.Min(contentW, textW));
+        }
+        if (Content != null) contentH = HeightFor(Content, contentW);
 
         int titleH = HeightFor(TitleText, textW);
         int descH = HeightFor(DescriptionText, textW);
