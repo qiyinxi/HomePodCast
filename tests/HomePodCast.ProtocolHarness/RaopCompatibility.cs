@@ -7,8 +7,14 @@ namespace HomePodCast.ProtocolHarness;
 
 internal static class RaopCompatibility
 {
+    private const int WarmupFrames = 44100 / 4;
+
     internal static short Signal(long frame, int channel)
     {
+        // 2026-10-14: shairport-sync's player replaces the first nine packets after RECORD/FLUSH with silence.
+        // Put the diagnostic marker after that deliberate startup mute; compare every subsequent source frame.
+        if (frame < WarmupFrames) return 0;
+        frame -= WarmupFrames;
         short left;
         if (frame < 256) left = (short)(frame * 997 % 50000 - 25000); // unique stereo alignment marker
         else
@@ -28,8 +34,8 @@ internal static class RaopCompatibility
         var marker = new byte[128 * 4];
         for (int i = 0; i < 128; i++)
         {
-            BinaryPrimitives.WriteInt16LittleEndian(marker.AsSpan(i * 4), Signal(i, 0));
-            BinaryPrimitives.WriteInt16LittleEndian(marker.AsSpan(i * 4 + 2), Signal(i, 1));
+            BinaryPrimitives.WriteInt16LittleEndian(marker.AsSpan(i * 4), Signal(i + WarmupFrames, 0));
+            BinaryPrimitives.WriteInt16LittleEndian(marker.AsSpan(i * 4 + 2), Signal(i + WarmupFrames, 1));
         }
         using var collecting = new CancellationTokenSource();
         var read = Task.Run(async () =>
@@ -68,14 +74,14 @@ internal static class RaopCompatibility
         try { await read; } catch (OperationCanceledException) { }
         Console.WriteLine($"RAOP diagnostic: sent={client.PacketsSent}, timing={client.TimingRequests}, decodedBytes={received.Count}, marker={markerOffset}");
         if (markerOffset < 0 || markerOffset % 4 != 0) throw new Exception("Decoded PCM has no aligned marker");
-        double actualLatency = MediaClock.ToMs(markerTime - client.StartedAt);
+        double actualLatency = MediaClock.ToMs(markerTime - client.StartedAt) - WarmupFrames * 1000.0 / 44100;
         if (Math.Abs(actualLatency - latency) > 50) throw new Exception($"Latency {actualLatency:F1} ms, expected {latency} ±50 ms");
         int frames = Math.Min((received.Count - markerOffset) / 4, 6 * 44100);
         if (frames < 4 * 44100) throw new Exception($"Only {frames} decoded frames");
         var decoded = received.ToArray();
         for (int i = 0; i < frames; i++)
             for (int channel = 0; channel < 2; channel++)
-                if (BinaryPrimitives.ReadInt16LittleEndian(decoded.AsSpan(markerOffset + i * 4 + channel * 2)) != Signal(i, channel))
+                if (BinaryPrimitives.ReadInt16LittleEndian(decoded.AsSpan(markerOffset + i * 4 + channel * 2)) != Signal(i + WarmupFrames, channel))
                     throw new Exception($"PCM mismatch/gap at frame {i}, channel {channel}");
         Console.WriteLine($"PASS: et={encryption}, password={password != "-"}, {frames} sample-exact frames, latency={actualLatency:F1} ms");
     }
