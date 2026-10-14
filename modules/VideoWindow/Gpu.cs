@@ -158,6 +158,9 @@ internal sealed unsafe class Gpu : IDisposable
         ((delegate* unmanaged[Stdcall]<nint, nint, float*, void>)Method(_context, 50))(_context, target, black);
     }
 
+    /// <summary>Submits the queued commands; also lets released views and textures actually go (deferred destruction).</summary>
+    public void Flush() => ((delegate* unmanaged[Stdcall]<nint, void>)Method(_context, 111))(_context);
+
     /// <summary>Waits until the GPU has done everything submitted so far (an event query).</summary>
     public void Finish()
     {

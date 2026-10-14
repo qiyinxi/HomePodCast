@@ -162,6 +162,7 @@ internal sealed unsafe class Presenter : IDisposable
     private void Resize(int width, int height)
     {
         Gpu.Release(ref _target); Gpu.Release(ref _backBuffer);
+        _gpu.Flush(); // ResizeBuffers fails while a released view of a buffer still waits for deferred destruction
         Gpu.Check(((delegate* unmanaged[Stdcall]<nint, uint, uint, uint, uint, uint, int>)Gpu.Method(_swapChain, 13)) // ResizeBuffers
             (_swapChain, 0, (uint)width, (uint)height, 0, FrameLatencyWaitable));
         (_width, _height) = (width, height);
