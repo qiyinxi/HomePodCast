@@ -59,7 +59,7 @@ internal sealed class ViewerForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = Title;
-        ClientSize = new Size(1100, 700); MinimumSize = new Size(640, 400);
+        ClientSize = new Size(960, 600); MinimumSize = new Size(640, 400);
         Font = new Font(L.FontName, 10); StartPosition = FormStartPosition.CenterScreen; KeyPreview = true;
         var choose = Button(L.T("选择窗口…"), async () => await ChooseAsync());
         var stop = Button(L.T("停止采集"), () => StopCapture());
@@ -112,6 +112,13 @@ internal sealed class ViewerForm : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        // Within the screen also at 150 % or more on a small one.
+        var area = Screen.FromControl(this).WorkingArea;
+        if (Width > area.Width || Height > area.Height)
+        {
+            Size = new Size(Math.Min(Width, area.Width), Math.Min(Height, area.Height));
+            Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+        }
         CreatePresenter();
         // The swap chain belongs to the surface's window: should WinForms ever recreate it, the presenter goes with it.
         _surface.HandleDestroyed += (_, _) => { if (!_closing) { _presenter?.Dispose(); _presenter = null; } };
