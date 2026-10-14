@@ -167,13 +167,13 @@ internal sealed class SpeakerInfoPanel : StackPanel
 
         public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming, IReadOnlyList<AirPlayDevice> scan)
         {
-            var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info);
+            var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info, speaker.Model);
             _name.Text = d.Name;
             (_state.Text, _state.Role) = ReadState(entry);
             Set(_model, d.ModelText);
-            var discovered = scan.FirstOrDefault(x => GroupPlan.Key(x.DeviceId) == GroupPlan.Key(speaker.DeviceId));
+            // The selection's services: the scan's, or, offline, the saved preferences' (SpeakerSelection).
             var receiverKind = ReceiverKinds.Classify(d.Model ?? "", speaker.Txt,
-                airPlay: discovered?.HasAirPlay ?? true, raop: discovered?.RaopPort != null, info: entry?.Info);
+                airPlay: speaker.HasAirPlay, raop: speaker.RaopPort != null, info: entry?.Info);
             Set(_kind, receiverKind == ReceiverKind.HomePod ? "HomePod" : ReceiverKinds.Label(receiverKind));
             var txt = TxtRecord.FromInfo(entry?.Info) ?? speaker.Txt;
             var holder = HomeTheater.IsAppleTvModel(d.Model) ? null : HomeTheater.HolderOf(GroupMembership.FromTxt(txt), scan);
