@@ -354,19 +354,24 @@ internal abstract class LayoutPanel : Panel
     }
 
     /// <summary>Measure and position everything again, from the outermost layout container up from <paramref name="from"/>.</summary>
-    public static void Relayout(Control? from)
+    public static void Relayout(Control? from) => RootOf(from)?.PerformLayout();
+
+    /// <summary>
+    /// <see cref="BatchLayout"/> for the page (or dialog) <paramref name="from"/> is on: changes that each ask for a
+    /// <see cref="Relayout"/> (texts, collapsed lines) get one layout of the page at the end.
+    /// </summary>
+    public static IDisposable BatchRelayout(Control from) => BatchLayout(RootOf(from) ?? from);
+
+    /// <summary>The outermost layout container up from <paramref name="from"/>: its page, dialog or window.</summary>
+    private static Control? RootOf(Control? from)
     {
         Control? root = null;
         for (var c = from; c != null; c = c.Parent)
         {
-            if (c is ScrollPage or ILayoutRoot)
-            {
-                root = c;
-                break;
-            }
+            if (c is ScrollPage or ILayoutRoot) return c;
             if (c is LayoutPanel) root = c;
         }
-        root?.PerformLayout();
+        return root;
     }
 }
 

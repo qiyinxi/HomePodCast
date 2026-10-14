@@ -92,8 +92,13 @@ internal sealed class SpeakerInfoPanel : StackPanel
         catch (InvalidOperationException) { } // the handle went away meanwhile
     }
 
+    /// <summary>
+    /// One layout of the page for all of it: a read that finishes shows here while nothing else holds the layout, and each
+    /// text or line that changes asked for one of its own (several layouts of 设置 per read).
+    /// </summary>
     private void ShowAll(List<SelectedSpeaker> speakers)
     {
+        using var layout = BatchRelayout(this);
         _none.Text = speakers.Count == 0 ? L.T("还没有选择音箱") : "";
         var keys = speakers.Select(s => SpeakerInfoCache.Key(s.DeviceId)).ToList();
         foreach (var gone in _byKey.Keys.Except(keys).ToList())
@@ -114,7 +119,6 @@ internal sealed class SpeakerInfoPanel : StackPanel
             card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming, scan);
         }
         _processing.Text = _processingMs() is { } ms ? L.F("上次连接时的音箱处理时间：{0} ms", ms) : "";
-        Relayout(this);
     }
 
     protected override void Dispose(bool disposing)
@@ -185,8 +189,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _lines.Show(_macNote, d.WifiMac != null);
             // A Bluetooth privacy address: three different ones were read from the same HomePod on 2026-10-11.
             Set(_bluetooth, d.BluetoothAddress is { } bluetooth ? L.F("{0}（会定期变化）", bluetooth) : null);
-            Set(_deviceId, d.DeviceId);
-            Relayout(this);
+            Set(_deviceId, d.DeviceId); // the lines shown changed: ShowAll lays the page out
         }
 
         /// <summary>A value that wraps in a narrow window (the status line is long in some languages).</summary>
