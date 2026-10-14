@@ -159,6 +159,11 @@
 
 这些功能在程序、README 和发布说明里标着「实验性」，因为还没在真实设备上测过；这种标注不随次版本号去掉，要等下面对应的部分实机测过、没有问题（`docs/RELEASING.md` 的「实验性功能」）。
 
+#### 第三方 AirPlay 设备
+
+- [x] 极米 Z6X 投影仪（乐播 SDK，`rhd=5.6.0.0`，自称 AppleTV3,2，`et=0,3,5`）：**不支持**。它只在 Apple 的 FairPlay 加密下才建立音频会话，不加密、RSA、TCP、PCM、AirPlay 2 式 SETUP、HomeKit 配对都只回空的 200 OK，`fp-setup` 回 FairPlay 的 142 字节应答；HomePodCast 做不了 FairPlay。现在连接时直接提示「这台设备要求 Apple 的加密，HomePodCast 不支持。」，不再重试（Claude 2026-10-14 只握手、不发音频地实测；RaopTests 覆盖）。改了 `src/Net/RaopClient.cs` 的 SETUP 处理才需要重看
+- [ ] 其他第三方 AirPlay 1 / AirPlay 2 设备：连不上时请用户发日志里「RAOP SETUP reply」那一行和 `HomePodCast.exe scan --txt` 的输出
+
 #### Apple TV：PIN 配对与推流（第 7 代，接上后再测）
 
 Apple TV 不接受 HomePod 用的瞬时配对（对它回 470），要先在电视上配对一次：程序生成自己的身份，Apple TV 记住这台电脑；以后每次连接只做 pair-verify，不再显示数字。配对信息存在 `%APPDATA%\HomePodCast\pairings.dat`（DPAPI 加密，只有这个 Windows 用户在这台电脑上能读）。Apple TV 的家庭影院扬声器是 HomePod，所以声音会从 HomePod 出来：**测试前先在首页把音量调到 25% 以下**。本节各项：改了 `src/Protocol/HapPairing.cs`、`src/Protocol/Srp.cs`、`src/Net/Pairing.cs`、`src/Net/PairingStore.cs`、`src/StreamController.Pairing.cs`、`src/UI/PairingDialog.cs` 或 `src/UI/Pages/PairingsPanel.cs` 才需要重测。
