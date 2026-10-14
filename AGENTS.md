@@ -51,7 +51,8 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 
 - **UI text** is written in Simplified Chinese in the code (`L.T("…")`, `L.F("…{0}", …)`) and translated in all 14
   tables in `src/i18n/*.json`. Add, rename or remove the entry in every table: `LocalizationTests` fails on a missing
-  or unused one. No brackets that can wrap alone at a line start in CJK text.
+  one and lists unused ones in its output (it doesn't fail on those), so remove a text's entries with the text. No
+  brackets that can wrap alone at a line start in CJK text.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
 - **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),

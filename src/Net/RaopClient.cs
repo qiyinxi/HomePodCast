@@ -20,6 +20,13 @@ public sealed record RaopOptions
     public RaopPcmReader? ReadAudio { get; init; }
     public Action<string>? Log { get; init; }
     internal RSA? RsaPublicKey { get; init; }
+
+    /// <summary>
+    /// How long Dispose waits for FLUSH and TEARDOWN before it closes the connection. Tests give more: 2026-10-14, on
+    /// a busy CI runner the 500 ms ran out mid-exchange twice, and the fake receiver saw the connection aborted instead
+    /// of TEARDOWN.
+    /// </summary>
+    internal TimeSpan EndTimeout { get; init; } = TimeSpan.FromMilliseconds(500);
 }
 
 public sealed class RaopPasswordRequiredException() : AirPlayException(L.T("这台 AirPlay 设备需要密码。"));
@@ -334,7 +341,7 @@ public sealed class RaopClient : IDisposable
                 try { Request("FLUSH", extra: [new("RTP-Info", $"seq={unchecked((ushort)(_firstSeq + PacketsSent))};rtptime={unchecked(_rtpBase + (uint)(PacketsSent * RaopAudio.FramesPerPacket))}")]); } catch { }
                 try { Request("TEARDOWN"); } catch { }
             });
-            try { end.Wait(TimeSpan.FromMilliseconds(500)); } catch (AggregateException) { }
+            try { end.Wait(_options.EndTimeout); } catch (AggregateException) { }
         }
         _rtsp.Dispose();
         bool ended = false;

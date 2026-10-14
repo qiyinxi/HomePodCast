@@ -45,9 +45,26 @@ internal static class UpdateFlow
     {
         var parts = new List<string>();
         for (var e = ex; e != null && parts.Count < 5; e = e.InnerException)
-            parts.Add($"{e.GetType().Name}: {(string.IsNullOrWhiteSpace(e.Message) ? "(no message)" : e.Message)}");
+        {
+            var text = $"{e.GetType().Name}: {(string.IsNullOrWhiteSpace(e.Message) ? "(no message)" : e.Message)}";
+            // That was it on 2026-10-14: System.Net.Http could not be loaded (AppEnvironment.RuntimeRemoved).
+            string? file = e switch { FileNotFoundException f => f.FileName, FileLoadException f => f.FileName, _ => null };
+            if (file != null && !e.Message.Contains(file, StringComparison.Ordinal)) text += $" [{file}]";
+            parts.Add(text);
+        }
         return string.Join(" ← ", parts);
     }
+
+    /// <summary>
+    /// The log line's end and the status text for a check or download that failed: when the .NET runtime this copy
+    /// started on has been uninstalled since (<see cref="AppEnvironment.RuntimeRemoved"/>), only a restart helps, and
+    /// trying again later does not.
+    /// </summary>
+    internal static (string LogNote, string? Status) RuntimeNote(bool runtimeRemoved, string runtimeFolder) =>
+        runtimeRemoved
+            ? ($"; the .NET runtime this copy started on ({runtimeFolder.TrimEnd('\\', '/')}) has been removed by a .NET update since: restart HomePodCast",
+                L.T(".NET 已更新，请重启 HomePodCast 后再试"))
+            : ("", null);
 
     /// <summary>What 「更新」 does with <paramref name="release"/> in an MSI install or a portable copy.</summary>
     public static InstallRoute Route(Release release, bool msiInstall) =>
