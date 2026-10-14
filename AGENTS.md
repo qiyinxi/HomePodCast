@@ -88,8 +88,10 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
     `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
   - **Bugs first, and without waiting** (the maintainer, 2026-10-15). A bug is something broken: a regression, a crash
-    or a CI failure. The agent that finds or is told about one fixes it right away, unless the maintainer says not
-    to. Put it on the board as well: yourself as 负责人, status 进行中.
+    or a CI failure. Bugs are Claude's, whoever's code they are in. Claude fixes them right away, unless the
+    maintainer says not to, and puts them on the board with Claude as 负责人 and the status 进行中.
+  - Codex adds the bugs it finds to the board, with 负责人 Claude, and doesn't fix them, unless the maintainer assigns
+    one to Codex. Codex still keeps its own open PRs green.
   - **Requirements wait for the maintainer.** A requirement is a new feature, a change of behaviour or an idea. It goes
     on the board first, with no 负责人 and the status 待办. Then ask the maintainer whether Claude or Codex does it,
     and start nothing (no subagents either) until they have assigned it. Work the maintainer asked for in your own
