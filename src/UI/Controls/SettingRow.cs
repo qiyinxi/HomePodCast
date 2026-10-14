@@ -42,11 +42,17 @@ internal sealed class SettingRow : Card
         if (Content != null && !IsCollapsed(Content))
         {
             contentW = ContentWidth > 0 ? Dp(ContentWidth) : WidthFor(Content);
-            contentH = HeightFor(Content, contentW);
         }
         int textW = right - x - (contentW > 0 ? contentW + Dp(16) : 0);
-        bool stacked = contentW > 0 && textW < Dp(180);
-        if (stacked) textW = right - x;
+        // Keep descriptions readable in compact windows instead of squeezing them beside a wide picker.
+        bool stacked = contentW > 0 && textW < Dp(240);
+        if (stacked)
+        {
+            textW = right - x;
+            contentW = Math.Max(0, Math.Min(contentW, textW));
+        }
+        // Under the text the content gets at most the text's width, and its height there (a row of buttons that wraps).
+        if (Content != null && !IsCollapsed(Content)) contentH = HeightFor(Content, contentW);
 
         int titleH = HeightFor(TitleText, textW);
         int descH = HeightFor(DescriptionText, textW);
@@ -60,7 +66,7 @@ internal sealed class SettingRow : Card
             {
                 Place(TitleText, x, top, textW, titleH);
                 Place(DescriptionText, x, top + titleH + Dp(2), textW, descH);
-                Place(Content!, x, y, Math.Min(contentW, right - x), contentH);
+                Place(Content!, x, y, contentW, contentH);
                 _icon?.SetBounds(left, top, iconSize, Math.Max(iconSize, titleH));
             }
             height = y + contentH + Dp(Padding.Bottom);

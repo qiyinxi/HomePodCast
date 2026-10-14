@@ -4,7 +4,7 @@
   .github/workflows/build.yml).
 
 .DESCRIPTION
-  Does what docs/device-test-checklist.zh-CN.md section 11 (Microsoft Store) asks a person to do, as far as it goes
+  Does what docs/device-test-checklist.zh-CN.md (its Microsoft Store section) asks a person to do, as far as it goes
   without a person, a speaker or a microphone:
     1. Install: signs a copy of the unsigned package with a throwaway self-signed certificate whose subject is the
        manifest's Publisher (trusted in LocalMachine\TrustedPeople) and installs that copy with Add-AppxPackage. The

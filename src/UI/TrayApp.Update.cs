@@ -173,8 +173,9 @@ internal sealed partial class TrayApp
         catch (Exception ex)
         {
             // Offline, rate limited, GitHub down: one line, and only a manual check says so.
-            Log.Warn($"update: check failed: {ex.Message}");
-            if (!automatic && !_quitting) SetUpdateStatus(L.T("检查失败，请稍后再试（详情见日志）"), TextRole.Critical);
+            var (note, status) = UpdateFlow.RuntimeNote(AppEnvironment.RuntimeRemoved, AppEnvironment.RuntimeFolder);
+            Log.Warn($"update: check failed: {UpdateFlow.Describe(ex)}{note}");
+            if (!automatic && !_quitting) SetUpdateStatus(status ?? L.T("检查失败，请稍后再试（详情见日志）"), TextRole.Critical);
         }
         finally
         {
@@ -372,9 +373,10 @@ internal sealed partial class TrayApp
         }
         catch (Exception ex)
         {
-            Log.Warn($"update: download or start of the installer failed: {ex.Message}");
+            var (note, status) = UpdateFlow.RuntimeNote(AppEnvironment.RuntimeRemoved, AppEnvironment.RuntimeFolder);
+            Log.Warn($"update: download or start of the installer failed: {UpdateFlow.Describe(ex)}{note}");
             UpdatePackage.TryDelete(folder);
-            SetUpdateStatus(L.T("下载或启动安装失败，请稍后再试，或在发布页手动下载。"), TextRole.Critical);
+            SetUpdateStatus(status ?? L.T("下载或启动安装失败，请稍后再试，或在发布页手动下载。"), TextRole.Critical);
         }
         finally
         {

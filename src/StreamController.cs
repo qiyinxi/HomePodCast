@@ -86,7 +86,12 @@ public sealed partial class StreamController : IDisposable
             lock (_lock)
             {
                 _run = cts;
-                _loop = Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
+                var receiver = ReceiverLookup?.Invoke(deviceId);
+                _loop = UsesThirdPartyPath(receiver)
+                    ? Task.Run(() => RunThirdPartyAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
+                    : UsesRaop(receiver)
+                        ? Task.Run(() => RunRaopAsync(receiver!, volume, volumeAsOf, trigger, cts.Token))
+                        : Task.Run(() => RunAsync(deviceId, host, latencyMs, volume, volumeAsOf, trigger, takenFrom, cts.Token));
             }
         }
     }
@@ -97,7 +102,10 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     private readonly object _lifecycle = new();
 
-    public void Stop()
+    public void Stop() => Stop(L.T("未连接"));
+
+    /// <param name="statusText">What <see cref="StatusText"/> says afterwards (translated), e.g. why it was stopped.</param>
+    public void Stop(string statusText)
     {
         lock (_lifecycle)
         {
@@ -114,7 +122,8 @@ public sealed partial class StreamController : IDisposable
             TearDownGroup();
             DisposeCapture();
             _waitingForSpeaker = false;
-            Set(StreamState.Idle, L.T("未连接"));
+            MeasurementCapPercent = null; // a measurement never outlives its stream
+            Set(StreamState.Idle, statusText);
         }
     }
 
@@ -350,6 +359,8 @@ public sealed partial class StreamController : IDisposable
     {
         var client = Interlocked.Exchange(ref _client, null);
         client?.Dispose();
+        Interlocked.Exchange(ref _raopClient, null)?.Dispose();
+        Interlocked.Exchange(ref _receiverSession, null)?.Dispose();
     }
 
     private void Set(StreamState state, string text)

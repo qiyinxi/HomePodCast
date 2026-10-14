@@ -26,7 +26,7 @@ public class LocalApiTests
     [Fact]
     public async Task Status_is_served_to_the_extension_on_127_0_0_1_and_localhost()
     {
-        using var api = new LocalApi(0, () => new { app = "HomePodCast", streaming = true });
+        using var api = new LocalApi(0, () => new { app = "HomePodCast", streaming = true }) { ReadTimeout = TimeSpan.FromSeconds(30) };
         var (code, body) = await Send(api.Port, Get("/v1/status", $"Host: 127.0.0.1:{api.Port}", "Accept: */*"));
         Assert.Equal(200, code);
         Assert.Contains("\"streaming\":true", body);
@@ -44,7 +44,7 @@ public class LocalApiTests
     public async Task Any_other_host_is_refused(string header)
     {
         bool called = false;
-        using var api = new LocalApi(0, () => { called = true; return new { streaming = true }; });
+        using var api = new LocalApi(0, () => { called = true; return new { streaming = true }; }) { ReadTimeout = TimeSpan.FromSeconds(30) };
         var (code, body) = await Send(api.Port, Get("/v1/status", string.Format(header, api.Port)));
         Assert.Equal(403, code);
         Assert.DoesNotContain("streaming", body);
@@ -54,7 +54,7 @@ public class LocalApiTests
     [Fact]
     public async Task Two_host_headers_are_a_bad_request()
     {
-        using var api = new LocalApi(0, () => new { streaming = true });
+        using var api = new LocalApi(0, () => new { streaming = true }) { ReadTimeout = TimeSpan.FromSeconds(30) };
         var (code, _) = await Send(api.Port, Get("/v1/status", $"Host: 127.0.0.1:{api.Port}", "Host: evil.example"));
         Assert.Equal(400, code);
     }
@@ -63,7 +63,7 @@ public class LocalApiTests
     public async Task A_failing_request_does_not_end_the_api()
     {
         int calls = 0;
-        using var api = new LocalApi(0, () => ++calls == 1 ? throw new InvalidOperationException("boom") : new { streaming = false });
+        using var api = new LocalApi(0, () => ++calls == 1 ? throw new InvalidOperationException("boom") : new { streaming = false }) { ReadTimeout = TimeSpan.FromSeconds(30) };
         string ok = Get("/v1/status", $"Host: 127.0.0.1:{api.Port}");
 
         Assert.Equal(500, (await Send(api.Port, ok)).Code);         // the status callback threw

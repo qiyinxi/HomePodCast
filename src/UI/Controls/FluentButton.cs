@@ -48,6 +48,9 @@ internal sealed class FluentButton : FluentControl, IButtonControl
     /// <summary>Minimum width in 96-DPI units.</summary>
     public int MinWidth { get; set; }
 
+    /// <summary>The texts the button shows at times (更新 / 取消): it is as wide as the widest, so a change doesn't move the layout.</summary>
+    public string[] AlternateTexts { get; set; } = [];
+
     /// <summary>Height in 96-DPI units.</summary>
     public int ButtonHeight { get; set; } = 32;
 
@@ -91,7 +94,9 @@ internal sealed class FluentButton : FluentControl, IButtonControl
         int h = Dp(ButtonHeight);
         bool hasText = !string.IsNullOrEmpty(Text);
         if (!hasText) return new Size(h, h); // icon button: square
-        int w = TextRenderer.MeasureText(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width + Dp(_kind == ButtonKind.Link ? 4 : 24);
+        var font = StyleFont(TextStyle.Body);
+        int w = AlternateTexts.Prepend(Text).Max(t => TextRenderer.MeasureText(t, font, Size.Empty, TextFlags.Measure).Width) +
+                Dp(_kind == ButtonKind.Link ? 4 : 24);
         if (_glyph != null) w += Dp(16 + 8);
         return new Size(Math.Max(w, Dp(MinWidth)), h);
     }

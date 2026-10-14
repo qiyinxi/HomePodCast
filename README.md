@@ -26,6 +26,7 @@ Not tested on real hardware:
 
 - HomePod mini, HomePod (1st generation), Apple TV, and AirPlay speakers from other brands
 - **Stereo pairs and multi-room**: built from protocol research and tested only against simulated speakers
+- **Wireless cinema** (one HomePod per channel): tested only against simulated speakers and generated files
 - Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
 
 If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`homepodcast.log`: Settings → Tools → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`).
@@ -37,12 +38,14 @@ If you try it on other hardware, please open an issue with the device model, its
 - Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
 - Never cuts off another device unasked: while an iPhone or a Mac plays to the HomePod, Connect asks first, and an automatic connect waits until the speaker is free (so does a playback profile that switches to it)
-- Apple TV home theater: a HomePod set up as an Apple TV's speaker (the Apple TV keeps it busy even when idle) is taken over for as long as HomePodCast is connected, with no PIN pairing; the Apple TV reconnects to it the next time it plays. Settings can make Connect ask first instead
+- Disconnect at night (experimental): for a PC left on with the screens off, the HomePod is let go during the hours you set once the keyboard, mouse and sound have been idle for a while (5 to 120 minutes), so other devices can use it; when the hours end it connects again like the auto-connect at startup, never cutting off a device that is playing
+- Apple TV home theater: a HomePod set up as an Apple TV's speaker (the Apple TV keeps it busy even when idle) is taken over for as long as HomePodCast is connected, with no PIN pairing; the Apple TV reconnects to it the next time it plays. Settings can make Connect ask first instead (experimental, not yet tested with a real Apple TV)
 - Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
 - Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
+- Wireless cinema (experimental, not yet tested on real speakers): the audio track of a local 5.1 or 7.1 file with each channel on a HomePod of its own, up to seven plus one for the LFE channel; channels without a speaker fold into the neighboring ones, and speaker delays can be measured with a microphone (at most 25 % volume). See [Wireless cinema](docs/WIRELESS_CINEMA.md#english)
 - Apple TV after a one-time PIN pairing: click Connect and type the 4 digits the TV shows; with HomePods as its home theater speakers, they play the sound (experimental, not yet tested on a real Apple TV)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
 - Speaker info in Settings: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID

@@ -83,6 +83,8 @@ public sealed class RtspConnection : IDisposable
     private HapSession? _session;
     private int _cseq;
 
+    public Action<string, string, string>? RequestTrace { get; set; }
+
     public IPAddress LocalIp { get; }
     public IPAddress RemoteIp { get; }
     public uint SessionId { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
@@ -162,7 +164,9 @@ public sealed class RtspConnection : IDisposable
         var raw = HttpMessage.Format($"{method} {uri} {protocol}", all, body);
         var wire = _session?.Encrypt(raw) ?? raw;
         _stream.Write(wire);
-        return ReadResponse();
+        var response = ReadResponse();
+        RequestTrace?.Invoke(method, uri, response.StartLine);
+        return response;
     }
 
     private HttpMessage ReadResponse()

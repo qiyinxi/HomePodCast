@@ -157,6 +157,35 @@ internal static partial class AppEnvironment
         }
     }
 
+    // ---------------------------------------------------------------- the .NET runtime
+
+    /// <summary>The folder of the .NET runtime this process started on (the app's own folder when self-contained).</summary>
+    public static string RuntimeFolder { get; } = RuntimeEnvironment.GetRuntimeDirectory();
+
+    /// <summary>
+    /// The shared .NET runtime this process started on has been uninstalled since: a .NET update replaced it while the
+    /// app ran. What is loaded goes on working, but nothing can be loaded from that folder any more, so whatever this
+    /// process uses for the first time fails until it is restarted. 2026-10-14: an SDK install at 2026-10-13 23:29
+    /// replaced runtime 10.0.12 with 10.0.13 on the maintainer's PC; the next 「检查更新」, the first HTTPS request of a
+    /// copy started 29 hours before, failed after 2 ms with FileNotFoundException for System.Net.Http and an empty
+    /// message (the runtime's mscorrc.dll, which holds that message, was gone too).
+    /// </summary>
+    public static bool RuntimeRemoved => RuntimeGone(RuntimeFolder, File.Exists);
+
+    /// <summary>
+    /// <paramref name="runtimeFolder"/> is a shared runtime (…\shared\Microsoft.NETCore.App\&lt;version&gt;) whose
+    /// Microsoft.NETCore.App.deps.json is gone. The host reads that file at startup and closes it, so an uninstall
+    /// removes it at once, while the runtime's loaded DLLs can only be moved aside. A self-contained copy (the Store
+    /// package) has its runtime in its own folder, which nothing removes under it.
+    /// </summary>
+    internal static bool RuntimeGone(string runtimeFolder, Func<string, bool> fileExists)
+    {
+        var folder = runtimeFolder.TrimEnd('\\', '/');
+        if (folder.Length == 0 || !string.Equals(Path.GetFileName(Path.GetDirectoryName(folder)), "Microsoft.NETCore.App",
+                StringComparison.OrdinalIgnoreCase)) return false;
+        return !fileExists(Path.Combine(folder, "Microsoft.NETCore.App.deps.json"));
+    }
+
     // ---------------------------------------------------------------- Windows
 
     private const int AppModelErrorNoPackage = 15700, ErrorInsufficientBuffer = 122;

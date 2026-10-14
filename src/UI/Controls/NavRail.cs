@@ -7,6 +7,8 @@ namespace HomePodCast.UI.Controls;
 internal sealed class NavRail : LayoutPanel, ISurface
 {
     private readonly List<NavItem> _items = [];
+    private readonly List<NavItem> _footer = [];
+    private readonly ToolTip _tips = new();
     private int _selected = -1;
 
     public NavRail()
@@ -22,13 +24,15 @@ internal sealed class NavRail : LayoutPanel, ISurface
 
     public IReadOnlyList<NavItem> Items => _items;
 
-    public NavItem Add(string glyph, string text)
+    public NavItem Add(string glyph, string text, bool bottom = false)
     {
-        var item = new NavItem(glyph, text) { TabStop = false };
+        var item = new NavItem(glyph, text) { TabStop = false, AccessibleName = text };
         int index = _items.Count;
         item.Click += (_, _) => Select(index, user: true);
         item.KeyDown += (_, e) => OnItemKey(index, e);
         _items.Add(item);
+        if (bottom) _footer.Add(item);
+        _tips.SetToolTip(item, text); // compact navigation keeps the full page name on hover
         Controls.Add(item);
         return item;
     }
@@ -71,25 +75,56 @@ internal sealed class NavRail : LayoutPanel, ISurface
     /// <summary>Width that fits the longest label.</summary>
     public int PreferredWidth() => Math.Max(Dp(200), _items.Count == 0 ? 0 : _items.Max(i => i.GetPreferredSize(Size.Empty).Width) + Dp(16));
 
+    /// <summary>Keep room for page controls at narrow widths; labels return as soon as both columns fit.</summary>
+    public int WidthForWindow(int clientWidth)
+    {
+        int full = PreferredWidth();
+        return full <= clientWidth / 3 && clientWidth - full >= Dp(560) ? full : Dp(64);
+    }
+
     protected override int Arrange(int width, bool apply)
     {
         int y = Dp(8), x = Dp(4), w = width - Dp(8);
-        foreach (var item in _items)
+        bool compact = width < PreferredWidth();
+        foreach (var item in _items.Except(_footer))
         {
             int h = item.GetPreferredSize(Size.Empty).Height;
-            if (apply) Place(item, x, y, w, h);
+            if (apply)
+            {
+                item.Compact = compact;
+                Place(item, x, y, w, h);
+            }
             y += h + Dp(4);
         }
-        return y;
+        int footerHeight = _footer.Sum(item => item.GetPreferredSize(Size.Empty).Height + Dp(4));
+        int footerY = Math.Max(y, Height - Dp(8) - footerHeight + Dp(4));
+        foreach (var item in _footer)
+        {
+            int h = item.GetPreferredSize(Size.Empty).Height;
+            if (apply)
+            {
+                item.Compact = compact;
+                Place(item, x, footerY, w, h);
+            }
+            footerY += h + Dp(4);
+        }
+        return y + footerHeight + Dp(8);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(SurfaceColor);
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _tips.Dispose();
+        base.Dispose(disposing);
+    }
 }
 
 /// <summary>A navigation entry: icon, text, hover/selected background and the accent pill when selected.</summary>
 internal sealed class NavItem : FluentControl
 {
     private bool _selected;
+    private bool _compact;
 
     public NavItem(string glyph, string text)
     {
@@ -101,6 +136,12 @@ internal sealed class NavItem : FluentControl
     }
 
     public string Glyph { get; }
+
+    public bool Compact
+    {
+        get => _compact;
+        set { if (_compact != value) { _compact = value; Invalidate(); } }
+    }
 
     public bool Selected
     {
@@ -144,10 +185,13 @@ internal sealed class NavItem : FluentControl
             int h = Dp(16), w = Dp(3);
             Shapes.FillRound(g, P.Accent, new Rectangle(Dp(3), (Height - h) / 2, w, h), w / 2f); // clear of the focus ring
         }
-        int x = Dp(16);
+        int x = _compact ? (Width - Dp(16)) / 2 : Dp(16);
         Shapes.Glyph(g, Glyph, Theme.IconFont(16, DeviceDpi), new Rectangle(x, 0, Dp(16), Height), P.Text);
-        x += Dp(16 + 14);
-        TextRenderer.DrawText(g, Text, StyleFont(TextStyle.Body), new Rectangle(x, 0, Width - x - Dp(8), Height), P.Text, TextFlags.Line);
+        if (!_compact)
+        {
+            x += Dp(16 + 14);
+            TextRenderer.DrawText(g, Text, StyleFont(TextStyle.Body), new Rectangle(x, 0, Width - x - Dp(8), Height), P.Text, TextFlags.Line);
+        }
         if (FocusVisible) DrawFocusRing(g, r, Dp(5));
     }
 
