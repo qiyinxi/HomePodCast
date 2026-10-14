@@ -72,6 +72,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
+        InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
@@ -112,7 +113,8 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
-            if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
+            // In the night window with nobody at the PC (a restart for Windows Update), 夜间自动断开 connects at its end instead.
+            if (Config.AutoConnect && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
         }
         RefreshDevices();
     }
@@ -156,6 +158,7 @@ internal sealed partial class TrayApp : ApplicationContext
             return;
         }
         _wantConnected = true;
+        _nightDisconnected = false;
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
         string id = Config.DeviceId;
         string? host = Config.Host;
@@ -173,6 +176,7 @@ internal sealed partial class TrayApp : ApplicationContext
     public void Disconnect()
     {
         _wantConnected = false;
+        _nightDisconnected = false; // the user's own disconnect: 夜间自动断开 doesn't connect it again
         _connection.Post(Controller.Stop);
     }
 
@@ -414,6 +418,7 @@ internal sealed partial class TrayApp : ApplicationContext
             _ui.Post(async _ =>
             {
                 await Task.Delay(3000); // let Wi-Fi come back
+                if (CheckNight()) return; // woken in the night window with nobody there, or after it: 夜间自动断开 decides
                 if (_wantConnected) Connect(ConnectTrigger.Reconnect);
             }, null);
     }
@@ -491,6 +496,7 @@ internal sealed partial class TrayApp : ApplicationContext
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeFirewall();
         DisposeUpdate();
+        DisposeNightDisconnect();
         DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();

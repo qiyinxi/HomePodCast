@@ -466,5 +466,16 @@
   "已配对的电视": "Pariliitetyt televisiot",
   "忘记配对": "Unohda pariliitos",
   "配对于 {0}": "Pariliitetty {0}",
-  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Unohdetaanko pariliitos laitteeseen {0}? Seuraavalla yhdistämiskerralla televisiossa näkyvät numerot on syötettävä uudelleen."
+  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Unohdetaanko pariliitos laitteeseen {0}? Seuraavalla yhdistämiskerralla televisiossa näkyvät numerot on syötettävä uudelleen.",
+  "夜间自动断开（实验性）": "Katkaise yhteys yöllä (kokeellinen)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Kun näytöt ovat pois päältä mutta tietokone on päällä: alla olevana aikana yhteys HomePodiin katkaistaan, kun näppäimistö, hiiri ja ääni ovat olleet käyttämättä hetken, jotta muut laitteet voivat käyttää sitä. Ajan päättyessä yhteys muodostetaan uudelleen kuten käynnistyksen automaattisessa yhdistämisessä: toistavaa laitetta ei koskaan keskeytetä.",
+  "开始时间": "Alkaa",
+  "结束时间": "Päättyy",
+  "时段": "Aika",
+  "到": "–",
+  "{0} 分钟": "{0} min",
+  "闲置多久后断开": "Katkaise, kun käyttämättä",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ei näppäimistön tai hiiren käyttöä eikä ääntä HomePodissa näin pitkään aikaan.",
+  "开始和结束时间相同，不会断开。": "Alku ja loppu ovat samat, joten yhteyttä ei katkaista.",
+  "夜间已自动断开，{0} 自动重新连接": "Yhteys katkaistu yöksi; yhdistää uudelleen klo {0}"
 }

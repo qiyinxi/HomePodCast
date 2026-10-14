@@ -466,5 +466,16 @@
   "已配对的电视": "Parrede tv",
   "忘记配对": "Glem parring",
   "配对于 {0}": "Parret {0}",
-  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Glem parringen med {0}? Næste gang du opretter forbindelse, skal du indtaste nye cifre fra tv'et."
+  "忘记与 {0} 的配对吗？下次连接时，需要在电视上重新输入数字。": "Glem parringen med {0}? Næste gang du opretter forbindelse, skal du indtaste nye cifre fra tv'et.",
+  "夜间自动断开（实验性）": "Afbryd om natten (eksperimentelt)",
+  "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Når skærmene er slukket, men pc'en er tændt: i tidsrummet nedenfor afbrydes forbindelsen til HomePod, når tastatur, mus og lyd har været inaktive et stykke tid, så andre enheder kan bruge den. Når tidsrummet slutter, opretter den forbindelse igen ligesom den automatiske forbindelse ved start: en enhed, der afspiller, bliver aldrig afbrudt.",
+  "开始时间": "Starttid",
+  "结束时间": "Sluttid",
+  "时段": "Tidsrum",
+  "到": "til",
+  "{0} 分钟": "{0} min.",
+  "闲置多久后断开": "Afbryd efter inaktivitet i",
+  "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen brug af tastatur eller mus og ingen lyd i HomePod så længe.",
+  "开始和结束时间相同，不会断开。": "Start og slut er ens, så forbindelsen afbrydes aldrig.",
+  "夜间已自动断开，{0} 自动重新连接": "Afbrudt for natten; opretter forbindelse igen kl. {0}"
 }

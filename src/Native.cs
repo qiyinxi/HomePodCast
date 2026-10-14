@@ -41,6 +41,25 @@ internal static partial class Native
     [LibraryImport("winmm.dll")]
     internal static partial uint timeEndPeriod(uint ms);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo
+    {
+        public uint Size;
+        public uint Time;
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetLastInputInfo(ref LastInputInfo info);
+
+    /// <summary>How long ago the last keyboard or mouse input of this Windows session was; null if Windows doesn't say.</summary>
+    public static TimeSpan? SinceLastInput()
+    {
+        var info = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        if (!GetLastInputInfo(ref info)) return null;
+        return TimeSpan.FromMilliseconds(unchecked((uint)Environment.TickCount - info.Time)); // both wrap at 2^32 ms
+    }
+
     /// <summary>Registers the calling thread with MMCSS (e.g. "Pro Audio"); dispose to revert.</summary>
     public static IDisposable EnterMmcss(string task)
     {

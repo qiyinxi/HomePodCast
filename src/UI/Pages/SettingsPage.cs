@@ -4,7 +4,7 @@ using HomePodCast.Update;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, local players in the 影视 scene
+/// <summary>设置: language and theme, startup, letting the speaker go at night, volume cap, volume keys, hotkeys, local players in the 影视 scene
 /// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
 /// experimental multi-speaker dialog, the A/V sync test, updates (check, install, channel, automatic checks), and about.</summary>
 internal sealed class SettingsPage : ScrollPage
@@ -26,6 +26,9 @@ internal sealed class SettingsPage : ScrollPage
     private static readonly HomeTheaterMode[] HomeTheaterModes = [HomeTheaterMode.TakeOver, HomeTheaterMode.Ask];
     private readonly Segmented _homeTheater = new(L.T("临时接管"), L.T("先询问"));
     private readonly SettingRow _homeTheaterRow;
+    private readonly ToggleSwitch _night = new();
+    private readonly FluentComboBox _nightFrom = new(), _nightUntil = new(), _nightIdle = new();
+    private readonly SettingRow _nightWindowRow, _nightIdleRow;
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
@@ -70,6 +73,22 @@ internal sealed class SettingsPage : ScrollPage
         // one): whether the Apple TV takes its HomePod back after we disconnect is still unverified.
         _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）");
         _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）"), "", _homeTheater);
+        // 夜间自动断开 (NightDisconnectPolicy); the window and the idle time show while it is on.
+        var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开（实验性）"), // experimental since 1.1
+            L.T("关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；" +
+                "时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。"), _night);
+        foreach (var time in NightDisconnectPolicy.TimeChoices)
+        {
+            _nightFrom.Items.Add(NightDisconnectPolicy.Format(time));
+            _nightUntil.Items.Add(NightDisconnectPolicy.Format(time));
+        }
+        _nightFrom.AccessibleName = L.T("开始时间");
+        _nightUntil.AccessibleName = L.T("结束时间");
+        _nightWindowRow = new SettingRow(Glyph.None, L.T("时段"), "",
+            Ui.Row(8, null, _nightFrom, new TextBlock(L.T("到")), _nightUntil));
+        _nightIdle.Items.AddRange(NightDisconnectPolicy.IdleChoices.Select(m => L.F("{0} 分钟", m)));
+        _nightIdleRow = new SettingRow(Glyph.None, L.T("闲置多久后断开"),
+            L.T("这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。"), _nightIdle);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
         _cap.AccessibleName = L.T("音量上限"); // the row is named after its title; the slider in it too
@@ -127,11 +146,12 @@ internal sealed class SettingsPage : ScrollPage
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
 
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+            sound, cap, _volumeKeysRow, _hotkeysRow, players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
             updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
         foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+                     cap, _volumeKeysRow, _hotkeysRow,
                      playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
@@ -175,6 +195,10 @@ internal sealed class SettingsPage : ScrollPage
             _app.SetHomeTheaterMode(HomeTheaterModes[_homeTheater.SelectedIndex]);
             ShowHomeTheater();
         };
+        _night.Toggled += (_, _) => SetNight();
+        _nightFrom.SelectionChangeCommitted += (_, _) => SetNight();
+        _nightUntil.SelectionChangeCommitted += (_, _) => SetNight();
+        _nightIdle.SelectionChangeCommitted += (_, _) => SetNight();
         _cap.Scroll += (_, _) =>
         {
             _capValue.Text = $"{_cap.Value}%";
@@ -347,6 +371,7 @@ internal sealed class SettingsPage : ScrollPage
         ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
         ShowHomeTheater();
+        ShowNight();
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
         ShowSoundOptions();
@@ -479,6 +504,40 @@ internal sealed class SettingsPage : ScrollPage
                                         "HomePodCast 连着的时候，Apple TV 的声音不会从这台 HomePod 出来；断开后，Apple TV 下次播放时会重新连上它。"),
         _ => L.T("点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。"),
     };
+
+    /// <summary>「夜间自动断开」: the switch, and while it is on the window and the idle time.</summary>
+    private void ShowNight()
+    {
+        var cfg = _app.Config;
+        _night.Checked = cfg.NightDisconnect;
+        _nightWindowRow.Collapsed = _nightIdleRow.Collapsed = !cfg.NightDisconnect;
+        ShowNightTime(_nightFrom, cfg.NightDisconnectFrom);
+        ShowNightTime(_nightUntil, cfg.NightDisconnectUntil);
+        int idle = Array.IndexOf(NightDisconnectPolicy.IdleChoices, cfg.NightDisconnectIdleMinutes);
+        _nightIdle.SelectedIndex = idle;
+        _nightIdle.Placeholder = idle < 0 ? L.F("{0} 分钟", cfg.NightDisconnectIdleMinutes) : "";
+        bool empty = cfg.NightDisconnectFrom == cfg.NightDisconnectUntil;
+        _nightWindowRow.DescriptionText.Text = empty ? L.T("开始和结束时间相同，不会断开。") : "";
+        _nightWindowRow.DescriptionText.Role = empty ? TextRole.Caution : TextRole.Secondary;
+    }
+
+    /// <summary>A time off the list (a hand-edited config) shows as the box's placeholder, and stays until another is picked.</summary>
+    private static void ShowNightTime(FluentComboBox box, TimeOnly time)
+    {
+        int i = Array.IndexOf(NightDisconnectPolicy.TimeChoices, time);
+        box.SelectedIndex = i;
+        box.Placeholder = i < 0 ? NightDisconnectPolicy.Format(time) : "";
+    }
+
+    private void SetNight()
+    {
+        var cfg = _app.Config;
+        TimeOnly Picked(FluentComboBox box, TimeOnly current) =>
+            box.SelectedIndex >= 0 ? NightDisconnectPolicy.TimeChoices[box.SelectedIndex] : current;
+        _app.SetNightDisconnect(_night.Checked, Picked(_nightFrom, cfg.NightDisconnectFrom), Picked(_nightUntil, cfg.NightDisconnectUntil),
+            _nightIdle.SelectedIndex >= 0 ? NightDisconnectPolicy.IdleChoices[_nightIdle.SelectedIndex] : cfg.NightDisconnectIdleMinutes);
+        ShowNight();
+    }
 
     private static string VolumeKeyModeName(VolumeKeyMode mode) => mode switch
     {
