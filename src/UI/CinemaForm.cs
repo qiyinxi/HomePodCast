@@ -69,7 +69,8 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         body.Controls.Add(Ui.Row(8, null, _choose, _play, _pause, _stop));
         body.Controls.Add(_file);
 
-        _devices = host.Speakers.Where(d => d.Model.StartsWith("AudioAccessory", StringComparison.Ordinal) && !StereoPairs.IsPairId(d.DeviceId))
+        // HomePods only (ReceiverKinds' rules): one latency and one clock for every channel; third-party receivers differ.
+        _devices = host.Speakers.Where(d => d.Kind == ReceiverKind.HomePod && !StereoPairs.IsPairId(d.DeviceId))
             .GroupBy(d => GroupPlan.Key(d.DeviceId)).Select(g => g.First()).ToList();
         foreach (var saved in config.Cinema.Speakers ?? [])
             if (_devices.All(d => GroupPlan.Key(d.DeviceId) != GroupPlan.Key(saved.DeviceId)))

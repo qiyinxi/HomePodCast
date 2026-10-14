@@ -160,6 +160,13 @@ internal sealed class SettingsPage : ScrollPage
                      _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
+        var manualAirPlay = new FluentButton(L.T("添加"));
+        var manualAirPlayRow = new SettingRow(Glyph.Devices, L.T("手动添加 AirPlay 设备（实验性）"), // experimental since 1.1
+            L.T("发现不到设备时，填写 IP 地址和端口。"), manualAirPlay);
+        Content.Controls.Add(manualAirPlayRow);
+        Content.Controls.SetChildIndex(manualAirPlayRow, Content.Controls.GetChildIndex(updates));
+        Content.GapBefore[manualAirPlayRow] = 4;
+        manualAirPlay.Click += (_, _) => _app.AddManualAirPlayDevice(FindForm());
         AddSpeakerInfo(before: updates);
         AddPairings(before: updates);
 

@@ -535,5 +535,16 @@
   "测量中断了：影院播放停止了，或者连接变了。": "Misura interrotta: la riproduzione cinema si è fermata o la connessione è cambiata.",
   "麦克风打不开：请确认它已接好，并且 Windows 允许本应用使用麦克风。": "Impossibile aprire il microfono: controlla che sia collegato e che Windows consenta a questa app di usarlo.",
   "测量超时：没有及时收到麦克风的声音。": "Tempo di misura scaduto: dal microfono non è arrivato audio in tempo.",
-  "没有可靠地听到「{0}」的测试音：把麦克风放近一些，或者把音量调大一点再试。原来的延迟没有改。": "Il segnale di prova di \"{0}\" non è stato sentito in modo affidabile: avvicina il microfono o alza un po' il volume e riprova. Restano i ritardi precedenti."
+  "没有可靠地听到「{0}」的测试音：把麦克风放近一些，或者把音量调大一点再试。原来的延迟没有改。": "Il segnale di prova di \"{0}\" non è stato sentito in modo affidabile: avvicina il microfono o alza un po' il volume e riprova. Restano i ritardi precedenti.",
+  "Apple TV（实验性）": "Apple TV (sperimentale)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Modalità compatibilità (sperimentale)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Terze parti (sperimentale, non testato su hardware)",
+  "未知 AirPlay 设备（实验性）": "Dispositivo AirPlay sconosciuto (sperimentale)",
+  "设备类型": "Tipo di dispositivo",
+  "手动添加 AirPlay 设备（实验性）": "Aggiungi dispositivo AirPlay manualmente (sperimentale)",
+  "端口（默认 7000）": "Porta (predefinita 7000)",
+  "添加": "Aggiungi",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "Inserisci indirizzo IP e porta del ricevitore; vengono lette solo le informazioni del dispositivo.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Inserisci un indirizzo IPv4 valido e una porta tra 1 e 65535.",
+  "发现不到设备时，填写 IP 地址和端口。": "Se il dispositivo non viene trovato, inserisci indirizzo IP e porta."
 }

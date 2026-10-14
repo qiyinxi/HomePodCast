@@ -535,5 +535,16 @@
   "测量中断了：影院播放停止了，或者连接变了。": "Meting onderbroken: de bioscoopweergave is gestopt of de verbinding is veranderd.",
   "麦克风打不开：请确认它已接好，并且 Windows 允许本应用使用麦克风。": "De microfoon kon niet worden geopend: controleer of hij is aangesloten en of Windows deze app de microfoon laat gebruiken.",
   "测量超时：没有及时收到麦克风的声音。": "Meting duurde te lang: er kwam niet op tijd geluid van de microfoon.",
-  "没有可靠地听到「{0}」的测试音：把麦克风放近一些，或者把音量调大一点再试。原来的延迟没有改。": "De testtoon van \"{0}\" was niet betrouwbaar te horen: zet de microfoon dichterbij of het volume iets hoger en probeer het opnieuw. De vorige vertragingen blijven."
+  "没有可靠地听到「{0}」的测试音：把麦克风放近一些，或者把音量调大一点再试。原来的延迟没有改。": "De testtoon van \"{0}\" was niet betrouwbaar te horen: zet de microfoon dichterbij of het volume iets hoger en probeer het opnieuw. De vorige vertragingen blijven.",
+  "Apple TV（实验性）": "Apple TV (experimenteel)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Compatibiliteitsmodus (experimenteel)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Andere fabrikanten (experimenteel, niet op hardware getest)",
+  "未知 AirPlay 设备（实验性）": "Onbekend AirPlay-apparaat (experimenteel)",
+  "设备类型": "Apparaattype",
+  "手动添加 AirPlay 设备（实验性）": "AirPlay-apparaat handmatig toevoegen (experimenteel)",
+  "端口（默认 7000）": "Poort (standaard 7000)",
+  "添加": "Toevoegen",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "Voer het IP-adres en de poort van de ontvanger in; alleen apparaatinformatie wordt gelezen.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Voer een geldig IPv4-adres en een poort tussen 1 en 65535 in.",
+  "发现不到设备时，填写 IP 地址和端口。": "Als het apparaat niet wordt gevonden, voer dan het IP-adres en de poort in."
 }
