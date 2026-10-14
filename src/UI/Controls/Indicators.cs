@@ -27,6 +27,14 @@ internal sealed class LevelMeter : FluentControl
         Invalidate();
     }
 
+    /// <summary>Back to silence at once (no release), e.g. for a row that is shown again later.</summary>
+    public void Reset()
+    {
+        if (_shown == 0) return;
+        _shown = 0;
+        Invalidate();
+    }
+
     public override Size GetPreferredSize(Size proposedSize) => new(Dp(120), Dp(Thickness + 4));
 
     protected override void OnPaint(PaintEventArgs e)
