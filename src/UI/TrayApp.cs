@@ -200,8 +200,21 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.DeviceId = device.DeviceId;
         Config.DeviceName = device.Name;
         Config.Host = device.Address.ToString();
-        if (StreamController.UsesRaop(device))
-            Config.ReceiverSettings[RaopPassword.Key(device.DeviceId)] = ReceiverPreferences.Of(device);
+        if (device.Kind is not (ReceiverKind.HomePod or ReceiverKind.AppleTv))
+            {
+            string key = RaopPassword.Key(device.DeviceId);
+            var previous = Config.ReceiverSettings.GetValueOrDefault(key);
+            var updated = ReceiverPreferences.Of(device);
+            if (previous != null)
+            {
+                updated.ProtocolOverride = previous.ProtocolOverride;
+                updated.LastSuccessfulProtocol = previous.LastSuccessfulProtocol;
+                updated.RealtimeLatencyMs = previous.RealtimeLatencyMs;
+                updated.ArrivalToRenderMs = previous.ArrivalToRenderMs;
+                updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
+            }
+            Config.ReceiverSettings[key] = updated;
+        }
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
         if (_wantConnected) Connect(ConnectTrigger.Automatic); // another speaker: never taken over without a click
@@ -289,7 +302,7 @@ internal sealed partial class TrayApp : ApplicationContext
     /// </summary>
     internal static AirPlayDevice? FirstHomePod(IReadOnlyList<AirPlayDevice> list, IReadOnlyList<AirPlayDevice> scan)
     {
-        var homepods = list.Where(d => d.Model.StartsWith("AudioAccessory", StringComparison.Ordinal)).ToList();
+        var homepods = list.Where(d => d.Kind == ReceiverKind.HomePod).ToList();
         return homepods.FirstOrDefault(d => HomeTheater.OwnerOf(d, scan) == null) ?? homepods.FirstOrDefault();
     }
 

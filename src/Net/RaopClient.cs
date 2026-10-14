@@ -56,6 +56,9 @@ public sealed class RaopClient : IDisposable
     public int LatencyFrames => _options.LatencyMs * RaopAudio.SampleRate / 1000;
     public long PacketsSent { get; private set; }
     public long StartedAt { get; private set; }
+    public string? LostReason => _failureReason;
+    public Action<long>? OnsetSent { get; set; }
+    private int _quietFrames;
     public long RetransmitRequests { get; private set; }
     public long Retransmitted { get; private set; }
     public long RetransmitMisses { get; private set; }
@@ -246,6 +249,14 @@ public sealed class RaopClient : IDisposable
                 }
                 pcm.AsSpan().Clear();
                 _options.ReadAudio?.Invoke(pcm);
+                int peak = 0;
+                foreach (short sample in pcm) peak = Math.Max(peak, Math.Abs((int)sample));
+                if (peak > 1311)
+                {
+                    if (_quietFrames >= RaopAudio.SampleRate * 3 / 10) OnsetSent?.Invoke(MediaClock.Now);
+                    _quietFrames = 0;
+                }
+                else _quietFrames = Math.Min(RaopAudio.SampleRate, _quietFrames + RaopAudio.FramesPerPacket);
                 var payload = _pcm ? RaopAudio.L16(pcm) : RaopAudio.Alac(pcm);
                 if (_key != null) payload = RaopAudio.Encrypt(payload, _key, _iv!);
                 ushort sequence = unchecked((ushort)(_firstSeq + n));

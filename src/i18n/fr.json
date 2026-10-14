@@ -497,5 +497,22 @@
   "AirPlay 密码": "Mot de passe AirPlay",
   "AirPlay 设备密码（实验性）": "Mot de passe du récepteur AirPlay (expérimental)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Saisissez le mot de passe AirPlay de « {0} ». Il est stocké chiffré uniquement sur ce PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Les récepteurs en mode de compatibilité AirPlay 1 ne peuvent pas rejoindre des groupes de plusieurs enceintes."
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Les récepteurs en mode de compatibilité AirPlay 1 ne peuvent pas rejoindre des groupes de plusieurs enceintes.",
+  "自动": "Automatique",
+  "AirPlay 2 低延迟（实验性）": "AirPlay 2 temps réel (expérimental)",
+  "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 avec tampon (expérimental, non testé sur matériel)",
+  "AirPlay 1 兼容（实验性）": "AirPlay 1 compatible (expérimental)",
+  "这台设备需要缓冲连接；当前缓冲发送器不可用。": "Ce récepteur nécessite un tampon ; l’émetteur correspondant est actuellement indisponible.",
+  "这台设备没有接受可用的连接方式：{0}": "Ce récepteur n’a accepté aucun mode de connexion disponible : {0}",
+  "这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。": "Le temps de traitement dépasse la plage temps réel. Utilisez le mode compatible ou avec tampon.",
+  "正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…": "Connexion à un récepteur AirPlay tiers (expérimental, non testé sur matériel)…",
+  "{0} · {1}": "{0} · {1}",
+  "连接方式（实验性）": "Mode de connexion (expérimental)",
+  "自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。": "Essayer automatiquement les modes pris en charge ; AirPlay 2 tiers n’a pas été testé sur matériel.",
+  "AirPlay 设备配对（实验性，未在实机上测试）": "Jumelage AirPlay (expérimental, non testé sur matériel)",
+  "这台接收端上的配对已失效，请重新配对。": "Le jumelage de ce récepteur n’est plus valide. Recommencez le jumelage.",
+  "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Jumeler « {0} » : choisissez Démarrer, puis saisissez les quatre chiffres affichés par le récepteur.",
+  "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Un seul jumelage suffit. Les récepteurs acceptant uniquement les émetteurs authentifiés MFi ne sont pas pris en charge.",
+  "输入接收端显示的 4 位数字": "Saisissez les quatre chiffres affichés par le récepteur",
+  "正在请接收端显示数字…": "Demande d’affichage des chiffres au récepteur…"
 }
