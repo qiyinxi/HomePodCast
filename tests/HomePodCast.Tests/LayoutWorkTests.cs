@@ -23,8 +23,17 @@ public sealed class LayoutWorkCollection { }
 /// with another scale laid 设置 out 282 times (8 s 「未响应」).
 /// </summary>
 [Collection("Layout work")]
-public class LayoutWorkTests(ITestOutputHelper output)
+public class LayoutWorkTests
 {
+    private readonly ITestOutputHelper output;
+
+    /// <summary>Each test starts with the text cache empty, so that what it counts never meets the cache starting over.</summary>
+    public LayoutWorkTests(ITestOutputHelper output)
+    {
+        this.output = output;
+        TextMeasure.Clear();
+    }
+
     [Fact]
     public void Toggling_night_disconnect_lays_each_container_out_once_and_measures_each_text_once() => Sta.Run(() =>
     {

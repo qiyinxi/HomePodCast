@@ -38,6 +38,12 @@ internal static class TextMeasure
         return size;
     }
 
+    /// <summary>Tests: start empty, so that a test's measurements never meet the cache starting over in the middle.</summary>
+    internal static void Clear()
+    {
+        lock (Cache) Cache.Clear();
+    }
+
     /// <summary>The font by reference: Font.GetHashCode asks GDI+ for the family name every time.</summary>
     private readonly struct Key(string text, Font font, Size proposed, TextFormatFlags flags) : IEquatable<Key>
     {
