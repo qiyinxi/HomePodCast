@@ -106,6 +106,7 @@ public class RaopTests
         {
             Txt = new Dictionary<string, string> { ["et"] = encrypted ? "1" : "0", ["cn"] = "1" },
             RsaPublicKey = fake.Key, Password = password ? "secret" : null, VolumePercent = 80, VolumeCapPercent = 10,
+            EndTimeout = TimeSpan.FromSeconds(10),
             ReadAudio = pcm => { for (int i = 0; i < pcm.Length; i++) pcm[i] = unchecked((short)sample++); },
         }, CancellationToken.None);
         var first = await fake.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
