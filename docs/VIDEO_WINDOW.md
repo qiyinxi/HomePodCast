@@ -2,91 +2,90 @@
 
 ## English
 
-An **experimental**, optional Windows Graphics Capture companion for players without a usable audio-delay API.
-It delays a selected window's picture by HomePodCast's current audio lag. It captures no audio and does not open
-a website, start a player, or start HomePod streaming. Control playback in the original window.
+An **experimental**, optional companion for players without a usable audio-delay setting: it shows a window you pick,
+delayed by HomePodCast's current sound lag, so that the picture lines up with the HomePod. It captures no audio, opens
+no website, and starts neither a player nor streaming; you control playback in the original window. The Microsoft Store
+version doesn't have it.
 
 ### Use
 
-1. Extract `HomePodCast-video-window-<version>.zip` from the same build. Windows 10 version 2004 or later and
-   .NET 10 Desktop Runtime x64 are required. The main app keeps its existing target and dependencies.
-2. In Settings → Tools → **Synchronized viewing window (experimental)**, choose the module folder and open it.
-3. Turn off other synchronization compensation first: the player's audio-delay correction, HomePodCast's Movies
-   player-sync option, and any browser extension picture compensation. Applying both compensates twice.
-   Stream the player's sound normally through HomePodCast.
-4. Click **Choose window…** in the companion. Windows' picker lets you explicitly select a window or screen and
-   retains the normal capture border. For screen capture, keep the companion outside that screen to avoid recursion.
-   Cancel leaves the previous capture alone; changing source discards old pictures.
-5. **Follow HomePod delay** reads the main app's read-only loopback `/v1/status` every 500 ms: negotiated AirPlay
-   delay, capture/FIFO contribution and applicable A/V calibration. It uses the actual bound API port, including
-   configurations requesting an ephemeral port. No external service or account is involved.
-6. Adjust by 5 ms with the numeric control or ±20 ms with the buttons. Uncheck following for a manual 0–2000 ms
-   delay. When streaming stops the automatic base becomes zero; unavailable status keeps the last known delay
-   with a visible indication. F11 toggles fullscreen; Esc leaves it. Stop capture or close the companion to release
-   resources and pictures. Quitting the main app also stops its companion. Capture never resumes automatically.
+1. Download `HomePodCast-video-window-<version>.zip` of the same version as HomePodCast from
+   [Releases](https://github.com/qiyinxi/HomePodCast/releases) and extract it anywhere. It needs Windows 10 version
+   2004 or later and the .NET 10 Desktop Runtime (x64). HomePodCast's updates don't update the module: download it again
+   for the new version (the window says so when the two versions differ).
+2. In Settings → Tools → **Synchronized viewing window (experimental)**, choose the module's folder with
+   **Choose module…**, then click **Open**.
+3. Turn off other synchronization first: the player's own audio delay, HomePodCast's "Adjust players in the Movies
+   scene" and the browser extension's picture delay. With both, the picture is delayed twice.
+4. **Choose window…** opens the Windows picker, where you choose a window or a whole screen; Windows keeps its yellow
+   capture border around it. Cancel leaves the current capture as it is; a new source discards the old pictures. The
+   mouse pointer is not captured. While it captures, this window is left out of every capture of the screen (screen
+   recordings and screen sharing too), so capturing the screen it is on doesn't show the window inside itself.
+5. **Follow HomePod delay** reads HomePodCast's local `/v1/status` every 500 ms: the same sound lag the browser
+   extension and the players get (the AirPlay latency, capture and buffer, and the matching A/V calibration). It is 0
+   while nothing streams. If the status can't be read, the last value stays and the status line says so. Clear the box
+   to set a delay of 0–2000 ms yourself.
+6. Fine-tune with **Sync adjustment** in 5 ms steps or ±20 ms with the buttons. **Subtract display latency
+   automatically** (on by default) shows every picture that much earlier: the time from choosing a frame to seeing it
+   on the screen, measured from Windows' frame statistics (one refresh of the screen until there are measurements).
+   Clear it to set that value yourself.
+7. F11 switches full screen on and off, Esc leaves it. **Stop capture** or closing the window frees the pictures;
+   quitting HomePodCast closes the window too. Capture never starts or resumes by itself.
 
-### Limits and verification
+### How it works, and its limits
 
-- First implementation: SDR preview up to 1280 × 720 and 30 fps, D3D11 readback and WinForms drawing.
-  It is **not** a zero-copy GPU renderer or an HDR pipeline. HDR can clip; protected/DRM content can be black.
-  Minimized or suspended source windows can stop producing frames. The module cannot bypass these restrictions.
-- The picture queue is capped at 128 MiB and 64 frames. Native capture/staging buffers, temporary source bitmaps
-  and the displayed frame use additional memory. Long delays reduce capture cadence to fit about 30 preview frames.
-  Input above 8,847,360 pixels is rejected to avoid unbounded allocations.
-- Frames carry Windows' QPC capture timestamps; only due frames can leave the queue. Capacity pressure discards
-  old frames and may freeze the preview; it never displays an early replacement. Resize recreates the native pool
-  and clears queued pictures. Source closure stops capture and clears the preview.
-- Refresh, readback and paint scheduling still contribute visual error. The displayed delay is a target, not a
-  measured presentation timestamp; use fine adjustment for residual error. Added input-to-picture delay makes
-  this suitable for watching video rather than latency-sensitive gaming. Input is not forwarded to the player.
-- Pictures stay in process memory, are not saved or uploaded. Only the module path is persisted. Status polling
-  uses numeric loopback without proxies or redirects and caps responses at 16 KiB.
-- Tests cover due-frame selection, delay changes, byte/frame limits, disposal, status validation, literal launcher
-  arguments and translations. A synthetic WARP texture verifies WinRT surface → D3D11 staging → BGRA bitmap
-  without opening a window or capturing the desktop. CI builds and packages the module. Actual capture, picker/
-  fullscreen layout, protected content and real hardware A/V alignment remain manual checks. No desktop page,
-  real player or speaker was launched for this implementation.
+- Windows delivers every captured frame as a picture on the graphics card, stamped with the moment it appeared on the
+  screen. The pictures stay on the graphics card: sources larger than 2560 × 1600 are halved until they fit
+  (4K → 1920 × 1080, 5K → 2560 × 1440), and the window shows them at every refresh of the screen, at the picture's
+  aspect ratio. The processor copies no pixels.
+- At most 30 frames per second are kept; 30 fps video keeps all of its frames on 50 Hz, 60 Hz and faster screens. The
+  queue holds 256 MiB of pictures, about a second of 1080p at 30 fps; longer delays keep fewer frames per second. A
+  picture is shown when it is due, never early; when the queue is full, the oldest pictures go and the picture may
+  stand still for a moment.
+- SDR only: HDR video can look washed out or clipped, protected (DRM) video is black, and a minimized source may stop
+  sending frames. The module doesn't get around any of this.
+- The delay is a target: use the sync adjustment for what is left. Because the picture is late, the original window
+  reacts late to your input: this is for watching videos, not for games. Input is not passed on to the player.
+- The pictures stay in the module's memory and graphics memory; they are never saved or uploaded. HomePodCast's
+  settings store only the module's folder. The status is read from the numeric loopback address only, without proxies
+  or redirects, and at most 16 KiB of it.
 
 API references: [Windows screen capture](https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture),
-[CreateFreeThreaded](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframepool.createfreethreaded),
-[Direct3D surface interop](https://learn.microsoft.com/en-us/windows/win32/api/windows.graphics.directx.direct3d11.interop/nf-windows-graphics-directx-direct3d11-interop-createdirect3d11surfacefromdxgisurface).
+[DXGI flip model](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-flip-model),
+[frame latency waitable object](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_3/nf-dxgi1_3-idxgiswapchain2-getframelatencywaitableobject),
+[SetWindowDisplayAffinity](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowdisplayaffinity).
 
 ## 简体中文
 
-这是一个**实验性**的可选 Windows Graphics Capture 模块，适用于没有可用音频延迟接口的播放器。
-它按照 HomePodCast 当前的声音延迟，延后显示选定窗口。它不采集音频，不打开网站、不启动播放器，
-也不自动开始 HomePod 推流。播放操作仍在原窗口进行。
+这是一个**实验性**的可选模块，给没有可用音频延迟设置的播放器用：把你选的窗口按 HomePodCast 当前的声音延迟延后显示，
+让画面对上 HomePod。它不采集声音，不打开网站，不启动播放器，也不开始推流；播放仍在原窗口里操作。Microsoft Store 版没有这个功能。
 
 ### 使用
 
-1. 解压同一构建的 `HomePodCast-video-window-<版本>.zip`。需要 Windows 10 2004 或更新版本，
-   以及 .NET 10 Desktop Runtime x64；主程序的目标平台和依赖保持原样。
-2. 在「设置 → 工具 → 同步观影窗口（实验性）」选择模块文件夹，然后打开。
-3. 先关闭其他同步补偿：播放器的音频提前、HomePodCast 的「影视场景自动调整播放器」、
-   浏览器扩展的画面补偿；同时开启会重复调整。通过 HomePodCast 正常推流播放器的声音。
-4. 在模块里点「选择窗口…」。Windows 选择器让你明确选择窗口或屏幕，保留系统采集边框。
-   采集屏幕时，把模块放在另一块屏幕，避免画面递归。取消不影响原采集；换源清空旧画面。
-5. 「跟随 HomePod 延迟」每 500 ms 读取主程序只读的本机 `/v1/status`，取得协商的 AirPlay 延迟、
-   采集和 FIFO 延迟及适用的音画校准。使用实际绑定的 API 端口，也支持随机端口，不涉及外部服务或账号。
-6. 数字框每次微调 5 ms，按钮每次 ±20 ms。关闭跟随后，可手动设置 0–2000 ms 延迟。
-   停止推流时，自动延迟基数归零；状态不可用时保留最后一次延迟，并显示提示。
-   F11 切换全屏，Esc 退出。停止采集或关闭模块会释放资源和画面；退出主程序也会停止它启动的模块。
-   不会自动恢复采集。
+1. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载和 HomePodCast 同一版本的
+   `HomePodCast-video-window-<版本>.zip`，解压到任意位置。需要 Windows 10 2004 或更新版本，以及 .NET 10 桌面运行时（x64）。
+   HomePodCast 更新时模块不会跟着更新，请重新下载新版本的模块（两边版本不同时，窗口里会提示）。
+2. 在「设置 → 工具 → 同步观影窗口（实验性）」用「选择模块…」选择模块所在的文件夹，然后点「打开」。
+3. 先关掉其他同步补偿：播放器自己的音频延迟、HomePodCast 的「影视场景自动调整播放器」、浏览器插件的画面延迟。同时开着，画面会被延后两次。
+4. 「选择窗口…」打开 Windows 的选择器，在那里选一个窗口或整块屏幕；Windows 会在它周围保留黄色的采集边框。
+   取消不影响正在进行的采集；换了来源，旧画面会清掉。不采集鼠标指针。采集期间，这个窗口不出现在任何屏幕采集里
+   （录屏和共享屏幕也一样），所以采集它所在的整块屏幕时，不会出现画中画的递归。
+5. 「跟随 HomePod 延迟」每 500 ms 读取 HomePodCast 本机的 `/v1/status`：和浏览器插件、播放器拿到的是同一个声音延迟
+   （AirPlay 延迟、采集和缓冲，以及对应的音画校准）。没在推流时是 0。读不到状态时保持上一次的值，状态栏会写出来。
+   去掉勾选后，可以手动设置 0–2000 ms 的延迟。
+6. 「同步微调」每次 5 ms，按钮每次 ±20 ms。「自动扣除显示延迟」（默认打开）让每一帧提前这么多显示：从选出一帧到它出现在屏幕上的时间，
+   按 Windows 的帧统计实测（测到之前按屏幕刷新一次的时间算）。去掉勾选后，可以自己设置这个值。
+7. F11 切换全屏，Esc 退出全屏。「停止采集」或关闭窗口会释放画面；退出 HomePodCast 也会关闭这个窗口。采集从不自动开始或恢复。
 
-### 限制与验证
+### 原理和限制
 
-- 首版最高 1280 × 720、30 fps SDR 预览，通过 D3D11 读回和 WinForms 绘图，
-  **不是**零拷贝 GPU 渲染器或 HDR 管线。HDR 可能过曝，受保护或 DRM 内容可能黑屏。
-  最小化或暂停运行的原窗口可能不再产生画面，模块不能绕过这些限制。
-- 队列最多 128 MiB、64 帧；原生采集和暂存纹理、临时原图、正在显示的帧另占内存。
-  延迟较长时降低采集帧率，以容纳约 30 帧预览。超过 8,847,360 像素的输入被拒绝，避免无限分配。
-- 使用 Windows QPC 采集时间戳，只显示到期帧。容量不足时丢弃旧帧，预览可能暂时停住，
-  不会提前显示新帧。改变尺寸时重建采集池并清空队列；原窗口关闭时停止采集并清空预览。
-- 屏幕刷新、像素读回和绘制调度仍有误差；显示的延迟是目标值，不是实测呈现时间，可用微调修正。
-  模式增加操作到画面的延迟，适合看视频，不适合低延迟游戏，也不把输入转发给播放器。
-- 画面只留在进程内存，不保存、不上传；只持久化模块路径。状态读取限于数字形式本机地址，
-  不使用代理、不跟随重定向，响应最多 16 KiB。
-- 测试覆盖到期帧、延迟变化、内存和帧数上限、释放、状态校验、字面启动参数和翻译。
-  合成 WARP 纹理验证 WinRT 表面 → D3D11 暂存 → BGRA 位图路径，不开窗口、不采集桌面；CI 构建并打包。
-  实际采集、选择器和全屏布局、受保护内容及真实硬件音画对齐仍需人工验证。
-  本次没有打开桌面页面、真实播放器或连接真实音箱。API 参考与英文部分相同。
+- Windows 把采集到的每一帧作为显卡上的画面交过来，并标上它出现在屏幕上的时间。画面始终留在显卡上：大于 2560 × 1600 的来源
+  每次缩小一半，直到放得下（4K → 1920 × 1080，5K → 2560 × 1440）；窗口在屏幕每次刷新时显示到期的画面，保持画面比例。处理器不复制像素。
+- 每秒最多保留 30 帧；30 fps 的视频在 50 Hz、60 Hz 和更高刷新率的屏幕上每一帧都保留。队列最多 256 MiB 画面，
+  1080p、30 fps 时约一秒；延迟更长时每秒保留的帧会变少。画面到时间才显示，不会提前；队列满时丢掉最旧的画面，画面可能停顿一下。
+- 只支持 SDR：HDR 视频可能发灰或过曝，受保护（DRM）的视频是黑的，最小化的来源窗口可能不再产生画面。模块不会绕过这些限制。
+- 延迟是目标值，剩下的误差用同步微调修正。画面是延后的，原窗口对操作的反应也就显得晚：适合看视频，不适合打游戏。输入不会转发给播放器。
+- 画面只在模块的内存和显存里，不保存、不上传。HomePodCast 的设置里只保存模块所在的文件夹。状态只从数字形式的本机地址读取，
+  不走代理、不跟随重定向，最多读 16 KiB。
+
+API 参考与英文部分相同。
