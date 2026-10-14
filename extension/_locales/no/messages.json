@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Lydforsinkelsen overstiger bildegrensen på 2000 ms. Bildet kan ikke forsinkes nok til å stemme."
   }
 }

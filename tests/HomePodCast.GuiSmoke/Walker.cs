@@ -76,6 +76,7 @@ internal sealed class Walker
                 case "idle": RunIdle(); break;
                 case "retrying": RunRetrying(); break;
                 case "streaming": RunStreaming(); break;
+                case "compatibility": RunCompatibility(); break;
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -120,6 +121,44 @@ internal sealed class Walker
         WalkEverything(connected: false);
         Quit();
         CheckLog(idle: true);
+    }
+
+    private void RunCompatibility()
+    {
+        const string id = "02:43:4F:4D:50:54";
+        var config = BaseConfig();
+        config["DeviceId"] = id; config["DeviceName"] = "CI compatibility receiver"; config["Host"] = "127.0.0.1";
+        config["ReceiverSettings"] = new Dictionary<string, object?>
+        {
+            [id.Replace(":", "")] = new Dictionary<string, object?>
+            {
+                ["Name"] = "CI compatibility receiver", ["Host"] = "127.0.0.1", ["Port"] = 7001,
+                ["Model"] = "AppleTV3,2", ["Txt"] = new Dictionary<string, string> { ["srcvers"] = "220.68" },
+                ["HasAirPlay"] = true, ["RaopPort"] = 7001, ["CompatibilityLatencyMs"] = 2000,
+                ["CompatibilityNoticeShown"] = true,
+            },
+        };
+        _userData.Add("CI compatibility receiver");
+        Start(config); // AutoConnect stays false: these checks render controls without starting a session.
+        foreach (var page in Pages)
+        {
+            Navigate(page);
+            var tree = Uia.Snapshot(MainWindow());
+            CheckNavigation(tree);
+            if (page == "首页")
+            {
+                CheckHome(tree, false);
+                Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), page,
+                    "compatibility latency selector is missing");
+                Expect(Has(tree, "2000 ms"), page, "compatibility default is not 2000 ms");
+            }
+            if (page == "设置")
+            {
+                tree = CheckSettings(false);
+            }
+            Layout(tree, page); ShootPage(page, "");
+        }
+        Quit(); CheckLog(idle: true);
     }
 
     private void RunRetrying()

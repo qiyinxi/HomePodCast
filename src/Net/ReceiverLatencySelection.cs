@@ -7,6 +7,13 @@ internal sealed record ReceiverLatencySelection(AirPlayDevice Device, ReceiverPr
     public bool Compatibility => Protocol is ReceiverProtocol.Raop or ReceiverProtocol.AirPlay2Buffered;
     public bool BelowRecommendation => Value < Policy.RecommendedMinimumMs;
 
+    public bool TakeCompatibilityNotice(ReceiverPreferences preferences)
+    {
+        if (!Compatibility || preferences.CompatibilityNoticeShown) return false;
+        preferences.CompatibilityNoticeShown = true;
+        return true;
+    }
+
     public static ReceiverLatencySelection? Create(AirPlayDevice? device, ReceiverPreferences? preferences,
         ReceiverProtocol? active = null, int? processing = null)
     {

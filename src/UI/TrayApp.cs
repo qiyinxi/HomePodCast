@@ -163,7 +163,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
         string id = Config.DeviceId;
         string? host = Config.Host;
-        int latency = Config.LatencyMs;
+        int latency = ReceiverSelection?.Value ?? Config.LatencyMs;
         double? volume = Config.Volume;
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
@@ -200,7 +200,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.DeviceId = device.DeviceId;
         Config.DeviceName = device.Name;
         Config.Host = device.Address.ToString();
-        if (device.Kind is not (ReceiverKind.HomePod or ReceiverKind.AppleTv))
+        if (device.Kind != ReceiverKind.HomePod)
             {
             string key = RaopPassword.Key(device.DeviceId);
             var previous = Config.ReceiverSettings.GetValueOrDefault(key);
@@ -212,6 +212,7 @@ internal sealed partial class TrayApp : ApplicationContext
                 updated.RealtimeLatencyMs = previous.RealtimeLatencyMs;
                 updated.ArrivalToRenderMs = previous.ArrivalToRenderMs;
                 updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
+                updated.CompatibilityNoticeShown = previous.CompatibilityNoticeShown;
             }
             Config.ReceiverSettings[key] = updated;
         }
@@ -321,18 +322,18 @@ internal sealed partial class TrayApp : ApplicationContext
         using var testRoute = Routing.BeginSyncTestRoute();
         int predicted = LatencyTuner.SoundLagMs(snapshot.EffectiveLatencyMs, Config, snapshot.CaptureExtraMs,
             snapshot.FifoTargetMs, snapshot.Context);
-        var expectedSender = Controller.ActiveSender;
+        var expectedSender = Controller.AudioSessionIdentity;
         using var test = new SyncTestForm(predicted, snapshot.Context.CaptureEndpointId, HasCurrentCalibration,
-            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.ActiveSender, expectedSender));
+            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.AudioSessionIdentity, expectedSender));
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
-        var sender = Controller.ActiveSender;
+        var sender = Controller.AudioSessionIdentity;
         var scheduled = new System.Collections.Concurrent.ConcurrentQueue<long>();
         var local = new List<double>();
         test.ClickScheduled += when => scheduled.Enqueue(when);
         if (sender != null)
         {
-            sender.OnsetSent = sent =>
+            Controller.ObserveAudioOnset(sent =>
             {
                 while (scheduled.TryPeek(out var w) && sent - w > MediaClock.FromMs(400)) scheduled.TryDequeue(out _);
                 if (scheduled.TryDequeue(out var when) && sent >= when)
@@ -340,14 +341,14 @@ internal sealed partial class TrayApp : ApplicationContext
                     double ms = MediaClock.ToMs(sent - when);
                     lock (local) local.Add(ms);
                     Log.Info($"probe: click left the PC {ms:F1} ms after entering the Windows mix " +
-                             $"(+{sender.LatencyFrames * 1000.0 / RtpSender.SampleRate:F0} ms requested playout delay)");
+                             $"(+{snapshot.EffectiveLatencyMs:F0} ms requested playout delay)");
                 }
-            };
+            });
         }
 
         DialogResult result;
         try { result = test.ShowDialog(owner); }
-        finally { if (sender != null) sender.OnsetSent = null; }
+        finally { if (sender != null && ReferenceEquals(Controller.AudioSessionIdentity, sender)) Controller.ObserveAudioOnset(null); }
         double[] localTimes;
         lock (local) localTimes = local.ToArray();
         if (localTimes.Length > 0)
@@ -468,6 +469,7 @@ internal sealed partial class TrayApp : ApplicationContext
             Config.Volume = volume;
             Config.Save();
         }
+        RememberReceiverConnection();
         UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();

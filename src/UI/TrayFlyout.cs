@@ -31,6 +31,10 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     private readonly TextBlock _volumeValue = new("", TextStyle.BodyStrong) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _volumeWait = new(150);
 
+    private readonly TextBlock _sceneTitle = new(L.T("场景"));
+    private readonly FluentComboBox _compatibilityLatency = new() { MinWidth = 160 };
+    private readonly TextBlock _receiverNote = Ui.Note();
+
     // scene, night mode, microphone
     private readonly Segmented _scenes = new(Scenes.All.Select(Scenes.Name).ToArray()) { EqualWidths = false, Compact = true };
     private readonly TextBlock _latency = new("", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Right };
@@ -119,13 +123,20 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
 
     private Control BuildScene()
     {
-        var title = new TextBlock(L.T("场景"));
+        var title = _sceneTitle;
+        _compatibilityLatency.AccessibleName = L.T("兼容模式延迟（实验性）"); // experimental since 1.1
+        _compatibilityLatency.Items.AddRange(Net.ReceiverLatencies.CompatibilityChoices.Select(ms => L.F("{0:F1} 秒", ms / 1000.0)));
+        _compatibilityLatency.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_compatibilityLatency.SelectedIndex >= 0)
+                _app.SetReceiverLatency(Net.ReceiverLatencies.CompatibilityChoices[_compatibilityLatency.SelectedIndex]);
+        };
         _scenes.AccessibleName = L.T("场景");
         _scenes.SelectionChangeCommitted += (_, _) =>
         {
             if (_scenes.SelectedIndex >= 0) _app.SelectScene(Scenes.All[_scenes.SelectedIndex]);
         };
-        return Ui.Stack(6, Ui.Row(8, title, title, _latency), _scenes);
+        return Ui.Stack(6, Ui.Row(8, title, title, _latency), _scenes, _compatibilityLatency, _receiverNote);
     }
 
     private Control BuildToggles()
@@ -168,6 +179,14 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
         }
         ShowMute(c.Muted);
 
+        var selection = _app.ReceiverSelection;
+        _scenes.Collapsed = selection != null;
+        _sceneTitle.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        _compatibilityLatency.Collapsed = selection?.Compatibility != true;
+        _receiverNote.Collapsed = selection?.Compatibility != true;
+        _receiverNote.Text = selection?.Compatibility == true
+            ? L.T("兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。") : "";
+        if (selection != null) _compatibilityLatency.SelectedIndex = Array.IndexOf(Net.ReceiverLatencies.CompatibilityChoices, selection.Value);
         _scenes.SelectedIndex = Array.IndexOf(Scenes.All, cfg.Scene);
         _latency.Text = $"{_app.LatencyMs} ms";
         _night.Checked = cfg.NightMode;
