@@ -74,7 +74,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             var entry = _cache.Get(s.DeviceId);
             bool fresh = entry is { State: SpeakerInfoState.Ready, ReadUtc: { } at } && DateTime.UtcNow - at < MaxAge
                          || entry is { State: SpeakerInfoState.Reading };
-            if (force || !fresh) _ = _cache.RefreshAsync(s.DeviceId, s.Name, s.Address);
+            if (force || !fresh) _ = _cache.RefreshAsync(s.DeviceId, s.Name, s.Address, port: s.Port);
         }
     }
 
@@ -128,7 +128,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
     {
         private readonly TextBlock _name = new("", TextStyle.BodyStrong);
         private readonly TextBlock _state = new("", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Right };
-        private readonly TextBlock _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
+        private readonly TextBlock _kind = Value(), _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
             _address = Value(), _mac = new(), _bluetooth = Value(), _deviceId = Value();
         private readonly TextBlock _macNote = Ui.Note(L.T("在路由器的设备列表里按这个地址找到 HomePod，就能看到它连在 2.4G 还是 5G，也可以给它分配固定 IP。"));
         private readonly FluentButton _copy = new(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 Wi-Fi MAC 地址") };
@@ -140,6 +140,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
         {
             Gap = 10;
             _macRow = Ui.Row(8, null, _mac, _copy);
+            _lines.Add(L.T("设备类型"), _kind);
             _lines.Add(L.T("型号"), _model);
             _lines.Add(L.T("状态"), _session);
             _lines.Add(L.T("分组"), _group);
@@ -166,6 +167,10 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _name.Text = d.Name;
             (_state.Text, _state.Role) = ReadState(entry);
             Set(_model, d.ModelText);
+            var discovered = scan.FirstOrDefault(x => GroupPlan.Key(x.DeviceId) == GroupPlan.Key(speaker.DeviceId));
+            var receiverKind = ReceiverKinds.Classify(d.Model ?? "", speaker.Txt,
+                airPlay: discovered?.HasAirPlay ?? true, raop: discovered?.RaopPort != null, info: entry?.Info);
+            Set(_kind, receiverKind == ReceiverKind.HomePod ? "HomePod" : ReceiverKinds.Label(receiverKind));
             var txt = TxtRecord.FromInfo(entry?.Info) ?? speaker.Txt;
             var holder = HomeTheater.IsAppleTvModel(d.Model) ? null : HomeTheater.HolderOf(GroupMembership.FromTxt(txt), scan);
             Set(_session, SessionText(d.SessionActive, streaming, holder?.Name));

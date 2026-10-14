@@ -62,7 +62,7 @@ internal sealed partial class TrayApp
             sender?.PacketsSent, sender?.LateWakeups, sender?.SkippedPackets, sender?.RetransmitRequests,
             sender?.Retransmitted, sender?.RetransmitMisses, network?.Kind ?? AdapterKind.Other,
             network?.Category ?? NetworkCategory.Unknown, capture?.CaptureDeviceMissing ?? false,
-            capture?.NoOutputDevice ?? false, verdict, _glitchMarkers.ToArray());
+            capture?.NoOutputDevice ?? false, verdict, _glitchMarkers.ToArray(), LastScan.FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(Config.DeviceId ?? ""))?.Kind);
         var identifiers = new List<string?>
         {
             Config.DeviceName, Config.Host, Config.MultiRoomDeviceName, Config.MultiRoomHost, Config.CaptureDeviceId,

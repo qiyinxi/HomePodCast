@@ -390,8 +390,26 @@ jobs:
           path: gui-screenshots
           if-no-files-found: warn
 
+  airplay-compat-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: AirPlay compatibility receiver test
+        run: bash tools/ci/airplay-compat-e2e.sh
+      - name: Upload receiver diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: airplay-compat-results
+          path: test-results/airplay-compat
+          if-no-files-found: warn
+
   release:
-    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke]
+    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, airplay-compat-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:

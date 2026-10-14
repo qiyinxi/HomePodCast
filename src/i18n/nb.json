@@ -477,5 +477,16 @@
   "闲置多久后断开": "Koble fra etter inaktivitet i",
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen bruk av tastatur eller mus og ingen lyd i HomePod så lenge.",
   "开始和结束时间相同，不会断开。": "Start og slutt er like, så den kobles aldri fra.",
-  "夜间已自动断开，{0} 自动重新连接": "Frakoblet for natten; kobler til igjen kl. {0}"
+  "夜间已自动断开，{0} 自动重新连接": "Frakoblet for natten; kobler til igjen kl. {0}",
+  "Apple TV（实验性）": "Apple TV (eksperimentelt)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Kompatibilitetsmodus (eksperimentell)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Tredjepart (eksperimentelt, ikke testet på maskinvare)",
+  "未知 AirPlay 设备（实验性）": "Ukjent AirPlay-enhet (eksperimentell)",
+  "设备类型": "Enhetstype",
+  "手动添加 AirPlay 设备（实验性）": "Legg til AirPlay-enhet manuelt (eksperimentelt)",
+  "端口（默认 7000）": "Port (standard 7000)",
+  "添加": "Legg til",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "Skriv inn mottakerens IP-adresse og port; bare enhetsinformasjon leses.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Skriv inn en gyldig IPv4-adresse og en port mellom 1 og 65535.",
+  "发现不到设备时，填写 IP 地址和端口。": "Hvis enheten ikke finnes, skriv inn IP-adresse og port."
 }

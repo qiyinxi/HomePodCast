@@ -278,6 +278,7 @@ internal sealed class Walker
         var page = PagePane(tree, "设置");
         Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
         Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
+        Expect(Has(page, T("手动添加 AirPlay 设备（实验性）")), "设置", "manual AirPlay receiver row missing"); // experimental since 1.1
         Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
         if (connected)
         {
