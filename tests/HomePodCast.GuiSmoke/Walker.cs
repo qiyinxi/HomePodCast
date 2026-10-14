@@ -405,6 +405,7 @@ internal sealed class Walker
     {
         var open = FindFlyout();
         if (open != IntPtr.Zero) return open;
+        HandlePrompts(); // a message box still open would swallow the request: the flyout never came (2026-10-14)
         using (var second = Process.Start(StartInfo("gui --flyout"))!)
         {
             if (!second.WaitForExit(15_000)) throw new StepFailed("a second gui --flyout did not exit");
@@ -794,6 +795,9 @@ internal sealed class Walker
         Checks.Layout(tree, Where(step), _t, first, _userData);
         if (first.Failures.Count > 0 && tree.Hwnd != IntPtr.Zero && Native.IsWindowVisible(tree.Hwnd))
         {
+            // A firewall message box can come up late, a child of the main window over the page. 2026-10-14: twice a
+            // runner's network change brought 「当前是公用网络」 up during 首页's checks. Answer it, then look again.
+            HandlePrompts();
             Thread.Sleep(800);
             first = new Report { Silent = true };
             Checks.Layout(Uia.Snapshot(tree.Hwnd), Where(step), _t, first, _userData);
