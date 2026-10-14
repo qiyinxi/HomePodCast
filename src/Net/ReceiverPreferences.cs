@@ -12,6 +12,7 @@ public sealed record ReceiverPreferences(string Name, string Host, int Port, str
     public int? ArrivalToRenderMs { get; set; }
     public Dictionary<string, string>? RaopTxt { get; set; }
     public int CompatibilityLatencyMs { get; set; } = 2000;
+    public bool CompatibilityNoticeShown { get; set; }
     public AirPlayDevice? Device(string id) => IPAddress.TryParse(Host, out var address)
         ? new AirPlayDevice(Name, id, address, Port, Model, Txt) { HasAirPlay = HasAirPlay, RaopPort = RaopPort, RaopTxt = RaopTxt ?? Txt }
         : null;

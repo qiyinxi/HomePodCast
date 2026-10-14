@@ -59,6 +59,12 @@ public sealed partial class StreamController
                 Set(StreamState.Idle, L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"));
                 return;
             }
+            if (plan.Members.Any(m => UsesThirdPartyPath(ReceiverLookup?.Invoke(m.DeviceId))))
+            {
+                source?.Dispose();
+                Set(StreamState.Idle, L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+                return;
+            }
             var cts = new CancellationTokenSource();
             Volatile.Write(ref _groupSource, source); // Stop disposes it (TearDownGroup)
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source);

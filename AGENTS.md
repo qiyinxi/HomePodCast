@@ -53,6 +53,16 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   tables in `src/i18n/*.json`. Add, rename or remove the entry in every table: `LocalizationTests` fails on a missing
   one and lists unused ones in its output (it doesn't fail on those), so remove a text's entries with the text. No
   brackets that can wrap alone at a line start in CJK text.
+- **Names of settings and controls** use the established professional term, as audio software and Windows itself say
+  it, with the English term in parentheses where it helps. Explanations go in the description line or the tooltip,
+  never in the name. Invented descriptive phrases are easy to misread. The maintainer's examples, 2026-10-15:
+  - 「麦克风监听」, not 「使用麦克风」 or 「把麦克风混进推流」;
+  - 衰减（Room Size）, 高频阻尼（Damping）, 干湿比（Wet/Dry）, 预延迟（Pre-delay）, not 「房间大小」 or 「混响比例」.
+- **Pages stay small.** Each page in the left navigation holds a limited number of features. A crowded page is worse
+  than one more page, so a feature that doesn't belong gets its own page rather than another section. That is why
+  设置 sits at the bottom of the nav rail. Example (2026-10-15): the output equalizer leaves 「麦克风与音效」 for a page
+  of its own, and doesn't move into 混音器. Keep long explanations short or collapsed, so that controls further down
+  stay visible.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
 - **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
@@ -87,9 +97,18 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Fields: Status (待办 / 进行中 / 等你决定 / 已完成 / 搁置), 负责人 (Claude / Codex / 维护者), 领域, 优先级, 链接.
   - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
     `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
-  - When you start an item, set it to 进行中 with yourself as 负责人. When it is finished, set 已完成 and add the result and
-    links to its body.
-  - A new need, or a question only the maintainer can answer, becomes a new item (the question with 等你决定).
+  - **Bugs first, and without waiting** (the maintainer, 2026-10-15). A bug is something broken: a regression, a crash
+    or a CI failure. Bugs are Claude's, whoever's code they are in. Claude fixes them right away, unless the
+    maintainer says not to, and puts them on the board with Claude as 负责人 and the status 进行中.
+  - Codex adds the bugs it finds to the board, with 负责人 Claude, and doesn't fix them, unless the maintainer assigns
+    one to Codex. Codex still keeps its own open PRs green.
+  - **Requirements wait for the maintainer.** A requirement is a new feature, a change of behaviour or an idea. It goes
+    on the board first, with no 负责人 and the status 待办. Then ask the maintainer whether Claude or Codex does it,
+    and start nothing (no subagents either) until they have assigned it. Work the maintainer asked for in your own
+    session counts as assigned. When it's unclear whether something is a bug or a requirement, ask.
+  - A question only the maintainer can answer gets the status 等你决定.
+  - When you start an assigned item, set it to 进行中. When it is finished, set 已完成 and add the result and links to its
+    body.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
   fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
   one: tell the maintainer, and build on it only if they say so.

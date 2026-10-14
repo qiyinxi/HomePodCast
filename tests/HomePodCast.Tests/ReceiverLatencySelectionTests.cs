@@ -1,0 +1,75 @@
+using System.Net;
+using HomePodCast.Net;
+
+namespace HomePodCast.Tests;
+
+public class ReceiverLatencySelectionTests
+{
+    private static AirPlayDevice Device(string model, bool modern = false) => new("Test", model, IPAddress.Loopback,
+        7001, model, new Dictionary<string, string> { ["srcvers"] = modern ? "366.0" : "220.68" });
+
+    [Fact]
+    public void HomePodKeepsScenesEvenWithCompatibilityOverrides()
+    {
+        var device = Device("AudioAccessory6,1", true);
+        var preferences = ReceiverPreferences.Of(device); preferences.ProtocolOverride = ReceiverProtocol.Raop;
+        Assert.Null(ReceiverLatencySelection.Create(device, preferences, ReceiverProtocol.AirPlay2Buffered));
+    }
+
+    [Fact]
+    public void CompatibilitySelectionIsPerDeviceAndDoesNotChangeScenes()
+    {
+        var device = Device("AppleTV3,2"); var first = ReceiverPreferences.Of(device); var second = ReceiverPreferences.Of(device);
+        var scene = new AppConfig(); int homePodLatency = scene.LatencyMs;
+        var selection = ReceiverLatencySelection.Create(device, first)!;
+        Assert.True(selection.Compatibility); Assert.Equal(2000, selection.Value);
+        selection.Save(first, 1500);
+        Assert.Equal(1500, first.CompatibilityLatencyMs); Assert.Equal(2000, second.CompatibilityLatencyMs);
+        Assert.Equal(homePodLatency, scene.LatencyMs);
+        Assert.Throws<ArgumentOutOfRangeException>(() => selection.Save(first, 500));
+    }
+
+    [Fact]
+    public void ProtocolInUseControlsFallbackLatencyAndAirportRecommendation()
+    {
+        var modern = Device("ThirdParty", true);
+        Assert.Equal(250, ReceiverLatencySelection.Create(modern, null)!.Value);
+        Assert.True(ReceiverLatencySelection.Create(modern, null, ReceiverProtocol.Raop)!.Compatibility);
+        var airport = Device("AirPort10,115"); var preferences = ReceiverPreferences.Of(airport); preferences.CompatibilityLatencyMs = 1000;
+        Assert.True(ReceiverLatencySelection.Create(airport, preferences)!.BelowRecommendation);
+    }
+
+    [Fact]
+    public void CompatibilityNoticeIsRememberedAcrossConfigRoundTrips()
+    {
+        var device = Device("AppleTV3,2"); var preferences = ReceiverPreferences.Of(device);
+        var selection = ReceiverLatencySelection.Create(device, preferences)!;
+        Assert.True(selection.TakeCompatibilityNotice(preferences));
+        var copy = System.Text.Json.JsonSerializer.Deserialize<ReceiverPreferences>(System.Text.Json.JsonSerializer.Serialize(preferences))!;
+        Assert.False(selection.TakeCompatibilityNotice(copy));
+        Assert.True(selection.TakeCompatibilityNotice(ReceiverPreferences.Of(device)));
+        Assert.False(ReceiverLatencySelection.Create(Device("ThirdParty", true), null)!.TakeCompatibilityNotice(ReceiverPreferences.Of(device)));
+    }
+
+    [Fact]
+    public void ThirdPartyGroupsAreRejectedBeforeCaptureOrConnection()
+    {
+        var device = Device("ThirdParty", true);
+        using var controller = new StreamController { ReceiverLookup = _ => device };
+        var plan = new GroupPlan(GroupKind.MultiRoom, "test", null,
+            [new("third", "Third party", "127.0.0.1"), new("home", "HomePod", "127.0.0.1")], false, false, new Dictionary<string, int>());
+        controller.StartGroup(plan, 120, 10);
+        Assert.Equal(StreamState.Idle, controller.State); Assert.Null(controller.Capture);
+        Assert.Equal(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"), controller.StatusText);
+    }
+
+    [Fact]
+    public void RealtimeChoicesRespectReceiverFloorAndAppleTvDefault()
+    {
+        Assert.Equal(200, ReceiverLatencySelection.Create(Device("AppleTV14,1", true), null)!.Value);
+        var device = Device("ThirdParty", true); var preferences = ReceiverPreferences.Of(device);
+        var selection = ReceiverLatencySelection.Create(device, preferences, processing: 320)!;
+        Assert.Equal(370, selection.Value); selection.Save(preferences, 100); Assert.Equal(350, preferences.RealtimeLatencyMs);
+        Assert.Equal(200, ReceiverLatencySelection.Create(device, null)!.Policy.MinimumMs);
+    }
+}

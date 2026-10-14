@@ -602,5 +602,17 @@
   "模块版本 {0} 与 HomePodCast {1} 不同，请下载同一版本的模块。": "La versión {0} del módulo no coincide con HomePodCast {1}. Descarga el módulo de la misma versión.",
   "窗口采集失败，错误代码 {0}。请重新选择窗口。": "Error al capturar la ventana, código de error {0}. Vuelve a elegir la ventana.",
   "画面太大：最多支持 {0} × {1} 像素。": "La imagen es demasiado grande: se admiten como máximo {0} × {1} píxeles.",
-  "画面显示失败，错误代码 {0}。采集已停止。": "Error al mostrar la imagen, código de error {0}. La captura se ha detenido."
+  "画面显示失败，错误代码 {0}。采集已停止。": "Error al mostrar la imagen, código de error {0}. La captura se ha detenido.",
+  "AirPlay 兼容模式（实验性）": "Modo compatible AirPlay (experimental)",
+  "兼容模式延迟约 2 秒，适合听音乐": "El modo compatible retrasa el sonido unos 2 segundos y es adecuado para música.",
+  "{0:F1} 秒": "{0:F1} s",
+  "兼容模式延迟（实验性）": "Latencia compatible (experimental)",
+  "设备延迟（实验性）": "Latencia del receptor (experimental)",
+  "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "El modo compatible es adecuado para música, con demasiado retraso para jugar. El vídeo puede quedar desincronizado; el retraso de imagen se limita a 2000 ms.",
+  "建议最低 {0} ms；默认 {1} ms": "Mínimo recomendado: {0} ms; predeterminado: {1} ms",
+  "低于推荐最低延迟，可能断音": "Por debajo del mínimo recomendado; puede haber cortes de audio.",
+  "实际连接：{0}": "Conexión activa: {0}",
+  "未连接；连接后显示实际协议。": "Desconectado; el protocolo activo se muestra al conectar.",
+  "接收端处理时间：{0} ms": "Procesamiento del receptor: {0} ms",
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Los receptores AirPlay de terceros aún no pueden unirse a grupos de altavoces."
 }
