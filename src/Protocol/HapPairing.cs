@@ -107,7 +107,7 @@ internal static class HapMessages
     /// <summary>ChaCha20-Poly1305 with a label nonce: ciphertext followed by the 16-byte tag.</summary>
     public static byte[] Seal(byte[] key, string nonceLabel, byte[] plain)
     {
-        using var aead = new ChaCha20Poly1305(key);
+        using var aead = new ChaChaPoly(key);
         var output = new byte[plain.Length + TagSize];
         aead.Encrypt(Nonce(nonceLabel), plain, output.AsSpan(0, plain.Length), output.AsSpan(plain.Length));
         return output;
@@ -116,7 +116,7 @@ internal static class HapMessages
     public static byte[] Open(byte[] key, string nonceLabel, byte[] sealedData, string step)
     {
         if (sealedData.Length < TagSize) throw new HapPairingException($"{step}: encrypted data too short");
-        using var aead = new ChaCha20Poly1305(key);
+        using var aead = new ChaChaPoly(key);
         int n = sealedData.Length - TagSize;
         var plain = new byte[n];
         try
