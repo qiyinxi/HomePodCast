@@ -9,6 +9,9 @@ public sealed class AppConfig
     public string? DeviceId { get; set; }
     public string? DeviceName { get; set; }
     public string? Host { get; set; }
+    public List<Net.ManualAirPlayDevice> ManualDevices { get; set; } = [];
+    public Dictionary<string, Net.ReceiverPreferences> ReceiverSettings { get; set; } = [];
+    public Dictionary<string, string> RaopPasswordsProtected { get; set; } = [];
     public int LatencyMs { get; set; } = 120;
     public double? Volume { get; set; }
     public bool AutoConnect { get; set; } = true;
@@ -178,6 +181,19 @@ public sealed class AppConfig
     /// </summary>
     public HomeTheaterMode HomeTheaterTakeover { get; set; } = HomeTheaterMode.TakeOver;
 
+    // ---- 夜间自动断开 (NightDisconnectPolicy, UI/TrayApp.NightDisconnect.cs) ----
+
+    /// <summary>
+    /// Between <see cref="NightDisconnectFrom"/> and <see cref="NightDisconnectUntil"/> (local time), let the speaker go once
+    /// nobody has used the keyboard or mouse and nothing audible was sent for <see cref="NightDisconnectIdleMinutes"/>; when
+    /// the window ends, connect again like the startup auto-connect.
+    /// </summary>
+    public bool NightDisconnect { get; set; }
+
+    public TimeOnly NightDisconnectFrom { get; set; } = NightDisconnectPolicy.DefaultFrom;
+    public TimeOnly NightDisconnectUntil { get; set; } = NightDisconnectPolicy.DefaultUntil;
+    public int NightDisconnectIdleMinutes { get; set; } = NightDisconnectPolicy.DefaultIdleMinutes;
+
     /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
@@ -219,6 +235,7 @@ public sealed class AppConfig
                 cfg.AppSendVolumes ??= [];
                 cfg.AppSendVolumesOff ??= [];
                 cfg.Effects ??= new();
+                cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
                 AvCalibrations.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;

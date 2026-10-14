@@ -9,20 +9,30 @@ namespace HomePodCast.Net;
 public sealed record AirPlayDevice(string Name, string DeviceId, IPAddress Address, int Port, string Model,
     IReadOnlyDictionary<string, string> Txt)
 {
-    public override string ToString() => $"{Name} ({Model}) {Address}:{Port} [{DeviceId}]";
+    public bool HasAirPlay { get; init; } = true;
+    public int? RaopPort { get; init; }
+    public IReadOnlyDictionary<string, string>? RaopTxt { get; init; }
+    public ReceiverKind Kind => ReceiverKinds.Classify(Model, Txt, HasAirPlay, RaopPort != null);
+    public override string ToString() => $"{Name} ({Model}, {Kind}) {Address}:{Port} [{DeviceId}]";
 }
 
-/// <summary>Tiny mDNS browser for _airplay._tcp (no Bonjour dependency).</summary>
+/// <summary>Tiny mDNS browser for AirPlay and RAOP (no Bonjour dependency).</summary>
 public static class Mdns
 {
     private static readonly IPEndPoint Group = new(IPAddress.Parse("224.0.0.251"), 5353);
-    private const string Service = "_airplay._tcp.local";
+    internal const string Service = "_airplay._tcp.local";
+    internal const string RaopService = "_raop._tcp.local";
 
-    public static async Task<List<AirPlayDevice>> BrowseAsync(TimeSpan timeout, CancellationToken ct = default)
+    public static Task<List<AirPlayDevice>> BrowseAsync(TimeSpan timeout, CancellationToken ct = default) =>
+        BrowseNetworkAsync(timeout, LocalIPv4Addresses().Distinct().ToArray(), Group, ct);
+
+    // Loopback and a private multicast port let tests exercise sockets without querying real receivers.
+    internal static async Task<List<AirPlayDevice>> BrowseNetworkAsync(TimeSpan timeout, IReadOnlyList<IPAddress> interfaces,
+        IPEndPoint group, CancellationToken ct = default)
     {
         var records = new Records();
         var sockets = new List<UdpClient>();
-        foreach (var ip in LocalIPv4Addresses())
+        foreach (var ip in interfaces)
         {
             try
             {
@@ -34,25 +44,54 @@ public static class Mdns
             catch (SocketException) { }
         }
 
-        var query = BuildQuery(Service);
+        UdpClient? multicast = null;
+        try
+        {
+            multicast = new UdpClient(AddressFamily.InterNetwork);
+            multicast.ExclusiveAddressUse = false;
+            multicast.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            multicast.Client.Bind(new IPEndPoint(IPAddress.Any, group.Port));
+            multicast.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
+            foreach (var ip in interfaces)
+                try { multicast.JoinMulticastGroup(group.Address, ip); } catch (SocketException) { }
+        }
+        catch (SocketException) { multicast?.Dispose(); multicast = null; }
+
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
         var receivers = sockets.Select(s => ReceiveLoop(s, records, cts.Token)).ToList();
+        if (multicast != null) receivers.Add(ReceiveLoop(multicast, records, cts.Token));
         try
         {
             // Ask a couple of times; some responders skip the first unicast-response query.
             for (int i = 0; i < 3 && !cts.IsCancellationRequested; i++)
             {
-                foreach (var s in sockets)
-                    try { await s.SendAsync(query, Group, cts.Token); } catch (SocketException) { }
-                await Task.Delay(TimeSpan.FromMilliseconds(400 * (i + 1)), cts.Token).ContinueWith(_ => { });
+                foreach (string service in new[] { Service, RaopService })
+                {
+                    foreach (var s in sockets)
+                        try { await s.SendAsync(BuildQuery(service, unicast: true), group, cts.Token); } catch (SocketException) { }
+                    if (multicast != null)
+                        foreach (var ip in interfaces)
+                            try
+                            {
+                                multicast.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, ip.GetAddressBytes());
+                                await multicast.SendAsync(BuildQuery(service, unicast: false), group, cts.Token);
+                            }
+                            catch (SocketException) { }
+                }
+                await Task.Delay(TimeSpan.FromMilliseconds(400 * (i + 1)), cts.Token);
             }
             await Task.WhenAll(receivers);
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
         finally
         {
+            cts.Cancel();
+            await Task.WhenAll(receivers);
             foreach (var s in sockets) s.Dispose();
+            multicast?.Dispose();
         }
+        ct.ThrowIfCancellationRequested();
         return records.Devices();
     }
 
@@ -80,12 +119,12 @@ public static class Mdns
             .Select(a => a.Address)
             .Where(a => a.AddressFamily == AddressFamily.InterNetwork);
 
-    private static byte[] BuildQuery(string name)
+    internal static byte[] BuildQuery(string name, bool unicast = true)
     {
         var ms = new MemoryStream();
         ms.Write(new byte[] { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 }); // id, flags, 1 question
         WriteName(ms, name);
-        ms.Write(new byte[] { 0, 12, 0x80, 1 }); // PTR, class IN with unicast-response bit
+        ms.Write(new byte[] { 0, 12, unicast ? (byte)0x80 : (byte)0, 1 }); // PTR, QU or QM
         return ms.ToArray();
     }
 
@@ -100,7 +139,7 @@ public static class Mdns
         s.WriteByte(0);
     }
 
-    private sealed class Records
+    internal sealed class Records
     {
         public readonly HashSet<string> Instances = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, (string Host, int Port)> Srv = new(StringComparer.OrdinalIgnoreCase);
@@ -110,25 +149,51 @@ public static class Mdns
 
         public List<AirPlayDevice> Devices()
         {
-            var list = new List<AirPlayDevice>();
-            foreach (var inst in Instances)
+            var byId = new Dictionary<string, AirPlayDevice>(StringComparer.OrdinalIgnoreCase);
+            foreach (var inst in Instances.Order(StringComparer.OrdinalIgnoreCase))
             {
                 if (!Srv.TryGetValue(inst, out var srv)) continue;
                 var txt = Txt.GetValueOrDefault(inst) ?? new Dictionary<string, string>();
                 var addr = A.GetValueOrDefault(srv.Host) ?? SourceOf.GetValueOrDefault(inst);
                 if (addr == null) continue;
-                string name = inst.EndsWith("." + Service, StringComparison.OrdinalIgnoreCase)
-                    ? inst[..^(Service.Length + 1)] : inst;
-                list.Add(new AirPlayDevice(name, txt.GetValueOrDefault("deviceid", ""), addr, srv.Port,
-                    txt.GetValueOrDefault("model", ""), txt));
+                bool raop = inst.EndsWith("." + RaopService, StringComparison.OrdinalIgnoreCase);
+                string service = raop ? RaopService : Service;
+                string name = inst.EndsWith("." + service, StringComparison.OrdinalIgnoreCase) ? inst[..^(service.Length + 1)] : inst;
+                int at = raop ? name.IndexOf('@') : -1;
+                string id = txt.GetValueOrDefault("deviceid", "");
+                if (at > 0)
+                {
+                    if (id.Length == 0) id = name[..at];
+                    name = name[(at + 1)..];
+                }
+                if (id.Length == 0) id = $"service:{srv.Host}:{name}";
+                string key = id.Replace(":", "").Replace("-", "").ToUpperInvariant();
+                string model = txt.GetValueOrDefault("model", txt.GetValueOrDefault("am", ""));
+                var device = new AirPlayDevice(name, id, addr, srv.Port, model, txt)
+                {
+                    HasAirPlay = !raop, RaopPort = raop ? srv.Port : null, RaopTxt = raop ? txt : null,
+                };
+                if (byId.TryGetValue(key, out var other))
+                {
+                    var air = device.HasAirPlay ? device : other;
+                    var legacy = raop ? device : other;
+                    var merged = new Dictionary<string, string>(legacy.Txt, StringComparer.OrdinalIgnoreCase);
+                    foreach (var (k, v) in air.Txt) merged[k] = v;
+                    device = air with
+                    {
+                        Txt = merged, Model = air.Model.Length > 0 ? air.Model : legacy.Model,
+                        HasAirPlay = air.HasAirPlay, RaopPort = legacy.RaopPort, RaopTxt = legacy.RaopTxt,
+                    };
+                }
+                byId[key] = device;
             }
-            return list.OrderBy(d => d.Name).ToList();
+            return byId.Values.OrderBy(d => ReceiverKinds.SortOrder(d.Kind)).ThenBy(d => d.Name).ToList();
         }
     }
 
-    private static void Parse(byte[] msg, Records rec, IPAddress source)
+    internal static void Parse(byte[] msg, Records rec, IPAddress source)
     {
-        if (msg.Length < 12) return;
+        if (msg.Length < 12 || (msg[2] & 0x80) == 0) return; // responses only
         int qd = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(4));
         int rr = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(6)) +
                  BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(8)) +
@@ -141,9 +206,10 @@ public static class Mdns
             int type = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(pos));
             int len = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(pos + 8));
             int data = pos + 10;
+            if (data + len > msg.Length) return;
             switch (type)
             {
-                case 12 when name.Equals(Service, StringComparison.OrdinalIgnoreCase): // PTR
+                case 12 when name.Equals(Service, StringComparison.OrdinalIgnoreCase) || name.Equals(RaopService, StringComparison.OrdinalIgnoreCase): // PTR
                 {
                     int p = data;
                     var inst = ReadName(msg, ref p);
@@ -151,15 +217,21 @@ public static class Mdns
                     rec.SourceOf[inst] = source;
                     break;
                 }
-                case 33: // SRV
+                case 33 when len >= 6: // SRV
                 {
                     int port = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(data + 4));
                     int p = data + 6;
                     rec.Srv[name] = (ReadName(msg, ref p), port);
+                    if (name.EndsWith("." + Service, StringComparison.OrdinalIgnoreCase) || name.EndsWith("." + RaopService, StringComparison.OrdinalIgnoreCase))
+                    {
+                        rec.Instances.Add(name);
+                        rec.SourceOf[name] = source;
+                    }
                     break;
                 }
                 case 16: // TXT
-                    rec.Txt[name] = TxtRecord.Parse(msg, data, len);
+                    if (!rec.Txt.TryGetValue(name, out var existing)) rec.Txt[name] = existing = new(StringComparer.OrdinalIgnoreCase);
+                    foreach (var (key, value) in TxtRecord.Parse(msg, data, len)) existing[key] = value;
                     break;
                 case 1 when len == 4: // A
                     rec.A[name] = new IPAddress(msg.AsSpan(data, 4));

@@ -37,8 +37,8 @@ internal sealed partial class TrayApp
         try
         {
             paired = PairingDialog.Run(_form.Visible ? _form : null, request.Speaker, request.Reason,
-                ct => PinPairingSession.StartAsync(request.Address, 7000, ct),
-                pairing => Pairings.Save(request.DeviceId, request.Speaker, pairing));
+                ct => PinPairingSession.StartAsync(request.Address, request.Port, ct),
+                pairing => Pairings.Save(request.DeviceId, request.Speaker, pairing), request.ThirdParty);
         }
         finally
         {

@@ -157,7 +157,7 @@ public class CalibrationPathTests
         using var sync = new PlayerSync(players);
         int apiDelay = 0;
         bool apiCalibrated = false;
-        using var api = new LocalApi(0, () => TrayApp.ApiStatus(true, cfg.DeviceName, cfg.LatencyMs, apiDelay, apiCalibrated));
+        using var api = new LocalApi(0, () => TrayApp.ApiStatus(true, cfg.DeviceName, cfg.LatencyMs, apiDelay, apiCalibrated)) { ReadTimeout = TimeSpan.FromSeconds(30) };
 
         async Task<(int Home, JsonElement Api, int[] Players)> Everywhere(int latencyMs)
         {

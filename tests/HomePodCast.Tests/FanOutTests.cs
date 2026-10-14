@@ -124,13 +124,15 @@ public class FanOutTests
     });
 
     [Fact]
-    public void Every_speaker_gets_the_same_sync_packets_with_both_rtp_fields_equal()
+    public void Every_speaker_gets_the_same_sync_packets_with_both_rtp_fields_equal() => WithoutStalls(() =>
     {
         using var a = new FakeReceiver();
         using var b = new FakeReceiver();
         var (fifo, _) = Primed();
         var sender = new RtpSender([a.Target(), b.Target(ChannelMode.LeftOnly)], 4630, fifo);
-        Play(sender, 1150); // the first sync goes out at start, the next one a second later
+        // The first sync goes out at start, the next one a second later. 2026-10-14: a CI run woke the sender 132 ms
+        // late, and the first sync lay that far after packet 0; such a run skips packets and is tried again.
+        if (!Play(sender, 1150)) return false;
 
         var sa = a.Sync.ToArray();
         var sb = b.Sync.ToArray();
@@ -148,12 +150,14 @@ public class FanOutTests
         // The first sync is sent ~10 ms before packet 0, the second ~1 s later. A loaded machine (CI) may wake
         // the sender late; what must hold is that both lie on one line: RTP step == NTP step.
         uint rtp0 = FakeReceiver.Rtp(sa[0].Bytes), rtp1 = FakeReceiver.Rtp(sa[1].Bytes);
-        Assert.InRange((int)unchecked(rtp0 - sender.RtpBase), -1500, 0);
+        // Before packet 0, or a late start that stayed under the sender's 60 ms stall limit (more would have skipped).
+        Assert.InRange((int)unchecked(rtp0 - sender.RtpBase), -1500, RtpSender.SampleRate * 60 / 1000);
         int rtpStep = (int)unchecked(rtp1 - rtp0);
         Assert.InRange(rtpStep, 44100 - 1500, 44100 + 22050);
         double ntpStep = (Ntp(sa[1].Bytes) - Ntp(sa[0].Bytes)) / 4294967296.0;
         Assert.InRange(rtpStep - ntpStep * RtpSender.SampleRate, -5, 5);
-    }
+        return true;
+    });
 
     /// <summary>The 64-bit NTP time of a sync packet (seconds &lt;&lt; 32 | fraction).</summary>
     private static ulong Ntp(byte[] sync) => System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(sync.AsSpan(8, 8));

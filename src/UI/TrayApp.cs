@@ -71,7 +71,9 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
+        InitRaop();
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
+        InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
@@ -112,7 +114,8 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
-            if (Config.AutoConnect) Connect(ConnectTrigger.Automatic);
+            // In the night window with nobody at the PC (a restart for Windows Update), 夜间自动断开 connects at its end instead.
+            if (Config.AutoConnect && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
         }
         RefreshDevices();
     }
@@ -156,6 +159,7 @@ internal sealed partial class TrayApp : ApplicationContext
             return;
         }
         _wantConnected = true;
+        _nightDisconnected = false;
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
         string id = Config.DeviceId;
         string? host = Config.Host;
@@ -173,6 +177,7 @@ internal sealed partial class TrayApp : ApplicationContext
     public void Disconnect()
     {
         _wantConnected = false;
+        _nightDisconnected = false; // the user's own disconnect: 夜间自动断开 doesn't connect it again
         _connection.Post(Controller.Stop);
     }
 
@@ -195,6 +200,21 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.DeviceId = device.DeviceId;
         Config.DeviceName = device.Name;
         Config.Host = device.Address.ToString();
+        if (device.Kind is not (ReceiverKind.HomePod or ReceiverKind.AppleTv))
+            {
+            string key = RaopPassword.Key(device.DeviceId);
+            var previous = Config.ReceiverSettings.GetValueOrDefault(key);
+            var updated = ReceiverPreferences.Of(device);
+            if (previous != null)
+            {
+                updated.ProtocolOverride = previous.ProtocolOverride;
+                updated.LastSuccessfulProtocol = previous.LastSuccessfulProtocol;
+                updated.RealtimeLatencyMs = previous.RealtimeLatencyMs;
+                updated.ArrivalToRenderMs = previous.ArrivalToRenderMs;
+                updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
+            }
+            Config.ReceiverSettings[key] = updated;
+        }
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
         if (_wantConnected) Connect(ConnectTrigger.Automatic); // another speaker: never taken over without a click
@@ -243,7 +263,8 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.SetScanning(true);
         try
         {
-            var found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
+            var found = ManualAirPlayDevice.Include(await Mdns.BrowseAsync(TimeSpan.FromSeconds(3)), Config.ManualDevices);
+            foreach (var d in found) Log.Info($"receiver: {Log.Name(d.Name)} {d.Address}:{d.Port} kind={d.Kind} raop={d.RaopPort}");
             LastScan = found; // TXT records and pair members for 设置 → 音箱信息, home theaters for the busy check
             Controller.RecheckSpeaker(); // a connect waiting for a HomePod may now see that its home-theater Apple TV holds it
             var scan = found;
@@ -281,7 +302,7 @@ internal sealed partial class TrayApp : ApplicationContext
     /// </summary>
     internal static AirPlayDevice? FirstHomePod(IReadOnlyList<AirPlayDevice> list, IReadOnlyList<AirPlayDevice> scan)
     {
-        var homepods = list.Where(d => d.Model.StartsWith("AudioAccessory", StringComparison.Ordinal)).ToList();
+        var homepods = list.Where(d => d.Kind == ReceiverKind.HomePod).ToList();
         return homepods.FirstOrDefault(d => HomeTheater.OwnerOf(d, scan) == null) ?? homepods.FirstOrDefault();
     }
 
@@ -419,6 +440,7 @@ internal sealed partial class TrayApp : ApplicationContext
             _ui.Post(async _ =>
             {
                 await Task.Delay(3000); // let Wi-Fi come back
+                if (CheckNight()) return; // woken in the night window with nobody there, or after it: 夜间自动断开 decides
                 if (_wantConnected) Connect(ConnectTrigger.Reconnect);
             }, null);
     }
@@ -498,6 +520,7 @@ internal sealed partial class TrayApp : ApplicationContext
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         DisposeFirewall();
         DisposeUpdate();
+        DisposeNightDisconnect();
         DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();

@@ -420,7 +420,12 @@ internal sealed class HomePage : ScrollPage
         _devices = devices;
         _device.Items.Clear();
         var scan = _app.LastScan;
-        foreach (var d in devices) _device.Items.Add(DeviceLabel(d, scan));
+        foreach (var d in devices)
+        {
+            string label = DeviceLabel(d, scan);
+            string kind = ReceiverKinds.Label(d.Kind);
+            _device.Items.Add(d.Kind is ReceiverKind.HomePod ? label : $"{label} · {kind}");
+        }
         _device.SelectedIndex = SelectedIndex(devices, _app.Config.DeviceId);
         ShowSpeaker();
     }

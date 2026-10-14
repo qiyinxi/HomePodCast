@@ -45,6 +45,11 @@ public sealed partial class StreamController
         lock (_lifecycle)
         {
             Stop();
+            if (plan.Members.Any(m => UsesRaop(ReceiverLookup?.Invoke(m.DeviceId))))
+            {
+                Set(StreamState.Idle, L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"));
+                return;
+            }
             var cts = new CancellationTokenSource();
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom);
             // The connected line says when the group was taken over from a home theater's Apple TV.

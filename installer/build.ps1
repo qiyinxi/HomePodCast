@@ -24,7 +24,7 @@
   ./installer/build.ps1 -Version 0.2.0-local.1 -Validate
 #>
 param(
-    # The CI version (build.yml "Version" step), e.g. 1.2.3, 0.2.0-beta.1, 0.2.0-dev.57.
+    # The CI version (build.yml "Version" step), e.g. 1.2.3, 1.2.3-beta.1, 1.2.3-dev.57.
     [Parameter(Mandatory)] [string] $Version,
     # Fourth MSI version field for prerelease versions (GITHUB_RUN_NUMBER in CI).
     [ValidateRange(0, 65535)] [int] $Build = 0,

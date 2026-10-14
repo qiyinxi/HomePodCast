@@ -205,6 +205,7 @@ internal sealed class Walker
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") tree = CheckSettings(connected);
+            CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
             if (page == "首页") Flyout(connected);
@@ -219,20 +220,35 @@ internal sealed class Walker
         {
             var main = MainWindow();
             var r = Native.WindowRect(main);
-            int width = 700 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(700)
+            int width = 600 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(600), compact navigation
             Native.SetWindowPos(main, IntPtr.Zero, 0, 0, width, r.Height, Native.SWP_NOMOVE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
             Thread.Sleep(800);
             _report.Pass(Where("narrow"), $"window {Native.WindowRect(main).Width}px wide");
             foreach (var page in Pages)
             {
                 Navigate(page);
-                Layout(Uia.Snapshot(MainWindow()), page + " (narrow)");
+                var tree = Uia.Snapshot(MainWindow());
+                CheckNavigation(tree, compact: true);
+                Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
         }
     }
 
     // ---------------------------------------------------------------- page checks
+
+    private void CheckNavigation(Node tree, bool compact = false)
+    {
+        var settings = Find(tree, n => n.Type == "TabItem" && n.Name == T("设置"));
+        Expect(settings?.Parent != null, "navigation", "no settings navigation item");
+        if (settings?.Parent is not { } rail) return;
+        int dpi = (int)Native.GetDpiForWindow(MainWindow());
+        int gap = 8 * dpi / 96;
+        Expect(Math.Abs(rail.Rect.Bottom - settings.Rect.Bottom - gap) <= 2, "navigation",
+            "settings is not pinned to the bottom of the rail");
+        if (compact)
+            Expect(rail.Rect.Width <= 64 * dpi / 96 + 1, "navigation", "narrow window did not compact the navigation rail");
+    }
 
     private void CheckHome(Node tree, bool connected)
     {
@@ -278,6 +294,7 @@ internal sealed class Walker
         var page = PagePane(tree, "设置");
         Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
         Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
+        Expect(Has(page, T("手动添加 AirPlay 设备（实验性）")), "设置", "manual AirPlay receiver row missing"); // experimental since 1.1
         Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
         if (connected)
         {
@@ -288,6 +305,27 @@ internal sealed class Walker
         {
             Expect(Has(page, T("还没有选择音箱")), "设置", $"音箱信息 doesn't say 「{T("还没有选择音箱")}」");
         }
+
+        // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
+        // connection to the fake HomePod that the next steps check.
+        var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
+        Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
+            $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+
+        // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
+        // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
+        // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
+        // Only in the row: German 「Aktualisieren」 is also 音箱信息's 刷新.
+        var versionPattern = _t.Pattern("当前版本 {0}");
+        var updateRow = Find(page, n => n.Type == "Text" && n.Shown && versionPattern.IsMatch(n.Name))?.Parent;
+        Expect(updateRow != null && Find(updateRow, n => n.Type == "Button" && n.Shown && n.Says(T("检查更新"))) != null,
+            "设置", $"「{T("检查更新")}」 is not in the row 「{T("当前版本 {0}")}」");
+        foreach (var offer in new[] { "更新", "查看说明", "跳过此版本" })
+            Expect(updateRow == null || !updateRow.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T(offer))), "设置",
+                $"「{T(offer)}」 is in the row 「{T("当前版本 {0}")}」 although no update was offered");
+        Expect(!page.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T("跳过此版本"))), "设置",
+            $"「{T("跳过此版本")}」 is shown although no update was offered");
 
         // Updates on a fresh config: no automatic checks; the channel follows the build (a prerelease: 测试版).
         var auto = Find(page, n => n.Name == T("自动检查更新") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);

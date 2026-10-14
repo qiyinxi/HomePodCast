@@ -192,6 +192,9 @@ public class UsageProfileTests
     {
         [nameof(AppConfig.Volume)] = "the speaker's loudness: a profile only caps it",
         [nameof(AppConfig.AutoConnect)] = "startup",
+        [nameof(AppConfig.ManualDevices)] = "the receiver address book is shared by every profile",
+        [nameof(AppConfig.ReceiverSettings)] = "per-receiver capabilities and compatibility preferences",
+        [nameof(AppConfig.RaopPasswordsProtected)] = "device-bound encrypted credentials",
         [nameof(AppConfig.MeasuredAvOffsetMs)] = "calibration",
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
@@ -214,6 +217,10 @@ public class UsageProfileTests
         [nameof(AppConfig.UpdateNotified)] = "updates",
         [nameof(AppConfig.LastOwnSession)] = "a record of this PC's last session",
         [nameof(AppConfig.HomeTheaterTakeover)] = "how the household's Apple TV and HomePod share, the same whatever the use",
+        [nameof(AppConfig.NightDisconnect)] = "the household's night, like the auto-connect at startup",
+        [nameof(AppConfig.NightDisconnectFrom)] = "the household's night",
+        [nameof(AppConfig.NightDisconnectUntil)] = "the household's night",
+        [nameof(AppConfig.NightDisconnectIdleMinutes)] = "the household's night",
         [nameof(AppConfig.AppSendVolumesOff)] = "where an app's own HomePod volume starts when turned on again; the levels in use are AppSendVolumes",
     };
 
