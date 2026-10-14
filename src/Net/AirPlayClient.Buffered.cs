@@ -14,7 +14,7 @@ public sealed partial class AirPlayClient
 
     internal static async Task<AirPlayClient> ConnectBufferedAsync(AirPlayDevice device, StreamOptions options,
         AudioFifo fifo, CancellationToken ct, Func<IAacEncoder>? encoder = null,
-        int ptpEventPort = 319, int ptpGeneralPort = 320, bool realtime = false, bool prepareOnly = false)
+        PtpPorts? timingPorts = null, bool realtime = false, bool prepareOnly = false)
     {
         if (device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv)
             throw new InvalidOperationException("Apple devices keep their original realtime NTP path");
@@ -24,14 +24,14 @@ public sealed partial class AirPlayClient
         var client = new AirPlayClient(rtsp);
         try
         {
-            await client.SetupBufferedAsync(options, fifo, encoder, ptpEventPort, ptpGeneralPort, realtime, prepareOnly, ct);
+            await client.SetupBufferedAsync(options, fifo, encoder, timingPorts ?? PtpPorts.Standard, realtime, prepareOnly, ct);
             return client;
         }
         catch { client.Dispose(); throw; }
     }
 
     private async Task SetupBufferedAsync(StreamOptions options, AudioFifo fifo, Func<IAacEncoder>? encoder,
-        int eventPort, int generalPort, bool realtime, bool prepareOnly, CancellationToken ct)
+        PtpPorts ports, bool realtime, bool prepareOnly, CancellationToken ct)
     {
         VolumeCapPercent = options.VolumeCapPercent;
         if (options.RequestLog != null)
@@ -44,7 +44,7 @@ public sealed partial class AirPlayClient
         var shared = Pair(options);
         _rtsp.EnableEncryption(HapKeys.Derive(shared, "Control-Salt", "Control-Write-Encryption-Key"),
             HapKeys.Derive(shared, "Control-Salt", "Control-Read-Encryption-Key"));
-        _ptp = new PtpMaster(_rtsp.LocalIp, new(_rtsp.RemoteIp, 319), new(_rtsp.RemoteIp, 320), true, eventPort, generalPort);
+        _ptp = new PtpMaster(_rtsp.LocalIp, new(_rtsp.RemoteIp, ports.PeerEvent), new(_rtsp.RemoteIp, ports.PeerGeneral), true, ports.LocalEvent, ports.LocalGeneral);
         _ptp.Failed += ex => SignalLost(ex.Message);
         var session = Expect(_rtsp.RtspPlist("SETUP", PtpSessionBody(Guid.NewGuid().ToString(), _rtsp.LocalIp, _ptp.ClockId)), "SETUP PTP session");
         int events = Convert.ToInt32(BPlist.ReadDict(session.Body).GetValueOrDefault("eventPort") ?? 0L);

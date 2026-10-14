@@ -51,4 +51,7 @@ internal sealed class LegacyReceiverSession(RaopClient client, AirPlayDevice dev
 }
 
 public sealed record ReceiverConnectOptions(int LatencyMs, double? VolumePercent, double VolumeCapPercent,
-    PairingStore? Pairings, string? Password, IAudioEffect Effects, Action<string>? Log = null);
+    PairingStore? Pairings, string? Password, IAudioEffect Effects, Action<string>? Log = null)
+{
+    internal PtpPorts? TimingPorts { get; init; }
+}

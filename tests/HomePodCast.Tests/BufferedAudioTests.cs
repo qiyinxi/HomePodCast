@@ -27,7 +27,7 @@ public sealed class BufferedAudioTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
         var accept = tcp.AcceptTcpClientAsync(timeout.Token).AsTask();
         using var client = await AirPlayClient.ConnectBufferedAsync(Device(fake.Port), new StreamOptions(1500, 99)
-            { VolumeCapPercent = 10 }, fifo, timeout.Token, ptpEventPort: 0, ptpGeneralPort: 0);
+            { VolumeCapPercent = 10 }, fifo, timeout.Token, timingPorts: fake.TimingPorts);
         using var receiver = await accept;
         Assert.Equal("PTP", fake.SessionSetup!["timingProtocol"]);
         Assert.Equal(103L, fake.StreamSetup!["type"]);

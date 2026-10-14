@@ -5,6 +5,7 @@ namespace HomePodCast;
 public sealed partial class StreamController
 {
     private IReceiverSession? _receiverSession;
+    internal PtpPorts? ReceiverTimingPorts { get; set; }
     public IReceiverSession? ReceiverSession => _receiverSession;
     public Func<string, ReceiverPreferences?>? ReceiverSettings { get; set; }
     internal ThirdPartyConnections.Connector? BufferedReceiverConnector { get; set; }
@@ -40,7 +41,7 @@ public sealed partial class StreamController
                     [new BusyTarget(device.DeviceId, device.Name, device.Address, device.Port)], ct);
                 EnsureCapture(ct);
                 var options = new ReceiverConnectOptions(250, Muted ? 0 : Volume, VolumeCapPercent, Pairings,
-                    ReceiverPassword?.Invoke(device.DeviceId), Effects, Log.Info);
+                    ReceiverPassword?.Invoke(device.DeviceId), Effects, Log.Info) { TimingPorts = ReceiverTimingPorts };
                 var session = await ThirdPartyConnections.ConnectAsync(device, ReceiverSettings?.Invoke(device.DeviceId), options, _fifo, ct,
                     BufferedReceiverConnector, ReceiverConnectorOverride);
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);

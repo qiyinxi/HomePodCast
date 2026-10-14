@@ -78,7 +78,7 @@ internal static class ThirdPartyConnections
                 };
                 bool ptp = (ReceiverKinds.Features(device.Txt?.GetValueOrDefault("features") ?? device.Txt?.GetValueOrDefault("ft")) & ReceiverKinds.Ptp) != 0;
                 prepared = ptp
-                    ? await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct, realtime: true, prepareOnly: true)
+                    ? await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct, timingPorts: options.TimingPorts, realtime: true, prepareOnly: true)
                     : await AirPlayClient.PrepareAsync(device.Address, device.Port, stream, ChannelMode.Stereo, ct);
                 var actual = ReceiverLatencies.For(device.Kind, ReceiverProtocol.AirPlay2Realtime, prepared.ArrivalToRenderMs, device.Model);
                 if (actual.MinimumMs > actual.MaximumMs) throw new AirPlayException(L.T("这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。"));
@@ -108,7 +108,7 @@ internal static class ThirdPartyConnections
             VolumeCapPercent = options.VolumeCapPercent, Effects = options.Effects,
             Pairings = options.Pairings, DeviceId = device.DeviceId, RequestLog = options.Log,
         };
-        return new BufferedReceiverSession(await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct));
+        return new BufferedReceiverSession(await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct, timingPorts: options.TimingPorts));
     }
 
     private static async Task<IReceiverSession> LegacyAsync(AirPlayDevice device, ReceiverPreferences? settings,

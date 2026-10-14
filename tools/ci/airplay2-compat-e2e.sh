@@ -16,6 +16,7 @@ dotnet build "$root/tests/HomePodCast.ProtocolHarness" -c Release
 run_case() {
   local mode="$1" latency="$2"
   local label="$mode-$latency"
+  touch "$results/$label.pcm"
   receiver="$(docker run -d -e GITHUB_ACTIONS=true -v "$results:/results" homepodcast-airplay2-ci "$label")"
   local host
   host="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$receiver")"
@@ -24,7 +25,6 @@ run_case() {
     if (echo > "/dev/tcp/$host/7000") 2>/dev/null; then break; fi
     sleep 1
   done
-  touch "$results/$label.pcm"
   if ! sudo env GITHUB_ACTIONS=true "$(command -v dotnet)" \
     "$root/tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll" \
     --airplay2 "$host" 7000 "$latency" "$fixture" "$results/$label.pcm" "$mode" 2>&1 | tee "$results/$label-sender.log"; then

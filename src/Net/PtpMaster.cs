@@ -104,3 +104,8 @@ public sealed class PtpMaster : IDisposable
         _stop.Dispose();
     }
 }
+
+internal sealed record PtpPorts(int LocalEvent, int LocalGeneral, int PeerEvent, int PeerGeneral)
+{
+    public static PtpPorts Standard { get; } = new(319, 320, 319, 320);
+}

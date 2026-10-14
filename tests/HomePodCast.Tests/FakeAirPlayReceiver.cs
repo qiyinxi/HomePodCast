@@ -57,6 +57,17 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
     public int ArrivalToRenderMs { get; set; } = 140;
+    private UdpClient? _ptpEvents, _ptpGeneral;
+    public PtpPorts TimingPorts
+    {
+        get
+        {
+            _ptpEvents ??= new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            _ptpGeneral ??= new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            return new(0, 0, ((IPEndPoint)_ptpEvents.Client.LocalEndPoint!).Port,
+                ((IPEndPoint)_ptpGeneral.Client.LocalEndPoint!).Port);
+        }
+    }
     public int? BufferedDataPort { get; init; }
     public Dictionary<string, object?>? SessionSetup { get; private set; }
     public Dictionary<string, object?>? StreamSetup { get; private set; }
@@ -389,6 +400,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public void Dispose()
     {
         _closed = true;
+        _ptpEvents?.Dispose(); _ptpGeneral?.Dispose();
         _listener.Stop();
         _events.Stop();
         lock (_connections)
