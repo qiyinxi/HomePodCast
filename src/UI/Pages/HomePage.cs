@@ -370,6 +370,7 @@ internal sealed class HomePage : ScrollPage
         var selection = _app.ReceiverSelection;
         _homePodLatency.Collapsed = selection != null;
         _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        _sceneHeader.Wrap = selection != null; // Long receiver labels share the header with 管理配置.
         int ms = selection?.Value ?? _tuner.Value;
         _latency.Value = _tuner.Value;
         _scenes.SelectedIndex = Array.IndexOf(Scenes.All, cfg.Scene);

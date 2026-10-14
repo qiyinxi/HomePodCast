@@ -154,10 +154,11 @@ internal sealed class Walker
             }
             if (page == "设置")
             {
-                tree = CheckSettings(false);
+                tree = CheckSettings(false, compatibility: true);
             }
             Layout(tree, page); ShootPage(page, "");
         }
+        WalkNarrow();
         Quit(); CheckLog(idle: true);
     }
 
@@ -264,6 +265,11 @@ internal sealed class Walker
         Dialog("cinema", ButtonInRow("无线影院（实验性）", "打开"), "无线影院（实验性）", "关闭", CheckCinema);
         if (VideoWindowDir != null) ViewingWindow(connected);
 
+        WalkNarrow();
+    }
+
+    private void WalkNarrow()
+    {
         if (_s.Narrow)
         {
             var main = MainWindow();
@@ -329,7 +335,7 @@ internal sealed class Walker
         }
     }
 
-    private Node CheckSettings(bool connected)
+    private Node CheckSettings(bool connected, bool compatibility = false)
     {
         // 音箱信息 reads the speaker when the page is shown: wait for 读取中… to go.
         var tree = Uia.Snapshot(MainWindow());
@@ -348,6 +354,13 @@ internal sealed class Walker
         {
             Expect(Has(page, _fake!.Name), "设置", $"音箱信息 doesn't name 「{_fake.Name}」");
             Expect(!Has(page, T("无法读取（音箱不在线？）")), "设置", "音箱信息 could not read the speaker");
+        }
+        else if (compatibility)
+        {
+            Expect(Has(page, "CI compatibility receiver"), "设置", "音箱信息 doesn't name the selected receiver");
+            Expect(!Has(page, T("还没有选择音箱")), "设置", "音箱信息 lost the selected receiver");
+            Expect(Has(page, T("连接方式（实验性）")), "设置", "connection override is missing"); // experimental since 1.1
+            Expect(Has(page, T("未连接；连接后显示实际协议。")), "设置", "disconnected protocol status is missing");
         }
         else
         {
