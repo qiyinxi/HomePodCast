@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace HomePodCast.UI.Controls;
 
@@ -73,6 +74,12 @@ internal abstract class FluentControl : Control
     protected void RequestLayout() => LayoutPanel.Relayout(Parent);
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Surface);
+
+    protected override void WndProc(ref Message m)
+    {
+        LayoutPanel.KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
 
     protected override void OnMouseEnter(EventArgs e)
     {
@@ -262,10 +269,15 @@ internal abstract class LayoutPanel : Panel
         return new Size(width, Arrange(width, apply: false));
     }
 
+    /// <summary>Tests: called on this thread for every container (page, card, row) that places its children.</summary>
+    [ThreadStatic] internal static Action<Control>? Arranged;
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         // Not while a subclass is still being built (Controls.Add lays out): only once it is on a parent.
-        if (Width > 0 && Parent != null) Arrange(Width, apply: true);
+        if (Width <= 0 || Parent == null) return;
+        Arranged?.Invoke(this);
+        Arrange(Width, apply: true);
     }
 
     protected virtual void OnThemeChanged() => Invalidate();
@@ -282,6 +294,28 @@ internal abstract class LayoutPanel : Panel
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
+
+    protected override void WndProc(ref Message m)
+    {
+        KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
+
+    /// <summary>
+    /// A container's order of children is its layout order, and stays as the code set it. When a child window's z-order
+    /// changes (WM_WINDOWPOSCHANGED), WinForms re-sorts the parent's children to match it, and the window of a row collapsed
+    /// while the page was built is created when the row is first shown, after the last earlier sibling that already has one.
+    /// 2026-10-15: turning 设置 →「夜间自动断开」 on put 「闲置多久后断开」 above 「时段」 (the second row was shown first).
+    /// Marked SWP_NOZORDER, the message leaves the order alone (our children never overlap).
+    /// </summary>
+    internal static void KeepChildOrder(ref Message m)
+    {
+        const int WM_WINDOWPOSCHANGED = 0x0047, SWP_NOZORDER = 0x0004;
+        if (m.Msg != WM_WINDOWPOSCHANGED || m.LParam == IntPtr.Zero) return;
+        int offset = 2 * IntPtr.Size + 16; // WINDOWPOS: hwnd, hwndInsertAfter, x, y, cx, cy, flags
+        int flags = Marshal.ReadInt32(m.LParam, offset);
+        if ((flags & SWP_NOZORDER) == 0) Marshal.WriteInt32(m.LParam, offset, flags | SWP_NOZORDER);
+    }
 
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
@@ -604,6 +638,7 @@ internal class ScrollPage : Panel, ISurface
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (Content is null) return; // AutoScroll lays out during construction
+        LayoutPanel.Arranged?.Invoke(this);
         int scrollBar = SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi);
         int width = Math.Max(0, Math.Min(Width - scrollBar, Theme.Dp(MaxContentWidth, DeviceDpi)));
         Content.Inset = Width < Theme.Dp(640, DeviceDpi)
