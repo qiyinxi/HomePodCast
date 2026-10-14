@@ -72,6 +72,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public Dictionary<string, object?>? SessionSetup { get; private set; }
     public Dictionary<string, object?>? StreamSetup { get; private set; }
     public Dictionary<string, object?>? RateAnchor { get; private set; }
+    public Dictionary<string, object?>? BufferedFlush { get; private set; }
 
     /// <summary>The identifier in M6 and pair-verify M2.</summary>
     public byte[] AccessoryId => Encoding.UTF8.GetBytes(DeviceId);
@@ -268,6 +269,10 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return Ok;
             case "SETRATEANCHORTIME":
                 RateAnchor = BPlist.ReadDict(req.Body);
+                Record(method, true);
+                return Ok;
+            case "FLUSHBUFFERED":
+                BufferedFlush = BPlist.ReadDict(req.Body);
                 Record(method, true);
                 return Ok;
             case "RECORD" or "FLUSH" or "SET_PARAMETER" or "TEARDOWN":

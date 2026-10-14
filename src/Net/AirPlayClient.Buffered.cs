@@ -91,6 +91,13 @@ public sealed partial class AirPlayClient
         {
             Record();
             SetVolumeDb(options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20);
+            // Initialise the receiver's decoded PCM cursor before its first AAC block. Type 103
+            // receivers use FLUSHBUFFERED rather than the realtime RTP-Info FLUSH.
+            Expect(_rtsp.RtspPlist("FLUSHBUFFERED", new()
+            {
+                ["flushUntilSeq"] = 0,
+                ["flushUntilTS"] = _buffered!.RtpBase,
+            }), "FLUSHBUFFERED");
         }
         // Give the receiver's PTP monitor time to establish the clock before its first anchor.
         // This delay is startup only; live audio thereafter uses the selected 1/1.5/2 second offset.

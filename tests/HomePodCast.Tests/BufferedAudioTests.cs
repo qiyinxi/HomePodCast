@@ -42,6 +42,10 @@ public sealed class BufferedAudioTests
         Assert.Equal(3L, fake.StreamSetup["ct"]);
         Assert.Equal(10, client.VolumeCapPercent);
         Assert.NotNull(fake.RateAnchor);
+        Assert.Equal(0L, fake.BufferedFlush!["flushUntilSeq"]);
+        Assert.Equal(fake.RateAnchor["rtpTime"], fake.BufferedFlush["flushUntilTS"]);
+        Assert.True(Array.IndexOf(fake.Requests.ToArray(), "FLUSHBUFFERED [encrypted]")
+            < Array.IndexOf(fake.Requests.ToArray(), "SETRATEANCHORTIME [encrypted]"));
         Assert.Contains("SETPEERS [encrypted]", fake.Requests);
         Assert.Contains("SETRATEANCHORTIME [encrypted]", fake.Requests);
         byte[] size = new byte[2];
