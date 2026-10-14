@@ -35,6 +35,7 @@
     <Compile Include="../../src/Net/Pairing.cs" Link="Net/Pairing.cs" />
     <Compile Include="../../src/Net/IGroupMember.cs" Link="Net/IGroupMember.cs" />
     <Compile Include="../../src/Net/RtpSender.cs" Link="Net/RtpSender.cs" />
+    <Compile Include="../../src/Audio/IGroupPacketSource.cs" Link="Audio/IGroupPacketSource.cs" />
     <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
     <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
