@@ -12,6 +12,16 @@ if (args is ["--self-test"])
 
 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true")
     throw new InvalidOperationException("Receiver integration tests only run in GitHub Actions");
+if (args is ["--aac-fixture", var directory])
+{
+    HomePodCast.ProtocolHarness.AirPlay2Compatibility.Fixture(directory);
+    return;
+}
+if (args is ["--airplay2", var apHost, var apPort, var apLatency, var fixtureDirectory, var receivedPcm, var mode])
+{
+    await HomePodCast.ProtocolHarness.AirPlay2Compatibility.Run(apHost, int.Parse(apPort), int.Parse(apLatency), fixtureDirectory, receivedPcm, mode == "realtime");
+    return;
+}
 if (args is ["--raop", var host, var portArg, var etArg, var latencyArg, var password, var pcm])
 {
     await HomePodCast.ProtocolHarness.RaopCompatibility.Run(host, int.Parse(portArg), int.Parse(etArg), int.Parse(latencyArg), password, pcm);
@@ -38,5 +48,5 @@ throw new Exception("shairport-sync was not discovered");
 namespace HomePodCast
 {
     // The console harness compiles the production protocol sources without WinForms or embedded UI resources.
-    internal static class L { public static string T(string text) => text; }
+    internal static class L { public static string T(string text) => text; public static string F(string text, params object?[] args) => string.Format(text, args); }
 }

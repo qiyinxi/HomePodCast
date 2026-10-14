@@ -74,6 +74,12 @@ public sealed partial class StreamController
                 DisposeCapture(); Set(StreamState.Idle, ex.Message);
                 RaopPasswordRequired?.Invoke(new(device, trigger)); return;
             }
+            catch (RaopUnsupportedException ex)
+            {
+                Log.Warn($"RAOP: {ex.Message}");
+                DisposeCapture(); Set(StreamState.Idle, ex.Message);
+                return; // FairPlay only: every retry would end the same
+            }
             catch (RaopBusyException ex)
             {
                 if (trigger is ConnectTrigger.Manual or ConnectTrigger.TakeOver)

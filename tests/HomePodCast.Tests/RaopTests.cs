@@ -92,7 +92,7 @@ public class RaopTests
 
     [Fact]
     public void FairPlay_only_receiver_is_rejected_before_any_socket_is_opened() =>
-        Assert.Throws<AirPlayException>(() => RaopClient.Encryption(new Dictionary<string, string> { ["et"] = "3,5" }));
+        Assert.Throws<RaopUnsupportedException>(() => RaopClient.Encryption(new Dictionary<string, string> { ["et"] = "3,5" }));
 
     [Theory]
     [InlineData(false, false)]
@@ -125,6 +125,51 @@ public class RaopTests
         Assert.Contains("FLUSH", fake.Methods);
         Assert.Equal("TEARDOWN", fake.Methods[^1]);
         Assert.Equal(new[] { "OPTIONS", "ANNOUNCE", "SETUP", "RECORD" }, fake.Methods.Distinct().Take(4));
+    }
+
+    [Fact]
+    public async Task A_SETUP_reply_without_Session_still_records_and_tears_down()
+    {
+        using var fake = new FakeRaop(false, false) { NoSession = true };
+        var lines = new List<string>();
+        using var client = await RaopClient.ConnectAsync(IPAddress.Loopback, fake.Port, new RaopOptions
+        {
+            Txt = new Dictionary<string, string> { ["et"] = "0", ["cn"] = "1" }, VolumePercent = 10, VolumeCapPercent = 10,
+            EndTimeout = TimeSpan.FromSeconds(10), Log = line => { lock (lines) lines.Add(line); },
+        }, CancellationToken.None);
+        await fake.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        client.Dispose();
+        await fake.TornDown.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(new[] { "OPTIONS", "ANNOUNCE", "SETUP", "RECORD" }, fake.Methods.Distinct().Take(4));
+        lock (lines)
+        {
+            Assert.Contains(lines, l => l.StartsWith("RAOP SETUP reply: ", StringComparison.Ordinal) && l.Contains("Transport: "));
+            Assert.Contains("RAOP SETUP: no Session header, going on without one", lines);
+        }
+    }
+
+    [Fact]
+    public async Task A_SETUP_reply_without_Transport_is_FairPlay_only()
+    {
+        using var fake = new FakeRaop(false, false) { NoTransport = true, NoSession = true };
+        await Assert.ThrowsAsync<RaopUnsupportedException>(() => RaopClient.ConnectAsync(IPAddress.Loopback, fake.Port,
+            new RaopOptions { Txt = new Dictionary<string, string> { ["et"] = "0,3,5" } }, CancellationToken.None));
+        Assert.Contains("SETUP", fake.Methods);
+        Assert.DoesNotContain("RECORD", fake.Methods);
+    }
+
+    [Fact]
+    public async Task Controller_stops_without_retrying_when_the_receiver_needs_FairPlay()
+    {
+        using var fake = new FakeRaop(false, false) { NoTransport = true, NoSession = true };
+        var device = new AirPlayDevice("Projector", "02:11", IPAddress.Loopback, fake.Port, "AppleTV3,2",
+            new Dictionary<string, string> { ["et"] = "0,3,5", ["cn"] = "0,1,2,3" }) { HasAirPlay = false, RaopPort = fake.Port };
+        using var controller = new StreamController { ReceiverLookup = _ => device, CaptureFactory = _ => new SilentCapture() };
+        controller.Start(device.DeviceId, "127.0.0.1", 120, 10);
+        await Until(() => controller.StatusText == L.T("这台设备要求 Apple 的加密，HomePodCast 不支持。"));
+        Assert.Equal(StreamState.Idle, controller.State);
+        Assert.Null(controller.Capture);
+        Assert.DoesNotContain("RECORD", fake.Methods);
     }
 
     [Fact]
@@ -242,6 +287,10 @@ public class RaopTests
         public List<string> Methods { get; } = [];
         public string LastVolume { get; private set; } = "";
         public bool Busy { get; init; }
+        /// <summary>SETUP's reply has no Session header (the XGIMI Z6X projector, 2026-10-14).</summary>
+        public bool NoSession { get; init; }
+        /// <summary>SETUP's reply has neither Transport nor Session: the projector without FairPlay (2026-10-14).</summary>
+        public bool NoTransport { get; init; }
         public TaskCompletionSource TornDown { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Port => ((IPEndPoint)_listen.LocalEndpoint).Port;
         public FakeRaop(bool encrypted, bool password)
@@ -307,13 +356,14 @@ public class RaopTests
                     if (method == "SETUP")
                     {
                         Assert.Contains("RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=", request.Header("Transport"));
-                        headers.Add(new("Transport", $"RTP/AVP/UDP;unicast;server_port={((IPEndPoint)Audio.Client.LocalEndPoint!).Port};control_port={((IPEndPoint)Control.Client.LocalEndPoint!).Port};timing_port=0"));
-                        headers.Add(new("Session", "1"));
+                        if (!NoTransport)
+                            headers.Add(new("Transport", $"RTP/AVP/UDP;unicast;server_port={((IPEndPoint)Audio.Client.LocalEndPoint!).Port};control_port={((IPEndPoint)Control.Client.LocalEndPoint!).Port};timing_port=0"));
+                        if (!NoSession) headers.Add(new("Session", "1"));
                         _senderTimingPort = int.Parse(request.Header("Transport").Split(';').Single(s => s.StartsWith("timing_port=")).Split('=')[1]);
                     }
                     if (method == "RECORD")
                     {
-                        Assert.Equal("1", request.Header("Session")); Assert.StartsWith("seq=", request.Header("RTP-Info"));
+                        Assert.Equal(NoSession ? "" : "1", request.Header("Session")); Assert.StartsWith("seq=", request.Header("RTP-Info"));
                         var timing = new byte[32]; timing[0] = 0x80; timing[1] = 0xd2;
                         BinaryPrimitives.WriteUInt64BigEndian(timing.AsSpan(24), MediaClock.NtpNow());
                         await _timing.SendAsync(timing, new IPEndPoint(IPAddress.Loopback, _senderTimingPort), _stop.Token);

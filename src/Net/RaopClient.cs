@@ -32,6 +32,9 @@ public sealed record RaopOptions
 public sealed class RaopPasswordRequiredException() : AirPlayException(L.T("这台 AirPlay 设备需要密码。"));
 public sealed class RaopBusyException() : AirPlayException(L.T("这台 AirPlay 设备正在被其他发送端使用。"));
 
+/// <summary>The receiver plays only with Apple's FairPlay encryption, which HomePodCast can't do: trying again won't help.</summary>
+public sealed class RaopUnsupportedException() : AirPlayException(L.T("这台设备要求 Apple 的加密，HomePodCast 不支持。"));
+
 /// <summary>Separate classic RAOP session; never uses HAP pairing or the HomePod realtime sender.</summary>
 public sealed class RaopClient : IDisposable
 {
@@ -107,7 +110,7 @@ public sealed class RaopClient : IDisposable
         if (types.Contains(4)) return 4;
         if (types.Contains(0)) return 0;
         if (types.Contains(1)) return 1;
-        throw new AirPlayException(L.T("这台设备要求 Apple 的加密，HomePodCast 不支持。"));
+        throw new RaopUnsupportedException();
     }
 
     private static HashSet<int> Tokens(string? text) => (text ?? "").Split(',')
@@ -172,8 +175,19 @@ public sealed class RaopClient : IDisposable
         }
         Request("ANNOUNCE", body: Encoding.UTF8.GetBytes(Sdp(encryption)), contentType: "application/sdp");
         var setup = Request("SETUP", extra: [new("Transport", $"RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port={((IPEndPoint)_control.Client.LocalEndPoint!).Port};timing_port={_timing.Port}")]);
-        _session = setup.Header("Session").Split(';')[0];
-        if (string.IsNullOrWhiteSpace(_session)) throw new AirPlayException("RAOP SETUP: missing Session");
+        _options.Log?.Invoke("RAOP SETUP reply: " + string.Join("; ", setup.Headers.Select(h => $"{h.Key}: {h.Value}")));
+        // 2026-10-14, an XGIMI Z6X projector (a Lebo receiver posing as an AppleTV3,2, et=0,3,5): every step got
+        // "200 OK", but SETUP's reply had neither Session nor Transport. Probing it (OPTIONS, ANNOUNCE and SETUP only, no
+        // audio) showed it opens a session for FairPlay alone: unencrypted and RSA ANNOUNCEs, other user agents, TCP,
+        // PCM, an AirPlay 2 stream SETUP (ports 0) and HAP pairing (an empty reply) all got nowhere, while fp-setup
+        // answered like FairPlay. Without Transport there is no session to go on with, and trying again won't help.
+        if (setup.Header("Transport").Length == 0)
+        {
+            _options.Log?.Invoke("RAOP SETUP: no Transport in the reply; the receiver opens no session without Apple's FairPlay");
+            throw new RaopUnsupportedException();
+        }
+        _session = setup.Header("Session").Split(';')[0].Trim();
+        if (_session.Length == 0) _options.Log?.Invoke("RAOP SETUP: no Session header, going on without one");
         var transport = setup.Header("Transport").Split(';').Select(p => p.Trim().Split('=', 2))
             .Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
         int Port(string key) => transport.TryGetValue(key, out var text) && int.TryParse(text, out int n) && n is > 0 and <= 65535
