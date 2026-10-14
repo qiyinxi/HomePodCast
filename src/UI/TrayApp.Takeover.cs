@@ -91,7 +91,7 @@ internal sealed partial class TrayApp
         try
         {
             bool ours = Controller.OwnSession.IsRecent(OwnSession.KeyOf(Config), DateTime.UtcNow);
-            var targets = SelectedSpeakers().Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address)).ToList();
+            var targets = SelectedSpeakers().Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address, s.Port)).ToList();
             var reading = await Controller.BusyReader!.ReadAsync(targets, CancellationToken.None);
             if (_quitting) return;
             var mode = Config.HomeTheaterTakeover;

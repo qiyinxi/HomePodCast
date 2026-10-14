@@ -477,5 +477,16 @@
   "闲置多久后断开": "Katkaise, kun käyttämättä",
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ei näppäimistön tai hiiren käyttöä eikä ääntä HomePodissa näin pitkään aikaan.",
   "开始和结束时间相同，不会断开。": "Alku ja loppu ovat samat, joten yhteyttä ei katkaista.",
-  "夜间已自动断开，{0} 自动重新连接": "Yhteys katkaistu yöksi; yhdistää uudelleen klo {0}"
+  "夜间已自动断开，{0} 自动重新连接": "Yhteys katkaistu yöksi; yhdistää uudelleen klo {0}",
+  "Apple TV（实验性）": "Apple TV (kokeellinen)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Yhteensopivuustila (kokeellinen)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Kolmas osapuoli (kokeellinen, ei testattu laitteistolla)",
+  "未知 AirPlay 设备（实验性）": "Tuntematon AirPlay-laite (kokeellinen)",
+  "设备类型": "Laitetyyppi",
+  "手动添加 AirPlay 设备（实验性）": "Lisää AirPlay-laite käsin (kokeellinen)",
+  "端口（默认 7000）": "Portti (oletus 7000)",
+  "添加": "Lisää",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "Anna vastaanottimen IP-osoite ja portti; vain laitteen tiedot luetaan.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Anna kelvollinen IPv4-osoite ja portti väliltä 1–65535.",
+  "发现不到设备时，填写 IP 地址和端口。": "Jos laitetta ei löydy, anna sen IP-osoite ja portti."
 }
