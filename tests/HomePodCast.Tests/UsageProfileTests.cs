@@ -205,6 +205,7 @@ public class UsageProfileTests
         [nameof(AppConfig.FifoTargetMs)] = "tuned for this PC",
         [nameof(AppConfig.VideoDelayExtraMs)] = "calibration",
         [nameof(AppConfig.LocalApiPort)] = "the browser extension's port",
+        [nameof(AppConfig.VideoWindowModuleDirectory)] = "optional viewing companion installation, unrelated to audio profiles",
         [nameof(AppConfig.Language)] = "the interface",
         [nameof(AppConfig.Theme)] = "the interface",
         [nameof(AppConfig.ForwardVolumeKeys)] = "only read from old files",

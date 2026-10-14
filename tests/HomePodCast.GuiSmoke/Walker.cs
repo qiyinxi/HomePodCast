@@ -29,6 +29,11 @@ internal sealed class Walker
     /// </summary>
     public static string? Profile { get; set; } = "gui-smoke";
 
+    /// <summary>The extracted viewing window module (the build's HomePodCast-video-window zip); null: not checked.</summary>
+    public static string? VideoWindowDir { get; set; }
+
+    private const string VideoWindowProcess = "HomePodCast.VideoWindow";
+
     public static string ConfigDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Profile == null ? "HomePodCast" : "HomePodCast-" + Profile);
 
@@ -106,6 +111,7 @@ internal sealed class Walker
         ["Scene"] = "Recommended", // as a fresh install
         ["LocalApiPort"] = 0,      // a random port: never the real instance's
         ["AutoConnect"] = false,
+        ["VideoWindowModuleDirectory"] = VideoWindowDir, // 打开 starts it without asking for the folder
     };
 
     private void RunIdle()
@@ -217,6 +223,7 @@ internal sealed class Walker
             !tree.Descendants().Any(n => n.Name == T("正在搜索音箱…")));
         // Opening it starts nothing (no file, no microphone); 关闭 must leave the connection to the fake HomePod as it was.
         Dialog("cinema", ButtonInRow("无线影院（实验性）", "打开"), "无线影院（实验性）", "关闭", CheckCinema);
+        if (VideoWindowDir != null) ViewingWindow(connected);
 
         if (_s.Narrow)
         {
@@ -367,6 +374,150 @@ internal sealed class Walker
                 button == null ? $"no 「{T(disabled)}」 button" : $"「{T(disabled)}」 is enabled before a file plays");
         }
         Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true }, where, $"「{T("选择影音文件")}」 is not enabled");
+    }
+
+    // ---------------------------------------------------------------- 同步观影窗口 (modules/VideoWindow)
+
+    /// <summary>
+    /// 设置 → 工具 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
+    /// no capture, the idle hint, at this scenario's DPI (per-monitor aware). Then the module on its own with generated 4K
+    /// pictures (--smoke-source) against the app's local API: frames through the GPU queue and the swap chain, halved to
+    /// 1080p, shown at the picture's aspect ratio, and the delay followed from the app. The window picker is never opened.
+    /// </summary>
+    private void ViewingWindow(bool connected)
+    {
+        string title = T("同步观影窗口（实验性）"); // experimental since 1.1
+        try
+        {
+            Uia.Invoke(ButtonInRow("同步观影窗口（实验性）", "打开"));
+            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 设置", 20_000);
+            Thread.Sleep(1200);
+            var tree = Uia.Snapshot(viewer);
+            Dump(tree, "viewer");
+            Shoot(viewer, "viewer", title);
+            Layout(tree, "viewer");
+            Checks.OnScreen(viewer, Where("viewer"), _report);
+            CheckDpi(viewer, "viewer");
+            foreach (var button in new[] { "选择窗口…", "停止采集", "全屏 / F11" })
+                Expect(Find(tree, n => n.Type == "Button" && n.Says(T(button))) != null, "viewer", $"no 「{T(button)}」 button");
+            string hint = T("选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。");
+            Expect(Has(tree, hint), "viewer", $"the status line doesn't say 「{hint}」 before a window is chosen");
+            CloseViewer(viewer, null, "viewer");
+
+            int port = ApiPort() ?? throw new StepFailed("no 「local API on http://127.0.0.1:…」 line in the log");
+            string result = Path.Combine(_dir, "viewer-pictures.json");
+            var start = new ProcessStartInfo(Path.Combine(VideoWindowDir!, VideoWindowProcess + ".exe")) { UseShellExecute = false };
+            foreach (var arg in new[] { "--smoke-source", "--status-port", port.ToString(), "--delay-ms", "0", "--language", _s.Language, "--smoke-result", result })
+                start.ArgumentList.Add(arg);
+            using var smoke = Process.Start(start) ?? throw new StepFailed("the viewing window did not start");
+            try
+            {
+                var hwnd = WaitWindow(() => ViewerWindow(title, smoke.Id), "the viewing window with generated pictures", 20_000);
+                var line = new Regex("^" + Regex.Replace(Regex.Escape(T("画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB")), @"\\\{(\d)}",
+                    m => m.Groups[1].Value == "0" ? "(?<delay>\\d+)" : m.Groups[1].Value == "1" ? "(?<mode>.+?)" : ".+?") + "$");
+                string following = T("已跟随本机音频状态");
+                Match? status = null;
+                WaitUntil(() => (status = StatusLine(hwnd, line)) is { Success: true } s && s.Groups["mode"].Value == following,
+                    "the viewing window to follow the app's delay", 10_000, fail: false);
+                Expect(status is { Success: true } && status.Groups["mode"].Value == following, "viewer (pictures)",
+                    $"the status line is 「{status?.Value ?? "(none)"}」: it should follow the app (「{following}」)");
+                if (status is { Success: true } && int.TryParse(status.Groups["delay"].Value, out int delay))
+                {
+                    Expect(connected ? delay > 0 : delay == 0, "viewer (pictures)",
+                        $"picture delay {delay} ms while {(connected ? "streaming (expected the app's sound lag)" : "not streaming (expected 0)")}");
+                    _report.Pass(Where("viewer (pictures)"), status.Value);
+                }
+                Thread.Sleep(1500);
+                var pictures = Uia.Snapshot(hwnd);
+                Dump(pictures, "viewer-pictures");
+                Shoot(hwnd, "viewer-pictures", $"{title}: generated 4K pictures (--smoke-source)");
+                Layout(pictures, "viewer (pictures)");
+                CloseViewer(hwnd, smoke, "viewer (pictures)");
+            }
+            finally
+            {
+                if (!smoke.HasExited) { smoke.Kill(); smoke.WaitForExit(5000); }
+            }
+
+            // What the module counted: frames through the queue and the presenter, halved on the GPU, letterboxed, this DPI.
+            if (!File.Exists(result)) { _report.Fail(Where("viewer (pictures)"), "the module wrote no result"); return; }
+            var r = JsonDocument.Parse(File.ReadAllText(result)).RootElement;
+            int shown = r.GetProperty("shown").GetInt32(), presents = r.GetProperty("presents").GetInt32();
+            int width = r.GetProperty("frameWidth").GetInt32(), height = r.GetProperty("frameHeight").GetInt32();
+            int surfaceWidth = r.GetProperty("surfaceWidth").GetInt32(), surfaceHeight = r.GetProperty("surfaceHeight").GetInt32();
+            string? message = r.GetProperty("message").GetString();
+            Expect(message == null, "viewer (pictures)", $"the module says 「{message}」");
+            Expect(shown >= 20 && presents >= shown, "viewer (pictures)", $"{shown} frames shown in {presents} presents (expected at least 20)");
+            Expect(width == 1920 && height == 1080, "viewer (pictures)", $"3840 × 2160 pictures were queued at {width} × {height} (expected 1920 × 1080)");
+            Expect(surfaceHeight > 0 && Math.Abs(surfaceWidth * 9 - surfaceHeight * 16) <= 32, "viewer (pictures)",
+                $"the picture is shown at {surfaceWidth} × {surfaceHeight}, not 16:9");
+            Expect(r.GetProperty("dpi").GetInt32() == 96 * _s.Scale / 100, "viewer (pictures)", $"the module ran at {r.GetProperty("dpi")} dpi");
+            _report.Pass(Where("viewer (pictures)"), $"{shown} frames in {presents} presents, queued at {width} × {height}, shown at {surfaceWidth} × {surfaceHeight}, " +
+                                                    $"display latency {r.GetProperty("leadMs")} ms ({(r.GetProperty("leadMeasured").GetBoolean() ? "measured" : "one refresh")})");
+        }
+        finally { KillViewers(); }
+    }
+
+    private static Match? StatusLine(IntPtr hwnd, Regex line)
+    {
+        foreach (var n in Uia.Snapshot(hwnd).Descendants())
+            if (n.Type == "Text" && line.Match(n.Name) is { Success: true } m) return m;
+        return null;
+    }
+
+    /// <summary>A viewing window (of <paramref name="pid"/>, or of any module process); a message box of the module fails the step.</summary>
+    private IntPtr ViewerWindow(string title, int? pid)
+    {
+        foreach (var p in Process.GetProcessesByName(VideoWindowProcess))
+        {
+            using (p)
+            {
+                if (pid != null && p.Id != pid) continue;
+                foreach (var h in Native.TopLevelWindows(p.Id))
+                {
+                    if (!Native.IsWindowVisible(h)) continue;
+                    if (Native.ClassName(h) == "#32770")
+                        throw new StepFailed($"the viewing window showed a message box: {string.Join(" ", Uia.Snapshot(h).Descendants().Where(n => n.Type == "Text").Select(n => n.Name))}");
+                    if (Native.WindowText(h).StartsWith(title, StringComparison.Ordinal)) return h;
+                }
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    private void CloseViewer(IntPtr hwnd, Process? process, string step)
+    {
+        Native.PostMessage(hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+        WaitUntil(() => !Native.IsWindow(hwnd), "the viewing window to close", 10_000);
+        if (process != null)
+        {
+            if (!process.WaitForExit(10_000)) _report.Fail(Where(step), "the viewing window's process did not exit within 10 s");
+            else Expect(process.ExitCode == 0, step, $"the viewing window exited with {process.ExitCode}");
+        }
+    }
+
+    private static void KillViewers()
+    {
+        foreach (var p in Process.GetProcessesByName(VideoWindowProcess))
+        {
+            try { p.Kill(); p.WaitForExit(5000); }
+            catch (Exception) { }
+            finally { p.Dispose(); }
+        }
+    }
+
+    private void CheckDpi(IntPtr hwnd, string step)
+    {
+        uint dpi = Native.GetDpiForWindow(hwnd), want = (uint)(96 * _s.Scale / 100);
+        Expect(dpi == want, step, $"the window is at {dpi} dpi, expected {want} ({_s.Scale}%): not per-monitor aware?");
+    }
+
+    /// <summary>The app's local API port (a random one in these configs), from its log.</summary>
+    private int? ApiPort()
+    {
+        foreach (var line in ReadLog())
+            if (Regex.Match(line, @"local API on http://127\.0\.0\.1:(\d+)/") is { Success: true } m) return int.Parse(m.Groups[1].Value);
+        return null;
     }
 
     // ---------------------------------------------------------------- flyout

@@ -10,6 +10,8 @@ HomePodCast doesn't collect personal data. It has no accounts, no telemetry, no 
 
 **Sound.** HomePodCast captures the sound of Windows (or of the apps you pick) and streams it over your local network to the AirPlay speakers you choose, such as your HomePods. The audio goes only to those speakers. It is processed in memory and never recorded or stored. In the wireless cinema (Settings > Tools), it instead reads the audio track of a media file you pick, decodes it with Windows' own decoders and streams it the same way; the file is only read, and its path is not saved.
 
+**Screen (synchronized viewing window).** The optional viewing window module (a separate download from GitHub, not in the Microsoft Store version) captures only the window or screen you pick in Windows' own picker, which Windows marks with a yellow border, and only until you stop the capture or close the window. The pictures stay in your PC's memory and graphics memory to be shown a little later; they are never recorded, stored or sent anywhere. It reads the current delay from HomePodCast on your own PC (`127.0.0.1`).
+
 **Microphone.** The microphone is used in two cases only, and is always off when the app starts:
 
 - While you have it switched on (Microphone and effects page, or the tray flyout). Your voice is then played on the HomePod and/or on a local output, whichever you chose. It is processed in memory (gain, gate, equalizer, reverb) and never recorded, stored, analysed or sent anywhere else.
@@ -45,6 +47,8 @@ Windows shows a microphone-in-use indicator while it is on. The Microsoft Store 
 HomePodCast 不收集个人数据。它没有账号、没有遥测、没有统计分析、没有广告，不会把任何关于你或你电脑的信息发送给开发者或其他任何人。
 
 **声音。** HomePodCast 采集 Windows 的声音（或你选定的应用的声音），通过本地网络串流到你选择的 AirPlay 音箱（例如 HomePod）。音频只发往这些音箱，只在内存中处理，从不录制或保存。在无线影院（设置 > 工具）里，它改为读取你选择的影音文件的音轨，用 Windows 自带的解码器解码，再同样地推送；文件只被读取，文件路径不会保存。
+
+**画面（同步观影窗口）。** 可选的同步观影窗口模块（从 GitHub 单独下载，Microsoft Store 版没有）只采集你在 Windows 自己的选择器里选的那个窗口或屏幕，Windows 会用黄色边框标出它；你停止采集或关闭窗口后就不再采集。画面只在你电脑的内存和显存里，稍后显示出来，从不录制、保存或发往任何地方。它从你电脑上的 HomePodCast（`127.0.0.1`）读取当前的延迟。
 
 **麦克风。** 只在下面两种情况下使用麦克风；应用每次启动时麦克风都是关闭的：
 
