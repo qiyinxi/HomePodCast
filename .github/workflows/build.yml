@@ -421,7 +421,17 @@ jobs:
           name: aac-fixture
           path: test-results/aac-fixture
       - name: AirPlay 2 realtime and buffered receiver tests
-        run: bash tools/ci/airplay2-compat-e2e.sh
+        run: |
+          set -o pipefail
+          if ! bash tools/ci/airplay2-compat-e2e.sh 2>&1 | tee test-results/airplay-compat/airplay2-build.log; then
+            {
+              echo '### AirPlay 2 receiver build or session failure'
+              echo '```text'
+              tail -n 160 test-results/airplay-compat/airplay2-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
       - name: Upload receiver diagnostics
         if: always()
         uses: actions/upload-artifact@v7
