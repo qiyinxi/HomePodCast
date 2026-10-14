@@ -21,7 +21,7 @@ internal sealed partial class TrayApp
 
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
     public int VideoDelayMs => VideoDelayFor(Config, Controller.State, Controller.EffectiveLatencyMs,
-        Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext, Stems.AddedLatencyMs);
+        Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext, Stems?.AddedLatencyMs ?? 0);
 
     /// <summary>
     /// The sound lag the local API (browser extension) and the players get: the estimate plus the calibration of the path
