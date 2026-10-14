@@ -583,7 +583,6 @@
   "选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。": "Wybierz okno do oglądania; tutaj opóźniany jest tylko obraz. HomePodCast nadal wysyła dźwięk.",
   "此 Windows 环境不支持窗口采集。": "Przechwytywanie okien jest niedostępne w tym środowisku Windows.",
   "源窗口已关闭，采集已停止。": "Okno źródłowe zamknięto; przechwytywanie zatrzymane.",
-  "窗口采集失败：{0}": "Przechwytywanie okna nie powiodło się: {0}",
   "手动": "Ręcznie",
   "已跟随本机音频状态": "Śledzenie lokalnego stanu dźwięku",
   "本机状态不可用，保持上次延迟": "Stan lokalny niedostępny; zachowano ostatnie opóźnienie",
@@ -593,5 +592,11 @@
   "这个文件夹不包含完整的同步窗口模块。": "Ten folder nie zawiera kompletnego modułu wideo.",
   "同步窗口已打开。": "Okno wideo jest już otwarte.",
   "延迟显示选定窗口，跟随 HomePod 音频；请关闭播放器和浏览器的其他同步补偿，避免重复调整。": "Opóźnia wybrane okno zgodnie z dźwiękiem HomePoda. Wyłącz inne korekty synchronizacji odtwarzacza i przeglądarki, aby uniknąć podwójnego dopasowania.",
-  "选择模块…": "Wybierz moduł…"
+  "选择模块…": "Wybierz moduł…",
+  "自动扣除显示延迟": "Automatycznie odejmuj opóźnienie wyświetlania",
+  "显示延迟，毫秒": "Opóźnienie wyświetlania, ms",
+  "模块版本 {0} 与 HomePodCast {1} 不同，请下载同一版本的模块。": "Wersja modułu {0} różni się od HomePodCast {1}. Pobierz moduł w tej samej wersji.",
+  "窗口采集失败，错误代码 {0}。请重新选择窗口。": "Przechwytywanie okna nie powiodło się, kod błędu {0}. Wybierz okno ponownie.",
+  "画面太大：最多支持 {0} × {1} 像素。": "Obraz jest za duży: obsługiwane jest najwyżej {0} × {1} pikseli.",
+  "画面显示失败，错误代码 {0}。采集已停止。": "Wyświetlanie obrazu nie powiodło się, kod błędu {0}. Przechwytywanie zatrzymane."
 }

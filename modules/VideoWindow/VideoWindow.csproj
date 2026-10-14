@@ -7,6 +7,9 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>HomePodCast.VideoWindow</AssemblyName>
+    <!-- As the main app: without it the module is system-aware and Windows stretches it again (blurred) on a monitor
+         whose scale differs from the primary one. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
   <ItemGroup>

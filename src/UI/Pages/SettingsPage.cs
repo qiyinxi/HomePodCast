@@ -6,7 +6,8 @@ namespace HomePodCast.UI.Pages;
 
 /// <summary>设置: language and theme, startup, letting the speaker go at night, volume cap, volume keys, hotkeys, local players in the 影视 scene
 /// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
-/// experimental multi-speaker dialog, the A/V sync test, updates (check, install, channel, automatic checks), and about.</summary>
+/// experimental multi-speaker dialog, wireless cinema and synchronized viewing window, the A/V sync test, updates (check,
+/// install, channel, automatic checks), and about.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
@@ -644,12 +645,16 @@ internal sealed class SettingsPage : ScrollPage
 
     // ---------------------------------------------------------------- 同步观影窗口 (TrayApp.VideoWindow.cs)
 
-    /// <summary>The optional viewing window module, just above <paramref name="before"/>.</summary>
+    /// <summary>
+    /// The optional viewing window module, just above <paramref name="before"/>; not in the Microsoft Store version,
+    /// where starting a separately downloaded exe is against Store policy 10.2.2 (VideoWindowModule.Offered).
+    /// </summary>
     private void AddVideoWindow(Control before)
     {
+        if (!Players.VideoWindowModule.Offered) return;
         var open = new FluentButton(L.T("打开"));
         var module = new FluentButton(L.T("选择模块…"));
-        var row = new SettingRow(Glyph.Video, L.T("同步观影窗口（实验性）"),
+        var row = new SettingRow(Glyph.Video, L.T("同步观影窗口（实验性）"), // experimental since 1.1
             L.T("延迟显示选定窗口，跟随 HomePod 音频；请关闭播放器和浏览器的其他同步补偿，避免重复调整。"),
             Ui.Row(8, null, module, open));
         Content.Controls.Add(row);

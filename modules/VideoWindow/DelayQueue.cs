@@ -7,6 +7,8 @@ internal sealed class DelayQueue<T>(long byteLimit, int frameLimit) : IDisposabl
     private readonly object _gate = new();
     private long _bytes, _lastTime = long.MinValue;
     private bool _disposed;
+    public long ByteLimit => byteLimit;
+    public int FrameLimit => frameLimit;
     public long Dropped { get; private set; }
     public (int Frames, long Bytes) Buffered { get { lock (_gate) return (_frames.Count, _bytes); } }
 
@@ -22,6 +24,7 @@ internal sealed class DelayQueue<T>(long byteLimit, int frameLimit) : IDisposabl
         }
     }
 
+    /// <summary>The newest frame captured at or before <paramref name="now"/> − <paramref name="delay"/> (older ones are disposed), or null.</summary>
     public T? TakeReady(long now, long delay)
     {
         lock (_gate)

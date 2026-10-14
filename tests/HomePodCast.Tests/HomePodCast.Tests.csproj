@@ -24,6 +24,9 @@
     <!-- Test the companion's pure timeline/status logic without a WinRT dependency or opening a window. -->
     <Compile Include="../../modules/VideoWindow/DelayQueue.cs" Link="VideoWindow/DelayQueue.cs" />
     <Compile Include="../../modules/VideoWindow/StatusDelay.cs" Link="VideoWindow/StatusDelay.cs" />
+    <Compile Include="../../modules/VideoWindow/Clock.cs" Link="VideoWindow/Clock.cs" />
+    <Compile Include="../../modules/VideoWindow/FrameCadence.cs" Link="VideoWindow/FrameCadence.cs" />
+    <Compile Include="../../modules/VideoWindow/DisplayLatency.cs" Link="VideoWindow/DisplayLatency.cs" />
   </ItemGroup>
 
 </Project>
