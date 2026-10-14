@@ -44,8 +44,10 @@ internal sealed partial class Walker
             _userData.Add(_fake.Name);
             Start(config);
 
+            // The log names the folder as the host found it (%TEMP% may be an 8.3 path on the runner): matched from the copy's name.
+            string RuntimeLine(string v) => $"{Path.GetFileName(root)}\\shared\\{NetCoreApp}\\{v} (shared";
             string runtime = Path.Combine(root, "shared", NetCoreApp, version);
-            WaitUntil(() => ReadLog().Any(l => l.Contains($"runtime: {runtime} (shared", StringComparison.OrdinalIgnoreCase)),
+            WaitUntil(() => ReadLog().Any(l => l.Contains(RuntimeLine(version), StringComparison.OrdinalIgnoreCase)),
                 $"the app to run on the private .NET ({runtime})", 10_000);
             var connected = _t.Pattern("已连接 · {0}");
             WaitForStatus(MainWindow, "首页", s => connected.IsMatch(s), 60_000);
@@ -104,9 +106,8 @@ internal sealed partial class Walker
                 "log", "no 「restarting … --resume=connected」 line (without --tray: the window was open)");
             Expect(log.Any(l => l.Contains("restarted by 「立即重启」: connecting again", StringComparison.Ordinal)), "log",
                 "the new copy doesn't say it was restarted to connect again");
-            string newerRuntime = Path.Combine(root, "shared", NetCoreApp, newer);
-            Expect(log.Any(l => l.Contains($"runtime: {newerRuntime} (shared", StringComparison.OrdinalIgnoreCase)), "log",
-                $"the new copy doesn't run on the newer version ({newerRuntime})");
+            Expect(log.Any(l => l.Contains(RuntimeLine(newer), StringComparison.OrdinalIgnoreCase)), "log",
+                $"the new copy doesn't run on the newer version ({Path.Combine(root, "shared", NetCoreApp, newer)})");
             tree = Uia.Snapshot(main);
             Expect(!Has(tree, T("立即重启")), "首页 (restarted)", "the restart notice is still there");
             Shoot(main, "home-restarted", "首页 after 立即重启: connected again, no notice");
