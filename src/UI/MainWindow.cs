@@ -155,14 +155,12 @@ internal sealed class MainWindow : Form, ISurface
         Invalidate(true);
     }
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
         MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
-        PerformLayout();
-        Invalidate(true);
-    }
+    });
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {

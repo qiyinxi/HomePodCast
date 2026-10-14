@@ -207,12 +207,11 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         Theme.StyleWindow(this);
     }
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-        PerformLayout();
-    }
+    });
 
     private void ThemeChanged()
     {

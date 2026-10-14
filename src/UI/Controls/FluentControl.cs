@@ -125,10 +125,15 @@ internal abstract class FluentControl : Control
         base.OnEnabledChanged(e);
     }
 
+    /// <summary>
+    /// Only a repaint: the window lays itself out once at the new DPI (MainWindow.OnDpiChanged and the dialogs; WinForms'
+    /// font scaling for the others). Windows sends this to every child window, top-down, after the window's WM_DPICHANGED;
+    /// asking for a layout here laid the whole page out once per control. 2026-10-15, the main window moved between the
+    /// maintainer's 150 % and 100 % monitors: about 8 s 「未响应」 per crossing (282 page layouts, 227 000 text measurements).
+    /// </summary>
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
-        RequestLayout();
         Invalidate();
     }
 
@@ -150,7 +155,7 @@ internal abstract class FluentControl : Control
     }
 
     /// <summary>Single-line text height for a style.</summary>
-    protected int LineHeight(TextStyle style) => TextRenderer.MeasureText("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
+    protected int LineHeight(TextStyle style) => TextMeasure.Size("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
 }
 
 internal static class TextFlags
@@ -305,6 +310,17 @@ internal abstract class LayoutPanel : Panel
 
     /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
     public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);
+
+    /// <summary>
+    /// A window's WM_DPICHANGED (<paramref name="scale"/>: base.OnDpiChanged and the window's own font and sizes for the new
+    /// DPI), with one layout at the end. Otherwise the font that WinForms and the window set reaches every control, and each
+    /// control asks its container for a layout: every card and row laid out again, once per control below it.
+    /// </summary>
+    public static void ScaleForDpi(Form window, Action scale)
+    {
+        using (BatchLayout(window)) scale();
+        window.Invalidate(true);
+    }
 
     private sealed class LayoutBatch : IDisposable
     {
@@ -593,12 +609,6 @@ internal class ScrollPage : Panel, ISurface
         int left = Math.Max(0, (Width - scrollBar - width) / 2);
         LayoutPanel.Place(Content, left + pos.X, pos.Y, width, height);
         base.OnLayout(levent);
-    }
-
-    protected override void OnDpiChangedAfterParent(EventArgs e)
-    {
-        base.OnDpiChangedAfterParent(e);
-        PerformLayout();
     }
 
     protected override void Dispose(bool disposing)

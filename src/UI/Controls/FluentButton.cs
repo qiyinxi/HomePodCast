@@ -95,7 +95,7 @@ internal sealed class FluentButton : FluentControl, IButtonControl
         bool hasText = !string.IsNullOrEmpty(Text);
         if (!hasText) return new Size(h, h); // icon button: square
         var font = StyleFont(TextStyle.Body);
-        int w = AlternateTexts.Prepend(Text).Max(t => TextRenderer.MeasureText(t, font, Size.Empty, TextFlags.Measure).Width) +
+        int w = AlternateTexts.Prepend(Text).Max(t => TextMeasure.Size(t, font, Size.Empty, TextFlags.Measure).Width) +
                 Dp(_kind == ButtonKind.Link ? 4 : 24);
         if (_glyph != null) w += Dp(16 + 8);
         return new Size(Math.Max(w, Dp(MinWidth)), h);
@@ -137,7 +137,7 @@ internal sealed class FluentButton : FluentControl, IButtonControl
         {
             var iconFont = Theme.IconFont(16, DeviceDpi);
             int icon = Dp(16);
-            int textWidth = hasText ? TextRenderer.MeasureText(Text, font, Size.Empty, TextFlags.Measure).Width + Dp(8) : 0;
+            int textWidth = hasText ? TextMeasure.Size(Text, font, Size.Empty, TextFlags.Measure).Width + Dp(8) : 0;
             int x = (Width - icon - textWidth) / 2;
             Shapes.Glyph(g, _glyph, iconFont, new Rectangle(x, 0, icon, Height), GlyphColor is { } gc && enabled ? gc : fore);
             if (hasText)

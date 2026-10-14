@@ -66,7 +66,7 @@ internal sealed class Segmented : FluentControl
     {
         var font = Theme.Font(compact ? TextStyle.Caption : TextStyle.Body, dpi);
         int pad = Theme.Dp(compact ? 10 : 14, dpi);
-        var w = items.Select(t => TextRenderer.MeasureText(t, font, Size.Empty, TextFlags.Measure).Width + pad * 2).ToArray();
+        var w = items.Select(t => TextMeasure.Size(t, font, Size.Empty, TextFlags.Measure).Width + pad * 2).ToArray();
         if (equal && w.Length > 0)
         {
             int max = w.Max();

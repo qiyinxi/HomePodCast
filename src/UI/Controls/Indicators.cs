@@ -72,7 +72,7 @@ internal sealed class MetricTile : FluentControl
     public override Size GetPreferredSize(Size proposedSize)
     {
         int h = Dp(12) + LineHeight(TextStyle.Caption) + Dp(4) + LineHeight(TextStyle.Metric) + Dp(12);
-        int w = Math.Max(TextRenderer.MeasureText(_caption, StyleFont(TextStyle.Caption), Size.Empty, TextFlags.Measure).Width, Dp(60)) + Dp(28);
+        int w = Math.Max(TextMeasure.Size(_caption, StyleFont(TextStyle.Caption), Size.Empty, TextFlags.Measure).Width, Dp(60)) + Dp(28);
         return new Size(w, h);
     }
 
@@ -86,7 +86,7 @@ internal sealed class MetricTile : FluentControl
         y += capH + Dp(4);
         var valueFont = StyleFont(TextStyle.Metric);
         int valH = LineHeight(TextStyle.Metric);
-        int valW = TextRenderer.MeasureText(_value, valueFont, Size.Empty, TextFlags.Measure).Width;
+        int valW = TextMeasure.Size(_value, valueFont, Size.Empty, TextFlags.Measure).Width;
         TextRenderer.DrawText(g, _value, valueFont, new Rectangle(x, y, Width - x * 2, valH), P.Text, TextFlags.Line);
         if (_unit.Length > 0 && _value != "—")
         {
