@@ -214,6 +214,8 @@ internal sealed class Walker
         Dialog("profiles", Button("管理配置"), "使用配置", "关闭");
         Dialog("multi-speaker", ButtonInRow("多音箱（实验性）", "打开"), "多音箱（实验性）", "取消", ready: tree =>
             !tree.Descendants().Any(n => n.Name == T("正在搜索音箱…")));
+        // Opening it starts nothing (no file, no microphone); 关闭 must leave the connection to the fake HomePod as it was.
+        Dialog("cinema", ButtonInRow("无线影院（实验性）", "打开"), "无线影院（实验性）", "关闭", CheckCinema);
 
         if (_s.Narrow)
         {
@@ -320,6 +322,20 @@ internal sealed class Walker
         Expect(caption != null, where, $"「{T("标记刚才的卡顿")}」 is not listed");
         var row = caption?.Parent;
         Expect(row != null && Has(row, T("未设置")), where, $"「{T("标记刚才的卡顿")}」 is not 「{T("未设置")}」 by default");
+    }
+
+    /// <summary>无线影院: every speaker position, nothing playable before a file is chosen, no measurement without playback.</summary>
+    private void CheckCinema(Node tree, string where)
+    {
+        foreach (var role in new[] { "前左", "前右", "中置", "低音声道", "后左", "后右", "侧左", "侧右" })
+            Expect(tree.Descendants().Any(n => n.Type == "Text" && n.Name == T(role)), where, $"no speaker row 「{T(role)}」");
+        foreach (var disabled in new[] { "播放", "暂停", "停止", "测量音箱延迟" })
+        {
+            var button = Find(tree, n => n.Type == "Button" && n.Says(T(disabled)));
+            Expect(button is { Enabled: false }, where,
+                button == null ? $"no 「{T(disabled)}」 button" : $"「{T(disabled)}」 is enabled before a file plays");
+        }
+        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true }, where, $"「{T("选择影音文件")}」 is not enabled");
     }
 
     // ---------------------------------------------------------------- flyout
