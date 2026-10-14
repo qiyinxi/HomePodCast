@@ -138,6 +138,10 @@ To run it locally: `npm ci`, then `npm test` in `extension/test/e2e` (ffmpeg mak
 
 Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and the `release` job waits for it, so a tag whose Microsoft Store package fails there publishes nothing. `packaging/msix/e2e-test.ps1` installs a copy of the `msix` artifact signed with a throwaway certificate (the artifact itself stays unsigned, as the Store wants it), starts it the way Start does, checks package identity, the log in the package's storage, that it never contacts GitHub, the manifest's firewall rules and no firewall prompt, the single-instance lock against a second start and the MSI build, and the startup task (through the app's `autostart on|off|status` command, the code of its switch), then uninstalls it and checks that nothing is left. Each check is a `PASS` line in the job's log; the app's log is the `msix-e2e-logs` artifact. What it covers is listed under 「已自动化」 in `docs/device-test-checklist.zh-CN.md`, and 「Microsoft Store 版」 there keeps the rest; the details are in `packaging/msix/README.md` (CI test). The script refuses to run outside GitHub Actions unless given `-Force` (a throwaway test VM): it installs a certificate, the package and the MSI.
 
+### The music separation module in CI
+
+Every build also runs the job `stem-module` after `build`: `tools/build-stem-module.ps1` builds `HomePodCast-stems-<version>.zip` (the worker, the vocal branch of the StemgenRT model pinned in `modules/StemWorker/upstream.json`, and the licenses), checks it against the publisher's independent PyTorch reference, benchmarks it, and `StemModuleTests` drive it through its pipes (buffers only, nothing is played). The upstream files, the 32 MB model from Git LFS among them, are cached by the pinned commit with `actions/cache` and checked against their SHA-256 on every run, so with the cache nothing is downloaded from upstream; the cache is saved only after the module passed. A tag build reads the cache of `main`. When upstream can't be reached and nothing is cached, the job passes with a warning and without the zip, and the release is published without the module: re-run `stem-module` (GitHub re-runs `release` after it) once upstream is back. A wrong SHA-256, the parity check or the tests failing fail the job, and `release` waits for it like for the others. The Store package never has the feature.
+
 ### Release notes
 
 - English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
@@ -305,6 +309,10 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 ### CI 里的 Microsoft Store 版测试
 
 每次构建（推送、PR 和标签）在 `build` 之后还会跑 `msix-e2e` 作业，`release` 作业要等它通过，所以 Microsoft Store 版的包在那里没通过的标签什么都不会发布。`packaging/msix/e2e-test.ps1` 安装 `msix` 产物的一个副本（用一次性证书签名；产物本身仍然不签名，Store 要的就是不签名的包），像开始菜单那样启动它，检查包标识、日志在包的存储里、从不访问 GitHub、清单里的防火墙规则和没有防火墙提示、对再次启动和 MSI 版的单实例锁、开机启动任务（用程序的 `autostart on|off|status` 命令，也就是开关的那段代码），然后卸载并检查什么都没留下。每项检查在作业日志里是一行 `PASS`；程序日志在 `msix-e2e-logs` 产物里。覆盖了哪些项，列在 `docs/device-test-checklist.zh-CN.md` 的「已自动化」里，其余的在那里的「Microsoft Store 版」；细节见 `packaging/msix/README.md` 的 CI test 一节。这个脚本会安装证书、包和 MSI，所以在 GitHub Actions 之外不加 `-Force`（一次性的测试虚拟机）就拒绝运行。
+
+### CI 里的音乐分轨模块
+
+每次构建在 `build` 之后还会跑 `stem-module` 作业：`tools/build-stem-module.ps1` 构建 `HomePodCast-stems-<版本>.zip`（分轨程序、`modules/StemWorker/upstream.json` 里固定版本的 StemgenRT 模型的人声分支和各许可证），和发布者独立的 PyTorch 参考结果比较，跑性能测试，再由 `StemModuleTests` 通过管道驱动它（只处理缓冲区，不播放任何声音）。上游文件（包括 Git LFS 里 32 MB 的模型）用 `actions/cache` 按固定的提交缓存，每次都校验 SHA-256，有缓存时不从上游下载任何东西；模块通过检查之后才保存缓存。标签构建读 `main` 的缓存。上游连不上、又没有缓存时，这个作业带着警告通过、不产出 zip，发布照常进行，只是没有模块：上游恢复后重跑 `stem-module`（GitHub 会接着重跑 `release`）。SHA-256 不符、和参考结果不一致或测试失败时作业失败，`release` 和等其他作业一样等它。商店版始终没有这个功能。
 
 ### 发布说明
 

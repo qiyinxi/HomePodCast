@@ -46,6 +46,7 @@ HomePodCast は個人プロジェクトで、実機テストは次の 1 組だ�
 - マイクを HomePod へ（リバーブとイコライザー付き）、ヘッドホンで低遅延モニター。スピーカーに送るすべての音にイコライザーのプリセット
 - ステレオペアとマルチルーム同期（実験的、実機では未検証）
 - ワイヤレスシネマ（実験的、実機では未検証）：ローカルの 5.1 / 7.1 ファイルの音声トラックを、チャンネルごとに 1 台の HomePod で再生（最大 7 台と LFE 用の 1 台）。スピーカーのないチャンネルは近くのスピーカーにミックスされ、各スピーカーの遅延をマイクで測定できます（測定中の音量は 25% 以下）。[ワイヤレスシネマ（英語／簡体字中国語）](docs/WIRELESS_CINEMA.md)を参照
+- 音楽の分離（実験的、Microsoft Store 版にはありません）：PC 上で音楽をボーカルと伴奏に分け、HomePod とヘッドホンで別々にミックスします。たとえば歌の練習では HomePod に伴奏だけを流せます。音は約 186 ms 余分に遅れます。別途ダウンロードするモジュール `HomePodCast-stems-<バージョン>.zip` が必要です。[音楽の分離（英語／簡体字中国語）](docs/MUSIC_STEMS.md#english)を参照 <!-- experimental since 1.1 -->
 - Apple TV：初回だけ「接続」でテレビとペアリング（テレビに表示される 4 桁の数字を入力）。ホームシアターのスピーカーが HomePod なら HomePod から音が出ます（実験的、実機の Apple TV では未検証）
 - 音ズレ測定：画面のフラッシュと「カチッ」という音で、音が映像よりどれだけ遅れているかがすぐわかる
 - 設定のスピーカー情報：モデル、システムと AirPlay のバージョン、IP アドレス、Wi‑Fi MAC アドレス（ルーターの接続機器一覧でこれを手がかりに HomePod を探し、周波数帯の確認や固定 IP の割り当てに使える）、Bluetooth アドレス、デバイス ID
@@ -189,6 +190,8 @@ CI からは HomePod に接続できないため、`dev` を `main` にマージ
 - [NAudio](https://github.com/naudio/NAudio)（MIT）：Windows Core Audio のインターフェイス定義の確認。
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低遅延な送信とバッファリングの考え方。
 - [TweetNaCl](https://tweetnacl.cr.yp.to/)（パブリックドメイン）：Ed25519 と X25519 のコード。Apple TV のペアリング用に C# へ移植。
+- [StemgenRT](https://github.com/sweetspotsoundsystem/stemgen-rt)（MIT）：オプションの音楽分離モジュールのボーカル モデル。
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime)（MIT）：モジュール内でそのモデルを実行。
 
 ## ライセンス
 

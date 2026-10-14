@@ -46,6 +46,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
 - Wireless cinema (experimental, not yet tested on real speakers): the audio track of a local 5.1 or 7.1 file with each channel on a HomePod of its own, up to seven plus one for the LFE channel; channels without a speaker fold into the neighboring ones, and speaker delays can be measured with a microphone (at most 25 % volume). See [Wireless cinema](docs/WIRELESS_CINEMA.md#english)
+- Music separation (experimental; not in the Microsoft Store version): splits the music into vocals and accompaniment on the PC and mixes them separately for the HomePod and for headphones, for example only the accompaniment on the HomePod to sing along; the sound waits about 186 ms more; needs the separately downloaded module `HomePodCast-stems-<version>.zip`. See [Music separation](docs/MUSIC_STEMS.md#english) <!-- experimental since 1.1 -->
 - Apple TV after a one-time PIN pairing: click Connect and type the 4 digits the TV shows; with HomePods as its home theater speakers, they play the sound (experimental, not yet tested on a real Apple TV)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
 - Speaker info in Settings: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID
@@ -56,8 +57,6 @@ If you try it on other hardware, please open an issue with the device model, its
 Playback profiles, per-speaker/source A/V calibration, independent per-app HomePod volume, redacted diagnostic reports, and synchronized browser fullscreen with ±5/±20 ms controls are also available. See [Playback profiles, calibration and diagnostics](docs/PLAYBACK_FEATURES.md#english) for their controls and limitations. The browser extension adds each site's own offset on top of the calibration: if you had already compensated per site, reset those site offsets after calibrating.
 
 ## Usage
-
-Experimental local vocal/accompaniment mixing is available in Mixer with a separately installed model module. See [Music separation](docs/MUSIC_STEMS.md#english) for installation, latency and quality limits.
 
 1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
 2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
@@ -195,6 +194,8 @@ clicks "Check for updates" or turns on automatic checks.
 - [NAudio](https://github.com/naudio/NAudio) (MIT): cross-checking the Windows Core Audio interface definitions.
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash) (GPL-3.0): ideas for low-latency packet sending and buffering.
 - [TweetNaCl](https://tweetnacl.cr.yp.to/) (public domain): the Ed25519 and X25519 code, ported to C# for the Apple TV pairing.
+- [StemgenRT](https://github.com/sweetspotsoundsystem/stemgen-rt) (MIT): the vocal model of the optional music separation module.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) (MIT): runs that model in the module.
 
 ## License
 

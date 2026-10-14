@@ -46,6 +46,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - 麦克风送到 HomePod，带混响和均衡，可用耳机低延迟监听；推到音箱的所有声音可选均衡预设
 - 立体声对和多房间同步（实验性，尚未在真实设备上验证）
 - 无线影院（实验性，尚未在真实设备上验证）：本地 5.1 或 7.1 文件的音轨，每个声道送到一台 HomePod，最多七台再加一台放低音声道；没有分配音箱的声道混入相邻的音箱，还可以用麦克风测量各音箱的延迟（测量时音量不超过 25%）。见[无线影院](docs/WIRELESS_CINEMA.md#简体中文)
+- 音乐分轨（实验性；Microsoft Store 版没有）：在电脑上把音乐分离成人声和伴奏，分别给 HomePod 和耳机调混合比例，比如练唱时 HomePod 只放伴奏；声音多等约 186 ms；需要另外下载的模块 `HomePodCast-stems-<版本>.zip`。见[音乐分轨](docs/MUSIC_STEMS.md#简体中文) <!-- experimental since 1.1 -->
 - Apple TV：第一次点「连接」时在电视上配对一次（输入电视显示的 4 位数字）；它的家庭影院扬声器是 HomePod 时由 HomePod 出声（实验性，尚未在真实 Apple TV 上验证）
 - 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
 - 设置里的音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
@@ -189,6 +190,8 @@ CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做
 - [NAudio](https://github.com/naudio/NAudio)（MIT）：核对 Windows Core Audio 接口定义。
 - [AirFlash](https://github.com/Ding-Kyoma/AirFlash)（GPL-3.0）：低延迟发包与缓冲的思路。
 - [TweetNaCl](https://tweetnacl.cr.yp.to/)（公有领域）：Ed25519 和 X25519 代码，移植到 C# 用于 Apple TV 配对。
+- [StemgenRT](https://github.com/sweetspotsoundsystem/stemgen-rt)（MIT）：可选的音乐分轨模块里的人声模型。
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime)（MIT）：在模块里运行这个模型。
 
 ## 许可证
 
