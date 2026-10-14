@@ -8,7 +8,8 @@ namespace HomePodCast.VideoWindow;
 /// </summary>
 internal sealed class DisplayLatency
 {
-    private const long MinPeriod = 20_000, MaxPeriod = 1_000_000;  // 2–100 ms: 10–500 Hz
+    // 2–50 ms, 20–500 Hz: the presenter's 100 ms wait timeouts (a minimized window gets no refreshes) are not a period.
+    private const long MinPeriod = 20_000, MaxPeriod = 500_000;
     private const long MaxLatency = 1_000_000;                     // 100 ms: anything longer is not this path
     private const int Needed = 8;
     private readonly Queue<(uint Present, long ChosenAt)> _pending = new();
