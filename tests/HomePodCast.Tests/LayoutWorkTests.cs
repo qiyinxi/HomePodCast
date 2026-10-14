@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using HomePodCast.Audio;
@@ -203,7 +204,9 @@ public class LayoutWorkTests
         public Work()
         {
             LayoutPanel.Arranged = c => Arranged[c] = Arranged.GetValueOrDefault(c) + 1;
-            TextMeasure.Measured = (text, font, size, flags) => Measured.Add($"「{text}」 {font.Name} {font.Size}px {size} {flags}");
+            // The font object itself, as the cache keys it: a regular and a bold font can share name and size.
+            TextMeasure.Measured = (text, font, size, flags) =>
+                Measured.Add($"「{text}」 {font.Name} {font.Style} {font.Size}px (font #{RuntimeHelpers.GetHashCode(font)}) {size} {flags}");
         }
 
         public int Pages => Arranged.Keys.Count(c => c is ScrollPage);
