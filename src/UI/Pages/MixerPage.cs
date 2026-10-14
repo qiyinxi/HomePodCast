@@ -314,9 +314,12 @@ internal sealed class MixerPage : ScrollPage
 
     // ---------------------------------------------------------------- app rows
 
+    /// <summary>The apps playing on a device (null: the default output); tests give made-up ones.</summary>
+    internal Func<string?, List<AppAudio>> FindApps { get; set; } = AppAudio.Enumerate;
+
     private void RefreshApps()
     {
-        var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
+        var fresh = FindApps(_app.Routing.CaptureDeviceId); // the apps on the captured device
 #if DEBUG
         if (DemoApps)
         {
