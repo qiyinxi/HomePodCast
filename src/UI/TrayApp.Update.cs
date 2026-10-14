@@ -173,7 +173,7 @@ internal sealed partial class TrayApp
         catch (Exception ex)
         {
             // Offline, rate limited, GitHub down: one line, and only a manual check says so.
-            Log.Warn($"update: check failed: {ex.Message}");
+            Log.Warn($"update: check failed: {UpdateFlow.Describe(ex)}");
             if (!automatic && !_quitting) SetUpdateStatus(L.T("检查失败，请稍后再试（详情见日志）"), TextRole.Critical);
         }
         finally

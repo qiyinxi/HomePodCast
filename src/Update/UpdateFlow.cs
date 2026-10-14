@@ -36,6 +36,19 @@ internal static class UpdateFlow
         return GitHubReleases.Parse(json, feed);
     }
 
+    /// <summary>
+    /// An exception for the log: each level's type and message, outermost first ("HttpRequestException: … ←
+    /// SocketException: …"). 2026-10-14: a check failed 2 ms after it started and the log said only "check failed: ",
+    /// an empty message with no hint where it came from.
+    /// </summary>
+    internal static string Describe(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var e = ex; e != null && parts.Count < 5; e = e.InnerException)
+            parts.Add($"{e.GetType().Name}: {(string.IsNullOrWhiteSpace(e.Message) ? "(no message)" : e.Message)}");
+        return string.Join(" ← ", parts);
+    }
+
     /// <summary>What 「更新」 does with <paramref name="release"/> in an MSI install or a portable copy.</summary>
     public static InstallRoute Route(Release release, bool msiInstall) =>
         !msiInstall ? InstallRoute.ReleasePage : release.Msi is { Sha256: not null } ? InstallRoute.Install : InstallRoute.NoChecksum;
