@@ -91,6 +91,26 @@ public class PtpTests
     }
 
     [Fact]
+    public async Task BetterGrandmasterPausesOurClockButAnUnrelatedDomainDoesNot()
+    {
+        using var events = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var general = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var master = new PtpMaster(IPAddress.Loopback, (IPEndPoint)events.Client.LocalEndPoint!,
+            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123);
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, domain: 7, priority: 1),
+            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
+        await Task.Delay(50);
+        Assert.True(master.IsMaster);
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 1),
+            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        while (master.IsMaster) await Task.Delay(10, timeout.Token);
+        long sent = master.SyncMessagesSent;
+        await Task.Delay(200);
+        Assert.Equal(sent, master.SyncMessagesSent);
+    }
+
+    [Fact]
     public void Apple_sessions_cannot_start_the_PTP_prototype() =>
         Assert.Throws<ArgumentException>(() => new PtpMaster(IPAddress.Loopback, new IPEndPoint(IPAddress.Loopback, 319),
             new IPEndPoint(IPAddress.Loopback, 320), thirdPartySession: false));

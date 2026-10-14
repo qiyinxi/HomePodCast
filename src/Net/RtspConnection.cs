@@ -146,11 +146,19 @@ public sealed class RtspConnection : IDisposable
     public HttpMessage RtspPlist(string method, Dictionary<string, object?> plist, string? uri = null) =>
         Rtsp(method, uri, "application/x-apple-binary-plist", BPlist.Write(plist));
 
+    /// <summary>Third-party receivers such as shairport-sync accept pairing requests on RTSP only.</summary>
+    internal bool PairingOverRtsp { get; set; }
+
     /// <summary>Plain HTTP/1.1 request (used for pair-setup).</summary>
     public HttpMessage Http(string method, string path, string userAgent, string? contentType, byte[]? body,
         IEnumerable<KeyValuePair<string, string>> headers)
     {
-        lock (_lock) return Send(method, path, "HTTP/1.1", userAgent, contentType, body, headers.ToList());
+        lock (_lock)
+        {
+            var requestHeaders = headers.ToList();
+            if (PairingOverRtsp) requestHeaders.Add(new("CSeq", (_cseq++).ToString()));
+            return Send(method, path, PairingOverRtsp ? "RTSP/1.0" : "HTTP/1.1", userAgent, contentType, body, requestHeaders);
+        }
     }
 
     private HttpMessage Send(string method, string uri, string protocol, string userAgent, string? contentType,

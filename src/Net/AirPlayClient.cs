@@ -436,7 +436,12 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         _sender?.Dispose();
         _buffered?.Dispose();
         PtpRealtime?.Dispose();
-        try { _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]); } catch { }
+        try
+        {
+            if (_rtsp.PairingOverRtsp) _rtsp.RtspPlist("TEARDOWN", new());
+            else _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]);
+        }
+        catch { }
         _events?.Dispose();
         _control.Dispose();
         _timing.Dispose();

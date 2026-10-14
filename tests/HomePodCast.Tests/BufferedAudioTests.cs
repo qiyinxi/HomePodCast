@@ -18,9 +18,15 @@ public sealed class BufferedAudioTests
     {
         using var tcp = new TcpListener(IPAddress.Loopback, 0);
         tcp.Start();
+        var pairingProtocols = new List<string>();
         using var fake = new FakeAirPlayReceiver(false)
         {
             ModelOverride = "Shairport Sync", BufferedDataPort = ((IPEndPoint)tcp.LocalEndpoint).Port,
+            RefuseRequest = request =>
+            {
+                if (request.StartLine.StartsWith("POST /pair-setup")) pairingProtocols.Add(request.StartLine);
+                return null;
+            },
         };
         var fifo = new AudioFifo(44100, 0, 999);
         fifo.Write(Enumerable.Repeat(.1f, 30000).ToArray());
@@ -29,6 +35,8 @@ public sealed class BufferedAudioTests
         using var client = await AirPlayClient.ConnectBufferedAsync(Device(fake.Port), new StreamOptions(1500, 99)
             { VolumeCapPercent = 10 }, fifo, timeout.Token, timingPorts: fake.TimingPorts);
         using var receiver = await accept;
+        Assert.All(pairingProtocols, line => Assert.EndsWith("RTSP/1.0", line));
+        Assert.Equal(2, pairingProtocols.Count);
         Assert.Equal("PTP", fake.SessionSetup!["timingProtocol"]);
         Assert.Equal(103L, fake.StreamSetup!["type"]);
         Assert.Equal(3L, fake.StreamSetup["ct"]);
@@ -56,6 +64,39 @@ public sealed class BufferedAudioTests
             Device(1) with { Model = "AudioAccessory6,1" }, new(2000, 10), fifo, default));
         await Assert.ThrowsAsync<AirPlayException>(() => AirPlayClient.ConnectBufferedAsync(
             Device(1) with { Txt = new Dictionary<string, string>() }, new(2000, 10), fifo, default));
+    }
+
+    [Fact]
+    public async Task EncoderInitializationFailureTearsDownWithoutRecording()
+    {
+        using var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start();
+        using var fake = new FakeAirPlayReceiver(false)
+        {
+            ModelOverride = "Shairport Sync", BufferedDataPort = ((IPEndPoint)tcp.LocalEndpoint).Port,
+        };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => AirPlayClient.ConnectBufferedAsync(
+            Device(fake.Port), new(2000, 10), new AudioFifo(44100, 0, 999), timeout.Token,
+            () => throw new InvalidOperationException("test encoder unavailable"), timingPorts: fake.TimingPorts));
+        Assert.Equal("test encoder unavailable", error.Message);
+        Assert.DoesNotContain(fake.Requests, r => r.StartsWith("RECORD"));
+        Assert.Contains("TEARDOWN [encrypted]", fake.Requests);
+    }
+
+    [Theory]
+    [InlineData(0u, 22050)]
+    [InlineData(1000u, 44100)]
+    [InlineData(0xffffffffu, 88200)]
+    public void PtpRealtimeAnchorMapsReceiverFixedPipelineToRequestedPlayout(uint timestamp, int latency)
+    {
+        var sync = PtpRealtimeSender.Sync(timestamp, 123456789, 0xabcdef0123456789, latency);
+        Assert.Equal(0xd7, sync[1]);
+        uint anchor = unchecked(BinaryPrimitives.ReadUInt32BigEndian(sync.AsSpan(4)) - 11035);
+        Assert.Equal(unchecked(timestamp - (uint)latency), anchor);
+        Assert.Equal(timestamp, BinaryPrimitives.ReadUInt32BigEndian(sync.AsSpan(16)));
+        Assert.Equal(123456789UL, BinaryPrimitives.ReadUInt64BigEndian(sync.AsSpan(8)));
+        Assert.Equal(0xabcdef0123456789UL, BinaryPrimitives.ReadUInt64BigEndian(sync.AsSpan(20)));
     }
 
     [Fact]

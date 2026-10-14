@@ -21,6 +21,7 @@ public sealed partial class AirPlayClient
         if ((ReceiverKinds.Features(device.Txt?.GetValueOrDefault("features") ?? device.Txt?.GetValueOrDefault("ft")) & ReceiverKinds.Ptp) == 0)
             throw new AirPlayException(L.T("缓冲连接需要设备支持 PTP 对时。"));
         var rtsp = await RtspConnection.ConnectAsync(device.Address, device.Port, ct);
+        rtsp.PairingOverRtsp = true;
         var client = new AirPlayClient(rtsp);
         try
         {
@@ -35,7 +36,7 @@ public sealed partial class AirPlayClient
     {
         VolumeCapPercent = options.VolumeCapPercent;
         if (options.RequestLog != null)
-            _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 buffered {method} {uri}: {status}");
+            _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {(realtime ? "realtime PTP" : "buffered")} {method} {uri}: {status}");
         var info = Expect(_rtsp.Rtsp("GET", "/info"), "GET /info");
         if (info.Body.Length > 0) Info = BPlist.ReadDict(info.Body);
         if (ReceiverKinds.Classify(Info.GetValueOrDefault("model") as string ?? "", null, info: Info)
