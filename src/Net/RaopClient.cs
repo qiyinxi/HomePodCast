@@ -172,8 +172,11 @@ public sealed class RaopClient : IDisposable
         }
         Request("ANNOUNCE", body: Encoding.UTF8.GetBytes(Sdp(encryption)), contentType: "application/sdp");
         var setup = Request("SETUP", extra: [new("Transport", $"RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port={((IPEndPoint)_control.Client.LocalEndPoint!).Port};timing_port={_timing.Port}")]);
-        _session = setup.Header("Session").Split(';')[0];
-        if (string.IsNullOrWhiteSpace(_session)) throw new AirPlayException("RAOP SETUP: missing Session");
+        _options.Log?.Invoke("RAOP SETUP reply: " + string.Join("; ", setup.Headers.Select(h => $"{h.Key}: {h.Value}")));
+        _session = setup.Header("Session").Split(';')[0].Trim();
+        // 2026-10-14: an XGIMI Z6X projector (a third-party AirPlay 1 receiver posing as an AppleTV3,2) answered SETUP
+        // with no Session header, and we gave up. shairport-sync sends one; without it the requests go on without one.
+        if (_session.Length == 0) _options.Log?.Invoke("RAOP SETUP: no Session header, going on without one");
         var transport = setup.Header("Transport").Split(';').Select(p => p.Trim().Split('=', 2))
             .Where(p => p.Length == 2).ToDictionary(p => p[0], p => p[1], StringComparer.OrdinalIgnoreCase);
         int Port(string key) => transport.TryGetValue(key, out var text) && int.TryParse(text, out int n) && n is > 0 and <= 65535
