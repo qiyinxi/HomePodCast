@@ -193,6 +193,8 @@ public class UsageProfileTests
         [nameof(AppConfig.Volume)] = "the speaker's loudness: a profile only caps it",
         [nameof(AppConfig.AutoConnect)] = "startup",
         [nameof(AppConfig.ManualDevices)] = "the receiver address book is shared by every profile",
+        [nameof(AppConfig.ReceiverSettings)] = "per-receiver capabilities and compatibility preferences",
+        [nameof(AppConfig.RaopPasswordsProtected)] = "device-bound encrypted credentials",
         [nameof(AppConfig.MeasuredAvOffsetMs)] = "calibration",
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",

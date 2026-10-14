@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using HomePodCast.Audio;
 using HomePodCast.Net;
+using HomePodCast.Protocol;
 
 namespace HomePodCast;
 
@@ -111,10 +112,13 @@ public static class Program
               info --host IP [--port N]                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
+              stream --protocol raop --host IP [--port N] [--latency 1000|1500|2000] [--silent | --tone] [--cap 10]
+                     [--encryption 0|1|4]           experimental; password via HOMEPODCAST_RAOP_PASSWORD
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
               autostart on|off|status                the Microsoft Store version's startup task (tests: see packaging/msix)
               firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
+        // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
@@ -281,6 +285,8 @@ public static class Program
 
     private static async Task<int> Stream(string[] args)
     {
+        if (Opt(args, "--protocol") is "raop")
+            return await StreamRaop(args);
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
         int latency = int.Parse(Opt(args, "--latency") ?? "250");
         int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
@@ -335,6 +341,40 @@ public static class Program
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
     }
+    // experimental since 1.1: separate compatibility sender, including a silent protocol-test mode.
+    private static async Task<int> StreamRaop(string[] args)
+    {
+        var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
+        int port = int.Parse(Opt(args, "--port") ?? "7000");
+        int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
+        bool silent = args.Contains("--silent"), tone = args.Contains("--tone");
+        var fifo = new AudioFifo(RaopAudio.SampleRate, targetMs: 20, capMs: 60);
+        using var capture = silent || tone ? null : new LoopbackCapture(fifo, RaopAudio.SampleRate);
+        using var source = tone && !silent ? new ToneGenerator(fifo) : null;
+        capture?.Start(); source?.Start();
+        var floats = new float[RaopAudio.FramesPerPacket * 2];
+        using var client = await RaopClient.ConnectAsync(host, port, new RaopOptions
+        {
+            LatencyMs = int.Parse(Opt(args, "--latency") ?? "2000"),
+            VolumePercent = double.Parse(Opt(args, "--volume") ?? "10"),
+            VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "10"),
+            Txt = new Dictionary<string, string> { ["et"] = Opt(args, "--encryption") ?? "0", ["cn"] = "1" },
+            Password = Environment.GetEnvironmentVariable("HOMEPODCAST_RAOP_PASSWORD"),
+            Log = Log.Info,
+            ReadAudio = pcm =>
+            {
+                fifo.Read(floats);
+                for (int i = 0; i < pcm.Length; i++) pcm[i] = (short)Math.Clamp((int)Math.Round(floats[i] * 32767), short.MinValue, short.MaxValue);
+            },
+        }, CancellationToken.None);
+        var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Lost += reason => lost.TrySetResult(reason);
+        await Task.WhenAny(Task.Delay(TimeSpan.FromSeconds(seconds)), lost.Task);
+        Log.Info($"RAOP sent={client.PacketsSent} rtx={client.RetransmitRequests}/{client.Retransmitted}/{client.RetransmitMisses} ntp={client.TimingRequests}");
+        if (lost.Task.IsCompleted) { Log.Warn(lost.Task.Result); return 1; }
+        return 0;
+    }
+
 }
 
 /// <summary>Test source: N short 880 Hz beeps at the start of every second, generated in real time.</summary>

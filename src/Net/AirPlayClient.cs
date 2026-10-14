@@ -420,18 +420,6 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     }
 }
 
-public class AirPlayException(string message) : Exception(message)
-{
-    /// <summary>
-    /// The message for the log when the user's <see cref="Exception.Message"/> names a speaker: the same with the names
-    /// marked by <see cref="Log.Name"/>, so that a diagnostic report leaves them out (Message never has the markers).
-    /// </summary>
-    public string? LogMessage { get; init; }
-
-    /// <summary>What the log says about <paramref name="ex"/>.</summary>
-    public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;
-}
-
 /// <param name="network">
 /// The network the speaker is reached through: when it is Public and the firewall doesn't let us in there (it reads
 /// the rules), the message says so, which is what the main window and the tray show.
