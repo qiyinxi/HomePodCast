@@ -157,6 +157,7 @@ internal sealed class Walker
                 tree = CheckSettings(false, compatibility: true);
             }
             Layout(tree, page); ShootPage(page, "");
+            if (page == "首页") Flyout(false, compatibility: true);
         }
         WalkNarrow();
         Quit(); CheckLog(idle: true);
@@ -574,7 +575,7 @@ internal sealed class Walker
 
     // ---------------------------------------------------------------- flyout
 
-    private void Flyout(bool connected)
+    private void Flyout(bool connected, bool compatibility = false)
     {
         var flyout = OpenFlyout();
         Thread.Sleep(500);
@@ -582,8 +583,14 @@ internal sealed class Walker
         Dump(tree, "flyout");
         string expected = connected ? T("断开") : T("连接");
         Expect(tree.Descendants().Any(n => n.Type == "Button" && n.Says(expected)), "flyout", $"no 「{expected}」 button");
-        string name = connected ? _fake!.Name : T("还没有选择音箱");
+        string name = compatibility ? "CI compatibility receiver" : connected ? _fake!.Name : T("还没有选择音箱");
         Expect(Has(tree, name), "flyout", $"doesn't show 「{name}」");
+        if (compatibility)
+        {
+            Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), "flyout",
+                "compatibility latency selector is missing"); // experimental since 1.1
+            Expect(Has(tree, "2000 ms"), "flyout", "compatibility default is not 2000 ms");
+        }
         Shoot(flyout, "flyout", "tray flyout");
         Layout(tree, "flyout");
         Checks.OnScreen(flyout, Where("flyout"), _report);

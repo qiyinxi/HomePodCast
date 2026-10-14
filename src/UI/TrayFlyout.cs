@@ -182,6 +182,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
         var selection = _app.ReceiverSelection;
         _scenes.Collapsed = selection != null;
         _sceneTitle.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        _sceneTitle.Wrap = selection != null;
         _compatibilityLatency.Collapsed = selection?.Compatibility != true;
         _receiverNote.Collapsed = selection?.Compatibility != true;
         _receiverNote.Text = selection?.Compatibility == true
