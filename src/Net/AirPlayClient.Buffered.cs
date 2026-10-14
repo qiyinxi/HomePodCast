@@ -95,6 +95,7 @@ public sealed partial class AirPlayClient
         // Give the receiver's PTP monitor time to establish the clock before its first anchor.
         // This delay is startup only; live audio thereafter uses the selected 1/1.5/2 second offset.
         await Task.Delay(1000, ct);
+        await _ptp.WaitForStableMasterAsync(ct);
         if (realtime)
         {
             if (!prepareOnly) StartPreparedPtpRealtime(options);

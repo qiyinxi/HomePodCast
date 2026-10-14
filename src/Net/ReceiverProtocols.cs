@@ -46,7 +46,7 @@ public static class ReceiverLatencies
         {
             ReceiverKind.HomePod => new(processing + 15, processing + 20, 120, 500),
             ReceiverKind.AppleTv => new(processing + 15, processing + 30, 200, 500),
-            _ => new(Math.Max(120, processing + 30), Math.Max(150, processing + 50), 250, 500),
+            _ => new(processingMs.HasValue ? Math.Max(120, processing + 30) : 200, Math.Max(150, processing + 50), 250, 500),
         };
     }
 }

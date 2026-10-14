@@ -37,6 +37,21 @@ public sealed class PtpMaster : IDisposable
     public static ulong NowNanoseconds => EpochBase + (ulong)((UInt128)(ulong)(Stopwatch.GetTimestamp() - ClockBase)
         * 1_000_000_000 / (ulong)Stopwatch.Frequency);
 
+    /// <summary>Let the receiver's wake-up election finish before anchoring or consuming live audio.</summary>
+    internal async Task WaitForStableMasterAsync(CancellationToken ct)
+    {
+        long began = Stopwatch.GetTimestamp(), stable = began;
+        while (Stopwatch.GetTimestamp() - began < Stopwatch.Frequency * 2)
+        {
+            ct.ThrowIfCancellationRequested();
+            long now = Stopwatch.GetTimestamp();
+            if (!IsMaster) stable = now;
+            else if (now - stable >= Stopwatch.Frequency / 4) return;
+            await Task.Delay(20, ct);
+        }
+        throw new IOException("PTP could not establish a stable master clock");
+    }
+
     /// <summary>Only an explicit third-party session may instantiate this; tests use loopback and private ports.</summary>
     public PtpMaster(IPAddress local, IPEndPoint peerEvents, IPEndPoint peerGeneral, bool thirdPartySession,
         int eventPort = 319, int generalPort = 320, ulong? clockId = null, byte domain = 0)

@@ -74,7 +74,7 @@ internal static class ThirdPartyConnections
                 var stream = new StreamOptions(latency, options.VolumePercent)
                 {
                     VolumeCapPercent = options.VolumeCapPercent, Effects = options.Effects,
-                    Pairings = options.Pairings, DeviceId = device.DeviceId, RequestLog = options.Log, AllowMissingEventChannel = true,
+                    Pairings = options.Pairings, DeviceId = device.DeviceId, RequestLog = options.Log, AllowMissingEventChannel = true, PairingOverRtsp = true,
                 };
                 bool ptp = (ReceiverKinds.Features(device.Txt?.GetValueOrDefault("features") ?? device.Txt?.GetValueOrDefault("ft")) & ReceiverKinds.Ptp) != 0;
                 prepared = ptp

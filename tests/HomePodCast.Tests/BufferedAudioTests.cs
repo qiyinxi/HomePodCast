@@ -67,6 +67,53 @@ public sealed class BufferedAudioTests
     }
 
     [Fact]
+    public async Task ThirdPartyRealtimeWithoutPtpRetainsNtpAndUsesRtspPairing()
+    {
+        var protocols = new List<string>();
+        using var fake = new FakeAirPlayReceiver(false)
+        {
+            ModelOverride = "ThirdParty",
+            RefuseRequest = request =>
+            {
+                if (request.StartLine.StartsWith("POST /pair-setup")) protocols.Add(request.StartLine);
+                return null;
+            },
+        };
+        var device = Device(fake.Port) with { Txt = new Dictionary<string, string> { ["features"] = "0x0,0x100" } };
+        var settings = ReceiverPreferences.Of(device); settings.ProtocolOverride = ReceiverProtocol.AirPlay2Realtime;
+        using var session = await ThirdPartyConnections.ConnectAsync(device, settings,
+            new(250, 10, 10, null, null, new EffectChain()), new AudioFifo(44100, 0, 999), default);
+        Assert.Equal("NTP", fake.SessionSetup!["timingProtocol"]);
+        Assert.Equal(96L, fake.StreamSetup!["type"]);
+        Assert.Equal(1L, fake.StreamSetup["ct"]);
+        Assert.Equal(2, protocols.Count);
+        Assert.All(protocols, line => Assert.EndsWith("RTSP/1.0", line));
+        Assert.Empty(fake.Errors);
+    }
+
+    [Fact]
+    public async Task ThirdPartyPinPairingUsesRtspForEveryStep()
+    {
+        var protocols = new List<string>();
+        using var fake = new FakeAirPlayReceiver(true)
+        {
+            ModelOverride = "ThirdParty",
+            RefuseRequest = request =>
+            {
+                if (request.StartLine.StartsWith("POST /pair-")) protocols.Add(request.StartLine);
+                return null;
+            },
+        };
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var session = await PinPairingSession.StartAsync(IPAddress.Loopback, fake.Port, timeout.Token, pairingOverRtsp: true);
+        var pairing = session.Finish(fake.Pin);
+        Assert.True(fake.IsPaired(pairing.ControllerId));
+        Assert.Equal(4, protocols.Count);
+        Assert.All(protocols, line => Assert.EndsWith("RTSP/1.0", line));
+        Assert.Empty(fake.Errors);
+    }
+
+    [Fact]
     public async Task EncoderInitializationFailureTearsDownWithoutRecording()
     {
         using var tcp = new TcpListener(IPAddress.Loopback, 0);

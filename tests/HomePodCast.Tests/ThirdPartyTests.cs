@@ -52,7 +52,7 @@ public class ThirdPartyTests
     [InlineData(ReceiverKind.HomePod, ReceiverProtocol.AirPlay2Realtime, 85, "", 100, 105, 120)]
     [InlineData(ReceiverKind.AppleTv, ReceiverProtocol.AirPlay2Realtime, 140, "", 155, 170, 200)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, 85, "", 120, 150, 250)]
-    [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, null, "", 180, 200, 250)]
+    [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, null, "", 200, 200, 250)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Buffered, null, "", 1000, 1000, 2000)]
     [InlineData(ReceiverKind.AppleAirPlay1, ReceiverProtocol.Raop, null, "AirPort10,115", 1000, 2000, 2000)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay1, ReceiverProtocol.Raop, null, "AppleTV3,2", 1000, 1000, 2000)]

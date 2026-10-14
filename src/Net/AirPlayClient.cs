@@ -39,6 +39,9 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>Some third-party receivers omit the optional event channel. Default preserves the HomePod path.</summary>
     public bool AllowMissingEventChannel { get; init; }
+
+    /// <summary>Third-party pairing over RTSP. HomePods and Apple TVs retain HTTP by default.</summary>
+    internal bool PairingOverRtsp { get; init; }
 }
 
 /// <summary>
@@ -162,6 +165,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
         VolumeCapPercent = options.VolumeCapPercent;
+        if (options.PairingOverRtsp) _rtsp.PairingOverRtsp = true;
         if (options.RequestLog != null)
             _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {method} {uri}: {status}");
         var info = _rtsp.Rtsp("GET", "/info");
