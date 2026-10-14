@@ -25,6 +25,13 @@ public sealed partial class StreamController
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
 
     /// <summary>
+    /// The audio source of the group started last (the wireless cinema's file), until Stop or the next start: null while
+    /// anything else plays. The cinema window compares it with its own source, so that a normal connection made while the
+    /// cinema waited is never mistaken for the cinema, nor stopped by its Stop (review of #22).
+    /// </summary>
+    public Audio.IGroupPacketSource? GroupSource => Volatile.Read(ref _groupSource);
+
+    /// <summary>
     /// One StartGroup's connection: why it connects, the selection's key, whether it has streamed yet, and whether a
     /// speaker ended its last session itself (another sender took it: a home theater's Apple TV is then not fought).
     /// </summary>
@@ -48,7 +55,7 @@ public sealed partial class StreamController
         {
             Stop();
             var cts = new CancellationTokenSource();
-            _groupSource = source;
+            Volatile.Write(ref _groupSource, source); // Stop disposes it (TearDownGroup)
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
@@ -85,7 +92,7 @@ public sealed partial class StreamController
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
             members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
-        if (run.Source == null) EnsureCapture(ct);
+        if (run.Source == null) EnsureCapture(ct); // the cinema plays its file: no system capture, no effects chain
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         if (EffectiveLatencyMs != latencyMs)

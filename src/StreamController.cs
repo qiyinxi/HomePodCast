@@ -117,6 +117,7 @@ public sealed partial class StreamController : IDisposable
             TearDownGroup();
             DisposeCapture();
             _waitingForSpeaker = false;
+            MeasurementCapPercent = null; // a measurement never outlives its stream
             Set(StreamState.Idle, statusText);
         }
     }

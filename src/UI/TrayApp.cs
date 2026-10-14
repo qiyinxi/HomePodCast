@@ -167,17 +167,17 @@ internal sealed partial class TrayApp : ApplicationContext
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
         {
-            _connection.Post(() => Controller.StartGroup(group, latency, volume, asOf, trigger, takenFrom));
+            PostConnection(() => Controller.StartGroup(group, latency, volume, asOf, trigger, takenFrom));
             return;
         }
-        _connection.Post(() => Controller.Start(id, host, latency, volume, asOf, trigger, takenFrom));
+        PostConnection(() => Controller.Start(id, host, latency, volume, asOf, trigger, takenFrom));
     }
 
     public void Disconnect()
     {
         _wantConnected = false;
         _nightDisconnected = false; // the user's own disconnect: 夜间自动断开 doesn't connect it again
-        _connection.Post(Controller.Stop);
+        PostConnection(Controller.Stop);
     }
 
     /// <summary>连接 / 断开 (首页, the tray flyout). 连接 asks first when another device is playing to the speaker.</summary>
