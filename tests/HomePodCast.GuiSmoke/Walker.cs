@@ -313,6 +313,20 @@ internal sealed class Walker
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
 
+        // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
+        // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
+        // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
+        // Only in the row: German 「Aktualisieren」 is also 音箱信息's 刷新.
+        var versionPattern = _t.Pattern("当前版本 {0}");
+        var updateRow = Find(page, n => n.Type == "Text" && n.Shown && versionPattern.IsMatch(n.Name))?.Parent;
+        Expect(updateRow != null && Find(updateRow, n => n.Type == "Button" && n.Shown && n.Says(T("检查更新"))) != null,
+            "设置", $"「{T("检查更新")}」 is not in the row 「{T("当前版本 {0}")}」");
+        foreach (var offer in new[] { "更新", "查看说明", "跳过此版本" })
+            Expect(updateRow == null || !updateRow.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T(offer))), "设置",
+                $"「{T(offer)}」 is in the row 「{T("当前版本 {0}")}」 although no update was offered");
+        Expect(!page.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T("跳过此版本"))), "设置",
+            $"「{T("跳过此版本")}」 is shown although no update was offered");
+
         // Updates on a fresh config: no automatic checks; the channel follows the build (a prerelease: 测试版).
         var auto = Find(page, n => n.Name == T("自动检查更新") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
         var autoState = auto == null ? null : Native.MsaaState(auto.Hwnd);

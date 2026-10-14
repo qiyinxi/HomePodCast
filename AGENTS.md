@@ -41,8 +41,8 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - CI (`.github/workflows/build.yml`, every push and PR to dev/main/release) also runs, on its own runners:
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
   the extension), `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact) and
-  `airplay-compat-e2e` (third-party AirPlay: a shairport-sync receiver on Linux). The `release` job needs all of them; main requires
-  them.
+  `airplay-compat-e2e` (third-party AirPlay: a shairport-sync receiver on Linux). The `release` job needs all of them;
+  main requires them.
 - What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression, one-time
   verifications (each says which change makes it worth re-testing), experimental features, and a list of what is
   already automated. When you automate an item, move it to that list with its CI job or test class.
@@ -87,7 +87,7 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   gives the scope and the files it will change, so the other agent can see the area is taken. Mark it ready for review
   when CI is green.
 - **Superseding** another agent's PR needs the maintainer's OK. The new PR then says `Supersedes #N` and what it keeps
-  and changes, and the old PR gets a comment linking to it. Closing the old PR is left to the maintainer.
+  and changes, and the old PR gets a comment linking to it. When the new PR is merged, close the old one.
 - **Stay close to dev.** Keep PRs small and merge them within a day or two. When `dev` moves, merge `origin/dev` into
   your branch: never rebase a pushed branch, never force-push. Resolve each conflict so that both sides' intent
   survives. If that needs a product decision, ask the maintainer. These files conflict most:
@@ -96,8 +96,11 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - `src/Program.cs` (its commands)
   - `src/UI/Pages/SettingsPage.cs`
   - the READMEs, `docs/device-test-checklist.zh-CN.md` and this file
-- **Merging.** The author merges its own PR into `dev` once CI is green on a branch that is up to date with dev. Merge
-  the other agent's PR only when the maintainer asks.
+- **Merging** into `dev` needs no one's OK (the maintainer, 2026-10-14). A PR can be merged once its CI is green and
+  it has no conflicts with dev. If dev has since changed code the PR also touches, merge dev in first and let CI run
+  again. Merge your own PRs yourself. Review the other agent's PR before you merge it: read the diff, and check that
+  the earlier review findings are fixed. If it isn't ready, leave a review comment saying what is missing.
+  Drafts are never merged.
 - **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
   and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
 - **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
