@@ -38,7 +38,7 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Home, L.T("首页"));
         _rail.Add(Glyph.Mixer, L.T("混音器"));
         _rail.Add(Glyph.Microphone, L.T("麦克风与音效"));
-        _rail.Add(Glyph.Settings, L.T("设置"));
+        _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
         _rail.Navigate += i => ShowPage((AppPage)i);
 
         _home = new HomePage(app);
@@ -85,13 +85,14 @@ internal sealed class MainWindow : Form, ISurface
         var area = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1280, 720);
         int w = Math.Min(Dp(1000), area.Width * 94 / 100), h = Math.Min(Dp(700), area.Height * 92 / 100);
         Size = new Size(w, h);
-        MinimumSize = new Size(Math.Min(Dp(700), w), Math.Min(Dp(460), h));
+        MinimumSize = new Size(Math.Min(Dp(600), w), Math.Min(Dp(460), h));
     }
 
     // ---------------------------------------------------------------- pages
 
     public void ShowPage(AppPage page)
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         SelectPage(page);
         UpdateShownPage();
     }
@@ -101,9 +102,9 @@ internal sealed class MainWindow : Form, ISurface
         int index = (int)page;
         _rail.SelectedIndex = index;
         if (index == _current && _pages[index].Visible) return;
+        using var layout = LayoutPanel.BatchLayout(this);
         _current = index;
         for (int i = 0; i < _pages.Length; i++) _pages[i].Visible = i == index;
-        PerformLayout();
     }
 
     /// <summary>Tell pages when they become visible (timers, mixer sessions) or stop being visible.</summary>
@@ -132,12 +133,10 @@ internal sealed class MainWindow : Form, ISurface
     {
         if (_pages is null) return; // Form setters lay out before the constructor is done
         var client = ClientSize;
-        int rail = Math.Min(_rail.PreferredWidth(), Math.Max(Dp(160), client.Width / 3));
+        int rail = _rail.WidthForWindow(client.Width);
         LayoutPanel.Place(_rail, 0, 0, rail, client.Height);
         var page = _pages[_current];
-        if (page.Left != rail || page.Width != client.Width - rail || page.Height != client.Height)
-            page.SetBounds(rail, 0, Math.Max(0, client.Width - rail), client.Height);
-        page.PerformLayout();
+        LayoutPanel.Place(page, rail, 0, Math.Max(0, client.Width - rail), client.Height);
     }
 
     // ---------------------------------------------------------------- theme, DPI, closing
@@ -160,7 +159,7 @@ internal sealed class MainWindow : Form, ISurface
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-        MinimumSize = new Size(Theme.Dp(700, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
+        MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
         PerformLayout();
         Invalidate(true);
     }

@@ -154,6 +154,13 @@ internal sealed class SettingsPage : ScrollPage
                      _updateRow.Row, _channelRow, _autoUpdateRow, aboutRow })
             Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
+        var manualAirPlay = new FluentButton(L.T("添加"));
+        var manualAirPlayRow = new SettingRow(Glyph.Devices, L.T("手动添加 AirPlay 设备（实验性）"), // experimental since 1.1
+            L.T("发现不到设备时，填写 IP 地址和端口。"), manualAirPlay);
+        Content.Controls.Add(manualAirPlayRow);
+        Content.Controls.SetChildIndex(manualAirPlayRow, Content.Controls.GetChildIndex(updates));
+        Content.GapBefore[manualAirPlayRow] = 4;
+        manualAirPlay.Click += (_, _) => _app.AddManualAirPlayDevice(FindForm());
         AddSpeakerInfo(before: updates);
         AddPairings(before: updates);
 
@@ -354,6 +361,7 @@ internal sealed class SettingsPage : ScrollPage
 
     private void Load()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         var cfg = _app.Config;
         string current = LanguageMenu.Normalize(cfg.Language);
         _language.SelectedIndex = current == L.Auto ? 0 : Array.FindIndex(LanguageMenu.Choices, c => c.Value == current) + 1;
@@ -478,6 +486,7 @@ internal sealed class SettingsPage : ScrollPage
     /// <summary>「夜间自动断开」: the switch, and while it is on the window and the idle time.</summary>
     private void ShowNight()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         var cfg = _app.Config;
         _night.Checked = cfg.NightDisconnect;
         _nightWindowRow.Collapsed = _nightIdleRow.Collapsed = !cfg.NightDisconnect;
@@ -565,6 +574,7 @@ internal sealed class SettingsPage : ScrollPage
 
     public override void PageShown()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         ShowAutostart(); // the Store version's startup task may have been switched in Windows' settings meanwhile
         ShowSoundOptions();
         ShowVolumeKeys(); // the capture device may have been changed on 混音器

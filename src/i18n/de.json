@@ -476,5 +476,16 @@
   "闲置多久后断开": "Trennen nach Inaktivität von",
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "So lange keine Eingabe mit Tastatur oder Maus und kein Ton auf dem HomePod.",
   "开始和结束时间相同，不会断开。": "Beginn und Ende sind gleich, daher wird nie getrennt.",
-  "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder"
+  "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder",
+  "Apple TV（实验性）": "Apple TV (experimentell)",
+  "AirPlay 1 · 兼容模式（实验性）": "AirPlay 1 · Kompatibilitätsmodus (experimentell)",
+  "AirPlay 2 · 第三方（实验性，未在实机上测试）": "AirPlay 2 · Drittanbieter (experimentell, nicht auf Hardware getestet)",
+  "未知 AirPlay 设备（实验性）": "Unbekanntes AirPlay-Gerät (experimentell)",
+  "设备类型": "Gerätetyp",
+  "手动添加 AirPlay 设备（实验性）": "AirPlay-Gerät manuell hinzufügen (experimentell)",
+  "端口（默认 7000）": "Port (Standard 7000)",
+  "添加": "Hinzufügen",
+  "填写接收端的 IP 地址和端口；只读取设备信息。": "IP-Adresse und Port des Empfängers eingeben; es werden nur Geräteinformationen gelesen.",
+  "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Eine gültige IPv4-Adresse und einen Port zwischen 1 und 65535 eingeben.",
+  "发现不到设备时，填写 IP 地址和端口。": "Wenn das Gerät nicht gefunden wird, IP-Adresse und Port eingeben."
 }

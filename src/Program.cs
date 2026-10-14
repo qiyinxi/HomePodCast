@@ -108,7 +108,7 @@ public static class Program
         Console.WriteLine("""
             HomePodCast
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
-              info --host IP                         dump the speaker's /info (read-only)
+              info --host IP [--port N]                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
@@ -259,26 +259,23 @@ public static class Program
         foreach (var d in devices)
         {
             Console.WriteLine("  " + d);
-            if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
+            if (txt) Console.WriteLine($"      experimental receiver={d.Kind} airplay={(d.HasAirPlay ? d.Port : null)} raop={d.RaopPort} " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
         }
         foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
         foreach (var line in HomeTheater.Describe(devices)) Console.WriteLine(line); // Apple TVs and their home-theater HomePods
         return 0;
     }
 
-    /// <summary>`info --host IP`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
+    /// <summary>`info --host IP [--port N]`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
     private static async Task<int> Info(string[] args)
     {
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
-        using var rtsp = await RtspConnection.ConnectAsync(host, 7000, CancellationToken.None);
-        var reply = rtsp.Rtsp("GET", "/info");
-        Console.WriteLine($"{host}: {reply.StartLine}");
-        if (reply.IsSuccess && reply.Body.Length > 0)
-        {
-            var info = Protocol.BPlist.ReadDict(reply.Body);
-            foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
-            Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info)); // bit 17: another sender's (or our) session is active
-        }
+        int port = int.Parse(Opt(args, "--port") ?? "7000");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var info = await SpeakerInfoReader.ReadAsync(host, port, timeout.Token);
+        Console.WriteLine($"{host}:{port}: {ReceiverKinds.Classify("", null, info: info)}");
+        foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
+        Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info));
         return 0;
     }
 

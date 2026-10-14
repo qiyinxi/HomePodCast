@@ -205,6 +205,7 @@ internal sealed class Walker
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") tree = CheckSettings(connected);
+            CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
             if (page == "首页") Flyout(connected);
@@ -219,20 +220,35 @@ internal sealed class Walker
         {
             var main = MainWindow();
             var r = Native.WindowRect(main);
-            int width = 700 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(700)
+            int width = 600 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(600), compact navigation
             Native.SetWindowPos(main, IntPtr.Zero, 0, 0, width, r.Height, Native.SWP_NOMOVE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
             Thread.Sleep(800);
             _report.Pass(Where("narrow"), $"window {Native.WindowRect(main).Width}px wide");
             foreach (var page in Pages)
             {
                 Navigate(page);
-                Layout(Uia.Snapshot(MainWindow()), page + " (narrow)");
+                var tree = Uia.Snapshot(MainWindow());
+                CheckNavigation(tree, compact: true);
+                Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
         }
     }
 
     // ---------------------------------------------------------------- page checks
+
+    private void CheckNavigation(Node tree, bool compact = false)
+    {
+        var settings = Find(tree, n => n.Type == "TabItem" && n.Name == T("设置"));
+        Expect(settings?.Parent != null, "navigation", "no settings navigation item");
+        if (settings?.Parent is not { } rail) return;
+        int dpi = (int)Native.GetDpiForWindow(MainWindow());
+        int gap = 8 * dpi / 96;
+        Expect(Math.Abs(rail.Rect.Bottom - settings.Rect.Bottom - gap) <= 2, "navigation",
+            "settings is not pinned to the bottom of the rail");
+        if (compact)
+            Expect(rail.Rect.Width <= 64 * dpi / 96 + 1, "navigation", "narrow window did not compact the navigation rail");
+    }
 
     private void CheckHome(Node tree, bool connected)
     {
@@ -278,6 +294,7 @@ internal sealed class Walker
         var page = PagePane(tree, "设置");
         Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
         Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
+        Expect(Has(page, T("手动添加 AirPlay 设备（实验性）")), "设置", "manual AirPlay receiver row missing"); // experimental since 1.1
         Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
         if (connected)
         {
