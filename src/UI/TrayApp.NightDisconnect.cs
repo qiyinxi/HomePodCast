@@ -43,7 +43,7 @@ internal sealed partial class TrayApp
                 _wantConnected = false;
                 _nightDisconnected = true;
                 string status = NightDisconnectedText(Config.NightDisconnectUntil);
-                _connection.Post(() => Controller.Stop(status));
+                PostConnection(() => Controller.Stop(status));
                 return true;
             case NightAction.Reconnect:
                 Log.Info("night disconnect: the night window is over, connecting again");
@@ -84,6 +84,6 @@ internal sealed partial class TrayApp
         // The status line names the reconnect time: a new one, or (turned off) none, since what it ended now stays ended.
         _nightDisconnected = on;
         string status = on ? NightDisconnectedText(until) : L.T("未连接");
-        _connection.Post(() => Controller.Stop(status));
+        PostConnection(() => Controller.Stop(status));
     }
 }
