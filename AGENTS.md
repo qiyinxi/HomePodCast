@@ -87,9 +87,13 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Fields: Status (待办 / 进行中 / 等你决定 / 已完成 / 搁置), 负责人 (Claude / Codex / 维护者), 领域, 优先级, 链接.
   - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
     `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
-  - When you start an item, set it to 进行中 with yourself as 负责人. When it is finished, set 已完成 and add the result and
-    links to its body.
-  - A new need, or a question only the maintainer can answer, becomes a new item (the question with 等你决定).
+  - **The maintainer assigns the work.** A new need goes on the board first, with no 负责人 and the status 待办; a
+    question only the maintainer can answer gets the status 等你决定. Then ask the maintainer whether Claude or Codex
+    does it, and start nothing (no subagents either) until they have assigned it (2026-10-15).
+  - Exceptions: work the maintainer told you to do in your own session, and keeping your own assigned PRs green
+    (CI failures, merge conflicts).
+  - When you start an assigned item, set it to 进行中. When it is finished, set 已完成 and add the result and links to its
+    body.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
   fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
   one: tell the maintainer, and build on it only if they say so.
