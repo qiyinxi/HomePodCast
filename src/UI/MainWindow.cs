@@ -241,6 +241,9 @@ internal sealed class MainWindow : Form, ISurface
         _settings.ShowUpdate();
     }
 
+    /// <summary>The .NET runtime this copy started on was found gone: 首页's restart notice.</summary>
+    public void ShowRuntimeNotice() => _home.ShowRuntimeNotice();
+
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
     public void Flush()
     {
