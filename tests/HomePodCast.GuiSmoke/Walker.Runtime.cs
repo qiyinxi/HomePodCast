@@ -94,6 +94,7 @@ internal sealed partial class Walker
             if (!old.WaitForExit(30_000)) throw new StepFailed("the app did not quit for the restart within 30 s");
             Expect(old.ExitCode == 0, "restart", $"the old copy exited with {old.ExitCode}");
             _app = WaitForRestartedApp(old.Id, 30_000);
+            _restarted = true;
             var main = WaitWindow(MainWindow, "the restarted copy's main window (it had its window open)", 30_000);
             Thread.Sleep(1500);
             HandlePrompts(); // the startup firewall check again
@@ -112,7 +113,7 @@ internal sealed partial class Walker
             Expect(!Has(tree, T("立即重启")), "首页 (restarted)", "the restart notice is still there");
             Shoot(main, "home-restarted", "首页 after 立即重启: connected again, no notice");
 
-            Quit();
+            QuitRestarted();
             CheckLog(idle: false);
             var sessions = _fake.Requests.Count(r => r == "SETUP stream [encrypted]");
             Expect(sessions >= 2, "fake HomePod", $"{sessions} stream session(s): the restarted copy did not connect again");
@@ -121,7 +122,10 @@ internal sealed partial class Walker
         }
         finally
         {
-            StopApp();
+            // The restarted copy was not started by the walker: not through its Process object, by its exe path.
+            if (_app != null && _restarted) _app = null;
+            else StopApp();
+            KillLeftovers();
             for (int i = 0; i < 20 && Directory.Exists(root); i++)
             {
                 try { Directory.Delete(root, recursive: true); }
@@ -158,6 +162,46 @@ internal sealed partial class Walker
             Directory.CreateDirectory(Path.Combine(to, Path.GetRelativePath(from, dir)));
         foreach (var file in Directory.GetFiles(from, "*", SearchOption.AllDirectories))
             File.Copy(file, Path.Combine(to, Path.GetRelativePath(from, file)), overwrite: true);
+    }
+
+    /// <summary>
+    /// <see cref="_app"/> is the copy 立即重启 started, found by name: its Process object can't tell its exit code
+    /// (InvalidOperationException, the first CI run), so it is quit and waited for by its id and window.
+    /// </summary>
+    private bool _restarted;
+
+    /// <summary>Quits the restarted copy from the tray flyout's 退出 and waits until its process is gone.</summary>
+    private void QuitRestarted()
+    {
+        int pid = App.Id;
+        var main = MainWindow();
+        try
+        {
+            var flyout = OpenFlyout();
+            var quit = Find(Uia.Snapshot(flyout), n => n.Type == "Button" && n.Says(T("退出"))) ?? throw new StepFailed($"no 「{T("退出")}」 in the flyout");
+            Uia.Invoke(quit);
+        }
+        catch (Exception ex) when (ex is StepFailed or InvalidOperationException or System.Windows.Automation.ElementNotAvailableException)
+        {
+            _report.Fail(Where("quit"), $"quitting the restarted copy from the flyout failed: {ex.Message}");
+            if (main != IntPtr.Zero) Native.PostMessage(main, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+        }
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (Running(pid) && DateTime.UtcNow < deadline) Thread.Sleep(200);
+        Expect(!Running(pid), "quit", "the restarted copy did not exit within 30 s");
+        _app = null; // gone (or killed with the leftovers): nothing here asks its Process object any more
+    }
+
+    /// <summary>A process with this id still runs (by the process list, not by a Process object's exit state).</summary>
+    private static bool Running(int pid)
+    {
+        bool found = false;
+        foreach (var p in Process.GetProcesses())
+        {
+            found |= p.Id == pid;
+            p.Dispose();
+        }
+        return found;
     }
 
     /// <summary>The copy 立即重启 started: the same exe, another process.</summary>
