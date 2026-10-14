@@ -306,6 +306,7 @@
   "上次检查：{0}": "Sidst tjekket: {0}",
   "正在检查更新…": "Søger efter opdateringer…",
   "检查失败，请稍后再试（详情见日志）": "Søgningen mislykkedes. Prøv igen senere (detaljer i loggen)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET er blevet opdateret. Genstart HomePodCast, og prøv igen.",
   "已是最新版本": "HomePodCast er opdateret",
   "发现新版本 {0}": "Ny version tilgængelig: {0}",
   "发现新版本 {0}。点这里查看。": "Ny version tilgængelig: {0}. Klik her for at se den.",
