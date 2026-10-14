@@ -69,8 +69,9 @@ public sealed record SpeakerDetails(
         };
     }
 
+    /// <param name="model">The model the scan or the saved preferences advertised: a RAOP-only receiver has it in TXT am.</param>
     public static SpeakerDetails Build(string name, IPAddress? address, IReadOnlyDictionary<string, string>? scanTxt,
-        IReadOnlyDictionary<string, object?>? info)
+        IReadOnlyDictionary<string, object?>? info, string? model = null)
     {
         var infoTxt = TxtRecord.FromInfo(info);
         string? Txt(string key) => Clean(infoTxt?.GetValueOrDefault(key)) ?? Clean(scanTxt?.GetValueOrDefault(key));
@@ -78,7 +79,7 @@ public sealed record SpeakerDetails(
         bool known = address != null && !address.Equals(IPAddress.None) && !address.Equals(IPAddress.Any);
         return new SpeakerDetails(
             Info("name") ?? name,
-            Info("model") ?? Txt("model"),
+            Info("model") ?? Txt("model") ?? Clean(model),
             SystemVersionText(Txt("osvers"), Info("osBuildVersion")),
             Txt("srcvers") ?? Info("sourceVersion") ?? Info("srcvers"),
             known ? address!.ToString() : null,
