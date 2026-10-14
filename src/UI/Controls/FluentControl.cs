@@ -285,11 +285,56 @@ internal abstract class LayoutPanel : Panel
 
     public static int WidthFor(Control c) => IsCollapsed(c) ? 0 : c.GetPreferredSize(Size.Empty).Width;
 
-    /// <summary>Set bounds (only when they changed) and lay a container out again.</summary>
+    /// <summary>Set bounds and arrange a container once, including when only its children's sizes changed.</summary>
     public static void Place(Control c, int x, int y, int w, int h)
     {
-        if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
-        if (c is LayoutPanel) c.PerformLayout();
+        bool container = c is LayoutPanel or ScrollPage;
+        if (container) c.SuspendLayout();
+        try
+        {
+            if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+        }
+        finally
+        {
+            // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
+            // doing both multiplies the work at each level of the page's nested cards and rows.
+            if (container) c.ResumeLayout(false);
+        }
+        if (container) c.PerformLayout();
+    }
+
+    /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
+    public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);
+
+    private sealed class LayoutBatch : IDisposable
+    {
+        private readonly Control _root;
+        private readonly List<Control> _containers = [];
+        private bool _disposed;
+
+        public LayoutBatch(Control root)
+        {
+            _root = root;
+            Suspend(root);
+        }
+
+        private void Suspend(Control c)
+        {
+            if (c == _root || c is LayoutPanel or ScrollPage)
+            {
+                c.SuspendLayout();
+                _containers.Add(c);
+            }
+            foreach (Control child in c.Controls) Suspend(child);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var c in _containers) c.ResumeLayout(false);
+            if (!_root.IsDisposed) _root.PerformLayout();
+        }
     }
 
     /// <summary>Measure and position everything again, from the outermost layout container up from <paramref name="from"/>.</summary>
@@ -497,10 +542,13 @@ internal class ScrollPage : Panel, ISurface
         if (Content is null) return; // AutoScroll lays out during construction
         int scrollBar = SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi);
         int width = Math.Max(0, Math.Min(Width - scrollBar, Theme.Dp(MaxContentWidth, DeviceDpi)));
+        Content.Inset = Width < Theme.Dp(640, DeviceDpi)
+            ? new Padding(16, 18, 16, 28) : new Padding(28, 18, 20, 28);
         int height = Content.GetPreferredSize(new Size(width, 0)).Height;
         if (AutoScrollMinSize.Height != height) AutoScrollMinSize = new Size(0, height);
         var pos = AutoScrollPosition;
-        LayoutPanel.Place(Content, pos.X, pos.Y, width, height);
+        int left = Math.Max(0, (Width - scrollBar - width) / 2);
+        LayoutPanel.Place(Content, left + pos.X, pos.Y, width, height);
         base.OnLayout(levent);
     }
 
