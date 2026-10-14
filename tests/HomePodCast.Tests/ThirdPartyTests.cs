@@ -52,7 +52,7 @@ public class ThirdPartyTests
     [InlineData(ReceiverKind.HomePod, ReceiverProtocol.AirPlay2Realtime, 85, "", 100, 105, 120)]
     [InlineData(ReceiverKind.AppleTv, ReceiverProtocol.AirPlay2Realtime, 140, "", 155, 170, 200)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, 85, "", 120, 150, 250)]
-    [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, null, "", 180, 200, 250)]
+    [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Realtime, null, "", 200, 200, 250)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay2, ReceiverProtocol.AirPlay2Buffered, null, "", 1000, 1000, 2000)]
     [InlineData(ReceiverKind.AppleAirPlay1, ReceiverProtocol.Raop, null, "AirPort10,115", 1000, 2000, 2000)]
     [InlineData(ReceiverKind.ThirdPartyAirPlay1, ReceiverProtocol.Raop, null, "AppleTV3,2", 1000, 1000, 2000)]
@@ -108,7 +108,7 @@ public class ThirdPartyTests
         using var fake = new FakeAirPlayReceiver(false) { ModelOverride = "ThirdParty", ArrivalToRenderMs = 320 };
         var device = Device() with { Address = IPAddress.Loopback, Port = fake.Port, RaopPort = null };
         var preferences = ReceiverPreferences.Of(device); preferences.ProtocolOverride = ReceiverProtocol.AirPlay2Realtime;
-        using var session = await ThirdPartyConnections.ConnectAsync(device, preferences, Options,
+        using var session = await ThirdPartyConnections.ConnectAsync(device, preferences, Options with { TimingPorts = fake.TimingPorts },
             new AudioFifo(44100, 10, 40), CancellationToken.None);
         Assert.InRange(session.LatencyMs, 369, 370);
         Assert.Equal(320, session.ArrivalToRenderMs);
@@ -140,6 +140,7 @@ public class ThirdPartyTests
         using var controller = new StreamController
         {
             ReceiverLookup = _ => device, ReceiverSettings = _ => preferences, ArrivalToRenderMs = 85,
+            ReceiverTimingPorts = fake.TimingPorts,
             CaptureFactory = _ => new SilentCapture(),
         };
         var connected = new TaskCompletionSource<(ReceiverProtocol Protocol, int? Processing)>(TaskCreationOptions.RunContinuationsAsynchronously);

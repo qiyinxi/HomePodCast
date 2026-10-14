@@ -128,9 +128,10 @@ public sealed class PinPairingSession : IDisposable
         _serverPublic = serverPublic;
     }
 
-    public static async Task<PinPairingSession> StartAsync(IPAddress host, int port, CancellationToken ct)
+    public static async Task<PinPairingSession> StartAsync(IPAddress host, int port, CancellationToken ct, bool pairingOverRtsp = false)
     {
         var rtsp = await RtspConnection.ConnectAsync(host, port, ct);
+        rtsp.PairingOverRtsp = pairingOverRtsp;
         try
         {
             HapHttp.Post(rtsp, "/pair-pin-start", null, "pair-pin-start");

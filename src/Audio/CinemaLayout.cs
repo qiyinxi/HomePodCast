@@ -263,11 +263,3 @@ internal sealed class CinemaException(string text, string logText, Exception? in
         L.T("这个文件的声道布局不支持：只能播放单声道、立体声、5.1 和 7.1 等最多 8 个声道的标准布局。"),
         $"unsupported channel layout: {channels} channels, mask 0x{mask:x}");
 }
-
-/// <summary>One multi-channel packet clock; every speaker is read from that exact packet before any RTP send.</summary>
-public interface IGroupPacketSource : IDisposable
-{
-    bool ReadPacket(long sourceTicks);
-    void ReadTarget(int index, Span<float> stereo);
-    void SkipPackets(int packets);
-}
