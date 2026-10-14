@@ -16,7 +16,7 @@ internal static class Program
     /// <summary>
     /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
     /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
-    /// HomePod, which also walk everything while connected.
+    /// HomePod, which also walk everything while connected; a .NET update under the connected app, and 立即重启.
     /// </summary>
     private static readonly Scenario[] Matrix =
     [
@@ -27,6 +27,7 @@ internal static class Program
         new("retrying", "zh-CN", 100),
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
+        new("runtime", "zh-CN", 100),
         new("idle", "zh-CN", 150),
         new("idle", "de", 150),
         new("streaming", "de", 150),
@@ -179,7 +180,7 @@ internal static class Program
                          "无线影院（实验性）", "选择影音文件", "播放", "暂停", "停止", "测量音箱延迟", "前左", "低音声道", "侧右",
                          "同步观影窗口（实验性）", "选择窗口…", "停止采集", "全屏 / F11", "已跟随本机音频状态", "自动扣除显示延迟",
                          "画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB", "选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。",
-                         "当前版本 {0}", "检查更新", "更新", "查看说明", "跳过此版本" })
+                         "当前版本 {0}", "检查更新", "更新", "查看说明", "跳过此版本", "立即重启" })
                 Check(lang == "zh-CN" || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
         }
         var scale = Display.Scale();

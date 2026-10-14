@@ -9,8 +9,9 @@ namespace HomePodCast.GuiSmoke;
 
 /// <summary>
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
-/// automatic connect: 「找不到音箱…，N 秒后重试」) or <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000),
-/// in a UI language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width.
+/// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
+/// or <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), in a UI
+/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width.
 /// </summary>
 internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false)
 {
@@ -21,7 +22,7 @@ internal sealed record Scenario(string Kind, string Language, int Scale, string 
 internal sealed class StepFailed(string message) : Exception(message);
 
 /// <summary>Drives one scenario: starts the app, walks it through UI Automation, checks, takes screenshots, quits it.</summary>
-internal sealed class Walker
+internal sealed partial class Walker
 {
     /// <summary>
     /// HOMEPODCAST_PROFILE for the app: null on a CI runner (the default config folder, as a fresh install: the
@@ -76,6 +77,7 @@ internal sealed class Walker
                 case "idle": RunIdle(); break;
                 case "retrying": RunRetrying(); break;
                 case "streaming": RunStreaming(); break;
+                case "runtime": RunRuntime(); break; // Walker.Runtime.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -701,6 +703,7 @@ internal sealed class Walker
         var psi = new ProcessStartInfo(_exe, arguments) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(_exe)! };
         if (Profile != null) psi.Environment["HOMEPODCAST_PROFILE"] = Profile;
         else psi.Environment.Remove("HOMEPODCAST_PROFILE");
+        if (_dotnetRoot != null) psi.Environment["DOTNET_ROOT"] = psi.Environment["DOTNET_ROOT_X64"] = _dotnetRoot; // Walker.Runtime.cs
         return psi;
     }
 

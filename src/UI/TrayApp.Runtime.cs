@@ -20,6 +20,8 @@ internal sealed partial class TrayApp
         if (resume is { } connect)
             Log.Info($"restarted by 「立即重启」: {(connect ? "connecting again, as before" : "not connecting: it was not connected")}");
         _runtimeWatch = RuntimeWatch.For(AppEnvironment.RuntimeFolder, File.Exists, () => _ui.Post(_ => OnRuntimeRemoved(), null));
+        Log.Info($"runtime: {AppEnvironment.RuntimeFolder.TrimEnd('\\', '/')} " +
+                 (_runtimeWatch != null ? "(shared: watched for its removal by a .NET update)" : "(the app's own: nothing to watch)"));
         _runtimeWatch?.Start();
     }
 

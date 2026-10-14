@@ -123,14 +123,14 @@
 - [ ] 「设置 → 开机自动启动」开关本身：默认是关的；在程序里打开后 Windows 设置 → 应用 → 启动 里 HomePodCast 是开的；在程序里关掉，那里也变成关（启动任务本身 CI 已测，这里看开关和 Windows 设置页面是否一致）。改了 `src/StartupTask.cs` 或 `src/UI/Pages/SettingsPage.cs` 的开关才需要重测
 - [ ] 注销再登录（或重启）：HomePodCast 在托盘里启动，不弹主窗口。日志里如果有 `started by the startup task: into the tray`，说明 Windows 没传 `--tray`、靠的是启动方式判断，告诉我。改了 `src/StartupTask.cs`、`src/Program.cs` 的启动参数或清单的 `windows.startupTask` 才需要重测
 - [ ] 在 Windows 设置 → 应用 → 启动 里关掉 HomePodCast，回到程序的设置页：开关变成关，下面写「已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。」；再在程序里打开它：弹窗问要不要打开 Windows 设置的「启动」页面。改了 `src/StartupTask.cs` 或 `src/UI/Pages/SettingsPage.cs` 的开关才需要重测
-- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）。CI 用同一条 `explorer.exe shell:AppsFolder\...` 命令启动打包版，所以这条命令本身能用。改了 `src/Program.cs` 的语言重启或 `src/AppEnvironment.cs` 才需要重测
+- [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）。CI 用同一条 `explorer.exe shell:AppsFolder\...` 命令启动打包版，所以这条命令本身能用。改了 `src/Program.cs` 的语言重启、`src/AppRestart.cs` 或 `src/AppEnvironment.cs` 才需要重测
 - [ ] 「设置 → 工具 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）。改了 `src/AppEnvironment.cs` 或 `src/UI/Pages/SettingsPage.cs` 的日志一栏才需要重测
 - [ ] 「设置 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查。改了 `src/UI/Pages/SettingsPage.cs` 或 `src/UI/TrayApp.Update.cs` 才需要重测
 - 上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart，`src/Program.cs`）
 
 ### 十一、界面语言
 
-- [ ] 设置 → 语言切换到 Svenska / English 看一眼：翻译通不通顺、Svenska、在设置里切换后重新启动（English 和 Deutsch 每一页的截图和没翻译的中文：CI 自动测试：gui-smoke）。改了 `src/i18n/*.json` 里较多的文字或 `src/UI/LanguageMenu.cs` 才需要重测
+- [ ] 设置 → 语言切换到 Svenska / English 看一眼：翻译通不通顺、Svenska、在设置里切换后重新启动（English 和 Deutsch 每一页的截图和没翻译的中文：CI 自动测试：gui-smoke）。改了 `src/i18n/*.json` 里较多的文字、`src/UI/LanguageMenu.cs` 或 `src/AppRestart.cs` 才需要重测
 
 ### 十二、夜间自动断开（1.1 新增）
 
@@ -154,6 +154,12 @@
 7. - [ ] 最大化后按 F11 全屏，再按 Esc：回到最大化；在两块缩放不同的显示器之间拖动模块：文字和按钮清晰、不发糊（gui-smoke：100 % 和 150 % 下按显示器感知 DPI）
 8. - [ ] 换一个旧版本的模块配这个版本的 HomePodCast：窗口底部提示「模块版本 … 与 HomePodCast … 不同，请下载同一版本的模块。」（单元测试：VideoWindowTests；仍需实机：提示的样子）
 9. - [ ] 关闭模块或退出 HomePodCast：模块进程退出，任务管理器里它的显存释放；打开模块时不自动采集、不开始推流
+
+### 十四、.NET 被替换后的重启提示
+
+只有 MSI 版和便携版会遇到（它们用电脑上装的 .NET；Microsoft Store 版自带运行时，不检查也不提示）。音量不超过 25%。
+
+- [ ] HomePodCast 连着 HomePod 推流时，装一个新的 .NET 10 SDK 或运行时补丁版本，让它替换掉程序正在用的旧版本（2026-10-13 就是装 SDK 时把 10.0.12 换成了 10.0.13）。之后 5 分钟内（马上点「设置 → 软件更新 → 检查更新」更快）：首页最上面出现黄色提示「.NET 已更新，HomePodCast 需要重新启动才能继续正常工作。重启时声音会中断几秒，然后自动重新连接。」和「立即重启」按钮，托盘弹出一次「.NET 已更新，需要重新启动 HomePodCast。点这里查看。」；日志有 `runtime: the .NET runtime this copy started on (…) has been removed by a .NET update`。不点就什么都不发生。点「立即重启」：程序退出，几秒后自己重新打开（窗口还在，不是只在托盘），自动连回 HomePod、有声音，提示不再出现；日志里新的 starting 行之后有 `restarted by 「立即重启」: connecting again, as before`（单元测试：RuntimeWatchTests、AppRestartTests、RuntimeRestartNoticeTests；在私有的 .NET 副本上模拟替换、点「立即重启」后连回假 HomePod：CI 自动测试：gui-smoke 的 runtime 场景；仍需实机：真实的 .NET 安装程序、真实的 HomePod）。改了 `src/RuntimeWatch.cs`、`src/AppRestart.cs`、`src/UI/TrayApp.Runtime.cs` 或 `src/Program.cs` 的重启才需要重测
 
 ### 实验性功能（实机测过才去掉实验性）
 
@@ -244,7 +250,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 每次 CI 构建都跑，失败时构建不通过、标签不发布；作业日志里每项检查一行，失败时看作业摘要和它的工件（`gui-screenshots`、`msi-e2e-logs`、`update-e2e-logs`、`msix-e2e-logs`、`extension-e2e-screenshots`）。细节见 `docs/RELEASING.md`。「实机确认过」写的是以前在真实设备上确认的日期。
 
-- **gui-smoke**（`tests/HomePodCast.GuiSmoke`，截图在 `gui-screenshots` 工件）：这次构建的 Release 版程序，中文、English、Deutsch，100 % 和 150 % 缩放、最小窗口宽度、深色模式下，走一遍每一页（整页滚动）、托盘面板和全局快捷键、使用配置、多音箱（实验性）、无线影院（实验性：八个音箱位置都在，没选文件时「播放」「暂停」「停止」「测量音箱延迟」不可用，打开和关闭不影响连接）、设置 → 音箱信息：程序不退出、日志里没有 ERROR、控件没有被裁掉或互相重叠、按钮都有文字、English / Deutsch 里没有没翻译的中文；找不到音箱、等待重试（「找不到音箱：请确认它已通电、和电脑在同一网络，N 秒后重试」）时首页和托盘面板的按钮是「连接」，点了马上开始连接；连着假 HomePod 时按钮是「断开」，缓冲、音箱处理、实际延迟、断音、重传都有数值，音箱信息读得到音箱，退出时发 TEARDOWN；首页没有「刚才卡了」「导出诊断」，设置 → 工具 有「导出诊断」，全局快捷键里「标记刚才的卡顿」默认「未设置」；新装的配置「自动检查更新」是关的，「更新渠道」跟随版本（测试版、PR 和分支构建是「测试版」，正式版标签构建是「正式版」）；同步观影窗口（实验性，用这次构建的模块 zip）：从「设置 → 工具」点「打开」直接启动模块（不弹文件夹选择、不开始采集），窗口按当前缩放显示（按显示器感知 DPI），布局和翻译同上，状态栏提示先选择窗口；再单独用生成的 4K 画面运行（`--smoke-source`，不打开窗口选择器）：画面经过显卡队列和交换链显示，缩到 1920 × 1080、按 16:9 显示，跟随程序的延迟（没推流时 0 ms，连着假 HomePod 时是它的声音延迟）
+- **gui-smoke**（`tests/HomePodCast.GuiSmoke`，截图在 `gui-screenshots` 工件）：这次构建的 Release 版程序，中文、English、Deutsch，100 % 和 150 % 缩放、最小窗口宽度、深色模式下，走一遍每一页（整页滚动）、托盘面板和全局快捷键、使用配置、多音箱（实验性）、无线影院（实验性：八个音箱位置都在，没选文件时「播放」「暂停」「停止」「测量音箱延迟」不可用，打开和关闭不影响连接）、设置 → 音箱信息：程序不退出、日志里没有 ERROR、控件没有被裁掉或互相重叠、按钮都有文字、English / Deutsch 里没有没翻译的中文；找不到音箱、等待重试（「找不到音箱：请确认它已通电、和电脑在同一网络，N 秒后重试」）时首页和托盘面板的按钮是「连接」，点了马上开始连接；连着假 HomePod 时按钮是「断开」，缓冲、音箱处理、实际延迟、断音、重传都有数值，音箱信息读得到音箱，退出时发 TEARDOWN；首页没有「刚才卡了」「导出诊断」，设置 → 工具 有「导出诊断」，全局快捷键里「标记刚才的卡顿」默认「未设置」；新装的配置「自动检查更新」是关的，「更新渠道」跟随版本（测试版、PR 和分支构建是「测试版」，正式版标签构建是「正式版」）；同步观影窗口（实验性，用这次构建的模块 zip）：从「设置 → 工具」点「打开」直接启动模块（不弹文件夹选择、不开始采集），窗口按当前缩放显示（按显示器感知 DPI），布局和翻译同上，状态栏提示先选择窗口；再单独用生成的 4K 画面运行（`--smoke-source`，不打开窗口选择器）：画面经过显卡队列和交换链显示，缩到 1920 × 1080、按 16:9 显示，跟随程序的延迟（没推流时 0 ms，连着假 HomePod 时是它的声音延迟）；.NET 被替换（runtime 场景，只动运行器上 .NET 的私有副本）：程序在副本上启动、连着假 HomePod，副本里出现更新的补丁版本，程序用的版本没了 deps.json 和还没加载的 System.Net.Http 后点「检查更新」：软件更新一栏写「.NET 已更新，请重启 HomePodCast 后再试」，日志写明是 System.Net.Http 加载失败时发现的，首页最上面出现重启提示（推流中，带声音会中断的那句）和「立即重启」；点「立即重启」：程序退出，自己在更新的版本上重新打开窗口（不带 `--tray`），连回假 HomePod（第二次建立推流），提示消失
 - **build 作业的模块自检**（`tools/build-video-window.ps1`，同步观影窗口的 `--self-test`，在 WARP 上、不开窗口、不采集）：32 × 16 到 8K 的已知画面经过 WinRT 表面互操作和显卡缩放后读回，尺寸和左右两半的颜色都对；大于 2560 × 1600 的来源缩小一半直到放得下（4K → 1920 × 1080，3840 × 2400、5K、8K 也能处理，原来超过 4096 × 2160 就拒绝），比显卡最大纹理还大时给出翻译过的提示
 - **msi-e2e**（`tools/ci/msi-e2e.ps1`，在运行器上真的安装）：静默安装到 `C:\Program Files\HomePodCast\`，开始菜单正好一个 HomePodCast 快捷方式（没有桌面快捷方式），「设置 → 应用」里正好一个；防火墙规则只有一条、正好指向装好的 exe（入站、允许、已启用、仅专用网络、仅本地子网，和程序自己加的一样），装好的 exe 自己的启动检查（`HomePodCast.exe firewall`）确认第一次启动**不弹**防火墙提示；装到自定义目录（`INSTALLFOLDER`，路径里有空格和中文）同样成立；卸载后程序、快捷方式、规则和「应用」里的条目都没了，`%APPDATA%\HomePodCast` 里的设置（config.json、日志）原样还在；先装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2、v1.0.0-beta.6、v1.0.0 和最新发布的版本再装新 MSI：旧版被替换、只有一个、是新版本、目录不变、规则仍只有一条，新旧两次安装用不同的向导语言（旧英文 → 新中文、旧中文 → 新英文交替；发布过的 MSI 从 v0.2.0-beta.2 起都是多语言的，纯英文的只在更早的 CI 构建里有过）；装着更新的版本时（比这次构建新的发布，和每次都测的、改成下一个主版本号的本 MSI 副本）新 MSI 拒绝降级、给出提示、旧版原样保留；MSI 里嵌着 `installer/build.ps1` 的全部语言转换，每种语言完成页的勾选框是它自己的文字，中文向导各页（欢迎、许可协议、安装目录、准备安装、进度、完成）都是中文、包括「启动 HomePodCast」，许可协议页是英文原文（预期），`TRANSFORMS=:2052` 真的装了中文版（msiexec 日志显示应用了内嵌的 2052 转换，快捷方式和防火墙规则的说明是中文）
 - **update-e2e**（`tools/ci/update-e2e.ps1`）：装一个用同一份源码构建的旧版 MSI（0.0.1-e2e.1），用「更新」按钮的代码从 `127.0.0.1` 上的假发布列表下载这次构建的 MSI：损坏的被拒绝（不安装、不启动助手、`%TEMP%` 里不留东西）；好的校验 SHA-256、退出，安装助手通过 msiexec（Verb runas）安装，新版带 `--updated-from=` 重新启动；只装了一个、目录不变（默认和自定义目录各一遍），`%TEMP%` 里的 `HomePodCast-update-*` 被清掉（下次启动也会清）
@@ -264,6 +270,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - 无线影院（实验性）：2.0、单声道、后环绕和侧环绕两种掩码的 5.1、7.1 在 2、3、5、6、7、8 台音箱上每个声道送到哪台、多大声，侧和后环绕互相补位，低音声道没有单独音箱时以 −6 dB 混入前左前右，整体余量保证不削波（CinemaTests）；Windows 解码生成的 16 位和浮点 WAV（1、2、6、8 声道，掩码 0x3f、0x60f、0x63f），解不了、不存在的文件给中文原因（CinemaTests）；所有音箱共用一条 RTP 时间线，无锁环形缓冲里每一帧都按顺序送到，暂停和测试音保持文件位置，校准结束后文件一定继续播放（CinemaTransportTests）；窗口里的音量就是开始播放的音量并保存，排队时改的音量保留，等待时在别处「连接」会结束影院、之后影院的「停止」不断开那个连接，排队中的影院停止后不再启动，测量时音箱音量不超过 25% 且之后恢复（CinemaSessionTests、CinemaFormTests）
   - 设置 → 软件更新只有一行「当前版本 x」：下面是状态，右边是「检查更新」；有新版本时同一行里换成「更新」「查看说明」「跳过此版本」（下载时「更新」变成「取消」、「跳过此版本」不能点），跳过后换回「检查更新」，下面不会多出或少掉一行；中文在默认窗口宽度下行高不变，最小宽度和德语里按钮放到文字下面，放不下时换行，都不被挤小；商店版只有状态、没有按钮（UpdateStatusRowTests；gui-smoke 检查「检查更新」在这一行里）
   - 同步观影窗口（实验性）：30 fps 视频在 60.1 Hz 屏上每一帧都保留（原来的 33.33 ms 硬门限只剩不到 20 fps）；24–30 fps 的内容在 50–144 Hz 屏上一帧不丢，60–240 Hz 的内容均匀减到 30 fps，没有长短交替；内容暂停后重新开始不补帧；延迟太长时每秒少存几帧，不超出队列；按 60.1 Hz 刷新显示时 30 fps 的每一帧都出现，都在「采集时间 + 延迟」之后一次刷新以内；扣除的显示延迟没有帧统计时是一次刷新，有了以后用实测值，换到刷新率更低的屏幕会跟上；只跟随 HomePodCast 的本机状态，版本和模块不同时提示；启动参数按字面传递；商店版不提供这个模块（VideoWindowTests）
+  - .NET 被替换后的重启提示：只检查共享的运行时（`…\shared\Microsoft.NETCore.App\<版本>`），商店版这类自带运行时的副本不检查；运行时文件夹里的 deps.json 不在了才算被替换；启动时、每 5 分钟、睡眠唤醒后、程序集加载失败时（日志写明是哪个程序集，同一个只写一次；不是程序集的文件找不到不算）各查一次，找到后停止、只通知一次；首页的提示找到之前不出现，推流时多一句声音会中断，「立即重启」只有点了才重启，中文、德语、英语在默认和最小窗口宽度下按钮不被挤小、不压住文字；重启的命令在窗口隐藏时带 `--tray`，带 `--resume=connected` 或 `--resume=idle`，商店版仍经资源管理器启动自己的包；新进程拿到这些参数和同样的环境变量（测试配置文件仍是测试配置文件），直接启动和以资源管理器为父进程（管理员运行时）都行，启动不了时说明原因（RuntimeWatchTests、AppRestartTests、RuntimeRestartNoticeTests）
   - Apple TV 家庭影院（实验性）：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；设置 → 音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
 
 ## 测试记录
