@@ -58,6 +58,11 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   never in the name. Invented descriptive phrases are easy to misread. The maintainer's examples, 2026-10-15:
   - 「麦克风监听」, not 「使用麦克风」 or 「把麦克风混进推流」;
   - 衰减（Room Size）, 高频阻尼（Damping）, 干湿比（Wet/Dry）, 预延迟（Pre-delay）, not 「房间大小」 or 「混响比例」.
+- **Pages stay small.** Each page in the left navigation holds a limited number of features. A crowded page is worse
+  than one more page, so a feature that doesn't belong gets its own page rather than another section. That is why
+  设置 sits at the bottom of the nav rail. Example (2026-10-15): the output equalizer leaves 「麦克风与音效」 for a page
+  of its own, and doesn't move into 混音器. Keep long explanations short or collapsed, so that controls further down
+  stay visible.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
 - **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
