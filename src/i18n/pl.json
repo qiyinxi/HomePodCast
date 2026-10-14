@@ -484,7 +484,6 @@
   "文件夹缺少分轨程序或模型，请按安装说明安装完整模块。": "Brak programu lub modelu. Zainstaluj pełny moduł zgodnie z instrukcją.",
   "请先选择已安装的分轨模块。": "Najpierw wybierz zainstalowany moduł.",
   "分轨已关闭；开启后在本机处理，不上传声音。": "Rozdzielanie wyłączone; dźwięk jest przetwarzany lokalnie, bez wysyłania.",
-  "分轨模块失败：{0}。请关闭后重试。": "Błąd modułu: {0}. Wyłącz go i spróbuj ponownie.",
   "正在加载分轨模型…": "Ładowanie modelu…",
   "分轨运行中：每块处理 {0:F1} ms，未及时完成 {1} 帧，丢弃 {2} 块。": "Rozdzielanie aktywne: {0:F1} ms na blok, {1} brakujących klatek, {2} odrzuconych bloków.",
   "请先关闭音乐分轨再做同步校准；分轨的额外延迟会自动加入视频补偿。": "Wyłącz rozdzielanie przed kalibracją; jego dodatkowe opóźnienie jest automatycznie uwzględniane w kompensacji obrazu.",
@@ -593,5 +592,13 @@
   "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Parowanie „{0}”: wybierz Start i wpisz tutaj cztery cyfry wyświetlone przez odbiornik.",
   "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Parowanie jest jednorazowe. Odbiorniki akceptujące wyłącznie nadajniki uwierzytelnione MFi nie są obsługiwane.",
   "输入接收端显示的 4 位数字": "Wpisz cztery cyfry wyświetlone przez odbiornik",
-  "正在请接收端显示数字…": "Żądanie wyświetlenia cyfr przez odbiornik…"
+  "正在请接收端显示数字…": "Żądanie wyświetlenia cyfr przez odbiornik…",
+  "分轨已关闭。{0}详细原因见日志。": "Rozdzielanie wyłączone. {0} Szczegóły są w dzienniku.",
+  "连接已断开，音乐分轨已关闭。重新连接后，可以在混音器里再次开启。": "Połączenie zostało przerwane, więc rozdzielanie muzyki jest wyłączone. Po ponownym połączeniu możesz je znowu włączyć w Mikserze.",
+  "音乐分轨已关闭。{0}": "Rozdzielanie muzyki wyłączone. {0}",
+  "分轨模块无法启动，请按安装说明重新安装。": "Nie udało się uruchomić modułu rozdzielania. Zainstaluj go ponownie zgodnie z instrukcją instalacji.",
+  "分轨模块的模型缺失或版本不对，请重新安装与本程序同一版本的模块。": "Brak modelu modułu rozdzielania lub ma on inną wersję. Zainstaluj ponownie moduł w tej samej wersji co aplikacja.",
+  "分轨模块与本程序的版本不配套，请安装同一版本的模块。": "Moduł rozdzielania nie pasuje do tej wersji aplikacji. Zainstaluj moduł w tej samej wersji.",
+  "分轨模块没有及时响应。": "Moduł rozdzielania nie odpowiedział na czas.",
+  "分轨模块意外退出。": "Moduł rozdzielania nieoczekiwanie się zamknął."
 }

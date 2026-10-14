@@ -484,7 +484,6 @@
   "文件夹缺少分轨程序或模型，请按安装说明安装完整模块。": "Program eller modell saknas. Installera hela modulen enligt guiden.",
   "请先选择已安装的分轨模块。": "Välj först en installerad modul.",
   "分轨已关闭；开启后在本机处理，不上传声音。": "Separering av; ljud behandlas lokalt utan uppladdning.",
-  "分轨模块失败：{0}。请关闭后重试。": "Modulen misslyckades: {0}. Stäng av och försök igen.",
   "正在加载分轨模型…": "Laddar separeringsmodell…",
   "分轨运行中：每块处理 {0:F1} ms，未及时完成 {1} 帧，丢弃 {2} 块。": "Separering på: {0:F1} ms per block, {1} missade bildrutor, {2} bortkastade block.",
   "请先关闭音乐分轨再做同步校准；分轨的额外延迟会自动加入视频补偿。": "Stäng av separering före synkkalibrering; dess extra fördröjning ingår automatiskt i videokompensationen.",
@@ -593,5 +592,13 @@
   "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Parkoppla ”{0}”: välj Start och skriv in de fyra siffror som visas på mottagaren.",
   "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Parkoppla en gång. Mottagare som endast accepterar MFi-autentiserade sändare stöds inte.",
   "输入接收端显示的 4 位数字": "Ange de fyra siffrorna som visas på mottagaren",
-  "正在请接收端显示数字…": "Ber mottagaren att visa siffrorna…"
+  "正在请接收端显示数字…": "Ber mottagaren att visa siffrorna…",
+  "分轨已关闭。{0}详细原因见日志。": "Separering av. {0} Detaljerna finns i loggen.",
+  "连接已断开，音乐分轨已关闭。重新连接后，可以在混音器里再次开启。": "Anslutningen bröts, så musikseparering är avstängd. När du har anslutit igen kan du slå på den i Mixer.",
+  "音乐分轨已关闭。{0}": "Musikseparering avstängd. {0}",
+  "分轨模块无法启动，请按安装说明重新安装。": "Separeringsmodulen kunde inte starta. Installera om den enligt installationsguiden.",
+  "分轨模块的模型缺失或版本不对，请重新安装与本程序同一版本的模块。": "Separeringsmodulens modell saknas eller har en annan version. Installera om modulen i samma version som appen.",
+  "分轨模块与本程序的版本不配套，请安装同一版本的模块。": "Separeringsmodulen passar inte den här versionen av appen. Installera modulen i samma version.",
+  "分轨模块没有及时响应。": "Separeringsmodulen svarade inte i tid.",
+  "分轨模块意外退出。": "Separeringsmodulen avslutades oväntat."
 }

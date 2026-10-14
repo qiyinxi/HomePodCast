@@ -21,16 +21,16 @@ internal sealed partial class TrayApp
 
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
     public int VideoDelayMs => VideoDelayFor(Config, Controller.State, Controller.EffectiveLatencyMs,
-        Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext)
-        + (Controller.State == StreamState.Streaming && Stems.Enabled ? Audio.LiveStemMixer.ExtraLatencyMs : 0);
+        Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext, Stems.AddedLatencyMs);
 
     /// <summary>
     /// The sound lag the local API (browser extension) and the players get: the estimate plus the calibration of the path
-    /// streaming now (<paramref name="context"/>, the same one 首页 uses), 0 when not streaming.
+    /// streaming now (<paramref name="context"/>, the same one 首页 uses), plus the wait of 音乐分轨 while it is on
+    /// (<paramref name="stemsMs"/>, which the sync test refuses to calibrate), 0 when not streaming.
     /// </summary>
     internal static int VideoDelayFor(AppConfig cfg, StreamState state, int effectiveLatencyMs, int captureExtraMs,
-        double fifoTargetMs, AvCalibrationContext? context) => state == StreamState.Streaming
-        ? LatencyTuner.SoundLagMs(effectiveLatencyMs, cfg, captureExtraMs, fifoTargetMs, context)
+        double fifoTargetMs, AvCalibrationContext? context, int stemsMs = 0) => state == StreamState.Streaming
+        ? LatencyTuner.SoundLagMs(effectiveLatencyMs, cfg, captureExtraMs, fifoTargetMs, context) + stemsMs
         : 0;
 
     private PlayerSyncInput PlayerInput() => PlayerInputFor(Config, Controller.State, VideoDelayMs);

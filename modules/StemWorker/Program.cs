@@ -6,7 +6,8 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 
 // Optional, separate process: no ONNX dependency or native DLL is loaded by the main app.
 // stdin: sequence(int64), 1024 interleaved stereo float frames. stdout: same sequence - 128,
-// 1024 estimated vocal frames. Protocol is binary; diagnostics only go to stderr.
+// 1024 estimated vocal frames. Protocol is binary; diagnostics only go to stderr. Exit code 2: the model is missing or
+// not the pinned one (the app asks for a reinstall: ProcessStemEngine.ModelRejectedExitCode), 1: anything else.
 const int hop = 128, frames = 1024;
 const string modelHash = "235e795229ecfbb453a295302cad34d608d520f7fb336e2ed6e1dfd7f0a0e857";
 try
@@ -14,7 +15,7 @@ try
     string path = Path.Combine(AppContext.BaseDirectory, "vocals.onnx");
     using (var file = File.OpenRead(path))
         if (!Convert.ToHexString(SHA256.HashData(file)).Equals(modelHash, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Unsupported model or SHA-256 mismatch; install the pinned StemgenRT 0.7.0 module.");
+            throw new ModelRejectedException("Unsupported model or SHA-256 mismatch; install the pinned StemgenRT 0.7.0 module.");
     using var options = new SessionOptions { IntraOpNumThreads = 1, InterOpNumThreads = 1,
         ExecutionMode = ExecutionMode.ORT_SEQUENTIAL, GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL };
     options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
@@ -26,7 +27,7 @@ try
     {
         var metadata = output ? session.OutputMetadata : session.InputMetadata;
         if (!metadata.TryGetValue(name, out var node) || node.ElementType != typeof(float) || !node.Dimensions.SequenceEqual(shape))
-            throw new InvalidDataException($"Unexpected model tensor: {name}");
+            throw new ModelRejectedException($"Unexpected model tensor: {name}");
     }
     Check("audio_chunk", [1,2,hop]); Check("vocals_chunk", [1,1,2,hop], true);
     var audio = new float[2 * hop];
@@ -126,4 +127,10 @@ try
         writer.Flush();
     }
 }
-catch (Exception ex) { Console.Error.WriteLine(ex.Message); Environment.ExitCode = 1; }
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"{ex.GetType().Name}: {ex.Message}");
+    Environment.ExitCode = ex is ModelRejectedException or FileNotFoundException ? 2 : 1;
+}
+
+internal sealed class ModelRejectedException(string message) : Exception(message);

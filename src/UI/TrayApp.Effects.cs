@@ -24,6 +24,7 @@ internal sealed partial class TrayApp
         Config.Stems ??= new StemSettings();
         Stems = new LiveStemMixer(Config.Stems);
         Controller.Effects.Insert(0, Stems); // separate system audio; the live microphone keeps its own low-delay path
+        Stems.Failed += () => _ui.Post(_ => OnStemsFailed(), null);
         _fx.Changed += () => _ui.Post(_ => OnMicChanged(), null);
         ApplyNightEq();
     }
@@ -70,5 +71,5 @@ internal sealed partial class TrayApp
         return result;
     }
 
-    private void DisposeEffects() { Stems.Dispose(); _fx?.Dispose(); }
+    private void DisposeEffects() { Stems?.Dispose(); _fx?.Dispose(); }
 }

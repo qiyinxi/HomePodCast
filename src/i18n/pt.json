@@ -484,7 +484,6 @@
   "文件夹缺少分轨程序或模型，请按安装说明安装完整模块。": "Falta o programa ou o modelo. Instale o módulo completo seguindo o guia.",
   "请先选择已安装的分轨模块。": "Selecione primeiro um módulo instalado.",
   "分轨已关闭；开启后在本机处理，不上传声音。": "Separação desativada; o áudio é processado localmente, sem carregamento.",
-  "分轨模块失败：{0}。请关闭后重试。": "Falha do módulo: {0}. Desative e tente novamente.",
   "正在加载分轨模型…": "A carregar o modelo…",
   "分轨运行中：每块处理 {0:F1} ms，未及时完成 {1} 帧，丢弃 {2} 块。": "Separação ativa: {0:F1} ms por bloco, {1} frames em falta, {2} blocos descartados.",
   "请先关闭音乐分轨再做同步校准；分轨的额外延迟会自动加入视频补偿。": "Desative a separação antes da calibração; o atraso adicional é incluído automaticamente na compensação de vídeo.",
@@ -593,5 +592,13 @@
   "配对「{0}」：点「开始」后，在接收端查看 4 位数字并填写到这里。": "Emparelhar «{0}»: escolha Iniciar e digite aqui os quatro números exibidos pelo receptor.",
   "配对只需一次。只接受 MFi 认证的接收端不受支持。": "Só é preciso emparelhar uma vez. Receptores que aceitam apenas emissores autenticados por MFi não são suportados.",
   "输入接收端显示的 4 位数字": "Digite os quatro números exibidos pelo receptor",
-  "正在请接收端显示数字…": "Pedindo ao receptor que exiba os números…"
+  "正在请接收端显示数字…": "Pedindo ao receptor que exiba os números…",
+  "分轨已关闭。{0}详细原因见日志。": "Separação desativada. {0} Os detalhes estão no registo.",
+  "连接已断开，音乐分轨已关闭。重新连接后，可以在混音器里再次开启。": "A ligação terminou, por isso a separação musical foi desativada. Depois de voltar a ligar, pode ativá-la novamente no Misturador.",
+  "音乐分轨已关闭。{0}": "Separação musical desativada. {0}",
+  "分轨模块无法启动，请按安装说明重新安装。": "Não foi possível iniciar o módulo de separação. Reinstale-o seguindo o guia de instalação.",
+  "分轨模块的模型缺失或版本不对，请重新安装与本程序同一版本的模块。": "O modelo do módulo de separação está em falta ou é de outra versão. Reinstale o módulo da mesma versão da aplicação.",
+  "分轨模块与本程序的版本不配套，请安装同一版本的模块。": "O módulo de separação não corresponde a esta versão da aplicação. Instale o módulo da mesma versão.",
+  "分轨模块没有及时响应。": "O módulo de separação não respondeu a tempo.",
+  "分轨模块意外退出。": "O módulo de separação terminou inesperadamente."
 }
