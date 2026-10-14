@@ -431,7 +431,7 @@ jobs:
           if-no-files-found: warn
 
   release:
-    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, airplay-compat-e2e]
+    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, aac-fixture, airplay-compat-e2e]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
