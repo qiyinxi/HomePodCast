@@ -218,6 +218,15 @@ public sealed class RaopClient : IDisposable
 
     private async Task SendLoop()
     {
+        // 2026-10-14: shairport-sync 4.3.7 discards sync before the first NTP exchange. Starting audio
+        // before that loses the beginning of a 1 s stream. Some emulators omit timing, so bound this wait.
+        long timingDeadline = MediaClock.Now + MediaClock.FromMs(2000);
+        try
+        {
+            while (_timing.RequestsAnswered == 0 && MediaClock.Now < timingDeadline)
+                await Task.Delay(10, _stop.Token);
+        }
+        catch (OperationCanceledException) { return; }
         var pcm = new short[RaopAudio.FramesPerPacket * 2];
         long start = MediaClock.Now, n = 0, nextSync = start;
         StartedAt = start;

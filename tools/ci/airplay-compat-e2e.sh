@@ -21,11 +21,12 @@ autoreconf -fi
 ./configure --with-pipe --with-avahi --with-ssl=openssl
 make -j2
 mkdir -p "$root/test-results/airplay-compat"
+# A small pipe buffer avoids receiver scheduling drops while keeping delivery within the 50 ms bound.
 mkfifo "$scratch/audio.pipe"
 cat "$scratch/audio.pipe" > "$root/test-results/airplay-compat/receiver.pcm" &
 reader_pid=$!
 cat > "$scratch/receiver.conf" <<EOF
-general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.0; };
+general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.02; };
 pipe = { name = "$scratch/audio.pipe"; };
 EOF
 ./shairport-sync -c "$scratch/receiver.conf" -vvv > "$root/test-results/airplay-compat/receiver.log" 2>&1 &
@@ -45,7 +46,7 @@ run_case() {
   cat "$fifo" > "$pcm" &
   reader_pid=$!
   cat > "$scratch/$label.conf" <<EOF
-general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.0; $(if [[ "$password" != "-" ]]; then echo 'password = "secret";'; fi) };
+general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.02; $(if [[ "$password" != "-" ]]; then echo 'password = "secret";'; fi) };
 pipe = { name = "$fifo"; };
 EOF
   "$scratch/shairport-sync/shairport-sync" -c "$scratch/$label.conf" -vvv > "$root/test-results/airplay-compat/$label.log" 2>&1 &

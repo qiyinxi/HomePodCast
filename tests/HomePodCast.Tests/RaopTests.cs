@@ -236,6 +236,8 @@ public class RaopTests
         private byte[]? _aesKey, _iv;
         public readonly RSA Key = RSA.Create(2048);
         public readonly UdpClient Audio = new(new IPEndPoint(IPAddress.Loopback, 0)), Control = new(new IPEndPoint(IPAddress.Loopback, 0));
+        private readonly UdpClient _timing = new(new IPEndPoint(IPAddress.Loopback, 0));
+        private int _senderTimingPort;
         public List<string> Methods { get; } = [];
         public string LastVolume { get; private set; } = "";
         public bool Busy { get; init; }
@@ -306,8 +308,17 @@ public class RaopTests
                         Assert.Contains("RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=", request.Header("Transport"));
                         headers.Add(new("Transport", $"RTP/AVP/UDP;unicast;server_port={((IPEndPoint)Audio.Client.LocalEndPoint!).Port};control_port={((IPEndPoint)Control.Client.LocalEndPoint!).Port};timing_port=0"));
                         headers.Add(new("Session", "1"));
+                        _senderTimingPort = int.Parse(request.Header("Transport").Split(';').Single(s => s.StartsWith("timing_port=")).Split('=')[1]);
                     }
-                    if (method == "RECORD") { Assert.Equal("1", request.Header("Session")); Assert.StartsWith("seq=", request.Header("RTP-Info")); }
+                    if (method == "RECORD")
+                    {
+                        Assert.Equal("1", request.Header("Session")); Assert.StartsWith("seq=", request.Header("RTP-Info"));
+                        var timing = new byte[32]; timing[0] = 0x80; timing[1] = 0xd2;
+                        BinaryPrimitives.WriteUInt64BigEndian(timing.AsSpan(24), MediaClock.NtpNow());
+                        await _timing.SendAsync(timing, new IPEndPoint(IPAddress.Loopback, _senderTimingPort), _stop.Token);
+                        var reply = (await _timing.ReceiveAsync(_stop.Token)).Buffer;
+                        Assert.Equal(0xd3, reply[1]); Assert.Equal(timing[24..32], reply[8..16]);
+                    }
                     if (method == "SET_PARAMETER") { Assert.Equal("text/parameters", request.Header("Content-Type")); LastVolume = Encoding.ASCII.GetString(request.Body); }
                     await stream.WriteAsync(HttpMessage.Format($"RTSP/1.0 {status} Test", headers, []), _stop.Token);
                     if (method == "TEARDOWN") { TornDown.TrySetResult(); return; }
@@ -316,6 +327,6 @@ public class RaopTests
             catch (Exception) when (_stop.IsCancellationRequested) { }
             catch (Exception ex) { TornDown.TrySetException(ex); }
         }
-        public void Dispose() { _stop.Cancel(); _listen.Stop(); Audio.Dispose(); Control.Dispose(); Key.Dispose(); }
+        public void Dispose() { _stop.Cancel(); _listen.Stop(); Audio.Dispose(); Control.Dispose(); _timing.Dispose(); Key.Dispose(); }
     }
 }
