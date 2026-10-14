@@ -11,6 +11,20 @@ internal sealed partial class TrayApp
         Controller.ReceiverLookup = id => LastScan.FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id))
             ?? Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id))?.Device(id)
             ?? Config.ManualDevices.Select(d => d.ToDevice()).FirstOrDefault(d => d != null && RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id));
+        Controller.ReceiverSettings = id => Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id));
+        Controller.ReceiverProtocolConnected += (id, protocol, processing) => _ui.Post(_ =>
+        {
+            if (_quitting) return;
+            string key = RaopPassword.Key(id);
+            if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
+            {
+                if (Controller.ReceiverLookup?.Invoke(id) is not { } device) return;
+                Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+            }
+            settings.LastSuccessfulProtocol = protocol;
+            if (processing != null) settings.ArrivalToRenderMs = processing;
+            Config.Save();
+        }, null);
         Controller.CompatibilityLatency = id => Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id))?.CompatibilityLatencyMs ?? 2000;
         Controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
         Controller.RaopPasswordRequired += request => _ui.Post(_ =>
@@ -38,6 +52,18 @@ internal sealed partial class TrayApp
             }
             finally { _raopDialog = false; }
         }, null);
+    }
+
+    public void SetReceiverProtocol(string id, ReceiverProtocol protocol)
+    {
+        if (Controller.ReceiverLookup?.Invoke(id) is not { } device || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv) return;
+        string key = RaopPassword.Key(id);
+        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
+            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+        if (settings.ProtocolOverride == protocol) return;
+        settings.ProtocolOverride = protocol;
+        Config.Save();
+        if (_wantConnected) Connect(ConnectTrigger.Reconnect);
     }
 
     private bool CanShowRaopDialog(RaopInteraction request) => !_quitting && !_raopDialog
