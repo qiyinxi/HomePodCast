@@ -66,6 +66,7 @@ internal static class RaopCompatibility
         client.Dispose();
         collecting.Cancel();
         try { await read; } catch (OperationCanceledException) { }
+        Console.WriteLine($"RAOP diagnostic: sent={client.PacketsSent}, timing={client.TimingRequests}, decodedBytes={received.Count}, marker={markerOffset}");
         if (markerOffset < 0 || markerOffset % 4 != 0) throw new Exception("Decoded PCM has no aligned marker");
         double actualLatency = MediaClock.ToMs(markerTime - client.StartedAt);
         if (Math.Abs(actualLatency - latency) > 50) throw new Exception($"Latency {actualLatency:F1} ms, expected {latency} ±50 ms");

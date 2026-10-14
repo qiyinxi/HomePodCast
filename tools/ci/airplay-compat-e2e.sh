@@ -28,7 +28,7 @@ cat > "$scratch/receiver.conf" <<EOF
 general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.0; };
 pipe = { name = "$scratch/audio.pipe"; };
 EOF
-./shairport-sync -c "$scratch/receiver.conf" -v > "$root/test-results/airplay-compat/receiver.log" 2>&1 &
+./shairport-sync -c "$scratch/receiver.conf" -vvv > "$root/test-results/airplay-compat/receiver.log" 2>&1 &
 receiver_pid=$!
 cd "$root"
 dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --self-test
@@ -48,7 +48,7 @@ run_case() {
 general = { name = "HomePodCast CI RAOP"; port = 7001; output_backend = "pipe"; mdns_backend = "avahi"; ignore_volume_control = "yes"; audio_backend_buffer_desired_length_in_seconds = 0.0; $(if [[ "$password" != "-" ]]; then echo 'password = "secret";'; fi) };
 pipe = { name = "$fifo"; };
 EOF
-  "$scratch/shairport-sync/shairport-sync" -c "$scratch/$label.conf" -v > "$root/test-results/airplay-compat/$label.log" 2>&1 &
+  "$scratch/shairport-sync/shairport-sync" -c "$scratch/$label.conf" -vvv > "$root/test-results/airplay-compat/$label.log" 2>&1 &
   receiver_pid=$!
   dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --discover "HomePodCast CI RAOP" 7001
   dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --raop 127.0.0.1 7001 "$encryption" "$latency" "$password" "$pcm"
