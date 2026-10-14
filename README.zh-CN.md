@@ -50,6 +50,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
 - 设置里的音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
 - 浏览器插件（测试版）：把 YouTube、bilibili 的画面延后，和 HomePod 的声音对齐。「音乐」场景的 500 ms 是给听音乐用的，看视频用「影视」或「推荐」最流畅（画面延迟超过 300 ms 时插件弹窗会提示）
+- 同步观影窗口（实验性）：给没有音频延迟设置的播放器用。独立模块把你选的窗口（或整个屏幕）按 HomePod 的声音延迟延后显示，可以全屏、可以微调，画面全程在显卡上处理。它是可选的 `HomePodCast-video-window-<版本>.zip`，Microsoft Store 版没有。见[同步观影窗口](docs/VIDEO_WINDOW.md#简体中文)
 - 检查更新（默认不自动检查，见[更新](#更新)）；MSI 安装的版本校验 SHA-256 后一键更新
 - 界面支持英文、简体中文、繁体中文和日文
 
@@ -58,9 +59,10 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 ## 使用
 
 1. 安装 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)（x64）。
-2. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载 HomePodCast，有两种包：
+2. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载 HomePodCast，有两种包，另有一个可选模块：
    - **安装包（推荐）`HomePodCast-<版本>-x64.msi`**：可以选择安装位置（默认 `C:\Program Files\HomePodCast`），自动添加开始菜单快捷方式和所需的防火墙规则。升级时直接运行新版 MSI；卸载在「设置 → 应用」里进行，如果开启过「开机自动启动」，请先在程序里关掉。
    - **便携版 `HomePodCast-<版本>-win-x64.zip`**：解压到任意位置，运行 `HomePodCast.exe`，第一次会请求添加防火墙规则。
+   - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「设置 → 工具」里选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
 
    防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「设置 → 工具 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
 3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
