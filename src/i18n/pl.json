@@ -598,5 +598,17 @@
   "模块版本 {0} 与 HomePodCast {1} 不同，请下载同一版本的模块。": "Wersja modułu {0} różni się od HomePodCast {1}. Pobierz moduł w tej samej wersji.",
   "窗口采集失败，错误代码 {0}。请重新选择窗口。": "Przechwytywanie okna nie powiodło się, kod błędu {0}. Wybierz okno ponownie.",
   "画面太大：最多支持 {0} × {1} 像素。": "Obraz jest za duży: obsługiwane jest najwyżej {0} × {1} pikseli.",
-  "画面显示失败，错误代码 {0}。采集已停止。": "Wyświetlanie obrazu nie powiodło się, kod błędu {0}. Przechwytywanie zatrzymane."
+  "画面显示失败，错误代码 {0}。采集已停止。": "Wyświetlanie obrazu nie powiodło się, kod błędu {0}. Przechwytywanie zatrzymane.",
+  "AirPlay 兼容模式（实验性）": "Tryb zgodności AirPlay (eksperymentalny)",
+  "兼容模式延迟约 2 秒，适合听音乐": "Tryb zgodności opóźnia dźwięk o około 2 sekundy i nadaje się do muzyki.",
+  "{0:F1} 秒": "{0:F1} s",
+  "兼容模式延迟（实验性）": "Opóźnienie zgodności (eksperymentalne)",
+  "设备延迟（实验性）": "Opóźnienie odbiornika (eksperymentalne)",
+  "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "Tryb zgodności nadaje się do muzyki, ale ma zbyt duże opóźnienie do gier. Obraz może nie być zsynchronizowany; opóźnienie obrazu jest ograniczone do 2000 ms.",
+  "建议最低 {0} ms；默认 {1} ms": "Zalecane minimum {0} ms; domyślnie {1} ms",
+  "低于推荐最低延迟，可能断音": "Poniżej zalecanego minimum; dźwięk może przerywać.",
+  "实际连接：{0}": "Aktywne połączenie: {0}",
+  "未连接；连接后显示实际协议。": "Brak połączenia; aktywny protokół pojawi się po połączeniu.",
+  "接收端处理时间：{0} ms": "Czas przetwarzania odbiornika: {0} ms",
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Odbiorniki AirPlay innych producentów nie mogą jeszcze dołączać do grup głośników."
 }

@@ -150,6 +150,13 @@ public class ThirdPartyTests
         Assert.Equal(ReceiverProtocol.AirPlay2Realtime, used.Protocol); Assert.Equal(180, used.Processing);
         Assert.Equal(85, controller.ArrivalToRenderMs);
         Assert.Equal(100, controller.SafeLatency(0));
+        Assert.Same(controller.ReceiverSession, controller.AudioSessionIdentity);
+        long onset = 0;
+        controller.ObserveAudioOnset(value => onset = value);
+        controller.ReceiverSession!.OnsetSent!(123);
+        Assert.Equal(123, onset);
+        controller.ObserveAudioOnset(null);
+        Assert.Null(controller.ReceiverSession.OnsetSent);
         controller.Stop();
     }
 

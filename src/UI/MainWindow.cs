@@ -211,6 +211,7 @@ internal sealed class MainWindow : Form, ISurface
     {
         _home.UpdateState();
         _mixer.UpdateState();
+        _settings.RefreshReceiverInfo();
     }
 
     /// <summary>An output device was added, removed, enabled, disabled, or the default changed.</summary>

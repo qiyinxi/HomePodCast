@@ -163,6 +163,15 @@
 
 #### 第三方 AirPlay 设备
 
+第三方支持为实验性；第三方 AirPlay 2 尚未实机验证。极米 Z6X 已确认要求 FairPlay，不支持音频，不做播放测试。
+
+- [ ] 极米 Z6X：只核对「这台设备要求 Apple 的加密，HomePodCast 不支持」提示及停止自动重试，不发送声音
+- [ ] 其他可用的 AirPlay 1 接收端：维护者本人以不超过 25% 音量连接并播放音乐，分别核对 1.0 / 1.5 / 2.0 秒、音量和静音；建议先用默认 2.0 秒
+- [ ] 其他可用接收端：手机投屏占用时，自动连接等待，手动连接询问；停止手机投屏后恢复；电脑或接收端休眠后可重连
+- [ ] 界面：连接方式与延迟按设备记忆；换回 HomePod 后场景不变；首次兼容连接只提示一次；音画校准可保存，画面延迟超过 2000 ms 时明确受上限限制
+- [ ] 其他设备反馈请附 `HomePodCast.exe scan --txt`、型号、实际协议、延迟及被拒绝请求；不要把软件接收端通过当成实机通过
+
+
 - [x] 极米 Z6X 投影仪（乐播 SDK，`rhd=5.6.0.0`，自称 AppleTV3,2，`et=0,3,5`）：**不支持**。它只在 Apple 的 FairPlay 加密下才建立音频会话，不加密、RSA、TCP、PCM、AirPlay 2 式 SETUP、HomeKit 配对都只回空的 200 OK，`fp-setup` 回 FairPlay 的 142 字节应答；HomePodCast 做不了 FairPlay。现在连接时直接提示「这台设备要求 Apple 的加密，HomePodCast 不支持。」，不再重试（Claude 2026-10-14 只握手、不发音频地实测；RaopTests 覆盖）。改了 `src/Net/RaopClient.cs` 的 SETUP 处理才需要重看
 - [ ] 其他第三方 AirPlay 1 / AirPlay 2 设备：连不上时请用户发日志里「RAOP SETUP reply」那一行和 `HomePodCast.exe scan --txt` 的输出
 
@@ -243,6 +252,10 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 7. - [ ] 连续放 30 分钟：各台有没有慢慢不同步、断开、单台没声；放完自动停止，最后一段声音没有被截断
 
 ## 已自动化（不用手测）
+
+- **airplay-compat-e2e / aac-fixture**：经典 shairport-sync 的未加密、RSA 与密码场景，以及 shairport-sync AirPlay 2 + nqptp 的实时和 1.0 / 1.5 / 2.0 秒缓冲场景；Windows Media Foundation 生成 AAC，独立解码作参考，对齐后逐样本比较至少 6 秒，检查无缺口与请求延迟 ±50 ms。
+- **ReceiverLatencySelectionTests / ThirdPartyTests / BufferedAudioTests / PtpTests**：每设备设置、HomePod 场景隔离、协议回退、接收端延迟下限、加密帧、配对、时钟选举和校准回调；**gui-smoke** 增加中英德兼容延迟与设置行的页面遍历。
+
 
 每次 CI 构建都跑，失败时构建不通过、标签不发布；作业日志里每项检查一行，失败时看作业摘要和它的工件（`gui-screenshots`、`msi-e2e-logs`、`update-e2e-logs`、`msix-e2e-logs`、`extension-e2e-screenshots`）。细节见 `docs/RELEASING.md`。「实机确认过」写的是以前在真实设备上确认的日期。
 

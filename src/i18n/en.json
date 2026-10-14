@@ -598,5 +598,17 @@
   "模块版本 {0} 与 HomePodCast {1} 不同，请下载同一版本的模块。": "Module version {0} differs from HomePodCast {1}. Download the module of the same version.",
   "窗口采集失败，错误代码 {0}。请重新选择窗口。": "Window capture failed, error code {0}. Choose the window again.",
   "画面太大：最多支持 {0} × {1} 像素。": "The picture is too large: at most {0} × {1} pixels are supported.",
-  "画面显示失败，错误代码 {0}。采集已停止。": "Showing the picture failed, error code {0}. Capture stopped."
+  "画面显示失败，错误代码 {0}。采集已停止。": "Showing the picture failed, error code {0}. Capture stopped.",
+  "AirPlay 兼容模式（实验性）": "AirPlay compatibility mode (experimental)",
+  "兼容模式延迟约 2 秒，适合听音乐": "Compatibility mode delays sound by about 2 seconds and is suited to music.",
+  "{0:F1} 秒": "{0:F1} s",
+  "兼容模式延迟（实验性）": "Compatibility latency (experimental)",
+  "设备延迟（实验性）": "Receiver latency (experimental)",
+  "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "Compatibility mode suits music, with too much delay for gaming. Video may be out of sync; picture delay is limited to 2000 ms.",
+  "建议最低 {0} ms；默认 {1} ms": "Recommended minimum {0} ms; default {1} ms",
+  "低于推荐最低延迟，可能断音": "Below the recommended minimum; audio may drop out.",
+  "实际连接：{0}": "Active connection: {0}",
+  "未连接；连接后显示实际协议。": "Disconnected; the active protocol appears after connecting.",
+  "接收端处理时间：{0} ms": "Receiver processing time: {0} ms",
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Third-party AirPlay receivers cannot join multi-speaker groups yet."
 }

@@ -76,5 +76,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Il ritardo del suono supera il limite dell’immagine di 2000 ms. Non è possibile ritardare abbastanza l’immagine per allinearla."
   }
 }

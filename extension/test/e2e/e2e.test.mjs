@@ -545,6 +545,14 @@ describe('YouTube-like player', () => {
       assert.equal(p.hint, null);
     });
 
+    test('compatibility delays above 2000 ms explain the picture limit', async () => {
+      h.app.setStatus({ videoDelayMs: 2250 });
+      const p = await waitPopup((x) => x.delay === '2000', 'the popup to clamp a compatibility delay');
+      assert.equal(p.hint, msg('hintDelayLimit'));
+      h.app.setStatus({ videoDelayMs: BASE_MS });
+      await waitPopup((x) => x.delay === String(BASE_MS), 'the popup back at the normal delay');
+    });
+
     test('the popup\'s −/+ change the site offset the page uses', async () => {
       await setBase(page, BASE_MS);
       await popup.click('#plus');

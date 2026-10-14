@@ -27,6 +27,10 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _streamStats = Ui.Note();
     private List<AirPlayDevice> _devices = [];
 
+    private StackPanel _homePodLatency = null!;
+    private ReceiverLatencyPanel _receiverLatency = null!;
+    private TextBlock _sceneHeader = null!;
+
     // scene / latency
     private readonly Segmented _scenes = new(Scenes.All.Select(Scenes.Name).ToArray()) { EqualWidths = false }; // "Recommended" is long
     private readonly TextBlock _latencyValue = new("", TextStyle.Display);
@@ -157,10 +161,13 @@ internal sealed class HomePage : ScrollPage
         var slider = Ui.Row(4, _latency, minus, _latency, plus);
         // 管理配置 in the header: in the picker's row it left the picker 「Pr…」 wide in German (the GUI smoke test's screenshots).
         var manage = new FluentButton(L.T("管理配置"), ButtonKind.Subtle);
-        var header = Ui.Header(L.T("场景"));
+        var header = _sceneHeader = Ui.Header(L.T("场景"));
         var head = Ui.Row(8, header, header, manage);
         var profiles = Ui.Row(8, _profiles, _profiles, _profileApply);
-        var card = Ui.Card(head, _scenes, profiles, number, _lag, slider, _movieHint);
+        _homePodLatency = Ui.Stack(10, _scenes, profiles, number, _lag, slider, _movieHint);
+        _receiverLatency = new ReceiverLatencyPanel(_app);
+        _receiverLatency.LatencyChanged += () => { ShowLatency(); LatencyChanged?.Invoke(); _app.KickPlayers(); };
+        var card = Ui.Card(head, _homePodLatency, _receiverLatency);
         manage.Click += (_, _) => _app.ShowProfiles(FindForm()!);
         _profileApply.Click += (_, _) =>
         {
@@ -273,7 +280,7 @@ internal sealed class HomePage : ScrollPage
     public event Action? LatencyChanged;
 
     /// <summary>The latency shown here: the scene's, or the slider's while it waits to reconnect.</summary>
-    public int LatencyMs => _tuner.Value;
+    public int LatencyMs => _app.ReceiverSelection?.Value ?? _tuner.Value;
 
     public void FlushLatency() => _tuner.FlushPending();
     public void CancelPendingLatency() => _tuner.ReloadFromConfig();
@@ -360,19 +367,24 @@ internal sealed class HomePage : ScrollPage
         bool loading = _loading;
         _loading = true;
         var cfg = _app.Config;
-        int ms = _tuner.Value;
-        _latency.Value = ms;
+        var selection = _app.ReceiverSelection;
+        _homePodLatency.Collapsed = selection != null;
+        _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        _sceneHeader.Wrap = selection != null; // Long receiver labels share the header with 管理配置.
+        int ms = selection?.Value ?? _tuner.Value;
+        _latency.Value = _tuner.Value;
         _scenes.SelectedIndex = Array.IndexOf(Scenes.All, cfg.Scene);
         _latencyValue.Text = $"{ms} ms";
         _latencyHint.Text = LatencyTuner.Hint(ms);
         _latencyHint.Role = ms < 110 ? TextRole.Critical : TextRole.Secondary;
 
         var c = _app.Controller;
-        bool live = c.State == StreamState.Streaming && !_tuner.Pending && ms == cfg.LatencyMs;
-        int effective = live ? c.EffectiveLatencyMs : c.SafeLatency(ms);
+        bool live = c.State == StreamState.Streaming && (selection != null || (!_tuner.Pending && ms == cfg.LatencyMs));
+        int effective = live ? c.EffectiveLatencyMs : selection?.Value ?? c.SafeLatency(ms);
         int captureExtra = c.Capture?.ExtraLatencyMs ?? (_app.Routing.Active ? Audio.RoutedCapture.RoutedExtraLatencyMs : 0);
         _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs, _app.CurrentCalibrationContext);
         _lag.Text = L.F("声音比画面晚约 {0} ms", _lagMs);
+        _receiverLatency.Refresh(selection, _lag.Text);
         ShowPlayers();
         _loading = loading;
     }
@@ -492,8 +504,8 @@ internal sealed class HomePage : ScrollPage
 #endif
         var c = _app.Controller;
         var s = c.ActiveSender;
-        bool streaming = s != null && c.State == StreamState.Streaming;
-        bool live = streaming && c.HealthWatched; // a single speaker: the network is watched
+        bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
+        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
         int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
         var verdict = live
             ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
@@ -533,11 +545,11 @@ internal sealed class HomePage : ScrollPage
         _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}" : null);
         // Like the other tiles, only while streaming: the value saved from the last connection still sets the latency
         // floor and the estimates, but shown while disconnected it looked like a live reading.
-        _speakerDelay.SetValue(streaming ? c.ArrivalToRenderMs?.ToString() : null);
+        _speakerDelay.SetValue(streaming ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString() : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
         _dropouts.SetValue(streaming ? dropouts : null);
         SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
-        _resent.SetValue(streaming ? $"{s!.Retransmitted}/{s.RetransmitRequests}" : null);
+        _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
     }
 

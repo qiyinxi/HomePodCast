@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Ljudfördröjningen överskrider bildgränsen på 2000 ms. Bilden kan inte fördröjas tillräckligt för att passa."
   }
 }

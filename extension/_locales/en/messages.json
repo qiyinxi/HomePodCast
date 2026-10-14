@@ -164,5 +164,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "The sound delay exceeds the 2000 ms picture-delay limit. The picture cannot be delayed far enough to match it."
   }
 }

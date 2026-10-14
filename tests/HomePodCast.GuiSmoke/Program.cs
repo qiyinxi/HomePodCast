@@ -30,6 +30,9 @@ internal static class Program
         new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),
+        new("compatibility", "zh-CN", 100, Narrow: true),
+        new("compatibility", "en", 100),
+        new("compatibility", "de", 150),
     ];
 
     private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);

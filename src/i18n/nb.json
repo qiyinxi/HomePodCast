@@ -598,5 +598,17 @@
   "模块版本 {0} 与 HomePodCast {1} 不同，请下载同一版本的模块。": "Modulversjon {0} er ikke den samme som HomePodCast {1}. Last ned modulen i samme versjon.",
   "窗口采集失败，错误代码 {0}。请重新选择窗口。": "Vindusopptaket mislyktes, feilkode {0}. Velg vinduet på nytt.",
   "画面太大：最多支持 {0} × {1} 像素。": "Bildet er for stort: høyst {0} × {1} piksler støttes.",
-  "画面显示失败，错误代码 {0}。采集已停止。": "Bildet kunne ikke vises, feilkode {0}. Opptaket er stoppet."
+  "画面显示失败，错误代码 {0}。采集已停止。": "Bildet kunne ikke vises, feilkode {0}. Opptaket er stoppet.",
+  "AirPlay 兼容模式（实验性）": "AirPlay-kompatibilitetsmodus (eksperimentell)",
+  "兼容模式延迟约 2 秒，适合听音乐": "Kompatibilitetsmodus forsinker lyden omtrent 2 sekunder og passer til musikk.",
+  "{0:F1} 秒": "{0:F1} s",
+  "兼容模式延迟（实验性）": "Kompatibilitetsforsinkelse (eksperimentell)",
+  "设备延迟（实验性）": "Mottakerforsinkelse (eksperimentell)",
+  "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "Kompatibilitetsmodus passer til musikk, men har for stor forsinkelse for spill. Video kan være ute av synk; bildeforsinkelsen er begrenset til 2000 ms.",
+  "建议最低 {0} ms；默认 {1} ms": "Anbefalt minimum {0} ms; standard {1} ms",
+  "低于推荐最低延迟，可能断音": "Under anbefalt minimum; lyden kan falle ut.",
+  "实际连接：{0}": "Aktiv tilkobling: {0}",
+  "未连接；连接后显示实际协议。": "Frakoblet; aktiv protokoll vises etter tilkobling.",
+  "接收端处理时间：{0} ms": "Mottakerens behandlingstid: {0} ms",
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-mottakere fra tredjeparter kan foreløpig ikke inngå i høyttalergrupper."
 }
