@@ -68,7 +68,8 @@ public static class Program
         Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName));
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
         Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
-                 (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
+                 (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : "") +
+                 $" on Windows {Environment.OSVersion.Version}" + (Protocol.ChaChaPoly.UsesOwnImplementation ? " (no ChaCha20-Poly1305 in Windows: using our own)" : ""));
         // The Store version's startup task passes --tray (packaging/msix/AppxManifest.xml); if Windows didn't, the
         // activation kind still says it was the startup task.
         if (!startHidden && Autostart.StartedByStartupTask())
