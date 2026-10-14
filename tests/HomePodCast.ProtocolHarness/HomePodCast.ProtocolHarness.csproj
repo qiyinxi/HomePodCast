@@ -9,5 +9,16 @@
     <Compile Include="../../src/Net/Mdns.cs" Link="Net/Mdns.cs" />
     <Compile Include="../../src/Net/ReceiverKind.cs" Link="Net/ReceiverKind.cs" />
     <Compile Include="../../src/Net/TxtRecord.cs" Link="Net/TxtRecord.cs" />
+    <Compile Include="../../src/Net/RaopClient.cs" Link="Net/RaopClient.cs" />
+    <Compile Include="../../src/Net/RaopPackets.cs" Link="Net/RaopPackets.cs" />
+    <Compile Include="../../src/Net/RtspConnection.cs" Link="Net/RtspConnection.cs" />
+    <Compile Include="../../src/Net/TimingServer.cs" Link="Net/TimingServer.cs" />
+    <Compile Include="../../src/Net/MediaClock.cs" Link="Net/MediaClock.cs" />
+    <Compile Include="../../src/Net/AirPlayException.cs" Link="Net/AirPlayException.cs" />
+    <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
+    <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
+    <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
+    <Compile Include="../../src/Protocol/BPlist.cs" Link="Protocol/BPlist.cs" />
+    <Compile Include="../../src/Protocol/Curve25519.cs" Link="Protocol/Curve25519.cs" />
   </ItemGroup>
 </Project>
