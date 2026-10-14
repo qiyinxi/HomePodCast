@@ -80,9 +80,19 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
 - **Your worktrees.** Claude works in `.claude/worktrees/<name>`, Codex in `.worktrees/<name>` or its own worktree
   folder. Don't edit, build, commit in or remove a worktree the other agent made. Remove your own
   (`git worktree remove`) once its PR is merged or closed. The main checkout stays on `dev` (hard rules above).
-- **Look before you start.** Run `git fetch` and `gh pr list --state open` first. If an open PR or a fresh branch of the
-  other agent covers the same feature or the same files, don't start a parallel one: tell the maintainer, and build
-  on it only if they say so.
+- **The board.** The work items live on the maintainer's private GitHub project board, «HomePodCast» (project 1 of
+  qiyinxi: https://github.com/users/qiyinxi/projects/1, since 2026-10-15). Its items are drafts and stay drafts:
+  never convert one to an issue, because the repository is public. Read the board with
+  `gh project item-list 1 --owner qiyinxi --format json`; the gh token needs the `project` scope.
+  - Fields: Status (待办 / 进行中 / 等你决定 / 已完成 / 搁置), 负责人 (Claude / Codex / 维护者), 领域, 优先级, 链接.
+  - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
+    `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
+  - When you start an item, set it to 进行中 with yourself as 负责人. When it is finished, set 已完成 and add the result and
+    links to its body.
+  - A new need, or a question only the maintainer can answer, becomes a new item (the question with 等你决定).
+- **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
+  fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
+  one: tell the maintainer, and build on it only if they say so.
 - **Claim with a draft PR.** Push the branch and open a draft PR to `dev` with your first commit. Its description
   gives the scope and the files it will change, so the other agent can see the area is taken. Mark it ready for review
   when CI is green.
@@ -104,8 +114,8 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
 - **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
   and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
 - **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
-  `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order. Progress goes in
-  the PRs, not in the plan.
+  `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order, and it gets a
+  board item that links to it. Progress goes in the PRs and on the board, not in the plan.
 - **Real speakers, one agent at a time.** Only the agent the maintainer asked, in its own session, talks to the HomePod
   or any other speaker, even with `stream --silent`. Subagents never do; their tests stay with the in-process fakes.
 
