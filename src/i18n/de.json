@@ -306,6 +306,7 @@
   "上次检查：{0}": "Zuletzt gesucht: {0}",
   "正在检查更新…": "Suche nach Updates…",
   "检查失败，请稍后再试（详情见日志）": "Die Suche ist fehlgeschlagen. Später erneut versuchen (Details im Protokoll)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET wurde aktualisiert. HomePodCast neu starten und erneut versuchen.",
   "已是最新版本": "HomePodCast ist auf dem neuesten Stand",
   "发现新版本 {0}": "Neue Version verfügbar: {0}",
   "发现新版本 {0}。点这里查看。": "Neue Version verfügbar: {0}. Zum Anzeigen hier klicken.",
@@ -487,5 +488,14 @@
   "添加": "Hinzufügen",
   "填写接收端的 IP 地址和端口；只读取设备信息。": "IP-Adresse und Port des Empfängers eingeben; es werden nur Geräteinformationen gelesen.",
   "请填写有效的 IPv4 地址和 1–65535 之间的端口。": "Eine gültige IPv4-Adresse und einen Port zwischen 1 und 65535 eingeben.",
-  "发现不到设备时，填写 IP 地址和端口。": "Wenn das Gerät nicht gefunden wird, IP-Adresse und Port eingeben."
+  "发现不到设备时，填写 IP 地址和端口。": "Wenn das Gerät nicht gefunden wird, IP-Adresse und Port eingeben.",
+  "这台 AirPlay 设备需要密码。": "Dieser AirPlay-Empfänger benötigt ein Passwort.",
+  "这台 AirPlay 设备正在被其他发送端使用。": "Ein anderer Sender verwendet diesen AirPlay-Empfänger.",
+  "这台设备要求 Apple 的加密，HomePodCast 不支持。": "Dieser Empfänger benötigt eine Apple-Verschlüsselung, die HomePodCast nicht unterstützt.",
+  "正在连接 AirPlay 1 兼容模式（实验性）…": "Verbindung im AirPlay-1-Kompatibilitätsmodus (experimentell)…",
+  "{0} · AirPlay 1 兼容模式（实验性）": "{0} · AirPlay-1-Kompatibilitätsmodus (experimentell)",
+  "AirPlay 密码": "AirPlay-Passwort",
+  "AirPlay 设备密码（实验性）": "Passwort des AirPlay-Empfängers (experimentell)",
+  "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "AirPlay-Passwort für „{0}“ eingeben. Es wird nur auf diesem PC verschlüsselt gespeichert.",
+  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay-1-Kompatibilitätsgeräte können nicht in Gruppen mit mehreren Lautsprechern verwendet werden."
 }

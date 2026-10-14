@@ -12,6 +12,11 @@ if (args is ["--self-test"])
 
 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true")
     throw new InvalidOperationException("Receiver integration tests only run in GitHub Actions");
+if (args is ["--raop", var host, var portArg, var etArg, var latencyArg, var password, var pcm])
+{
+    await HomePodCast.ProtocolHarness.RaopCompatibility.Run(host, int.Parse(portArg), int.Parse(etArg), int.Parse(latencyArg), password, pcm);
+    return;
+}
 if (args is not ["--discover", var name, var portText] || !int.TryParse(portText, out int port))
     throw new ArgumentException("--discover NAME PORT required");
 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));

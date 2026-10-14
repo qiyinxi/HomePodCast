@@ -35,6 +35,7 @@
 - [ ] 首页「推流状态」下面的网络一行：平时是「网络：稳定」；卡顿后变成「网络：最近 10 分钟抖动 N 次」（单元测试：HomeNetworkTextTests、NetworkHealthTests；仍需实机：真实的卡顿有没有被记到）。改了 `src/Net/NetworkHealth.cs` 或 `src/StreamController.Network.cs` 才需要重测
 - [ ] 出现黄色提示（「HomePod 那边 / 电脑这边的 Wi-Fi 最近不太稳……建议把延迟调到 … ms」）时：截图，记下时间。点「应用」：场景切到「自定义」、延迟变成建议值、重连一次，提示消失；不点就不会改延迟（单元测试：HomeNetworkTextTests、LatencyTunerTests；仍需实机：之后卡顿是否变少）。改了 `src/Net/NetworkHealth.cs` 或 `src/UI/LatencyTuner.cs` 才需要重测
 - [ ] 推流中切到「音乐」再切回来：重连约 1 秒，有没有异常（单元测试：LatencyTunerTests，来回切只在停下 1 秒后重连一次；仍需实机：重连多久、有没有异常）。改了 `src/UI/LatencyTuner.cs`、`src/Scenes.cs` 或 `src/StreamController.cs` 的重连才需要重测
+- [ ] 连着推流一个下午后看日志里的 `stats:` 行：音箱的 `lost=` 几乎都是 0，只有真的网络抖动时才有几个；任务管理器「详细信息」里加上「句柄」列，HomePodCast 的句柄数不再每秒涨约 20。2026-10-14 之前会连续一两个小时 `lost=100/600`、每秒一行 `ping to the speaker lost`，那是 Windows 按自己 500 ms 的节拍提前判超时，音箱其实都回了（单元测试：NetworkWatchTests；句柄：NetworkWatchSoakTests；仍需实机：真实 HomePod 上的 lost）。改了 `src/Net/NetworkWatch.cs` 才需要重测
 
 听到卡顿时：
 

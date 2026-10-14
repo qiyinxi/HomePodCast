@@ -53,7 +53,8 @@ public sealed record NetworkVerdict(int Episodes, int Threats, bool Threatened, 
 /// below 250 ms, not to larger ones. 2026-10-12: at 500 ms (a 410 ms margin) a few lost pings among answers of 2 ms
 /// median and 98 ms at most made 断音 read ≈9 and raised the hint, with not one resend request. Most "lost" pings
 /// there (and on 2026-10-10's crowded 2.4 GHz band) were Windows reporting TimedOut after about 46 ms, the next ping
-/// answered in a few: no measure of a delay at all.</item>
+/// answered in a few: no measure of a delay at all. 2026-10-14: that was Windows ending echo requests on its own 500 ms
+/// tick (<see cref="NetworkWatch.WindowsIcmpTickMs"/>); the pings now give it a second.</item>
 /// <item>A hint is due at <see cref="ThreatEpisodes"/> threats in the window, or at any resend miss.</item>
 /// <item>A threat with a router spike within <see cref="SameTimeMs"/> is the PC's Wi-Fi (both pings cross it);
 /// otherwise the HomePod's. The majority decides; a tie blames the HomePod (Wi-Fi 4 on the HomePod 2). A wired PC has
