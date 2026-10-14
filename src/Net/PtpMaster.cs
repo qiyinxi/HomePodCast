@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Buffers.Binary;
 
 namespace HomePodCast.Net;
 
@@ -17,6 +18,8 @@ public sealed class PtpMaster : IDisposable
     private readonly byte[] _ownAnnounce;
     private readonly Task[] _tasks;
     private long _betterUntil;
+    private ulong _betterGrandmaster;
+    private readonly object _election = new();
     private int _disposed;
 
     public ulong ClockId { get; }
@@ -83,8 +86,21 @@ public sealed class PtpMaster : IDisposable
                 ulong received = NowNanoseconds;
                 if (!datagram.RemoteEndPoint.Address.Equals(_peerEvents.Address) || !PtpPackets.Valid(datagram.Buffer, Domain)) continue;
                 byte type = (byte)(datagram.Buffer[0] & 15);
-                if (type == PtpPackets.Announce && PtpPackets.CompareGrandmasters(datagram.Buffer, _ownAnnounce) < 0)
-                    Interlocked.Exchange(ref _betterUntil, Stopwatch.GetTimestamp() + Stopwatch.Frequency * 3);
+                if (type == PtpPackets.Announce)
+                {
+                    ulong identity = BinaryPrimitives.ReadUInt64BigEndian(datagram.Buffer.AsSpan(53));
+                    lock (_election)
+                    {
+                        if (PtpPackets.CompareGrandmasters(datagram.Buffer, _ownAnnounce) < 0)
+                        {
+                            _betterGrandmaster = identity;
+                            Interlocked.Exchange(ref _betterUntil, Stopwatch.GetTimestamp() + Stopwatch.Frequency * 3);
+                        }
+                        // 2026-10-14: nqptp 1.2.4 wakes a master with a better announce, then a worse
+                        // one 150 ms later. That same clock withdrawing its candidacy ends the hold.
+                        else if (identity == _betterGrandmaster) Interlocked.Exchange(ref _betterUntil, 0);
+                    }
+                }
                 else if (type == PtpPackets.DelayRequest && IsMaster)
                 {
                     await _general.SendAsync(PtpPackets.DelayResponseMessage(ClockId, datagram.Buffer, received, Domain), _peerGeneral, _stop.Token);

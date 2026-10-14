@@ -108,6 +108,15 @@ public class PtpTests
         long sent = master.SyncMessagesSent;
         await Task.Delay(200);
         Assert.Equal(sent, master.SyncMessagesSent);
+        await general.SendAsync(PtpPackets.AnnounceMessage(789, 0, priority: 200),
+            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
+        await Task.Delay(50);
+        Assert.False(master.IsMaster);
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 200),
+            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
+        while (!master.IsMaster) await Task.Delay(10, timeout.Token);
+        await Task.Delay(200);
+        Assert.True(master.SyncMessagesSent > sent);
     }
 
     [Fact]
