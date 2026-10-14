@@ -306,6 +306,7 @@
   "上次检查：{0}": "Last checked: {0}",
   "正在检查更新…": "Checking for updates…",
   "检查失败，请稍后再试（详情见日志）": "Couldn't check for updates. Try again later (details in the log)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET has been updated. Restart HomePodCast and try again.",
   "已是最新版本": "HomePodCast is up to date",
   "发现新版本 {0}": "New version available: {0}",
   "发现新版本 {0}。点这里查看。": "New version available: {0}. Click here to see it.",

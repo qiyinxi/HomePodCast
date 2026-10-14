@@ -306,6 +306,7 @@
   "上次检查：{0}": "Dernière vérification : {0}",
   "正在检查更新…": "Recherche de mises à jour…",
   "检查失败，请稍后再试（详情见日志）": "La vérification a échoué. Réessayez plus tard (détails dans le journal)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET a été mis à jour. Redémarrez HomePodCast, puis réessayez.",
   "已是最新版本": "HomePodCast est à jour",
   "发现新版本 {0}": "Nouvelle version disponible : {0}",
   "发现新版本 {0}。点这里查看。": "Nouvelle version disponible : {0}. Cliquez ici pour la voir.",

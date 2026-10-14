@@ -306,6 +306,7 @@
   "上次检查：{0}": "Tarkistettu viimeksi: {0}",
   "正在检查更新…": "Haetaan päivityksiä…",
   "检查失败，请稍后再试（详情见日志）": "Tarkistus epäonnistui. Yritä myöhemmin uudelleen (tiedot lokissa)",
+  ".NET 已更新，请重启 HomePodCast 后再试": ".NET on päivitetty. Käynnistä HomePodCast uudelleen ja yritä sitten uudelleen.",
   "已是最新版本": "HomePodCast on ajan tasalla",
   "发现新版本 {0}": "Uusi versio saatavilla: {0}",
   "发现新版本 {0}。点这里查看。": "Uusi versio saatavilla: {0}. Näytä napsauttamalla tätä.",
