@@ -53,6 +53,11 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   tables in `src/i18n/*.json`. Add, rename or remove the entry in every table: `LocalizationTests` fails on a missing
   one and lists unused ones in its output (it doesn't fail on those), so remove a text's entries with the text. No
   brackets that can wrap alone at a line start in CJK text.
+- **Names of settings and controls** use the established professional term, as audio software and Windows itself say
+  it, with the English term in parentheses where it helps. Explanations go in the description line or the tooltip,
+  never in the name. Invented descriptive phrases are easy to misread. The maintainer's examples, 2026-10-15:
+  - 「麦克风监听」, not 「使用麦克风」 or 「把麦克风混进推流」;
+  - 衰减（Room Size）, 高频阻尼（Damping）, 干湿比（Wet/Dry）, 预延迟（Pre-delay）, not 「房间大小」 or 「混响比例」.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
 - **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
