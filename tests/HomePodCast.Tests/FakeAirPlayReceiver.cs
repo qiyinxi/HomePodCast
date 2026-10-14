@@ -57,6 +57,10 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
     public int ArrivalToRenderMs { get; set; } = 140;
+    public int? BufferedDataPort { get; init; }
+    public Dictionary<string, object?>? SessionSetup { get; private set; }
+    public Dictionary<string, object?>? StreamSetup { get; private set; }
+    public Dictionary<string, object?>? RateAnchor { get; private set; }
 
     /// <summary>The identifier in M6 and pair-verify M2.</summary>
     public byte[] AccessoryId => Encoding.UTF8.GetBytes(DeviceId);
@@ -248,6 +252,13 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         {
             case "SETUP":
                 return Setup(BPlist.ReadDict(req.Body));
+            case "SETPEERS":
+                Record(method, true);
+                return Ok;
+            case "SETRATEANCHORTIME":
+                RateAnchor = BPlist.ReadDict(req.Body);
+                Record(method, true);
+                return Ok;
             case "RECORD" or "FLUSH" or "SET_PARAMETER" or "TEARDOWN":
                 Record(method, true);
                 return Ok;
@@ -349,6 +360,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         const string plist = "application/x-apple-binary-plist";
         if (body.GetValueOrDefault("streams") is List<object?> { Count: > 0 } streams && streams[0] is Dictionary<string, object?> stream)
         {
+            StreamSetup = stream;
             Record("SETUP stream", true);
             StreamKey = stream.GetValueOrDefault("shk") as byte[];
             return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
@@ -357,14 +369,15 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 {
                     new Dictionary<string, object?>
                     {
-                        ["type"] = 96L,
-                        ["dataPort"] = (long)Rtp.DataPort,
+                        ["type"] = stream.GetValueOrDefault("type") ?? 96L,
+                        ["dataPort"] = (long)(BufferedDataPort ?? Rtp.DataPort),
                         ["controlPort"] = (long)Rtp.ControlPort,
                         ["arrivalToRenderLatencyMs"] = (long)ArrivalToRenderMs,
                     },
                 },
             }), plist);
         }
+        SessionSetup = body;
         Record("SETUP session", true);
         return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
         {

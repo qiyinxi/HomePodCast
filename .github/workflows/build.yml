@@ -390,9 +390,25 @@ jobs:
           path: gui-screenshots
           if-no-files-found: warn
 
+  aac-fixture:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Encode synthetic AAC with Windows Media Foundation
+        run: dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --aac-fixture test-results/aac-fixture
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aac-fixture
+          path: test-results/aac-fixture
+
   airplay-compat-e2e:
+    needs: aac-fixture
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -400,6 +416,12 @@ jobs:
           dotnet-version: '10.0.x'
       - name: AirPlay compatibility receiver test
         run: bash tools/ci/airplay-compat-e2e.sh
+      - uses: actions/download-artifact@v8
+        with:
+          name: aac-fixture
+          path: test-results/aac-fixture
+      - name: AirPlay 2 realtime and buffered receiver tests
+        run: bash tools/ci/airplay2-compat-e2e.sh
       - name: Upload receiver diagnostics
         if: always()
         uses: actions/upload-artifact@v7

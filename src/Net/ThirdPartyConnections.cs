@@ -27,7 +27,7 @@ internal static class ThirdPartyConnections
                 {
                     ReceiverProtocol.AirPlay2Realtime => RealtimeAsync,
                     ReceiverProtocol.Raop => LegacyAsync,
-                    ReceiverProtocol.AirPlay2Buffered => buffered ?? throw new AirPlayException(L.T("这台设备需要缓冲连接；当前缓冲发送器不可用。")),
+                    ReceiverProtocol.AirPlay2Buffered => buffered ?? BufferedAsync,
                     _ => throw new InvalidOperationException("No automatic protocol inside a trial"),
                 };
                 var session = await connect(device, settings, options, fifo, ct);
@@ -76,7 +76,10 @@ internal static class ThirdPartyConnections
                     VolumeCapPercent = options.VolumeCapPercent, Effects = options.Effects,
                     Pairings = options.Pairings, DeviceId = device.DeviceId, RequestLog = options.Log, AllowMissingEventChannel = true,
                 };
-                prepared = await AirPlayClient.PrepareAsync(device.Address, device.Port, stream, ChannelMode.Stereo, ct);
+                bool ptp = (ReceiverKinds.Features(device.Txt?.GetValueOrDefault("features") ?? device.Txt?.GetValueOrDefault("ft")) & ReceiverKinds.Ptp) != 0;
+                prepared = ptp
+                    ? await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct, realtime: true, prepareOnly: true)
+                    : await AirPlayClient.PrepareAsync(device.Address, device.Port, stream, ChannelMode.Stereo, ct);
                 var actual = ReceiverLatencies.For(device.Kind, ReceiverProtocol.AirPlay2Realtime, prepared.ArrivalToRenderMs, device.Model);
                 if (actual.MinimumMs > actual.MaximumMs) throw new AirPlayException(L.T("这台设备的处理时间超过低延迟范围，请使用兼容或缓冲连接。"));
                 int next = actual.Clamp(settings?.RealtimeLatencyMs ?? Math.Max(actual.DefaultMs, actual.RecommendedMinimumMs));
@@ -86,12 +89,26 @@ internal static class ThirdPartyConnections
                     options.Log?.Invoke($"receiver realtime floor: {latency} -> {next} ms, arrivalToRender={prepared.ArrivalToRenderMs}");
                     prepared.Dispose(); prepared = null; latency = next; continue;
                 }
-                prepared.StartPreparedStream(stream, fifo);
+                if (ptp) prepared.StartPreparedPtpRealtime(stream);
+                else prepared.StartPreparedStream(stream, fifo);
                 return new RealtimeReceiverSession(prepared);
             }
             throw new AirPlayException("receiver realtime negotiation did not converge");
         }
         catch { prepared?.Dispose(); throw; }
+    }
+
+    private static async Task<IReceiverSession> BufferedAsync(AirPlayDevice device, ReceiverPreferences? settings,
+        ReceiverConnectOptions options, AudioFifo fifo, CancellationToken ct)
+    {
+        int latency = settings?.CompatibilityLatencyMs ?? 2000;
+        if (!ReceiverLatencies.CompatibilityChoices.Contains(latency)) latency = 2000;
+        var stream = new StreamOptions(latency, options.VolumePercent)
+        {
+            VolumeCapPercent = options.VolumeCapPercent, Effects = options.Effects,
+            Pairings = options.Pairings, DeviceId = device.DeviceId, RequestLog = options.Log,
+        };
+        return new BufferedReceiverSession(await AirPlayClient.ConnectBufferedAsync(device, stream, fifo, ct));
     }
 
     private static async Task<IReceiverSession> LegacyAsync(AirPlayDevice device, ReceiverPreferences? settings,

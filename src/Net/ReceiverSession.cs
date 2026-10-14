@@ -26,9 +26,9 @@ internal sealed class RealtimeReceiverSession(AirPlayClient client) : IReceiverS
     public int? ArrivalToRenderMs => client.ArrivalToRenderMs;
     public double? InitialVolumeDb => client.InitialVolumeDb;
     public double VolumeCapPercent { get => client.VolumeCapPercent; set => client.VolumeCapPercent = value; }
-    public long PacketsSent => client.Sender?.PacketsSent ?? 0;
+    public long PacketsSent => client.Sender?.PacketsSent ?? client.PtpRealtime?.PacketsSent ?? 0;
     public string? LostReason => client.LostReason;
-    public Action<long>? OnsetSent { get => client.Sender?.OnsetSent; set { if (client.Sender is { } sender) sender.OnsetSent = value; } }
+    public Action<long>? OnsetSent { get => client.Sender?.OnsetSent ?? client.PtpRealtime?.OnsetSent; set { if (client.Sender is { } sender) sender.OnsetSent = value; else if (client.PtpRealtime is { } ptp) ptp.OnsetSent = value; } }
     public event Action<string>? Lost { add => client.Lost += value; remove => client.Lost -= value; }
     public void SetVolume(double percent) => client.SetVolumePercent(percent);
     public void Dispose() => client.Dispose();

@@ -46,7 +46,7 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 /// transient pair-setup (HomePods) or pair-verify with a stored PIN pairing (Apple TV) → encrypted RTSP → SETUP (session)
 /// → event channel → SETUP (stream) → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
 /// </summary>
-public sealed class AirPlayClient : IDisposable, IGroupMember
+public sealed partial class AirPlayClient : IDisposable, IGroupMember
 {
     private const string PairUserAgent = "AirPlay/320.20";
     private static readonly TimeSpan FeedbackInterval = TimeSpan.FromSeconds(2);
@@ -434,10 +434,13 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         _lostSignalled = 1; // no Lost events during deliberate teardown
         _feedbackTimer?.Dispose();
         _sender?.Dispose();
+        _buffered?.Dispose();
+        PtpRealtime?.Dispose();
         try { _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]); } catch { }
         _events?.Dispose();
         _control.Dispose();
         _timing.Dispose();
+        _ptp?.Dispose();
         _rtsp.Dispose();
     }
 }

@@ -6,8 +6,8 @@ using System.Security.Cryptography;
 namespace HomePodCast.Net;
 
 /// <summary>
-/// Isolated unicast timing prototype for non-Apple sessions (experimental since 1.1).
-/// No caller in the application yet. The HomePod NTP timing server remains independent.
+/// Isolated unicast master for non-Apple sessions (experimental since 1.1).
+/// Used only by third-party sessions. The HomePod NTP timing server remains independent.
 /// </summary>
 public sealed class PtpMaster : IDisposable
 {
