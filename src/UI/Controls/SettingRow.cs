@@ -44,7 +44,8 @@ internal sealed class SettingRow : Card
             contentW = ContentWidth > 0 ? Dp(ContentWidth) : WidthFor(Content);
         }
         int textW = right - x - (contentW > 0 ? contentW + Dp(16) : 0);
-        bool stacked = contentW > 0 && textW < Dp(180);
+        // Keep descriptions readable in compact windows instead of squeezing them beside a wide picker.
+        bool stacked = contentW > 0 && textW < Dp(240);
         if (stacked)
         {
             textW = right - x;

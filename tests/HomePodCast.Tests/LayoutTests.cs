@@ -200,6 +200,24 @@ public class LayoutTests
         Assert.Equal(content.Bottom + row.Padding.Bottom, row.Height);
     });
 
+    [Fact]
+    public void Narrow_settings_move_wide_controls_below_the_description() => Sta.Run(() =>
+    {
+        using var host = new Panel();
+        var content = new Segmented("Take over", "Ask first");
+        using var row = new SettingRow("a", "Home theater", "A description that needs room to remain readable.", content)
+            { ContentWidth = 170 };
+        host.Controls.Add(row);
+        LayoutPanel.Place(row, 0, 0, 640, row.GetPreferredSize(new Size(640, 0)).Height);
+        Assert.True(content.Left > row.DescriptionText.Right);
+
+        LayoutPanel.Place(row, 0, 0, 470, row.GetPreferredSize(new Size(470, 0)).Height);
+        Assert.Equal(row.DescriptionText.Left, content.Left);
+        Assert.True(content.Top > row.DescriptionText.Bottom);
+        Assert.True(row.DescriptionText.Width > 360);
+        Assert.True(content.Bottom + row.Padding.Bottom <= row.Height);
+    });
+
     private sealed class CountingStack : StackPanel
     {
         public int Applied;
