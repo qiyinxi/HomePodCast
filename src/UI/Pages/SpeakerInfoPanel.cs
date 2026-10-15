@@ -55,6 +55,9 @@ internal sealed class SpeakerInfoPanel : StackPanel
 
     public void PageHidden() => _shown = false;
 
+    /// <summary>What is known now, on the hidden page before its first visit (SpeakersPage.Prepare): no read.</summary>
+    public void Prepare() => ShowAll(_speakers());
+
     /// <summary>
     /// The selection may have changed while the page is shown (a profile applied from 设置 → 使用配置): the cards follow at
     /// once and a speaker not read yet is read. While hidden, nothing: <see cref="PageShown"/> does it.

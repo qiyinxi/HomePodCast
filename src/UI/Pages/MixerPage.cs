@@ -81,7 +81,8 @@ internal sealed class MixerPage : ScrollPage
         Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
-        _empty.Collapsed = true;
+        // _empty stays shown until the first refresh (PageShown, before the page is painted): a page built ahead of its first
+        // visit (MainWindow) then has its window, and finding no app creates none.
 
         _master.Scroll += (_, _) =>
         {

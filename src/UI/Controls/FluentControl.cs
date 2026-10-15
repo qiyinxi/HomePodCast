@@ -324,6 +324,23 @@ internal abstract class LayoutPanel : Panel
 
     public static int WidthFor(Control c) => IsCollapsed(c) ? 0 : c.GetPreferredSize(Size.Empty).Width;
 
+    /// <summary>
+    /// The windows that showing the hidden <paramref name="root"/> would create (it and every control in it that is not
+    /// collapsed), created now, parents first, while it stays hidden. <paramref name="yield"/> is asked after each one: true
+    /// stops there, and the next call goes on from there. True once they all exist.
+    /// </summary>
+    internal static bool CreateWindows(Control root, Func<bool> yield)
+    {
+        if (!root.IsHandleCreated)
+        {
+            _ = root.Handle;
+            if (yield()) return false;
+        }
+        foreach (var child in root.Controls.Cast<Control>().ToArray())
+            if (!IsCollapsed(child) && !CreateWindows(child, yield)) return false;
+        return true;
+    }
+
     /// <summary>Set bounds and arrange a container once, including when only its children's sizes changed.</summary>
     public static void Place(Control c, int x, int y, int w, int h)
     {
@@ -356,15 +373,23 @@ internal abstract class LayoutPanel : Panel
         window.Invalidate(true);
     }
 
+    /// <summary>
+    /// Like <see cref="BatchLayout"/>, but without the layout at the end: what changes meanwhile is laid out by whoever
+    /// lays <paramref name="root"/> out next (MainWindow after a DPI change, a hidden page when it is prepared or shown).
+    /// </summary>
+    public static IDisposable SuspendLayouts(Control root) => new LayoutBatch(root, layout: false);
+
     private sealed class LayoutBatch : IDisposable
     {
         private readonly Control _root;
+        private readonly bool _layout;
         private readonly List<Control> _containers = [];
         private bool _disposed;
 
-        public LayoutBatch(Control root)
+        public LayoutBatch(Control root, bool layout = true)
         {
             _root = root;
+            _layout = layout;
             Suspend(root);
         }
 
@@ -383,7 +408,7 @@ internal abstract class LayoutPanel : Panel
             if (_disposed) return;
             _disposed = true;
             foreach (var c in _containers) c.ResumeLayout(false);
-            if (!_root.IsDisposed) _root.PerformLayout();
+            if (_layout && !_root.IsDisposed) _root.PerformLayout();
         }
     }
 
@@ -594,6 +619,8 @@ internal class Card : LayoutPanel, ISurface
 /// </summary>
 internal class ScrollPage : Panel, ISurface
 {
+    private bool _fontPending;
+
     public ScrollPage(string? title = null)
     {
         Content = new StackPanel { Inset = new Padding(28, 18, 20, 28), Gap = 12 };
@@ -617,9 +644,18 @@ internal class ScrollPage : Panel, ISurface
     /// <summary>The page is no longer visible: stop timers, let go of what it holds.</summary>
     public virtual void PageHidden() { }
 
+    /// <summary>
+    /// Build now, on the hidden page, what <see cref="PageShown"/> would build from the app's state, so that the first visit
+    /// finds it (MainWindow prepares the pages at idle). Never a timer, a read or anything else only a shown page does.
+    /// </summary>
+    public virtual void Prepare() { }
+
     public StackPanel Content { get; }
     public int MaxContentWidth { get; set; } = 1040;
     public Color SurfaceColor => Theme.P.Window;
+
+    /// <summary>The DPI of the page's last layout (0: never laid out).</summary>
+    internal int LayoutDpi { get; private set; }
 
     private void ThemeChanged()
     {
@@ -635,10 +671,36 @@ internal class ScrollPage : Panel, ISurface
         Theme.StyleScrollBars(this);
     }
 
+    /// <summary>
+    /// The window's font for a new DPI reaches a hidden page's controls when the page is shown or prepared, not at once: every
+    /// control's font changed and every window got a new font handle (WM_SETFONT), on every page, for each move to a monitor
+    /// with another scale. 2026-10-15, all 11 pages visited: 636 font changes and 575 new GDI fonts per DPI change.
+    /// </summary>
+    protected override void OnParentFontChanged(EventArgs e)
+    {
+        if (Visible || Parent == null) base.OnParentFontChanged(e);
+        else _fontPending = true;
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        if (Visible) ApplyFont();
+        base.OnVisibleChanged(e);
+    }
+
+    /// <summary>The font change the hidden page left for later (<see cref="OnParentFontChanged"/>), with one layout.</summary>
+    internal void ApplyFont()
+    {
+        if (!_fontPending) return;
+        _fontPending = false;
+        using (LayoutPanel.BatchLayout(this)) base.OnParentFontChanged(EventArgs.Empty);
+    }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (Content is null) return; // AutoScroll lays out during construction
         LayoutPanel.Arranged?.Invoke(this);
+        LayoutDpi = DeviceDpi;
         int scrollBar = SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi);
         int width = Math.Max(0, Math.Min(Width - scrollBar, Theme.Dp(MaxContentWidth, DeviceDpi)));
         Content.Inset = Width < Theme.Dp(640, DeviceDpi)

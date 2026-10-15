@@ -11,6 +11,9 @@ internal sealed class ThemeTransition : Control
     private long _started;
     internal bool Running => _timer.Enabled;
 
+    /// <summary>Tests: snapshots of the window taken (two per animated theme change, none for anything else).</summary>
+    internal int Snapshots { get; private set; }
+
     public ThemeTransition()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
@@ -25,10 +28,15 @@ internal sealed class ThemeTransition : Control
         Stop();
         bool animate = window.Visible && window.Opacity > 0 && AnimationsEnabled &&
             window.WindowState != FormWindowState.Minimized && window.ClientSize.Width > 0 && window.ClientSize.Height > 0;
-        if (animate) _before = Snapshot(window);
+        if (animate)
+        {
+            _before = Snapshot(window);
+            Snapshots++;
+        }
         using (LayoutPanel.BatchLayout(window)) change();
         if (_before == null) return;
         _after = Snapshot(window);
+        Snapshots++;
         if (_after == null) { Stop(); return; }
         Bounds = window.ClientRectangle;
         BringToFront();
