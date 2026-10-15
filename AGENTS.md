@@ -112,7 +112,7 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Don't archive items. Views keep finished work apart (2026-10-15):
     - 「待办与进行中」 (table) and 「看板」 (board) hide 已完成 and 搁置;
     - 「等你决定」 lists the questions for the maintainer;
-    - 「已完成与搁置」 holds the rest.
+    - 「已完成」 and 「搁置」 hold the rest, one view each.
     The status alone decides which view an item is in.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
   fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
