@@ -18,10 +18,13 @@ internal sealed class SpeakersPage : ScrollPage
     public SpeakersPage(TrayApp app) : base(L.T("音箱信息"))
     {
         _app = app;
+        // The protocol and the live processing time were a note of 连接方式 above the card until 2026-10-15.
         _speakerInfo = new SpeakerInfoPanel(app.SpeakerInfo, Inspected,
             () => app.Controller.State == StreamState.Streaming && app.SelectedSpeakers().Any(s => s.DeviceId == _selected),
-            () => app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(_selected ?? ""))?.ArrivalToRenderMs
-                ?? (app.SelectedSpeakers().Any(s => s.DeviceId == _selected) ? app.Config.ArrivalToRenderMs : null), () => app.LastScan);
+            () => (Connected(_selected) ? app.Controller.ReceiverSession?.ArrivalToRenderMs ?? app.Controller.Client?.ArrivalToRenderMs : null)
+                ?? app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(_selected ?? ""))?.ArrivalToRenderMs
+                ?? (app.SelectedSpeakers().Any(s => s.DeviceId == _selected) ? app.Config.ArrivalToRenderMs : null), () => app.LastScan,
+            id => Connected(id) ? app.Controller.ActiveProtocol : null);
         _receiverConnection = new ReceiverConnectionPanel(app, () => _selected);
         var detail = Ui.Stack(12, _receiverConnection, _speakerInfo);
         Content.Controls.Add(new Browser(_list, detail));
@@ -35,6 +38,9 @@ internal sealed class SpeakersPage : ScrollPage
     }
 
     private List<SelectedSpeaker> Inspected() => _devices.Where(d => d.DeviceId == _selected).ToList();
+
+    /// <summary>This PC streams to that device now: the controller's protocol and processing time are its.</summary>
+    private bool Connected(string? id) => id != null && id == _app.Config.DeviceId && _app.Controller.State == StreamState.Streaming;
 
     public void RefreshDevices()
     {

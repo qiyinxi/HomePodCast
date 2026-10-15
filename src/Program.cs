@@ -23,6 +23,7 @@ public static class Program
                 "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
+                "dlna" => DlnaCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
                 "proctest" => ProcTest.Run(args),
@@ -133,6 +134,7 @@ public static class Program
             """);
         // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(DlnaCli.Usage);
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
     }

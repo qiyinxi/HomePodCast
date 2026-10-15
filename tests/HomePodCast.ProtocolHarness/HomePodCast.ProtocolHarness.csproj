@@ -18,6 +18,12 @@
     <Compile Include="../../src/Net/TimingServer.cs" Link="Net/TimingServer.cs" />
     <Compile Include="../../src/Net/MediaClock.cs" Link="Net/MediaClock.cs" />
     <Compile Include="../../src/Net/AirPlayException.cs" Link="Net/AirPlayException.cs" />
+    <Compile Include="../../src/Net/DlnaAudioFormat.cs" Link="Net/DlnaAudioFormat.cs" />
+    <Compile Include="../../src/Net/DlnaDevice.cs" Link="Net/DlnaDevice.cs" />
+    <Compile Include="../../src/Net/DlnaDiscovery.cs" Link="Net/DlnaDiscovery.cs" />
+    <Compile Include="../../src/Net/DlnaControl.cs" Link="Net/DlnaControl.cs" />
+    <Compile Include="../../src/Net/DlnaStreamServer.cs" Link="Net/DlnaStreamServer.cs" />
+    <Compile Include="../../src/Net/DlnaClient.cs" Link="Net/DlnaClient.cs" />
     <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
     <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
     <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
