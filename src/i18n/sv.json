@@ -624,5 +624,6 @@
   "至少选择完整立体声，或给左和右各选一台音箱。": "Välj minst en högtalare med Full stereo, eller tilldela en högtalare vardera till Vänster och Höger.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Realtidsströmning till en enda högtalare använder det befintliga läget med låg latens. Placering, extra fördröjning och ljudstyrkejustering gäller bara för grupper med flera utgångar.",
   "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Den här källan saknar en kanal för positionen, så högtalaren förblir tyst. När du växlar tillbaka till en flerkanalsfil återställs positionen.",
-  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Gruppuppspelning av lokala filer stöder ännu inte anslutningar till parkopplade Apple TV-enheter. Använd en HomePod."
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Gruppuppspelning av lokala filer stöder ännu inte anslutningar till parkopplade Apple TV-enheter. Använd en HomePod.",
+  "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "Om en högtalare fortfarande används av gruppen för realtidsströmning, välj Datorljud i realtid, ta bort den och tillämpa inställningarna."
 }

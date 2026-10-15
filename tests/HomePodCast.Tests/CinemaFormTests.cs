@@ -90,8 +90,11 @@ public class CinemaFormTests
             Pump(page.PlayAsync());
             var (source, layout, _) = Assert.Single(host.Started);
             Assert.Equal(CinemaRole.RearLeft, layout[2].Role);
-            source.ReadPacket(0);
+            Assert.True(SpinWait.SpinUntil(() => source.BufferedFrames >= RtpSender.FramesPerPacket, TimeSpan.FromSeconds(2)));
+            Assert.True(source.ReadPacket(0));
             var pcm = new float[RtpSender.FramesPerPacket * 2];
+            source.ReadTarget(0, pcm);
+            Assert.Contains(pcm, sample => Math.Abs(sample) > 0.001f); // prove the packet contains the generated file, not startup silence
             source.ReadTarget(2, pcm);
             Assert.All(pcm, sample => Assert.Equal(0, sample));
             Assert.Equal(SpeakerPosition.RearLeft, host.Config.GroupSpeakers![2].Position);

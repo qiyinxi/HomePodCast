@@ -10,6 +10,40 @@ namespace HomePodCast.Tests;
 /// <summary>Per-output settings, against synthetic scans. No window is shown, no receiver is contacted.</summary>
 public class GroupFormTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void File_mode_cannot_remove_a_speaker_still_referenced_by_live_capture(bool explicitLiveIds) => OnSta(() =>
+    {
+        string path = Path.Combine(Path.GetTempPath(), "hpc-group-ui-" + Guid.NewGuid().ToString("N"), "config.json");
+        try
+        {
+            var cfg = new AppConfig { DeviceId = A.DeviceId, DeviceName = A.Name, MultiRoomDeviceId = B.DeviceId, MultiRoomDeviceName = B.Name };
+            using var panel = new GroupPanel(cfg);
+            panel.SetFound([A, B]);
+            if (explicitLiveIds) panel.Apply();
+            panel.SetSource(true);
+            var remove = All<FluentButton>(panel).Single(b => b.AccessibleName == "移除 书房");
+            Assert.False(remove.Enabled);
+            remove.PerformClick();
+            panel.Apply(activateCapture: false);
+            Assert.Equal([A.DeviceId, B.DeviceId], GroupPlan.FromConfig(cfg)!.Members.Select(m => m.DeviceId));
+            cfg.Save(path);
+            var loaded = AppConfig.Load(path);
+            Assert.Equal([A.DeviceId, B.DeviceId], GroupPlan.FromConfig(loaded)!.Members.Select(m => m.DeviceId));
+            var restored = new AppConfig();
+            UsageProfiles.Apply(restored, UsageProfiles.Capture(loaded));
+            Assert.Equal([A.DeviceId, B.DeviceId], GroupPlan.FromConfig(restored)!.Members.Select(m => m.DeviceId));
+            panel.SetSource(false);
+            Assert.True(All<FluentButton>(panel).Single(b => b.AccessibleName == "移除 书房").Enabled);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(Path.GetDirectoryName(path)))
+                System.IO.Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+        }
+    });
+
     [Fact]
     public void A_partial_pair_scan_cannot_reassign_the_remaining_member_to_the_first_channel() => OnSta(() =>
     {

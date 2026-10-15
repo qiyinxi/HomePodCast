@@ -15,6 +15,7 @@ internal sealed class GroupPanel : StackPanel
     private readonly ToggleSwitch _leaderOnly = new(L.T("只连接主音箱（实验）")); // experimental since 1.1; hardware untested
     private readonly TextBlock _state = Ui.Note();
     private readonly TextBlock _singleNote = Ui.Note();
+    private readonly TextBlock _fileMemberNote = Ui.Note();
     private readonly List<GroupSpeakerSettings> _speakers;
     private readonly Dictionary<string, SpeakerPosition> _capturePositions;
     private readonly List<Row> _rows = [];
@@ -44,6 +45,7 @@ internal sealed class GroupPanel : StackPanel
         Controls.Add(Ui.Note(L.T("实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。")));
         Controls.Add(Ui.Note(L.T("离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。")));
         Controls.Add(_members);
+        Controls.Add(_fileMemberNote);
         Controls.Add(Ui.Row(8, _add, _add, _addButton));
         _addButton.Click += (_, _) =>
         {
@@ -116,6 +118,8 @@ internal sealed class GroupPanel : StackPanel
             row.Delay.Enabled = row.Volume.Enabled = !active && !singleCapture && !row.Silent;
         }
         _singleNote.Text = singleCapture ? L.T("实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。") : "";
+        _fileMemberNote.Text = _fileSource && _speakers.Any(s => IsLiveMember(s.DeviceId))
+            ? L.T("实时组仍在使用的音箱，请在电脑实时声音下移除并应用。") : "";
         _add.Enabled = !active && _tsid == null && _choices.Count > 0;
         _addButton.Enabled = _add.Enabled && _speakers.Count < 8;
         if (_tsid != null) _leaderOnly.Enabled = !active;
@@ -136,6 +140,14 @@ internal sealed class GroupPanel : StackPanel
             ReceiverKind.ThirdPartyAirPlay2 or ReceiverKind.Unknown => L.T("第三方 AirPlay 设备暂不支持多音箱分组。"),
             _ => null,
         };
+    }
+
+    private bool IsLiveMember(string deviceId)
+    {
+        string key = GroupPlan.Key(deviceId);
+        if (_config.GroupCaptureDeviceIds is { } explicitIds) return explicitIds.Any(id => GroupPlan.Key(id) == key);
+        if (_tsid != null) return StereoPairs.Members(_found, _tsid).Any(d => GroupPlan.Key(d.DeviceId) == key);
+        return new[] { _config.DeviceId, _config.MultiRoomDeviceId }.Any(id => id != null && GroupPlan.Key(id) == key);
     }
 
     internal string? BlockReason
@@ -197,8 +209,13 @@ internal sealed class GroupPanel : StackPanel
             var volumeValue = new TextBlock(volume.Value.ToString("+0;-0;0"));
             volume.ValueChanged += (_, _) => volumeValue.Text = volume.Value.ToString("+0;-0;0");
             var remove = new FluentButton(L.T("移除")) { AccessibleName = L.F("移除 {0}", speaker.Name) };
-            remove.Enabled = _tsid == null && GroupPlan.Key(speaker.DeviceId) != GroupPlan.Key(_config.DeviceId ?? "");
-            remove.Click += (_, _) => { ReadRows(); _speakers.Remove(speaker); ShowMembers(); };
+            bool liveReference = _fileSource && IsLiveMember(speaker.DeviceId);
+            remove.Enabled = _tsid == null && !liveReference && GroupPlan.Key(speaker.DeviceId) != GroupPlan.Key(_config.DeviceId ?? "");
+            remove.Click += (_, _) =>
+            {
+                if (_active || _fileSource && IsLiveMember(speaker.DeviceId)) return;
+                ReadRows(); _speakers.Remove(speaker); ShowMembers();
+            };
             var title = new TextBlock(device == null ? L.F("{0}（未发现）", speaker.Name) : speaker.Name, TextStyle.BodyStrong, wrap: true);
             var positionField = Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary), position);
             var delayField = Ui.Stack(2, new TextBlock(L.T("延迟"), TextStyle.Caption, TextRole.Secondary), Ui.Row(4, null, delay, delayValue));
