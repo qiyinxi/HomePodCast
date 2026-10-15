@@ -98,6 +98,11 @@ jobs:
             if ($LASTEXITCODE) { throw "syntax error in $($_.FullName)" }
           }
 
+      # The decisions of tools/release.ps1 -Beta (snapshot branches, docs/RELEASING.md), offline.
+      - name: Check release script
+        shell: pwsh
+        run: ./tools/release.ps1 -SelfTest
+
       - name: Publish (framework-dependent, single file)
         run: >
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false
