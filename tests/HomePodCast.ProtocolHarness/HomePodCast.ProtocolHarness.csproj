@@ -11,6 +11,8 @@
     <Compile Include="../../src/Net/ReceiverKind.cs" Link="Net/ReceiverKind.cs" />
     <Compile Include="../../src/Net/TxtRecord.cs" Link="Net/TxtRecord.cs" />
     <Compile Include="../../src/Net/RaopClient.cs" Link="Net/RaopClient.cs" />
+    <Compile Include="../../src/Net/RaopOutputSink.cs" Link="Net/RaopOutputSink.cs" />
+    <Compile Include="../../src/Net/IOutputSink.cs" Link="Net/IOutputSink.cs" />
     <Compile Include="../../src/Net/RaopPackets.cs" Link="Net/RaopPackets.cs" />
     <Compile Include="../../src/Net/RtspConnection.cs" Link="Net/RtspConnection.cs" />
     <Compile Include="../../src/Net/TimingServer.cs" Link="Net/TimingServer.cs" />
@@ -38,6 +40,7 @@
     <Compile Include="../../src/Net/RtpSender.cs" Link="Net/RtpSender.cs" />
     <Compile Include="../../src/Audio/IGroupPacketSource.cs" Link="Audio/IGroupPacketSource.cs" />
     <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
+    <Compile Include="../../src/Audio/TimelineBuffer.cs" Link="Audio/TimelineBuffer.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
     <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
     <Compile Include="../../src/Protocol/BufferedAudio.cs" Link="Protocol/BufferedAudio.cs" />
