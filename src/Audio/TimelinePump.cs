@@ -15,6 +15,7 @@ internal sealed class TimelinePump(AudioFifo fifo, IAudioEffect? effects, int hi
     public event Action<string>? Failed;
     public long SilentPackets { get; private set; }
     public long SkippedPackets { get; private set; }
+    public long ProducedPackets { get; private set; }
 
     internal void Produce(long ticks)
     {
@@ -24,6 +25,7 @@ internal sealed class TimelinePump(AudioFifo fifo, IAudioEffect? effects, int hi
         long frame = _nextFrame ?? Timeline.FrameAt(ticks);
         Timeline.WriteFrames(frame, _pcm);
         _nextFrame = checked(frame + RtpSender.FramesPerPacket);
+        ProducedPackets++;
     }
 
     public void Start(long t0)

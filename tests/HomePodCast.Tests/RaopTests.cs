@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using HomePodCast.Net;
+using HomePodCast.Audio;
 using HomePodCast.Protocol;
 
 namespace HomePodCast.Tests;
@@ -300,17 +301,30 @@ public class RaopTests
     }
 
     [Fact]
-    public void Mixed_protocol_group_is_rejected_before_opening_any_session()
+    public void Cinema_group_refuses_RAOP_and_disposes_its_source_before_opening_sessions()
     {
         var legacy = new AirPlayDevice("RAOP", "legacy", IPAddress.Loopback, 1, "",
             new Dictionary<string, string>()) { HasAirPlay = false, RaopPort = 1 };
         using var controller = new StreamController { ReceiverLookup = id => id == "legacy" ? legacy : null };
         var plan = new GroupPlan(GroupKind.MultiRoom, "group", null,
             [new("legacy", "RAOP", "127.0.0.1"), new("homepod", "HomePod", "127.0.0.1")], false, false, new Dictionary<string, int>());
-        controller.StartGroup(plan, 120, 10);
+        var source = new NoAudioSource();
+        controller.StartGroup(plan, 120, 10, source: source);
         Assert.Equal(StreamState.Idle, controller.State);
         Assert.Null(controller.Capture);
-        Assert.Equal(L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"), controller.StatusText);
+        Assert.Equal(L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"), controller.StatusText);
+        Assert.Equal(1, source.Disposals);
+        controller.Stop();
+        Assert.Equal(1, source.Disposals);
+    }
+
+    private sealed class NoAudioSource : IGroupPacketSource
+    {
+        public int Disposals;
+        public bool ReadPacket(long ticks) => false;
+        public void ReadTarget(int target, Span<float> stereo) => stereo.Clear();
+        public void SkipPackets(int packets) { }
+        public void Dispose() => Disposals++;
     }
 
     private static async Task Until(Func<bool> condition)
