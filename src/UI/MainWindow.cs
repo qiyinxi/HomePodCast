@@ -120,6 +120,7 @@ internal sealed class MainWindow : Form, ISurface
 
     public void ShowPage(AppPage page)
     {
+        if (!_sizeMove) FinishDpiChange(); // shown right after a move to another monitor: laid out at its DPI first
         using var layout = LayoutPanel.BatchLayout(this);
         _transition.Stop();
         SelectPage(page);
@@ -374,16 +375,48 @@ internal sealed class MainWindow : Form, ISurface
     /// </summary>
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
-        _transition.Stop();
+        BeginDpiChange();
         using (LayoutPanel.SuspendLayouts(this))
         {
             base.OnDpiChanged(e);
             Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
             MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
         }
+    }
+
+    /// <summary>
+    /// Every layout in the window held from the start of a DPI change to <see cref="FinishDpiChange"/>. Windows asks the window
+    /// for its size at the new DPI (WM_GETDPISCALEDSIZE) before it tells the child windows (WM_DPICHANGED_BEFOREPARENT), and it
+    /// moves each child window as it tells it: each page and container moved laid itself out, and the window too, once per
+    /// page, at the old DPI; then the window's frame changed at the new DPI and its client area with it, another layout.
+    /// 2026-10-15, the maintainer's monitors (150 % and 100 %): 1.1–2.3 s for a move across, 0.9 s more with 混音器 shown.
+    /// </summary>
+    private void BeginDpiChange()
+    {
+        _transition.Stop();
+        if (_dpiHold == null)
+        {
+            ReleaseHiddenPages();
+            _dpiHold = LayoutPanel.SuspendLayouts(this);
+        }
         _dpiLayoutPending = true;
         _dpiSettle.Stop();
         _dpiSettle.Start();
+    }
+
+    private IDisposable? _dpiHold;
+
+    /// <summary>
+    /// Windows tells every child window of a DPI change and moves it, about 2.2 ms per window on the maintainer's PC, hidden
+    /// or not: with the pages built ahead (445 windows) a move across took 0.8–1.1 s even with every layout held, 0.2 s with
+    /// only the rail and 首页 (70). The hidden pages' windows go first (20 ms for all of them) and are built again at idle,
+    /// at the new DPI (<see cref="StartPreparing"/> after <see cref="FinishDpiChange"/>).
+    /// </summary>
+    private void ReleaseHiddenPages()
+    {
+        foreach (var page in _pages)
+            if (page != _pages[_current]) page.ReleaseWindows();
+        _prepareNext = 0;
     }
 
     /// <summary>Quiet time after a DPI change before the window is laid out at it (outside a drag).</summary>
@@ -392,19 +425,23 @@ internal sealed class MainWindow : Form, ISurface
     /// <summary>A DPI change waits for its layout (<see cref="OnDpiChanged"/>).</summary>
     internal bool DpiLayoutPending => _dpiLayoutPending;
 
-    /// <summary>The layout a DPI change left for later, now (also by any other layout of the window meanwhile).</summary>
+    /// <summary>The layout a DPI change left for later, now (also before another page is shown meanwhile).</summary>
     internal void FinishDpiChange()
     {
         _dpiSettle.Stop();
         if (!_dpiLayoutPending || IsDisposed) return;
+        _dpiHold?.Dispose();
+        _dpiHold = null;
         using (LayoutPanel.BatchLayout(this)) { } // OnLayout, which repaints
         if (_dpiLayoutPending) _dpiSettle.Start(); // the window's layout was held (a batch in progress): again later
+        else if (Visible) StartPreparing(); // the hidden pages again, at this DPI
     }
 
     protected override void WndProc(ref Message m)
     {
-        const int WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232;
+        const int WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232, WM_GETDPISCALEDSIZE = 0x02E4;
         if (m.Msg == WM_ENTERSIZEMOVE) _sizeMove = true;
+        if (m.Msg == WM_GETDPISCALEDSIZE) BeginDpiChange();
         base.WndProc(ref m);
         if (m.Msg == WM_EXITSIZEMOVE)
         {
