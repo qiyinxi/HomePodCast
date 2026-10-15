@@ -21,7 +21,10 @@ internal sealed class GroupPage : ScrollPage
             _signature = null;
         };
     }
-    public override void PageShown()
+    public override void PageShown() => Prepare();
+
+    /// <summary>The editor for the speakers and the layout now (built again when they changed).</summary>
+    public override void Prepare()
     {
         string signature = _app.Config.DeviceId + "|" + GroupForm.PlayLayout(_app.Config) + "|" +
             string.Join(";", _app.LastScan.Select(d => d.DeviceId + d.Address));
