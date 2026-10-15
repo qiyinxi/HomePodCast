@@ -12,6 +12,7 @@ internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelM
 {
     private readonly float[] _pcm = new float[RtpSender.FramesPerPacket * 2];
     private long _packetFrame;
+    private long? _nextFrame;
     private int _quietFrames;
     public TimelineBuffer Timeline { get; } = new(RtpSender.SampleRate, RtpSender.SampleRate * 5, MediaClock.Now);
 
@@ -33,8 +34,11 @@ internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelM
                 else _quietFrames++;
             }
         }
-        Timeline.Write(sourceTicks, _pcm);
-        _packetFrame = Timeline.FrameAt(sourceTicks);
+        // Anchor once. Truncating each QPC deadline and then rounding it to a frame can otherwise produce
+        // a 351-frame step for a 352-frame packet, overlapping the previous write (2026-10-15).
+        _packetFrame = _nextFrame ?? Timeline.FrameAt(sourceTicks);
+        Timeline.WriteFrames(_packetFrame, _pcm);
+        _nextFrame = checked(_packetFrame + RtpSender.FramesPerPacket);
         return complete;
     }
 
@@ -49,7 +53,11 @@ internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelM
             stereo[i * 2] = stereo[i * 2 + 1] = stereo[i * 2 + channel];
     }
 
-    // The sender already discards the FIFO to its target on a stall. Its next absolute deadline leaves a gap here.
-    public void SkipPackets(int packets) { }
+    // The sender already discards the FIFO on a stall; leave the same whole-packet gap in the shared history.
+    public void SkipPackets(int packets)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(packets);
+        if (_nextFrame is { } frame) _nextFrame = checked(frame + packets * (long)RtpSender.FramesPerPacket);
+    }
     public void Dispose() { }
 }
