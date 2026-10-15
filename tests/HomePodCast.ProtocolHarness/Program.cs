@@ -12,6 +12,12 @@ if (args is ["--self-test"])
 
 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true")
     throw new InvalidOperationException("Receiver integration tests only run in GitHub Actions");
+if (args is ["--dlna", var dlnaName, var localAddress, var rendererAddress, var dlnaFormat, var dlnaFraming, var dlnaPcm])
+{
+    await HomePodCast.ProtocolHarness.DlnaCompatibility.Run(dlnaName, localAddress, rendererAddress,
+        dlnaFormat, dlnaFraming, dlnaPcm);
+    return;
+}
 if (args is ["--aac-fixture", var directory])
 {
     HomePodCast.ProtocolHarness.AirPlay2Compatibility.Fixture(directory);

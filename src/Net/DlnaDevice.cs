@@ -31,8 +31,9 @@ internal sealed record DlnaDevice(string Udn, string Name, IPAddress Address, Ur
         string urlBase = Value(root, "URLBase");
         if (urlBase.Length > 0)
         {
-            if (!Uri.TryCreate(urlBase, UriKind.Absolute, out baseUri)) throw new FormatException("Invalid URLBase.");
-            DlnaHttp.RequirePeerHttp(baseUri, peerAddress);
+            if (!Uri.TryCreate(urlBase, UriKind.Absolute, out var parsedBase)) throw new FormatException("Invalid URLBase.");
+            DlnaHttp.RequirePeerHttp(parsedBase, peerAddress);
+            baseUri = parsedBase;
         }
         var serviceList = renderer.Elements().FirstOrDefault(e => e.Name.LocalName == "serviceList");
         var services = new List<DlnaService>();
@@ -57,8 +58,14 @@ internal sealed record DlnaDevice(string Udn, string Name, IPAddress Address, Ur
             Find("RenderingControl"), Optional(renderer, "manufacturer"), Optional(renderer, "modelName"));
     }
 
-    internal static bool HasVersion(string value, string prefix) => value.StartsWith(prefix, StringComparison.Ordinal)
-        && int.TryParse(value.AsSpan(prefix.Length), out int version) && version >= 1;
+    internal static bool HasVersion(string value, string prefix)
+    {
+        if (!value.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var suffix = value.AsSpan(prefix.Length);
+        if (suffix.IsEmpty) return false;
+        foreach (char digit in suffix) if (digit is < '0' or > '9') return false;
+        return int.TryParse(suffix, out int version) && version >= 1;
+    }
 
     internal static string Value(XElement element, string name) =>
         element.Elements().FirstOrDefault(e => e.Name.LocalName == name)?.Value.Trim() ?? "";

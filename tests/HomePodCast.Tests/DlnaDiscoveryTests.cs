@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using HomePodCast.Net;
 
@@ -70,6 +71,122 @@ public class DlnaDiscoveryTests
         Assert.Throws<FormatException>(() => Parse("<root>"));
         Assert.Throws<FormatException>(() => Parse(new string(' ', DlnaXml.MaxBytes + 1)));
     }
+
+    [Fact]
+    public async Task Browse_fetches_descriptions_on_explicit_loopback_and_deduplicates_UDN()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var endpoint = (IPEndPoint)responder.Client.LocalEndPoint!;
+        var reply = Task.Run(async () =>
+        {
+            var search = await responder.ReceiveAsync(guard.Token);
+            string request = Encoding.ASCII.GetString(search.Buffer);
+            Assert.Contains("M-SEARCH * HTTP/1.1", request);
+            Assert.Contains("ST: urn:schemas-upnp-org:device:MediaRenderer:1", request);
+            Assert.Contains("MAN: \"ssdp:discover\"", request);
+            byte[] advertisement = Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri));
+            await responder.SendAsync(advertisement, search.RemoteEndPoint, guard.Token);
+            await responder.SendAsync(advertisement, search.RemoteEndPoint, guard.Token);
+        });
+        var devices = await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback, endpoint);
+        await reply;
+        Assert.Equal("uuid:fake-renderer", Assert.Single(devices).Udn);
+        Assert.All(renderer.Requests, r => Assert.Equal("GET", r.Method));
+    }
+
+    [Fact]
+    public async Task Browse_rejects_cross_peer_locations_and_invalid_descriptions()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        renderer.DescriptionOverride = "<!DOCTYPE root [<!ENTITY x SYSTEM 'file:///test'>]><root>&x;</root>";
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var reply = Task.Run(async () =>
+        {
+            var search = await responder.ReceiveAsync(guard.Token);
+            await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(new Uri("http://192.0.2.1/description.xml"))),
+                search.RemoteEndPoint, guard.Token);
+            await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri)), search.RemoteEndPoint, guard.Token);
+        });
+        Assert.Empty(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!));
+        await reply;
+        Assert.Single(renderer.Requests);
+    }
+
+    [Fact]
+    public async Task Browse_cancellation_interrupts_receiving_without_a_real_interface()
+    {
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var cancel = new CancellationTokenSource();
+        var pending = DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(30), cancel.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!);
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await responder.ReceiveAsync(guard.Token);
+        cancel.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+    }
+
+    [Theory]
+    [InlineData("LOCATION: http://192.0.2.1/description.xml")]
+    [InlineData("LOCATION: http://user:pass@127.0.0.1/description.xml")]
+    [InlineData("CACHE-CONTROL: max-age=-1")]
+    [InlineData("CACHE-CONTROL: max-age=bad")]
+    [InlineData("ST: urn:schemas-upnp-org:device:MediaServer:1")]
+    [InlineData("USN: fake-renderer")]
+    public void Advertisement_rejects_unsafe_or_malformed_fields(string replacement)
+    {
+        string name = replacement[..replacement.IndexOf(':')];
+        var lines = Advertisement(new Uri("http://127.0.0.1/description.xml")).Split("\r\n");
+        string text = string.Join("\r\n", lines.Select(l => l.StartsWith(name + ":") ? replacement : l));
+        Assert.False(DlnaDiscovery.TryParseAdvertisement(Encoding.ASCII.GetBytes(text), IPAddress.Loopback, out _));
+    }
+
+    [Fact]
+    public void Advertisement_and_cache_handle_duplicates_TTL_and_byebye()
+    {
+        var device = Parse(Description());
+        var cache = new DlnaDiscovery.Cache();
+        var now = DateTimeOffset.UtcNow;
+        long revision = cache.ObserveAlive(device.Udn, device.Address);
+        cache.Add(device, now.AddSeconds(10), revision);
+        cache.Add(device with { Name = "Updated name" }, now.AddSeconds(20), revision);
+        Assert.Equal("Updated name", Assert.Single(cache.Devices(now)).Name);
+        Assert.Empty(cache.Devices(now.AddSeconds(21)));
+        string bye = "NOTIFY * HTTP/1.1\r\nNT: urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
+            + "NTS: ssdp:byebye\r\nUSN: uuid:fake-renderer::urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n";
+        Assert.True(DlnaDiscovery.TryParseAdvertisement(Encoding.ASCII.GetBytes(bye), IPAddress.Loopback, out var advertisement));
+        Assert.True(advertisement.ByeBye);
+        cache.Remove(advertisement.Udn, advertisement.Address);
+        Assert.Empty(cache.Devices(now));
+        cache.Add(device, now.AddSeconds(30), revision);
+        Assert.Empty(cache.Devices(now));
+        revision = cache.ObserveAlive(device.Udn, device.Address);
+        cache.Add(device, now.AddSeconds(30), revision);
+        Assert.Single(cache.Devices(now));
+    }
+
+    [Theory]
+    [InlineData("urn:schemas-upnp-org:service:AVTransport:+1")]
+    [InlineData("urn:schemas-upnp-org:service:AVTransport:1\r\n")]
+    [InlineData("urn:schemas-upnp-org:service:AVTransport:0")]
+    public void Service_version_is_digits_only(string type) =>
+        Assert.False(DlnaDevice.HasVersion(type, "urn:schemas-upnp-org:service:AVTransport:"));
+
+    [Fact]
+    public void Advertisement_rejects_duplicate_headers_and_oversized_payloads()
+    {
+        string text = Advertisement(new Uri("http://127.0.0.1/description.xml"))
+            .Replace("\r\n\r\n", "\r\nLOCATION: http://127.0.0.1/other\r\n\r\n");
+        Assert.False(DlnaDiscovery.TryParseAdvertisement(Encoding.ASCII.GetBytes(text), IPAddress.Loopback, out _));
+        Assert.False(DlnaDiscovery.TryParseAdvertisement(new byte[16 * 1024 + 1], IPAddress.Loopback, out _));
+    }
+
+    internal static string Advertisement(Uri location) => "HTTP/1.1 200 OK\r\n"
+        + "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\nUSN: uuid:fake-renderer::urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
+        + $"LOCATION: {location}\r\nCACHE-CONTROL: max-age=1800\r\n\r\n";
 
     private static DlnaDevice Parse(string xml) => DlnaDevice.ParseDescription(Encoding.UTF8.GetBytes(xml),
         IPAddress.Loopback, new Uri("http://127.0.0.1:12345/device/description.xml"));
