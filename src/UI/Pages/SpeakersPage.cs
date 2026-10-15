@@ -38,7 +38,20 @@ internal sealed class SpeakersPage : ScrollPage
 
     public void RefreshDevices()
     {
-        if (!_shown) return;
+        if (_shown) ShowDevices();
+    }
+
+    /// <summary>The list and what is known of the inspected speaker, before the first visit (no read: PageShown reads).</summary>
+    public override void Prepare()
+    {
+        using var layout = LayoutPanel.BatchLayout(this);
+        ShowDevices();
+        _speakerInfo.Prepare();
+    }
+
+    /// <summary>The device list and the inspected device's panels, built again when the devices or their state changed.</summary>
+    private void ShowDevices()
+    {
         var devices = _app.SelectedSpeakers().Concat(ManualAirPlayDevice.Include(_app.LastScan, _app.Config.ManualDevices).Select(d => new SelectedSpeaker(d.DeviceId, d.Name, d.Address, d.Txt, d.Port)
             { Model = d.Model, HasAirPlay = d.HasAirPlay, RaopPort = d.RaopPort }))
             .GroupBy(d => GroupPlan.Key(d.DeviceId)).Select(g => g.First()).ToList();

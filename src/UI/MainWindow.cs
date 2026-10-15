@@ -25,8 +25,14 @@ internal sealed class MainWindow : Form, ISurface
     private readonly CinemaPage _cinema;
     private readonly ScrollPage[] _pages;
     private readonly ThemeTransition _transition = new();
+    private readonly System.Windows.Forms.Timer _dpiSettle = new() { Interval = DpiSettleMs };
+    private readonly System.Windows.Forms.Timer _prepare = new() { Interval = PrepareStartMs };
     private int _current;
     private ScrollPage? _shown;
+    private bool _sizeMove, _dpiLayoutPending;
+    private int _prepareNext;
+    private long _lastInput;
+    private bool _watchingInput;
 
     public MainWindow(TrayApp app)
     {
@@ -90,6 +96,8 @@ internal sealed class MainWindow : Form, ISurface
         SetInitialSize();
         SelectPage(AppPage.Home);
         Theme.Changed += OnThemeChanged;
+        _dpiSettle.Tick += (_, _) => { if (!_sizeMove) FinishDpiChange(); }; // in a drag: when it ends (WndProc)
+        _prepare.Tick += (_, _) => PrepareSome();
         ResumeLayout(false);
     }
 
@@ -130,10 +138,178 @@ internal sealed class MainWindow : Form, ISurface
     private void UpdateShownPage()
     {
         var want = Visible && WindowState != FormWindowState.Minimized ? _pages[_current] : null;
+        if (want != null) StartPreparing();
         if (want == _shown) return;
         _shown?.PageHidden();
         _shown = want;
         _shown?.PageShown();
+    }
+
+    // ---------------------------------------------------------------- pages built ahead of their first visit
+
+    /// <summary>First step this long after the window is shown; then one step each <see cref="PrepareStepMs"/> at most.</summary>
+    internal const int PrepareStartMs = 400, PrepareStepMs = 30;
+
+    /// <summary>Work per step, in ms: a window takes about 1.4 ms to create on the maintainer's PC.</summary>
+    private const int PrepareBudgetMs = 8;
+
+    /// <summary>The user used the window this recently (ms): no step yet.</summary>
+    private const int PrepareQuietMs = 400;
+
+    /// <summary>Every page has been built and laid out ahead, or visited.</summary>
+    internal bool PagesPrepared => _prepareNext >= _pages.Length;
+
+    /// <summary>Tests: false leaves the pages to their first visit, as before (counting the work of a page never shown).</summary>
+    internal bool PrepareAhead { get; set; } = true;
+
+    /// <summary>
+    /// A page shown for the first time created all its windows (about 1.4 ms each on the maintainer's PC: 100 for 混音器 or
+    /// 麦克风与音效) and laid itself out, 100–250 ms before it appeared (1.1.0-beta.7). Once the window is shown (never while
+    /// only the tray icon is), the other pages are built ahead instead, one after the other, a few milliseconds at a time
+    /// while the window is idle: a timer (its messages come only when no input or other message waits), and nothing while the
+    /// user clicks, types, moves the mouse over the window or drags it. Hidden meanwhile, it stops until shown again.
+    /// </summary>
+    private void StartPreparing()
+    {
+        if (!PrepareAhead || PagesPrepared || _prepare.Enabled || IsDisposed) return;
+        _prepare.Interval = PrepareStartMs;
+        _prepare.Start();
+        if (!_watchingInput)
+        {
+            Application.AddMessageFilter(_inputWatch ??= new InputWatch(this));
+            _watchingInput = true;
+        }
+    }
+
+    private void StopPreparing()
+    {
+        _prepare.Stop();
+        if (_watchingInput)
+        {
+            Application.RemoveMessageFilter(_inputWatch!);
+            _watchingInput = false;
+        }
+    }
+
+    private InputWatch? _inputWatch;
+
+    /// <summary>When this thread last got keyboard or mouse input (any of its windows).</summary>
+    private sealed class InputWatch(MainWindow owner) : IMessageFilter
+    {
+        public bool PreFilterMessage(ref Message m)
+        {
+            // WM_KEYFIRST…WM_KEYLAST, WM_NCMOUSEMOVE…WM_NCXBUTTONDBLCLK, WM_MOUSEFIRST…WM_MOUSELAST
+            if (m.Msg is >= 0x0100 and <= 0x0109 or >= 0x00A0 and <= 0x00AD or >= 0x0200 and <= 0x020E)
+                owner._lastInput = Environment.TickCount64;
+            return false;
+        }
+    }
+
+    private bool UserBusy() =>
+        _sizeMove || _dpiLayoutPending || _transition.Running || MouseButtons != MouseButtons.None || InputWaiting() ||
+        Environment.TickCount64 - _lastInput < PrepareQuietMs;
+
+    private static bool InputWaiting() => (GetQueueStatus(0x0407) >> 16) != 0; // QS_KEY | QS_MOUSE | QS_RAWINPUT
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetQueueStatus(uint flags);
+
+    /// <summary>One step of <see cref="StartPreparing"/>.</summary>
+    private void PrepareSome()
+    {
+        if (_prepare.Interval != PrepareStepMs) _prepare.Interval = PrepareStepMs;
+        if (!Visible || WindowState == FormWindowState.Minimized)
+        {
+            StopPreparing(); // UpdateShownPage starts it again
+            return;
+        }
+        if (UserBusy()) return;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        bool Yield() => watch.ElapsedMilliseconds >= PrepareBudgetMs || InputWaiting();
+        try
+        {
+            for (; _prepareNext < _pages.Length; _prepareNext++)
+            {
+                var page = _pages[_prepareNext];
+                // The shown page, and one shown before (Created: its first visit did this), need nothing.
+                if (_prepareNext == _current || page.Created || page.IsDisposed) continue;
+                if (!Prepare(page, Yield)) return;
+                if (Yield())
+                {
+                    _prepareNext++;
+                    return;
+                }
+            }
+            StopPreparing();
+        }
+        finally
+        {
+            PrepareSteps++;
+            LongestPrepareStepMs = Math.Max(LongestPrepareStepMs, watch.ElapsedMilliseconds);
+        }
+    }
+
+    /// <summary>Tests: steps taken by <see cref="StartPreparing"/>, and the longest one.</summary>
+    internal int PrepareSteps { get; private set; }
+    internal long LongestPrepareStepMs { get; private set; }
+
+    /// <summary>
+    /// Build the hidden <paramref name="page"/> as its first visit would (what it builds when shown, its windows) and lay it
+    /// out where it will show, at this DPI; false when <paramref name="yield"/> stopped it (the next call goes on).
+    /// </summary>
+    private bool Prepare(ScrollPage page, Func<bool> yield)
+    {
+        // WinForms lays a parent out when a child's bounds change or a child window is created. Nothing here changes the rail
+        // or the shown page, and the page is laid out below: those layouts are dropped (2026-10-15: 首页 25 times otherwise).
+        SuspendLayout();
+        try
+        {
+            var area = PageArea();
+            if (!page.IsHandleCreated)
+            {
+                // Not yet a window, and its controls (no windows either) already at this window's DPI: laid out first, so that
+                // their windows are created where they belong. Moving windows is most of a layout's time on the maintainer's PC.
+                bool layoutFirst = page.DeviceDpi == DeviceDpi;
+                using (layoutFirst ? LayoutPanel.BatchLayout(page) : LayoutPanel.SuspendLayouts(page))
+                {
+                    page.Prepare();
+                    page.ApplyFont();
+                    if (layoutFirst) page.Bounds = area;
+                }
+                using (LayoutPanel.SuspendLayouts(page)) _ = page.Handle; // the next step goes on with the windows in it
+                if (yield()) return false;
+            }
+            using (LayoutPanel.SuspendLayouts(page))
+            {
+                if (!LayoutPanel.CreateWindows(page, yield)) return false;
+            }
+            page.ApplyFont();
+            // Windows created first (their DPI is known once they exist), or the window changed size or DPI meanwhile.
+            if (page.Bounds != area || page.LayoutDpi != DeviceDpi) LayoutPanel.Place(page, area.X, area.Y, area.Width, area.Height);
+            return true;
+        }
+        finally
+        {
+            ResumeLayout(false);
+        }
+    }
+
+    /// <summary>Where the pages go: right of the navigation rail.</summary>
+    private Rectangle PageArea()
+    {
+        var client = ClientSize;
+        int rail = _rail.WidthForWindow(client.Width);
+        return new Rectangle(rail, 0, Math.Max(0, client.Width - rail), client.Height);
+    }
+
+    /// <summary>
+    /// Shown, its windows created and laid out once: each window created asked its container for a layout (2026-10-15, the
+    /// window shown from the tray for the first time: 163 layouts, rows of 首页 9 times each).
+    /// </summary>
+    protected override void SetVisibleCore(bool value)
+    {
+        if (!value || _pages is null || Visible) base.SetVisibleCore(value);
+        else using (LayoutPanel.BatchLayout(this)) base.SetVisibleCore(value);
     }
 
     protected override void OnVisibleChanged(EventArgs e)
@@ -153,11 +329,12 @@ internal sealed class MainWindow : Form, ISurface
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (_pages is null) return; // Form setters lay out before the constructor is done
-        var client = ClientSize;
-        int rail = _rail.WidthForWindow(client.Width);
-        LayoutPanel.Place(_rail, 0, 0, rail, client.Height);
-        var page = _pages[_current];
-        LayoutPanel.Place(page, rail, 0, Math.Max(0, client.Width - rail), client.Height);
+        bool dpiChanged = _dpiLayoutPending;
+        _dpiLayoutPending = false;
+        var area = PageArea();
+        LayoutPanel.Place(_rail, 0, 0, area.X, area.Height);
+        LayoutPanel.Place(_pages[_current], area.X, area.Y, area.Width, area.Height);
+        if (dpiChanged) Invalidate(true);
     }
 
     // ---------------------------------------------------------------- theme, DPI, closing
@@ -187,13 +364,51 @@ internal sealed class MainWindow : Form, ISurface
         Invalidate(true);
     }
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
+    /// <summary>
+    /// A move to a monitor with another scale: the new font and sizes now (the rail and the shown page; hidden pages when they
+    /// are shown, ScrollPage.OnParentFontChanged), the layout once the window has settled at its DPI, when the drag ends or
+    /// <see cref="DpiSettleMs"/> after the last change otherwise. A drag back and forth over the edge between the monitors
+    /// changes the DPI each time: laid out each time, it stopped following the mouse for every one (1.1.0-beta.7).
+    /// </summary>
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         _transition.Stop();
-        base.OnDpiChanged(e);
-        Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-        MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
-    });
+        using (LayoutPanel.SuspendLayouts(this))
+        {
+            base.OnDpiChanged(e);
+            Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
+            MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
+        }
+        _dpiLayoutPending = true;
+        _dpiSettle.Stop();
+        _dpiSettle.Start();
+    }
+
+    /// <summary>Quiet time after a DPI change before the window is laid out at it (outside a drag).</summary>
+    internal const int DpiSettleMs = 150;
+
+    /// <summary>A DPI change waits for its layout (<see cref="OnDpiChanged"/>).</summary>
+    internal bool DpiLayoutPending => _dpiLayoutPending;
+
+    /// <summary>The layout a DPI change left for later, now (also by any other layout of the window meanwhile).</summary>
+    internal void FinishDpiChange()
+    {
+        _dpiSettle.Stop();
+        if (!_dpiLayoutPending || IsDisposed) return;
+        using (LayoutPanel.BatchLayout(this)) { } // OnLayout, which repaints
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        const int WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232;
+        if (m.Msg == WM_ENTERSIZEMOVE) _sizeMove = true;
+        base.WndProc(ref m);
+        if (m.Msg == WM_EXITSIZEMOVE)
+        {
+            _sizeMove = false;
+            FinishDpiChange();
+        }
+    }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
@@ -213,7 +428,14 @@ internal sealed class MainWindow : Form, ISurface
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { Theme.Changed -= OnThemeChanged; _transition.Dispose(); }
+        if (disposing)
+        {
+            Theme.Changed -= OnThemeChanged;
+            _transition.Dispose();
+            StopPreparing();
+            _prepare.Dispose();
+            _dpiSettle.Dispose();
+        }
         base.Dispose(disposing);
     }
 
