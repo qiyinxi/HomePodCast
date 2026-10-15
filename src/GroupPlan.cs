@@ -36,16 +36,19 @@ public sealed record GroupPlan(
     public bool SharedGroupUuid { get; init; } = true;
 
     public IReadOnlyDictionary<string, GroupSpeakerSettings> SpeakerSettings { get; init; } = new Dictionary<string, GroupSpeakerSettings>();
+    private bool UseSpeakerPositions { get; init; } = true;
 
     public static GroupPlan? FromConfig(AppConfig cfg)
     {
         if (cfg.DeviceId is not { } id) return null;
         var offsets = new Dictionary<string, int>(cfg.GroupVolumeOffsets ?? new());
-        var settings = (cfg.GroupSpeakers ?? []).ToDictionary(s => Key(s.DeviceId));
+        var settings = GroupSettings.Copy(cfg.GroupSpeakers ?? []).ToDictionary(s => Key(s.DeviceId));
+        foreach (var (key, row) in settings) row.Position = cfg.GroupCapturePositions?.GetValueOrDefault(key) ?? SpeakerPosition.Stereo;
         foreach (var (key, row) in settings) offsets[key] = row.VolumeOffset;
         if (StereoPairs.TryGetTsid(id, out var tsid))
             return new GroupPlan(GroupKind.StereoPair, cfg.DeviceName ?? tsid, tsid, [],
-                cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { PairLeaderOnly = cfg.GroupPairLeaderOnly, SpeakerSettings = settings };
+                cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { PairLeaderOnly = cfg.GroupPairLeaderOnly, SpeakerSettings = settings,
+                    UseSpeakerPositions = cfg.GroupCapturePositions != null || !cfg.GroupSplitChannels };
         var rows = cfg.GroupCaptureDeviceIds?.Select(deviceId => settings.GetValueOrDefault(Key(deviceId)))
             .Where(s => s != null).Cast<GroupSpeakerSettings>().DistinctBy(s => Key(s.DeviceId)).ToArray();
         if (rows is { Length: > 1 } && rows.Any(s => Key(s.DeviceId) == Key(id)))
@@ -56,7 +59,8 @@ public sealed record GroupPlan(
         if (cfg.MultiRoomDeviceId is { } extra && !StereoPairs.IsPairId(extra) && Key(extra) != Key(id))
             return new GroupPlan(GroupKind.MultiRoom, $"{cfg.DeviceName ?? id} + {cfg.MultiRoomDeviceName ?? extra}", null,
                 [new GroupMemberRef(id, cfg.DeviceName ?? id, cfg.Host), new GroupMemberRef(extra, cfg.MultiRoomDeviceName ?? extra, cfg.MultiRoomHost)],
-                cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { SpeakerSettings = settings };
+                cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { SpeakerSettings = settings,
+                    UseSpeakerPositions = cfg.GroupCapturePositions != null || !cfg.GroupSplitChannels };
         return null;
     }
 
@@ -68,12 +72,12 @@ public sealed record GroupPlan(
     /// the second right, unless swapped. The leader alone always gets full stereo.
     /// </summary>
     public ChannelMode ChannelsFor(int index) =>
-        index < Members.Count && SpeakerSettings.ContainsKey(Key(Members[index].DeviceId)) ? ChannelsFor(index, Members[index].DeviceId)
+        UseSpeakerPositions && index < Members.Count && SpeakerSettings.ContainsKey(Key(Members[index].DeviceId)) ? ChannelsFor(index, Members[index].DeviceId)
         : !SplitChannels || LeaderOnly || index > 1 ? ChannelMode.Stereo
         : (index == 0) != SwapChannels ? ChannelMode.LeftOnly : ChannelMode.RightOnly;
 
     public ChannelMode ChannelsFor(int index, string deviceId) => LeaderOnly ? ChannelMode.Stereo
-        : SpeakerSettings.TryGetValue(Key(deviceId), out var row) ? row.Position switch
+        : UseSpeakerPositions && SpeakerSettings.TryGetValue(Key(deviceId), out var row) ? row.Position switch
         {
             SpeakerPosition.Left => ChannelMode.LeftOnly, SpeakerPosition.Right => ChannelMode.RightOnly, _ => ChannelMode.Stereo,
         } : !SplitChannels || index > 1 ? ChannelMode.Stereo
