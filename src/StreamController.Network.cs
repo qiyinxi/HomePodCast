@@ -37,9 +37,9 @@ public sealed partial class StreamController
 
     /// <summary>
     /// A new connection streams: start over, and feed its ping spikes (<paramref name="net"/>, started only after this
-    /// call so that none is missed; null in tests) and its
-    /// sender's resend requests and misses into <see cref="Health"/> until disposed. <paramref name="pcNetwork"/> (null in
-    /// tests) looks up <see cref="PcNetwork"/>, on the thread pool: it does COM work.
+    /// call so that none is missed; null in tests) and its sender's resend requests and misses into <see cref="Health"/>
+    /// until disposed. <paramref name="pcNetwork"/> (null in tests) looks up <see cref="PcNetwork"/>, on the thread
+    /// pool: it does COM work.
     /// </summary>
     internal IDisposable FeedHealth(NetworkWatch? net, Func<RtpSender?> sender, Func<NetworkProfile>? pcNetwork = null)
     {
