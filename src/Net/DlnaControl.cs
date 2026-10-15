@@ -129,7 +129,10 @@ internal sealed class DlnaControl : IDisposable
         request.Headers.TryAddWithoutValidation("SOAPAction", $"\"{service.ServiceType}#{action}\"");
         request.Content = new ByteArrayContent(body);
         request.Content.Headers.ContentType = new("text/xml") { CharSet = "utf-8" };
+        // Diagnostics identify the action, never the random stream URL, DIDL contents or renderer response body.
+        Log.Debug($"dlna {Log.Name(_device.Name)} SOAP {action}");
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+        Log.Debug($"dlna {Log.Name(_device.Name)} {action} HTTP {(int)response.StatusCode}");
         byte[] bytes = await DlnaHttp.ReadBoundedAsync(response.Content, timeout.Token).ConfigureAwait(false);
         if (bytes.Length == 0 && !response.IsSuccessStatusCode)
             throw new DlnaActionException(action, service.ServiceType, null, $"HTTP {(int)response.StatusCode}.", response.StatusCode);
@@ -142,6 +145,7 @@ internal sealed class DlnaControl : IDisposable
             var error = fault.Descendants().FirstOrDefault(e => e.Name.LocalName == "UPnPError");
             int? code = int.TryParse(error is null ? "" : DlnaDevice.Value(error, "errorCode"),
                 NumberStyles.None, CultureInfo.InvariantCulture, out int number) ? number : null;
+            Log.Debug($"dlna {Log.Name(_device.Name)} {action} UPnP error {code}");
             string description = error is null ? DlnaDevice.Value(fault, "faultstring") : DlnaDevice.Value(error, "errorDescription");
             throw new DlnaActionException(action, service.ServiceType, code, description, response.StatusCode);
         }
