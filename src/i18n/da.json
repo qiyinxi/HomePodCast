@@ -625,5 +625,7 @@
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Streaming i realtid til én højttaler bruger den eksisterende tilstand med lav latenstid. Placering, ekstra forsinkelse og lydstyrkejustering gælder kun for grupper med flere udgange.",
   "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Denne kilde har ingen kanal til denne placering, så højttaleren forbliver lydløs. Skift tilbage til en flerkanalsfil for at gendanne placeringen.",
   "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Gruppeafspilning af lokale filer understøtter endnu ikke forbindelser til parrede Apple TV-enheder. Brug en HomePod.",
-  "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "Hvis en højttaler stadig bruges af gruppen til streaming i realtid, skal du vælge Computerlyd i realtid, fjerne højttaleren og anvende indstillingerne."
+  "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "Hvis en højttaler stadig bruges af gruppen til streaming i realtid, skal du vælge Computerlyd i realtid, fjerne højttaleren og anvende indstillingerne.",
+  "未发现「{0}」，无法确认它是否支持已保存的离散位置。": "“{0}” blev ikke fundet, så det kan ikke bekræftes, om den gemte placering for en separat kanal understøttes.",
+  "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "“{0}” er i øjeblikket ikke en enkeltstående HomePod og kan ikke bruge den gemte placering for en separat kanal."
 }

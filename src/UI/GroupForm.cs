@@ -128,6 +128,14 @@ internal sealed class GroupPanel : StackPanel
     private bool DiscreteAllowed(GroupSpeakerSettings speaker) => _found.Any(d =>
         GroupPlan.Key(d.DeviceId) == GroupPlan.Key(speaker.DeviceId) && d.Kind == ReceiverKind.HomePod && StereoPairs.Tsid(d) == null);
 
+    private string? DiscreteBlockReason(GroupSpeakerSettings speaker)
+    {
+        if (!_fileSource || !_multichannel || speaker.Position == SpeakerPosition.Stereo || DiscreteAllowed(speaker)) return null;
+        return _found.All(d => GroupPlan.Key(d.DeviceId) != GroupPlan.Key(speaker.DeviceId))
+            ? L.F("未发现「{0}」，无法确认它是否支持已保存的离散位置。", speaker.Name)
+            : L.F("「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。", speaker.Name);
+    }
+
     private string? ReceiverBlockReason(GroupSpeakerSettings speaker)
     {
         if (!_fileSource && _speakers.Count <= 1) return null; // single-receiver playback keeps its existing protocol path
@@ -161,7 +169,7 @@ internal sealed class GroupPanel : StackPanel
                 if (count != 2 && !_leaderOnly.Checked)
                     return L.F("没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。", count);
             }
-            return _speakers.Select(ReceiverBlockReason).FirstOrDefault(reason => reason != null);
+            return _speakers.Select(s => DiscreteBlockReason(s) ?? ReceiverBlockReason(s)).FirstOrDefault(reason => reason != null);
         }
     }
 
@@ -185,8 +193,8 @@ internal sealed class GroupPanel : StackPanel
         {
             var device = _found.FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(speaker.DeviceId));
             if (device != null) { speaker.Name = device.Name; speaker.Host = device.Address.ToString(); }
-            bool retainedPosition = _fileSource && !_multichannel && !GroupSettings.IsStereoPosition(speaker.Position);
-            bool silent = retainedPosition && _fileMask != 0 && !(speaker.Position == SpeakerPosition.Center && (_fileMask & CinemaChannels.FC) != 0);
+            bool retainedPosition = _fileSource && (DiscreteBlockReason(speaker) != null || !_multichannel && !GroupSettings.IsStereoPosition(speaker.Position));
+            bool silent = retainedPosition && !_multichannel && _fileMask != 0 && !(speaker.Position == SpeakerPosition.Center && (_fileMask & CinemaChannels.FC) != 0);
             var positions = retainedPosition ? new[] { speaker.Position } : _multichannel && DiscreteAllowed(speaker) ? Enum.GetValues<SpeakerPosition>()
                 : _multichannel ? [SpeakerPosition.Stereo] : new[] { SpeakerPosition.Stereo, SpeakerPosition.Left, SpeakerPosition.Right };
             var position = new FluentComboBox { AccessibleName = L.F("{0} 位置", speaker.Name), MinWidth = 120 };
@@ -224,7 +232,7 @@ internal sealed class GroupPanel : StackPanel
             fields.Wrap = true;
             var entry = Ui.Stack(4, title, fields);
             if (silent) entry.Controls.Add(Ui.Note(L.T("此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。")));
-            if (ReceiverBlockReason(speaker) is { } blocked) entry.Controls.Add(Ui.Note(blocked));
+            if ((DiscreteBlockReason(speaker) ?? ReceiverBlockReason(speaker)) is { } blocked) entry.Controls.Add(Ui.Note(blocked));
             if (_multichannel && !DiscreteAllowed(speaker)) entry.Controls.Add(Ui.Note(L.T("此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。")));
             _members.Controls.Add(entry);
             _rows.Add(new(speaker, position, positions, delay, volume, retainedPosition, silent));

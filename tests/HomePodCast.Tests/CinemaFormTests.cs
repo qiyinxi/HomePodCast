@@ -14,6 +14,47 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaFormTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_saved_surround_position_is_preserved_and_blocked_until_its_receiver_is_independent_again(bool joinsPair) => OnSta(() =>
+    {
+        string surround = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        string stereo = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:04", Name = "后环绕", Position = SpeakerPosition.RearLeft });
+            var rear = host.Found.Single(d => d.DeviceId == "AA:00:00:00:00:04");
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            FluentComboBox Rear() => All<FluentComboBox>(page).Single(c => c.AccessibleName == "后环绕 位置");
+            Pump(page.UseFile(surround));
+            Assert.True(Rear().Enabled); Assert.Equal("后左", Rear().SelectedText);
+            host.Found.Remove(rear);
+            if (joinsPair) host.Found.Add(rear with { Txt = new Dictionary<string, string> { ["tsid"] = "saved-speaker-pair" } });
+            page.RefreshSpeakers(); page.RefreshStatus();
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "应用").Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text.Contains(joinsPair ? "当前不是独立的 HomePod" : "无法确认它是否支持已保存的离散位置"));
+            Pump(page.PlayAsync());
+            Assert.Empty(host.Started);
+            Assert.Equal(SpeakerPosition.RearLeft, host.Config.GroupSpeakers![2].Position);
+            Assert.Empty(host.Config.Cinema.Speakers);
+            Pump(page.UseFile(stereo));
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.True(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled); // the retained stereo-file role stays silent
+            host.Found.RemoveAll(d => d.DeviceId == rear.DeviceId); host.Found.Add(rear);
+            page.RefreshSpeakers();
+            Pump(page.UseFile(surround));
+            Assert.True(Rear().Enabled); Assert.Equal("后左", Rear().SelectedText);
+            Pump(page.PlayAsync());
+            Assert.Equal(CinemaRole.RearLeft, Assert.Single(host.Started).Speakers[2].Role);
+            Assert.Equal(CinemaRole.RearLeft, host.Config.Cinema.Speakers[2].Role);
+        }
+        finally { File.Delete(surround); File.Delete(stereo); }
+    });
+
     [Fact]
     public void Local_file_groups_explain_and_block_the_unsupported_apple_tv_pairing_path() => OnSta(() =>
     {
@@ -159,7 +200,8 @@ public class CinemaFormTests
             MultiRoomDeviceId = "AA:00:00:00:00:02", MultiRoomDeviceName = "书房", GroupSpeakers = [
                 new() { DeviceId = "AA:00:00:00:00:01", Name = "客厅", Position = SpeakerPosition.Left },
                 new() { DeviceId = "AA:00:00:00:00:02", Name = "书房", Position = SpeakerPosition.Right } ] };
-        public IReadOnlyList<AirPlayDevice> Speakers { get; } =
+        public IReadOnlyList<AirPlayDevice> Speakers => Found;
+        public List<AirPlayDevice> Found { get; } =
         [
             new("客厅", "AA:00:00:00:00:01", IPAddress.Parse("192.168.50.11"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
             new("书房", "AA:00:00:00:00:02", IPAddress.Parse("192.168.50.12"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),

@@ -169,13 +169,14 @@ public class GroupFormTests
     public void Pair_keeps_the_experimental_leader_only_control_and_blocks_discrete_file_channels() => OnSta(() =>
     {
         var (left, right) = StereoPairTests.IdlePair();
-        var cfg = new AppConfig { DeviceId = StereoPairs.PairId(StereoPairs.Tsid(left)!), GroupSplitChannels = true };
+        var cfg = new AppConfig { DeviceId = StereoPairs.PairId(StereoPairs.Tsid(left)!) };
         using var panel = new GroupPanel(cfg);
         panel.SetFound([right, left]);
-        Assert.Equal("左", Position(panel, left.Name).SelectedText);
-        Assert.Equal("右", Position(panel, right.Name).SelectedText);
+        Assert.Equal("完整立体声", Position(panel, left.Name).SelectedText);
+        Assert.Equal("完整立体声", Position(panel, right.Name).SelectedText);
         panel.SetSource(true);
         Assert.All(All<FluentComboBox>(panel).Where(c => c.AccessibleName?.EndsWith(" 位置") == true), c => Assert.Equal(["完整立体声"], c.Items));
+        Assert.Null(panel.BlockReason);
         All<ToggleSwitch>(panel).Single(t => t.Text == "只连接主音箱（实验）").Checked = true;
         panel.Apply();
         Assert.True(GroupPlan.FromConfig(cfg)!.PairLeaderOnly);

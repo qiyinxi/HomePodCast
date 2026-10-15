@@ -625,5 +625,7 @@
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Live streaming to a single speaker uses the existing low latency mode. Position, extra delay and volume offset apply only to groups with multiple outputs.",
   "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "This source has no channel for this position, so this speaker stays silent. Switching back to a multichannel file restores its position.",
   "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Local file playback in a group does not yet support connections to paired Apple TV devices. Use a HomePod.",
-  "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "To remove a speaker still used by the live group, select Live computer audio, remove it and apply."
+  "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "To remove a speaker still used by the live group, select Live computer audio, remove it and apply.",
+  "未发现「{0}」，无法确认它是否支持已保存的离散位置。": "“{0}” was not found, so support for its saved discrete channel position cannot be confirmed.",
+  "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "“{0}” is currently not a standalone HomePod and cannot use its saved discrete channel position."
 }
