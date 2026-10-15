@@ -55,6 +55,9 @@ internal sealed class SpeakerInfoPanel : StackPanel
 
     public void PageHidden() => _shown = false;
 
+    /// <summary>What is known now, on the hidden page before its first visit (SpeakersPage.Prepare): no read.</summary>
+    public void Prepare() => ShowAll(_speakers());
+
     /// <summary>
     /// The selection may have changed while the page is shown (a profile applied from 设置 → 使用配置): the cards follow at
     /// once and a speaker not read yet is read. While hidden, nothing: <see cref="PageShown"/> does it.
@@ -74,7 +77,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             var entry = _cache.Get(s.DeviceId);
             bool fresh = entry is { State: SpeakerInfoState.Ready, ReadUtc: { } at } && DateTime.UtcNow - at < MaxAge
                          || entry is { State: SpeakerInfoState.Reading };
-            if (force || !fresh) _ = _cache.RefreshAsync(s.DeviceId, s.Name, s.Address);
+            if (force || !fresh) _ = _cache.RefreshAsync(s.DeviceId, s.Name, s.Address, port: s.Port);
         }
     }
 
@@ -92,8 +95,13 @@ internal sealed class SpeakerInfoPanel : StackPanel
         catch (InvalidOperationException) { } // the handle went away meanwhile
     }
 
+    /// <summary>
+    /// One layout of the page for all of it: a read that finishes shows here while nothing else holds the layout, and each
+    /// text or line that changes asked for one of its own (several layouts of 设置 per read).
+    /// </summary>
     private void ShowAll(List<SelectedSpeaker> speakers)
     {
+        using var layout = BatchRelayout(this);
         _none.Text = speakers.Count == 0 ? L.T("还没有选择音箱") : "";
         var keys = speakers.Select(s => SpeakerInfoCache.Key(s.DeviceId)).ToList();
         foreach (var gone in _byKey.Keys.Except(keys).ToList())
@@ -114,7 +122,6 @@ internal sealed class SpeakerInfoPanel : StackPanel
             card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming, scan);
         }
         _processing.Text = _processingMs() is { } ms ? L.F("上次连接时的音箱处理时间：{0} ms", ms) : "";
-        Relayout(this);
     }
 
     protected override void Dispose(bool disposing)
@@ -128,7 +135,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
     {
         private readonly TextBlock _name = new("", TextStyle.BodyStrong);
         private readonly TextBlock _state = new("", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Right };
-        private readonly TextBlock _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
+        private readonly TextBlock _kind = Value(), _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
             _address = Value(), _mac = new(), _bluetooth = Value(), _deviceId = Value();
         private readonly TextBlock _macNote = Ui.Note(L.T("在路由器的设备列表里按这个地址找到 HomePod，就能看到它连在 2.4G 还是 5G，也可以给它分配固定 IP。"));
         private readonly FluentButton _copy = new(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 Wi-Fi MAC 地址") };
@@ -140,6 +147,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
         {
             Gap = 10;
             _macRow = Ui.Row(8, null, _mac, _copy);
+            _lines.Add(L.T("设备类型"), _kind);
             _lines.Add(L.T("型号"), _model);
             _lines.Add(L.T("状态"), _session);
             _lines.Add(L.T("分组"), _group);
@@ -162,10 +170,14 @@ internal sealed class SpeakerInfoPanel : StackPanel
 
         public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming, IReadOnlyList<AirPlayDevice> scan)
         {
-            var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info);
+            var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info, speaker.Model);
             _name.Text = d.Name;
             (_state.Text, _state.Role) = ReadState(entry);
             Set(_model, d.ModelText);
+            // The selection's services: the scan's, or, offline, the saved preferences' (SpeakerSelection).
+            var receiverKind = ReceiverKinds.Classify(d.Model ?? "", speaker.Txt,
+                airPlay: speaker.HasAirPlay, raop: speaker.RaopPort != null, info: entry?.Info);
+            Set(_kind, receiverKind == ReceiverKind.HomePod ? "HomePod" : ReceiverKinds.Label(receiverKind));
             var txt = TxtRecord.FromInfo(entry?.Info) ?? speaker.Txt;
             var holder = HomeTheater.IsAppleTvModel(d.Model) ? null : HomeTheater.HolderOf(GroupMembership.FromTxt(txt), scan);
             Set(_session, SessionText(d.SessionActive, streaming, holder?.Name));
@@ -180,8 +192,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _lines.Show(_macNote, d.WifiMac != null);
             // A Bluetooth privacy address: three different ones were read from the same HomePod on 2026-10-11.
             Set(_bluetooth, d.BluetoothAddress is { } bluetooth ? L.F("{0}（会定期变化）", bluetooth) : null);
-            Set(_deviceId, d.DeviceId);
-            Relayout(this);
+            Set(_deviceId, d.DeviceId); // the lines shown changed: ShowAll lays the page out
         }
 
         /// <summary>A value that wraps in a narrow window (the status line is long in some languages).</summary>

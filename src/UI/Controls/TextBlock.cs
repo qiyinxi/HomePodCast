@@ -84,10 +84,10 @@ internal sealed class TextBlock : FluentControl
         var font = TextFont;
         if (_wrap && proposedSize.Width > 0)
         {
-            var s = TextRenderer.MeasureText(Text, font, new Size(proposedSize.Width, int.MaxValue), TextFlags.Wrap);
+            var s = TextMeasure.Size(Text, font, new Size(proposedSize.Width, int.MaxValue), TextFlags.Wrap);
             return new Size(proposedSize.Width, s.Height + 1);
         }
-        var line = TextRenderer.MeasureText(Text, font, Size.Empty, TextFlags.Measure);
+        var line = TextMeasure.Size(Text, font, Size.Empty, TextFlags.Measure);
         return new Size(line.Width + 1, Math.Max(line.Height, LineHeight(_style)) + 1);
     }
 

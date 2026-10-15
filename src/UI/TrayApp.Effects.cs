@@ -8,7 +8,7 @@ internal sealed partial class TrayApp
 {
     private MicEffects? _fx;
 
-    /// <summary>The microphone and effects engine shared by the send path and the 麦克风与音效 page.</summary>
+    /// <summary>The microphone and effects engine shared by the send path and the 麦克风 page.</summary>
     public MicEffects Fx => _fx!;
 
     /// <summary>Windows' privacy settings refused the microphone, and the user was told (once per run).</summary>
@@ -26,7 +26,7 @@ internal sealed partial class TrayApp
 
     /// <summary>
     /// The mic opened, failed or closed (UI thread). Refused by the privacy settings: say so once, with the way to the
-    /// switches; 麦克风与音效 keeps saying it under the mic for as long as it lasts.
+    /// switches; 麦克风 keeps saying it under the mic for as long as it lasts.
     /// </summary>
     private void OnMicChanged()
     {
@@ -56,7 +56,7 @@ internal sealed partial class TrayApp
     }
 
     /// <summary>
-    /// Turn the microphone on or off (tray flyout) with the rules of the switch on the 麦克风与音效 page, which
+    /// Turn the microphone on or off (tray flyout) with the rules of the switch on the 麦克风 page, which
     /// asks first when the voice would also go to loudspeakers. Never saved. Returns whether it is on now.
     /// </summary>
     public bool SetMicOn(bool on)

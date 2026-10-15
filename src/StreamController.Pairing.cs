@@ -7,7 +7,7 @@ namespace HomePodCast;
 /// A connect that stopped because the receiver needs a PIN pairing first (an Apple TV): who, where, why, and what started
 /// the connect (only the user's 连接 click may go on to the pairing dialog).
 /// </summary>
-public sealed record PairingRequest(string DeviceId, IPAddress Address, string Speaker, PairingReason Reason, ConnectTrigger Trigger);
+public sealed record PairingRequest(string DeviceId, IPAddress Address, string Speaker, PairingReason Reason, ConnectTrigger Trigger, int Port = 7000, bool ThirdParty = false);
 
 /// <summary>When the app may start a PIN pairing: the TV lights up and shows a PIN, so only right after a click.</summary>
 public static class PairingPolicy
@@ -30,10 +30,10 @@ public sealed partial class StreamController
     /// <summary>Raised on the thread pool when a connect stopped for a pairing (the state is Idle by then).</summary>
     public event Action<PairingRequest>? PairingRequired;
 
-    private void StopForPairing(string deviceId, IPAddress address, PairingRequiredException ex, ConnectTrigger trigger)
+    private void StopForPairing(string deviceId, IPAddress address, PairingRequiredException ex, ConnectTrigger trigger, int port = 7000, bool thirdParty = false)
     {
         DisposeCapture(); // nothing is sent until it is paired; routed apps play on this PC again
         Set(StreamState.Idle, ex.Message);
-        PairingRequired?.Invoke(new PairingRequest(deviceId, address, ex.Speaker, ex.Reason, trigger));
+        PairingRequired?.Invoke(new PairingRequest(deviceId, address, ex.Speaker, ex.Reason, trigger, port, thirdParty));
     }
 }

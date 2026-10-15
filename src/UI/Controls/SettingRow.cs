@@ -6,12 +6,17 @@ namespace HomePodCast.UI.Controls;
 /// </summary>
 internal sealed class SettingRow : Card
 {
-    private readonly GlyphIcon? _icon;
+    /// <summary>
+    /// The row's icon, painted by the row: a window of its own for each row's icon was 29 of the windows a page creates
+    /// (about 1.4 ms each on the maintainer's PC, and each one moved again on every layout).
+    /// </summary>
+    private readonly string? _icon;
+    private Rectangle _iconBounds;
 
     public SettingRow(string? glyph, string title, string? description, Control? content)
     {
         Padding = new Padding(16, 12, 16, 12);
-        if (glyph != null) Controls.Add(_icon = new GlyphIcon(glyph));
+        _icon = glyph;
         TitleText = new TextBlock(title, TextStyle.Body, wrap: true);
         DescriptionText = new TextBlock(description ?? "", TextStyle.Caption, TextRole.Secondary, wrap: true);
         Controls.Add(TitleText);
@@ -42,11 +47,17 @@ internal sealed class SettingRow : Card
         if (Content != null && !IsCollapsed(Content))
         {
             contentW = ContentWidth > 0 ? Dp(ContentWidth) : WidthFor(Content);
-            contentH = HeightFor(Content, contentW);
         }
         int textW = right - x - (contentW > 0 ? contentW + Dp(16) : 0);
-        bool stacked = contentW > 0 && textW < Dp(180);
-        if (stacked) textW = right - x;
+        // Keep descriptions readable in compact windows instead of squeezing them beside a wide picker.
+        bool stacked = contentW > 0 && textW < Dp(240);
+        if (stacked)
+        {
+            textW = right - x;
+            contentW = Math.Max(0, Math.Min(contentW, textW));
+        }
+        // Under the text the content gets at most the text's width, and its height there (a row of buttons that wraps).
+        if (Content != null && !IsCollapsed(Content)) contentH = HeightFor(Content, contentW);
 
         int titleH = HeightFor(TitleText, textW);
         int descH = HeightFor(DescriptionText, textW);
@@ -60,8 +71,8 @@ internal sealed class SettingRow : Card
             {
                 Place(TitleText, x, top, textW, titleH);
                 Place(DescriptionText, x, top + titleH + Dp(2), textW, descH);
-                Place(Content!, x, y, Math.Min(contentW, right - x), contentH);
-                _icon?.SetBounds(left, top, iconSize, Math.Max(iconSize, titleH));
+                Place(Content!, x, y, contentW, contentH);
+                SetIcon(new Rectangle(left, top, iconSize, Math.Max(iconSize, titleH)));
             }
             height = y + contentH + Dp(Padding.Bottom);
         }
@@ -74,27 +85,26 @@ internal sealed class SettingRow : Card
                 Place(TitleText, x, ty, textW, titleH);
                 Place(DescriptionText, x, ty + titleH + Dp(2), textW, descH);
                 if (Content != null && contentW > 0) Place(Content, right - contentW, top + (inner - contentH) / 2, contentW, contentH);
-                _icon?.SetBounds(left, top + (inner - iconSize) / 2, iconSize, iconSize);
+                SetIcon(new Rectangle(left, top + (inner - iconSize) / 2, iconSize, iconSize));
             }
             height = top + inner + Dp(Padding.Bottom);
         }
         return height;
     }
 
-    /// <summary>The row's icon.</summary>
-    private sealed class GlyphIcon : FluentControl
+    private void SetIcon(Rectangle bounds)
     {
-        private readonly string _glyph;
+        if (_icon == null || bounds == _iconBounds) return;
+        Invalidate(_iconBounds);
+        _iconBounds = bounds;
+        Invalidate(_iconBounds);
+    }
 
-        public GlyphIcon(string glyph)
-        {
-            SetStyle(ControlStyles.Selectable, false);
-            TabStop = false;
-            _glyph = glyph;
-        }
-
-        protected override void OnPaint(PaintEventArgs e) =>
-            Shapes.Glyph(e.Graphics, _glyph, Theme.IconFont(18, DeviceDpi), ClientRectangle, P.Text);
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        if (_icon != null && e.ClipRectangle.IntersectsWith(_iconBounds))
+            Shapes.Glyph(e.Graphics, _icon, Theme.IconFont(18, DeviceDpi), _iconBounds, P.Text);
     }
 }
 

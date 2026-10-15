@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Net/Mdns.cs" Link="Net/Mdns.cs" />
+    <Compile Include="../../src/Net/ReceiverKind.cs" Link="Net/ReceiverKind.cs" />
+    <Compile Include="../../src/Net/TxtRecord.cs" Link="Net/TxtRecord.cs" />
+    <Compile Include="../../src/Net/RaopClient.cs" Link="Net/RaopClient.cs" />
+    <Compile Include="../../src/Net/RaopPackets.cs" Link="Net/RaopPackets.cs" />
+    <Compile Include="../../src/Net/RtspConnection.cs" Link="Net/RtspConnection.cs" />
+    <Compile Include="../../src/Net/TimingServer.cs" Link="Net/TimingServer.cs" />
+    <Compile Include="../../src/Net/MediaClock.cs" Link="Net/MediaClock.cs" />
+    <Compile Include="../../src/Net/AirPlayException.cs" Link="Net/AirPlayException.cs" />
+    <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
+    <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
+    <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
+    <Compile Include="../../src/Protocol/ChaChaPoly.cs" Link="Protocol/ChaChaPoly.cs" />
+    <Compile Include="../../src/Protocol/BPlist.cs" Link="Protocol/BPlist.cs" />
+    <Compile Include="../../src/Protocol/Curve25519.cs" Link="Protocol/Curve25519.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.cs" Link="Net/AirPlayClient.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.Buffered.cs" Link="Net/AirPlayClient.Buffered.cs" />
+    <Compile Include="../../src/Net/BufferedSender.cs" Link="Net/BufferedSender.cs" />
+    <Compile Include="../../src/Net/PtpRealtimeSender.cs" Link="Net/PtpRealtimeSender.cs" />
+    <Compile Include="../../src/Net/PtpMaster.cs" Link="Net/PtpMaster.cs" />
+    <Compile Include="../../src/Net/PtpPackets.cs" Link="Net/PtpPackets.cs" />
+    <Compile Include="../../src/Net/ReceiverSession.cs" Link="Net/ReceiverSession.cs" />
+    <Compile Include="../../src/Net/ReceiverPreferences.cs" Link="Net/ReceiverPreferences.cs" />
+    <Compile Include="../../src/Net/ReceiverProtocols.cs" Link="Net/ReceiverProtocols.cs" />
+    <Compile Include="../../src/Net/StatusFlags.cs" Link="Net/StatusFlags.cs" />
+    <Compile Include="../../src/Net/EventChannel.cs" Link="Net/EventChannel.cs" />
+    <Compile Include="../../src/Net/Pairing.cs" Link="Net/Pairing.cs" />
+    <Compile Include="../../src/Net/IGroupMember.cs" Link="Net/IGroupMember.cs" />
+    <Compile Include="../../src/Net/RtpSender.cs" Link="Net/RtpSender.cs" />
+    <Compile Include="../../src/Audio/IGroupPacketSource.cs" Link="Audio/IGroupPacketSource.cs" />
+    <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
+    <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
+    <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
+    <Compile Include="../../src/Protocol/BufferedAudio.cs" Link="Protocol/BufferedAudio.cs" />
+    <Compile Include="../../src/Protocol/Srp.cs" Link="Protocol/Srp.cs" />
+    <Compile Include="../../src/Protocol/Tlv8.cs" Link="Protocol/Tlv8.cs" />
+    <Compile Include="../../src/Protocol/HapPairing.cs" Link="Protocol/HapPairing.cs" />
+    <Compile Include="../../src/VolumeLimit.cs" Link="VolumeLimit.cs" />
+  </ItemGroup>
+</Project>

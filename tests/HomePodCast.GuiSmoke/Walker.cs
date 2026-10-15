@@ -9,10 +9,12 @@ namespace HomePodCast.GuiSmoke;
 
 /// <summary>
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
-/// automatic connect: 「找不到音箱…，N 秒后重试」) or <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000),
-/// in a UI language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width.
+/// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
+/// or <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), in a UI
+/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
+/// <see cref="DpiChange"/> changes the display scale to 100 % and back while the app runs (as a move to another monitor).
 /// </summary>
-internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false)
+internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false)
 {
     public string Id => $"{Kind}-{Language}-{Scale}" + (Theme == "auto" ? "" : "-" + Theme);
 }
@@ -21,7 +23,7 @@ internal sealed record Scenario(string Kind, string Language, int Scale, string 
 internal sealed class StepFailed(string message) : Exception(message);
 
 /// <summary>Drives one scenario: starts the app, walks it through UI Automation, checks, takes screenshots, quits it.</summary>
-internal sealed class Walker
+internal sealed partial class Walker
 {
     /// <summary>
     /// HOMEPODCAST_PROFILE for the app: null on a CI runner (the default config folder, as a fresh install: the
@@ -29,12 +31,17 @@ internal sealed class Walker
     /// </summary>
     public static string? Profile { get; set; } = "gui-smoke";
 
+    /// <summary>The extracted viewing window module (the build's HomePodCast-video-window zip); null: not checked.</summary>
+    public static string? VideoWindowDir { get; set; }
+
+    private const string VideoWindowProcess = "HomePodCast.VideoWindow";
+
     public static string ConfigDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Profile == null ? "HomePodCast" : "HomePodCast-" + Profile);
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风与音效", "设置"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -71,6 +78,8 @@ internal sealed class Walker
                 case "idle": RunIdle(); break;
                 case "retrying": RunRetrying(); break;
                 case "streaming": RunStreaming(); break;
+                case "compatibility": RunCompatibility(); break;
+                case "runtime": RunRuntime(); break; // Walker.Runtime.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -106,14 +115,56 @@ internal sealed class Walker
         ["Scene"] = "Recommended", // as a fresh install
         ["LocalApiPort"] = 0,      // a random port: never the real instance's
         ["AutoConnect"] = false,
+        ["VideoWindowModuleDirectory"] = VideoWindowDir, // 打开 starts it without asking for the folder
     };
 
     private void RunIdle()
     {
         Start(BaseConfig());
         WalkEverything(connected: false);
+        if (_s.DpiChange) DpiRoundTrip();
         Quit();
         CheckLog(idle: true);
+    }
+
+    private void RunCompatibility()
+    {
+        const string id = "02:43:4F:4D:50:54";
+        var config = BaseConfig();
+        config["DeviceId"] = id; config["DeviceName"] = "CI compatibility receiver"; config["Host"] = "127.0.0.1";
+        config["ReceiverSettings"] = new Dictionary<string, object?>
+        {
+            [id.Replace(":", "")] = new Dictionary<string, object?>
+            {
+                ["Name"] = "CI compatibility receiver", ["Host"] = "127.0.0.1", ["Port"] = 7001,
+                ["Model"] = "AppleTV3,2", ["Txt"] = new Dictionary<string, string> { ["srcvers"] = "220.68" },
+                ["HasAirPlay"] = true, ["RaopPort"] = 7001, ["CompatibilityLatencyMs"] = 2000,
+                ["CompatibilityNoticeShown"] = true,
+            },
+        };
+        _userData.Add("CI compatibility receiver");
+        Start(config); // AutoConnect stays false: these checks render controls without starting a session.
+        foreach (var page in Pages)
+        {
+            Navigate(page);
+            var tree = Uia.Snapshot(MainWindow());
+            CheckNavigation(tree);
+            if (page == "首页")
+            {
+                CheckHome(tree, false);
+                Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), page,
+                    "compatibility latency selector is missing");
+                Expect(Has(tree, "2000 ms"), page, "compatibility default is not 2000 ms");
+            }
+            if (page == "音箱信息") tree = CheckSpeakers(false, compatibility: true);
+            if (page == "关于") tree = CheckAbout();
+            if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
+            if (page == "设置") CheckSettings();
+            Layout(tree, page); ShootPage(page, "");
+            if (page == "首页") Flyout(false, compatibility: true);
+        }
+        WalkNarrow();
+        Quit(); CheckLog(idle: true);
     }
 
     private void RunRetrying()
@@ -204,35 +255,198 @@ internal sealed class Walker
             Navigate(page);
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
-            if (page == "设置") tree = CheckSettings(connected);
+            if (page == "设置") CheckSettings();
+            if (page == "音箱信息") tree = CheckSpeakers(connected);
+            if (page == "关于") tree = CheckAbout();
+            if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
+            if (page == "多声道（5.1 / 7.1，实验性）") CheckCinema(tree, page);
+            CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
             if (page == "首页") Flyout(connected);
         }
 
+        Navigate("设置");
         Dialog("hotkeys", Button("快捷键…"), "全局快捷键", "关闭", CheckHotkeys);
-        Dialog("profiles", Button("管理配置"), "使用配置", "关闭");
-        Dialog("multi-speaker", ButtonInRow("多音箱（实验性）", "打开"), "多音箱（实验性）", "取消", ready: tree =>
-            !tree.Descendants().Any(n => n.Name == T("正在搜索音箱…")));
+        Navigate("首页");
+        Uia.Invoke(Button("管理配置"));
+        WaitUntil(() => TryPagePane(Uia.Snapshot(MainWindow()), "使用配置") != null, "profile management page", 8000);
+        Layout(Uia.Snapshot(MainWindow()), "使用配置");
+        CheckThemeSwitch();
+        if (VideoWindowDir != null) ViewingWindow(connected);
 
+        WalkNarrow();
+    }
+
+    private void CheckThemeSwitch()
+    {
+        Navigate("关于");
+        for (int i = 0; i < 2; i++)
+        {
+            var tree = Uia.Snapshot(MainWindow());
+            var toggle = Find(tree, n => n.Type == "Button" && (n.Name == T("切换到浅色") || n.Name == T("切换到深色")))
+                ?? throw new StepFailed("no accessible theme switch");
+            string before = toggle.Name;
+            Uia.Invoke(toggle);
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" &&
+                (n.Name == T("切换到浅色") || n.Name == T("切换到深色")) && n.Name != before) != null, "theme switch", 5000);
+            Shoot(MainWindow(), "theme-fade-" + i, "client theme transition");
+            Thread.Sleep(300);
+            Layout(Uia.Snapshot(MainWindow()), "theme switch");
+            Shoot(MainWindow(), "theme-toggle-" + i, "client fade completed");
+        }
+    }
+
+    private void WalkNarrow()
+    {
         if (_s.Narrow)
         {
             var main = MainWindow();
             var r = Native.WindowRect(main);
-            int width = 700 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(700)
+            int width = 600 * _s.Scale / 100; // MainWindow.MinimumSize: Dp(600), compact navigation
             Native.SetWindowPos(main, IntPtr.Zero, 0, 0, width, r.Height, Native.SWP_NOMOVE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
             Thread.Sleep(800);
             _report.Pass(Where("narrow"), $"window {Native.WindowRect(main).Width}px wide");
             foreach (var page in Pages)
             {
                 Navigate(page);
-                Layout(Uia.Snapshot(MainWindow()), page + " (narrow)");
+                var tree = Uia.Snapshot(MainWindow());
+                CheckNavigation(tree, compact: true);
+                if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
+                Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
         }
     }
 
+    /// <summary>
+    /// The window moved to a monitor with another scale. 2026-10-15, 1.1.0-beta.5 between the maintainer's 150 % and 100 %
+    /// monitors: 「未响应」 for seconds, half repainted (navigation items and rows drawn twice). The runner has one screen, so
+    /// its scale goes to 100 % and back while the app runs, which sends the window the same WM_DPICHANGED. Each time: the
+    /// window answers within Windows' 5 s (after that it shows as not responding), its controls are at the new DPI, the
+    /// layout checks pass, and repainting the whole window changes nothing (no stale picture left from before).
+    /// </summary>
+    private void DpiRoundTrip()
+    {
+        Navigate("麦克风"); // the page in the maintainer's screenshot
+        try
+        {
+            foreach (int scale in new[] { 100, _s.Scale })
+            {
+                string step = $"DPI {scale}%";
+                var (ok, detail) = Display.SetScale(scale);
+                if (!ok)
+                {
+                    _report.Warn(Where(step), $"the scale can't change on this runner: {detail}");
+                    return;
+                }
+                var watch = Stopwatch.StartNew();
+                var main = MainWindow();
+                uint want = (uint)(96 * scale / 100);
+                WaitUntil(() => Native.GetDpiForWindow(main) == want, $"the window at {want} dpi", 10_000, fail: false);
+                if (Native.GetDpiForWindow(main) != want)
+                {
+                    _report.Warn(Where(step), $"the window stayed at {Native.GetDpiForWindow(main)} dpi: Windows did not move it to the new scale");
+                    return;
+                }
+                // A message waits behind the DPI change's work on the UI thread.
+                bool answered = Native.SendMessageTimeout(main, 0 /* WM_NULL */, IntPtr.Zero, IntPtr.Zero, 0, 30_000, out _) != IntPtr.Zero;
+                long answer = watch.ElapsedMilliseconds;
+                Expect(answered, step, "the window did not answer within 30 s after the scale changed");
+                // Laid out at the new DPI: the navigation items are 38 px high at 96 dpi.
+                int itemHeight = (int)(38 * want / 96);
+                WaitUntil(() => Find(Uia.Snapshot(main), n => n.Type == "TabItem" && n.Name == T("设置")) is { } item &&
+                                Math.Abs(item.Rect.Height - itemHeight) <= 1, $"the navigation at {want} dpi ({itemHeight} px items)", 15_000);
+                long laidOut = watch.ElapsedMilliseconds;
+                Expect(answer < 5000, step, $"the window took {answer} ms to answer after the scale changed (Windows shows it as not responding after 5 s)");
+                _report.Note(Where(step), $"{want} dpi: the window answered after {answer} ms and was laid out after {laidOut} ms");
+                Thread.Sleep(800);
+                var tree = Uia.Snapshot(main);
+                CheckNavigation(tree);
+                Layout(tree, $"麦克风 at {scale}%");
+                CheckRepainted(main, step);
+                Shoot(main, $"dpi-{scale}", $"麦克风 after the scale changed to {scale}%");
+                Navigate("设置");
+                Layout(Uia.Snapshot(main), $"设置 at {scale}%");
+                Navigate("麦克风");
+            }
+        }
+        finally
+        {
+            if (Display.Scale()?.Current != _s.Scale) Display.SetScale(_s.Scale); // the next scenarios run at this scale
+        }
+    }
+
+    /// <summary>
+    /// Nothing on the window is a leftover: repainted in full, it looks the same (a control drawn at its old place and not
+    /// painted over since would differ).
+    /// </summary>
+    private void CheckRepainted(IntPtr hwnd, string step)
+    {
+        using var before = Native.Capture(hwnd);
+        Native.RedrawWindow(hwnd, IntPtr.Zero, IntPtr.Zero, 0x1 | 0x4 | 0x80 | 0x100); // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
+        Thread.Sleep(400);
+        using var after = Native.Capture(hwnd);
+        if (before.Size != after.Size)
+        {
+            _report.Fail(Where(step), $"the window changed size while it was repainted ({before.Size} → {after.Size})");
+            return;
+        }
+        int differ = 0, total = 0;
+        for (int y = 0; y < before.Height; y += 2)
+        for (int x = 0; x < before.Width; x += 2, total++)
+            if (before.GetPixel(x, y) != after.GetPixel(x, y)) differ++;
+        double share = 100.0 * differ / Math.Max(1, total);
+        if (share > 1)
+        {
+            string name = step.Replace("%", "").Replace(' ', '-').ToLowerInvariant();
+            before.Save(Path.Combine(_dir, $"stale-{name}-before.png"), ImageFormat.Png);
+            after.Save(Path.Combine(_dir, $"stale-{name}-after.png"), ImageFormat.Png);
+            _report.Fail(Where(step), $"{share:F1}% of the window changed when it was repainted: a stale picture was left after the scale change");
+        }
+        else
+        {
+            _report.Pass(Where(step), $"repainted in full, {share:F2}% of the window changed");
+        }
+    }
+
     // ---------------------------------------------------------------- page checks
+
+    private void CheckMicrophoneAndEqualizer(Node tree, string name)
+    {
+        var page = PagePane(tree, name);
+        if (name == "麦克风")
+        {
+            foreach (string text in new[] { "麦克风监听", "输入设备", "输出到", "本机输出设备", "麦克风监听已关闭。",
+                         "每次启动 HomePodCast 时麦克风默认关闭。", "衰减（Room Size）", "高频阻尼（Damping）",
+                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡" })
+                Expect(Has(page, T(text)), name, $"missing microphone control or explanation: {T(text)}");
+            Expect(!Has(page, T("HomePod 输出均衡")), name, "output EQ is still on the microphone page");
+            var route = Find(page, n => n.Name == T("输出到") && n.Type == "List");
+            Expect(route != null && Has(route, T("本机")) && Has(route, T("两者")), name, "output choices are missing");
+            var hint = _t.Pattern("你的声音会和电脑声音一起从 HomePod 播出，比实际晚约 {0} ms。");
+            Expect(page.Descendants().Any(n => n.Shown && hint.IsMatch(n.Name)), name, "HomePod destination explanation is missing");
+        }
+        else
+        {
+            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。" })
+                Expect(Has(page, T(text)), name, $"missing output EQ control or scope: {T(text)}");
+            Expect(!Has(page, T("麦克风均衡")), name, "microphone EQ is on the output page");
+        }
+    }
+
+    private void CheckNavigation(Node tree, bool compact = false)
+    {
+        var settings = Find(tree, n => n.Type == "TabItem" && n.Name == T("关于"));
+        Expect(settings?.Parent != null, "navigation", "no settings navigation item");
+        if (settings?.Parent is not { } rail) return;
+        int dpi = (int)Native.GetDpiForWindow(MainWindow());
+        int gap = 8 * dpi / 96;
+        Expect(Math.Abs(rail.Rect.Bottom - settings.Rect.Bottom - gap) <= 2, "navigation",
+            "About is not pinned to the bottom of the rail");
+        if (compact)
+            Expect(rail.Rect.Width <= 64 * dpi / 96 + 1, "navigation", "narrow window did not compact the navigation rail");
+    }
 
     private void CheckHome(Node tree, bool connected)
     {
@@ -265,7 +479,7 @@ internal sealed class Walker
         }
     }
 
-    private Node CheckSettings(bool connected)
+    private Node CheckSpeakers(bool connected, bool compatibility = false)
     {
         // 音箱信息 reads the speaker when the page is shown: wait for 读取中… to go.
         var tree = Uia.Snapshot(MainWindow());
@@ -275,19 +489,61 @@ internal sealed class Walker
             Thread.Sleep(300);
             tree = Uia.Snapshot(MainWindow());
         }
-        var page = PagePane(tree, "设置");
-        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
-        Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
-        Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
+        var page = PagePane(tree, "音箱信息");
+        Expect(Has(page, T("手动添加 AirPlay 设备（实验性）")), "设置", "manual AirPlay receiver row missing"); // experimental since 1.1
         if (connected)
         {
             Expect(Has(page, _fake!.Name), "设置", $"音箱信息 doesn't name 「{_fake.Name}」");
             Expect(!Has(page, T("无法读取（音箱不在线？）")), "设置", "音箱信息 could not read the speaker");
         }
+        else if (compatibility)
+        {
+            Expect(Has(page, "CI compatibility receiver"), "设置", "音箱信息 doesn't name the selected receiver");
+            Expect(!Has(page, T("还没有选择音箱")), "设置", "音箱信息 lost the selected receiver");
+            Expect(Has(page, T("连接方式（实验性）")), "设置", "connection override is missing"); // experimental since 1.1
+            Expect(Has(page, T("未连接；连接后显示实际协议。")), "设置", "disconnected protocol status is missing");
+        }
         else
         {
             Expect(Has(page, T("还没有选择音箱")), "设置", $"音箱信息 doesn't say 「{T("还没有选择音箱")}」");
         }
+
+        return tree;
+    }
+
+    private void CheckSettings()
+    {
+        var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
+        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）" })
+            Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
+        // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
+        // connection to the fake HomePod that the next steps check.
+        var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
+        Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
+            $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+
+    }
+
+    private Node CheckAbout()
+    {
+        var tree = Uia.Snapshot(MainWindow());
+        var page = PagePane(tree, "关于");
+        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "关于", "diagnostic export missing");
+        Expect(Has(page, T("许可证")), "关于", "license missing");
+        // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
+        // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
+        // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
+        // Only in the row: German 「Aktualisieren」 is also 音箱信息's 刷新.
+        var versionPattern = _t.Pattern("当前版本 {0}");
+        var updateRow = Find(page, n => n.Type == "Text" && n.Shown && versionPattern.IsMatch(n.Name))?.Parent;
+        Expect(updateRow != null && Find(updateRow, n => n.Type == "Button" && n.Shown && n.Says(T("检查更新"))) != null,
+            "设置", $"「{T("检查更新")}」 is not in the row 「{T("当前版本 {0}")}」");
+        foreach (var offer in new[] { "更新", "查看说明", "跳过此版本" })
+            Expect(updateRow == null || !updateRow.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T(offer))), "设置",
+                $"「{T(offer)}」 is in the row 「{T("当前版本 {0}")}」 although no update was offered");
+        Expect(!page.Descendants().Any(n => n.Type == "Button" && n.Shown && n.Says(T("跳过此版本"))), "设置",
+            $"「{T("跳过此版本")}」 is shown although no update was offered");
 
         // Updates on a fresh config: no automatic checks; the channel follows the build (a prerelease: 测试版).
         var auto = Find(page, n => n.Name == T("自动检查更新") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
@@ -315,9 +571,168 @@ internal sealed class Walker
         Expect(row != null && Has(row, T("未设置")), where, $"「{T("标记刚才的卡顿")}」 is not 「{T("未设置")}」 by default");
     }
 
+    /// <summary>无线影院: every speaker position, nothing playable before a file is chosen, no measurement without playback.</summary>
+    private void CheckCinema(Node tree, string where)
+    {
+        foreach (var role in new[] { "前左", "前右", "中置", "低音声道", "后左", "后右", "侧左", "侧右" })
+            Expect(tree.Descendants().Any(n => n.Type == "Text" && n.Name == T(role)), where, $"no speaker row 「{T(role)}」");
+        foreach (var disabled in new[] { "播放", "暂停", "停止", "测量音箱延迟" })
+        {
+            var button = Find(tree, n => n.Type == "Button" && n.Says(T(disabled)));
+            Expect(button is { Enabled: false }, where,
+                button == null ? $"no 「{T(disabled)}」 button" : $"「{T(disabled)}」 is enabled before a file plays");
+        }
+        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true }, where, $"「{T("选择影音文件")}」 is not enabled");
+    }
+
+    // ---------------------------------------------------------------- 同步观影窗口 (modules/VideoWindow)
+
+    /// <summary>
+    /// 设置 → 工具 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
+    /// no capture, the idle hint, at this scenario's DPI (per-monitor aware). Then the module on its own with generated 4K
+    /// pictures (--smoke-source) against the app's local API: frames through the GPU queue and the swap chain, halved to
+    /// 1080p, shown at the picture's aspect ratio, and the delay followed from the app. The window picker is never opened.
+    /// </summary>
+    private void ViewingWindow(bool connected)
+    {
+        string title = T("同步观影窗口（实验性）"); // experimental since 1.1
+        Navigate("同步观影窗口（实验性）");
+        try
+        {
+            Uia.Invoke(Button("打开"));
+            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 设置", 20_000);
+            Thread.Sleep(1200);
+            var tree = Uia.Snapshot(viewer);
+            Dump(tree, "viewer");
+            Shoot(viewer, "viewer", title);
+            Layout(tree, "viewer");
+            Checks.OnScreen(viewer, Where("viewer"), _report);
+            CheckDpi(viewer, "viewer");
+            foreach (var button in new[] { "选择窗口…", "停止采集", "全屏 / F11" })
+                Expect(Find(tree, n => n.Type == "Button" && n.Says(T(button))) != null, "viewer", $"no 「{T(button)}」 button");
+            string hint = T("选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。");
+            Expect(Has(tree, hint), "viewer", $"the status line doesn't say 「{hint}」 before a window is chosen");
+            CloseViewer(viewer, null, "viewer");
+
+            int port = ApiPort() ?? throw new StepFailed("no 「local API on http://127.0.0.1:…」 line in the log");
+            string result = Path.Combine(_dir, "viewer-pictures.json");
+            var start = new ProcessStartInfo(Path.Combine(VideoWindowDir!, VideoWindowProcess + ".exe")) { UseShellExecute = false };
+            foreach (var arg in new[] { "--smoke-source", "--status-port", port.ToString(), "--delay-ms", "0", "--language", _s.Language, "--smoke-result", result })
+                start.ArgumentList.Add(arg);
+            using var smoke = Process.Start(start) ?? throw new StepFailed("the viewing window did not start");
+            try
+            {
+                var hwnd = WaitWindow(() => ViewerWindow(title, smoke.Id), "the viewing window with generated pictures", 20_000);
+                var line = new Regex("^" + Regex.Replace(Regex.Escape(T("画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB")), @"\\\{(\d)}",
+                    m => m.Groups[1].Value == "0" ? "(?<delay>\\d+)" : m.Groups[1].Value == "1" ? "(?<mode>.+?)" : ".+?") + "$");
+                string following = T("已跟随本机音频状态");
+                Match? status = null;
+                WaitUntil(() => (status = StatusLine(hwnd, line)) is { Success: true } s && s.Groups["mode"].Value == following,
+                    "the viewing window to follow the app's delay", 10_000, fail: false);
+                Expect(status is { Success: true } && status.Groups["mode"].Value == following, "viewer (pictures)",
+                    $"the status line is 「{status?.Value ?? "(none)"}」: it should follow the app (「{following}」)");
+                if (status is { Success: true } && int.TryParse(status.Groups["delay"].Value, out int delay))
+                {
+                    Expect(connected ? delay > 0 : delay == 0, "viewer (pictures)",
+                        $"picture delay {delay} ms while {(connected ? "streaming (expected the app's sound lag)" : "not streaming (expected 0)")}");
+                    _report.Pass(Where("viewer (pictures)"), status.Value);
+                }
+                Thread.Sleep(1500);
+                var pictures = Uia.Snapshot(hwnd);
+                Dump(pictures, "viewer-pictures");
+                Shoot(hwnd, "viewer-pictures", $"{title}: generated 4K pictures (--smoke-source)");
+                Layout(pictures, "viewer (pictures)");
+                CloseViewer(hwnd, smoke, "viewer (pictures)");
+            }
+            finally
+            {
+                if (!smoke.HasExited) { smoke.Kill(); smoke.WaitForExit(5000); }
+            }
+
+            // What the module counted: frames through the queue and the presenter, halved on the GPU, letterboxed, this DPI.
+            if (!File.Exists(result)) { _report.Fail(Where("viewer (pictures)"), "the module wrote no result"); return; }
+            var r = JsonDocument.Parse(File.ReadAllText(result)).RootElement;
+            int shown = r.GetProperty("shown").GetInt32(), presents = r.GetProperty("presents").GetInt32();
+            int width = r.GetProperty("frameWidth").GetInt32(), height = r.GetProperty("frameHeight").GetInt32();
+            int surfaceWidth = r.GetProperty("surfaceWidth").GetInt32(), surfaceHeight = r.GetProperty("surfaceHeight").GetInt32();
+            string? message = r.GetProperty("message").GetString();
+            Expect(message == null, "viewer (pictures)", $"the module says 「{message}」");
+            Expect(shown >= 20 && presents >= shown, "viewer (pictures)", $"{shown} frames shown in {presents} presents (expected at least 20)");
+            Expect(width == 1920 && height == 1080, "viewer (pictures)", $"3840 × 2160 pictures were queued at {width} × {height} (expected 1920 × 1080)");
+            Expect(surfaceHeight > 0 && Math.Abs(surfaceWidth * 9 - surfaceHeight * 16) <= 32, "viewer (pictures)",
+                $"the picture is shown at {surfaceWidth} × {surfaceHeight}, not 16:9");
+            Expect(r.GetProperty("dpi").GetInt32() == 96 * _s.Scale / 100, "viewer (pictures)", $"the module ran at {r.GetProperty("dpi")} dpi");
+            _report.Pass(Where("viewer (pictures)"), $"{shown} frames in {presents} presents, queued at {width} × {height}, shown at {surfaceWidth} × {surfaceHeight}, " +
+                                                    $"display latency {r.GetProperty("leadMs")} ms ({(r.GetProperty("leadMeasured").GetBoolean() ? "measured" : "one refresh")})");
+        }
+        finally { KillViewers(); }
+    }
+
+    private static Match? StatusLine(IntPtr hwnd, Regex line)
+    {
+        foreach (var n in Uia.Snapshot(hwnd).Descendants())
+            if (n.Type == "Text" && line.Match(n.Name) is { Success: true } m) return m;
+        return null;
+    }
+
+    /// <summary>A viewing window (of <paramref name="pid"/>, or of any module process); a message box of the module fails the step.</summary>
+    private IntPtr ViewerWindow(string title, int? pid)
+    {
+        foreach (var p in Process.GetProcessesByName(VideoWindowProcess))
+        {
+            using (p)
+            {
+                if (pid != null && p.Id != pid) continue;
+                foreach (var h in Native.TopLevelWindows(p.Id))
+                {
+                    if (!Native.IsWindowVisible(h)) continue;
+                    if (Native.ClassName(h) == "#32770")
+                        throw new StepFailed($"the viewing window showed a message box: {string.Join(" ", Uia.Snapshot(h).Descendants().Where(n => n.Type == "Text").Select(n => n.Name))}");
+                    if (Native.WindowText(h).StartsWith(title, StringComparison.Ordinal)) return h;
+                }
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    private void CloseViewer(IntPtr hwnd, Process? process, string step)
+    {
+        Native.PostMessage(hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+        WaitUntil(() => !Native.IsWindow(hwnd), "the viewing window to close", 10_000);
+        if (process != null)
+        {
+            if (!process.WaitForExit(10_000)) _report.Fail(Where(step), "the viewing window's process did not exit within 10 s");
+            else Expect(process.ExitCode == 0, step, $"the viewing window exited with {process.ExitCode}");
+        }
+    }
+
+    private static void KillViewers()
+    {
+        foreach (var p in Process.GetProcessesByName(VideoWindowProcess))
+        {
+            try { p.Kill(); p.WaitForExit(5000); }
+            catch (Exception) { }
+            finally { p.Dispose(); }
+        }
+    }
+
+    private void CheckDpi(IntPtr hwnd, string step)
+    {
+        uint dpi = Native.GetDpiForWindow(hwnd), want = (uint)(96 * _s.Scale / 100);
+        Expect(dpi == want, step, $"the window is at {dpi} dpi, expected {want} ({_s.Scale}%): not per-monitor aware?");
+    }
+
+    /// <summary>The app's local API port (a random one in these configs), from its log.</summary>
+    private int? ApiPort()
+    {
+        foreach (var line in ReadLog())
+            if (Regex.Match(line, @"local API on http://127\.0\.0\.1:(\d+)/") is { Success: true } m) return int.Parse(m.Groups[1].Value);
+        return null;
+    }
+
     // ---------------------------------------------------------------- flyout
 
-    private void Flyout(bool connected)
+    private void Flyout(bool connected, bool compatibility = false)
     {
         var flyout = OpenFlyout();
         Thread.Sleep(500);
@@ -325,8 +740,14 @@ internal sealed class Walker
         Dump(tree, "flyout");
         string expected = connected ? T("断开") : T("连接");
         Expect(tree.Descendants().Any(n => n.Type == "Button" && n.Says(expected)), "flyout", $"no 「{expected}」 button");
-        string name = connected ? _fake!.Name : T("还没有选择音箱");
+        string name = compatibility ? "CI compatibility receiver" : connected ? _fake!.Name : T("还没有选择音箱");
         Expect(Has(tree, name), "flyout", $"doesn't show 「{name}」");
+        if (compatibility)
+        {
+            Expect(tree.Descendants().Any(n => n.Shown && n.Name == T("兼容模式延迟（实验性）")), "flyout",
+                "compatibility latency selector is missing"); // experimental since 1.1
+            Expect(Has(tree, "2000 ms"), "flyout", "compatibility default is not 2000 ms");
+        }
         Shoot(flyout, "flyout", "tray flyout");
         Layout(tree, "flyout");
         Checks.OnScreen(flyout, Where("flyout"), _report);
@@ -351,6 +772,7 @@ internal sealed class Walker
     {
         var open = FindFlyout();
         if (open != IntPtr.Zero) return open;
+        HandlePrompts(); // a message box still open would swallow the request: the flyout never came (2026-10-14)
         using (var second = Process.Start(StartInfo("gui --flyout"))!)
         {
             if (!second.WaitForExit(15_000)) throw new StepFailed("a second gui --flyout did not exit");
@@ -476,7 +898,15 @@ internal sealed class Walker
     {
         "首页" => "home",
         "混音器" => "mixer",
-        "麦克风与音效" => "effects",
+        "麦克风" => "microphone",
+        "均衡" => "equalizer",
+        "音箱信息" => "speakers",
+        "多音箱（实验性）" => "groups",
+        "多声道（5.1 / 7.1，实验性）" => "multichannel",
+        "同步观影窗口（实验性）" => "viewing",
+        "音画同步测试" => "sync-test",
+        "使用配置" => "profiles",
+        "关于" => "about",
         _ => "settings",
     };
 
@@ -495,6 +925,7 @@ internal sealed class Walker
         var psi = new ProcessStartInfo(_exe, arguments) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(_exe)! };
         if (Profile != null) psi.Environment["HOMEPODCAST_PROFILE"] = Profile;
         else psi.Environment.Remove("HOMEPODCAST_PROFILE");
+        if (_dotnetRoot != null) psi.Environment["DOTNET_ROOT"] = psi.Environment["DOTNET_ROOT_X64"] = _dotnetRoot; // Walker.Runtime.cs
         return psi;
     }
 
@@ -740,6 +1171,9 @@ internal sealed class Walker
         Checks.Layout(tree, Where(step), _t, first, _userData);
         if (first.Failures.Count > 0 && tree.Hwnd != IntPtr.Zero && Native.IsWindowVisible(tree.Hwnd))
         {
+            // A firewall message box can come up late, a child of the main window over the page. 2026-10-14: twice a
+            // runner's network change brought 「当前是公用网络」 up during 首页's checks. Answer it, then look again.
+            HandlePrompts();
             Thread.Sleep(800);
             first = new Report { Silent = true };
             Checks.Layout(Uia.Snapshot(tree.Hwnd), Where(step), _t, first, _userData);

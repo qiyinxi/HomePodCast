@@ -76,5 +76,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Le retard du son dépasse la limite d’image de 2000 ms. L’image ne peut pas être assez retardée pour correspondre."
   }
 }

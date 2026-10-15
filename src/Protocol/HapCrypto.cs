@@ -15,10 +15,10 @@ public static class HapKeys
 public sealed class CounterCipher : IDisposable
 {
     public const int TagSize = 16;
-    private readonly ChaCha20Poly1305 _aead;
+    private readonly ChaChaPoly _aead;
     private ulong _counter;
 
-    public CounterCipher(byte[] key) => _aead = new ChaCha20Poly1305(key);
+    public CounterCipher(byte[] key) => _aead = new ChaChaPoly(key);
 
     public ulong Counter => _counter;
 

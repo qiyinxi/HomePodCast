@@ -33,6 +33,15 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>The receiver's device id (TXT "deviceid"); null: the one its /info reports ("deviceID").</summary>
     public string? DeviceId { get; init; }
+
+    /// <summary>Third-party diagnostics only: request path and status, never body or credentials.</summary>
+    public Action<string>? RequestLog { get; init; }
+
+    /// <summary>Some third-party receivers omit the optional event channel. Default preserves the HomePod path.</summary>
+    public bool AllowMissingEventChannel { get; init; }
+
+    /// <summary>Third-party pairing over RTSP. HomePods and Apple TVs retain HTTP by default.</summary>
+    internal bool PairingOverRtsp { get; init; }
 }
 
 /// <summary>
@@ -40,7 +49,7 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 /// transient pair-setup (HomePods) or pair-verify with a stored PIN pairing (Apple TV) → encrypted RTSP → SETUP (session)
 /// → event channel → SETUP (stream) → RECORD/FLUSH → RTP + sync, with /feedback keep-alives.
 /// </summary>
-public sealed class AirPlayClient : IDisposable, IGroupMember
+public sealed partial class AirPlayClient : IDisposable, IGroupMember
 {
     private const string PairUserAgent = "AirPlay/320.20";
     private static readonly TimeSpan FeedbackInterval = TimeSpan.FromSeconds(2);
@@ -128,6 +137,17 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     {
         var target = await NegotiateAsync(options, ct);
 
+        StartRealtimeSender(target, options, fifo);
+    }
+
+    internal void StartPreparedStream(StreamOptions options, AudioFifo fifo)
+    {
+        if (StreamTarget == null || _sender != null) throw new InvalidOperationException("No prepared stream");
+        StartRealtimeSender(StreamTarget, options, fifo);
+    }
+
+    private void StartRealtimeSender(RtpTarget target, StreamOptions options, AudioFifo fifo)
+    {
         // --- start: anchor the timeline a little in the future so RECORD/FLUSH fit before packet 0
         _sender = new RtpSender(target.Control, target.Remote, target.DataPort, target.ControlPort, target.StreamKey,
             target.Ssrc, LatencyFrames, fifo) { LatencyInSync = options.LatencyInSync, Effects = options.Effects };
@@ -145,6 +165,9 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
     {
         VolumeCapPercent = options.VolumeCapPercent;
+        if (options.PairingOverRtsp) _rtsp.PairingOverRtsp = true;
+        if (options.RequestLog != null)
+            _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {method} {uri}: {status}");
         var info = _rtsp.Rtsp("GET", "/info");
         if (info.IsSuccess && info.Body.Length > 0)
             Info = BPlist.ReadDict(info.Body);
@@ -165,8 +188,11 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         int eventPort = Convert.ToInt32(s1.GetValueOrDefault("eventPort") ?? 0L);
         Log.Debug($"SETUP session -> eventPort={eventPort} timingPort={s1.GetValueOrDefault("timingPort")}");
 
-        _events = await EventChannel.ConnectAsync(_rtsp.RemoteIp, eventPort, shared, ct);
-        _events.Closed += SignalLost;
+        if (eventPort > 0 || !options.AllowMissingEventChannel)
+        {
+            _events = await EventChannel.ConnectAsync(_rtsp.RemoteIp, eventPort, shared, ct);
+            _events.Closed += SignalLost;
+        }
 
         // --- stream SETUP
         int latencyFrames = Math.Max(RtpSender.FramesPerPacket * 4, options.LatencyMs * RtpSender.SampleRate / 1000);
@@ -364,7 +390,7 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
     }
 
     private static HttpMessage Expect(HttpMessage resp, string what) =>
-        resp.IsSuccess ? resp : throw new AirPlayException($"{what} failed: {resp.StartLine}");
+        resp.IsSuccess ? resp : throw new AirPlayException($"{what} failed: {resp.StartLine}") { ResponseStatusCode = resp.StatusCode, RequestName = what };
 
     private void Feedback()
     {
@@ -412,24 +438,20 @@ public sealed class AirPlayClient : IDisposable, IGroupMember
         _lostSignalled = 1; // no Lost events during deliberate teardown
         _feedbackTimer?.Dispose();
         _sender?.Dispose();
-        try { _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]); } catch { }
+        _buffered?.Dispose();
+        PtpRealtime?.Dispose();
+        try
+        {
+            if (_rtsp.PairingOverRtsp) _rtsp.RtspPlist("TEARDOWN", new());
+            else _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]);
+        }
+        catch { }
         _events?.Dispose();
         _control.Dispose();
         _timing.Dispose();
+        _ptp?.Dispose();
         _rtsp.Dispose();
     }
-}
-
-public class AirPlayException(string message) : Exception(message)
-{
-    /// <summary>
-    /// The message for the log when the user's <see cref="Exception.Message"/> names a speaker: the same with the names
-    /// marked by <see cref="Log.Name"/>, so that a diagnostic report leaves them out (Message never has the markers).
-    /// </summary>
-    public string? LogMessage { get; init; }
-
-    /// <summary>What the log says about <paramref name="ex"/>.</summary>
-    public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;
 }
 
 /// <param name="network">

@@ -53,8 +53,26 @@ internal sealed class FakeAirPlayReceiver : IDisposable
 
     public string Pin { get; set; } = "0482";
     public string DeviceId { get; } = "3E:B7:8E:9F:64:72";
+    public string? ModelOverride { get; init; }
+    public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
     public int ArrivalToRenderMs { get; set; } = 140;
+    private UdpClient? _ptpEvents, _ptpGeneral;
+    public PtpPorts TimingPorts
+    {
+        get
+        {
+            _ptpEvents ??= new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            _ptpGeneral ??= new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+            return new(0, 0, ((IPEndPoint)_ptpEvents.Client.LocalEndPoint!).Port,
+                ((IPEndPoint)_ptpGeneral.Client.LocalEndPoint!).Port);
+        }
+    }
+    public int? BufferedDataPort { get; init; }
+    public Dictionary<string, object?>? SessionSetup { get; private set; }
+    public Dictionary<string, object?>? StreamSetup { get; private set; }
+    public Dictionary<string, object?>? RateAnchor { get; private set; }
+    public Dictionary<string, object?>? BufferedFlush { get; private set; }
 
     /// <summary>The identifier in M6 and pair-verify M2.</summary>
     public byte[] AccessoryId => Encoding.UTF8.GetBytes(DeviceId);
@@ -164,7 +182,12 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 Reply reply;
                 try
                 {
-                    reply = Handle(req, c);
+                    if (RefuseRequest?.Invoke(req) is { } status)
+                    {
+                        Record(req.StartLine + " refused", c.Session != null);
+                        reply = new Reply(status + " Refused", []);
+                    }
+                    else reply = Handle(req, c);
                 }
                 catch (Exception ex)
                 {
@@ -219,7 +242,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
                 {
                     ["name"] = Name,
-                    ["model"] = AppleTv ? "AppleTV14,1" : "AudioAccessory6,1",
+                    ["model"] = ModelOverride ?? (AppleTv ? "AppleTV14,1" : "AudioAccessory6,1"),
                     ["deviceID"] = DeviceId,
                     ["statusFlags"] = StatusFlags,
                     ["sourceVersion"] = AppleTv ? "980.77.2" : "900.7.1",
@@ -241,6 +264,17 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         {
             case "SETUP":
                 return Setup(BPlist.ReadDict(req.Body));
+            case "SETPEERS":
+                Record(method, true);
+                return Ok;
+            case "SETRATEANCHORTIME":
+                RateAnchor = BPlist.ReadDict(req.Body);
+                Record(method, true);
+                return Ok;
+            case "FLUSHBUFFERED":
+                BufferedFlush = BPlist.ReadDict(req.Body);
+                Record(method, true);
+                return Ok;
             case "RECORD" or "FLUSH" or "SET_PARAMETER" or "TEARDOWN":
                 Record(method, true);
                 return Ok;
@@ -342,6 +376,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         const string plist = "application/x-apple-binary-plist";
         if (body.GetValueOrDefault("streams") is List<object?> { Count: > 0 } streams && streams[0] is Dictionary<string, object?> stream)
         {
+            StreamSetup = stream;
             Record("SETUP stream", true);
             StreamKey = stream.GetValueOrDefault("shk") as byte[];
             return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
@@ -350,14 +385,15 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 {
                     new Dictionary<string, object?>
                     {
-                        ["type"] = 96L,
-                        ["dataPort"] = (long)Rtp.DataPort,
+                        ["type"] = stream.GetValueOrDefault("type") ?? 96L,
+                        ["dataPort"] = (long)(BufferedDataPort ?? Rtp.DataPort),
                         ["controlPort"] = (long)Rtp.ControlPort,
                         ["arrivalToRenderLatencyMs"] = (long)ArrivalToRenderMs,
                     },
                 },
             }), plist);
         }
+        SessionSetup = body;
         Record("SETUP session", true);
         return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
         {
@@ -369,6 +405,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public void Dispose()
     {
         _closed = true;
+        _ptpEvents?.Dispose(); _ptpGeneral?.Dispose();
         _listener.Stop();
         _events.Stop();
         lock (_connections)

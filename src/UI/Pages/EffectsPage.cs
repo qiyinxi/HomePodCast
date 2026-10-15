@@ -4,8 +4,8 @@ using HomePodCast.UI.Controls;
 namespace HomePodCast.UI.Pages;
 
 /// <summary>
-/// 麦克风与音效: the microphone (device, on/off, gain, noise gate), where the voice goes (HomePod / local
-/// monitor / both), reverb, and two equalizers: one on the mic, one on everything sent to the HomePod.
+/// 麦克风: device, monitoring on/off, gain, noise gate, where the voice goes (HomePod / local
+/// monitor / both), reverb and mic EQ. Output EQ lives on its own page.
 /// Edits AppConfig.Effects and applies every change to the shared <see cref="MicEffects"/> immediately.
 /// </summary>
 internal sealed class EffectsPage : ScrollPage
@@ -17,7 +17,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly bool _ownsEngine;
     private readonly ToolTip _tips = new();
 
-    private readonly ToggleSwitch _micOn = new(L.T("开启麦克风"));
+    private readonly ToggleSwitch _micOn = new(L.T("麦克风监听"));
     private readonly LevelMeter _meter = new();
     private readonly FluentComboBox _micDevice = new();
     private readonly FluentButton _refresh;
@@ -26,7 +26,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly ToggleSwitch _gate = new() { AccessibleName = L.T("噪声门") };
     private readonly FluentSlider _gateThreshold = Ui.Slider(-80, -20, 1, 6);
     private readonly TextBlock _gateValue = new("");
-    private readonly Segmented _destination = new(["HomePod", L.T("本机监听"), L.T("两者")]) { EqualWidths = false };
+    private readonly Segmented _destination = new(["HomePod", L.T("本机"), L.T("两者")]) { EqualWidths = false };
     private readonly FluentComboBox _monitorDevice = new();
     private readonly TextBlock _howl = new("", TextStyle.BodyStrong, TextRole.Caution, wrap: true);
     private readonly TextBlock _monitorCaptured = new(L.T(LocalMonitor.CapturedText), TextStyle.Body, TextRole.Caution, wrap: true) { Collapsed = true };
@@ -39,8 +39,7 @@ internal sealed class EffectsPage : ScrollPage
     private readonly FluentSlider _room = Ui.Slider(0, 100), _damping = Ui.Slider(0, 100), _mix = Ui.Slider(0, 100), _preDelay = Ui.Slider(0, 200);
     private readonly TextBlock _roomValue = new(""), _dampingValue = new(""), _mixValue = new(""), _preDelayValue = new("");
 
-    private readonly EqEditor _micEq, _outputEq;
-    private readonly TextBlock _nightNote = Ui.Note();
+    private readonly EqEditor _micEq;
     private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 100 };
     private readonly System.Windows.Forms.Timer _saveDebounce = new() { Interval = 600 };
     private List<AudioEndpoint> _inputs = [], _outputs = [];
@@ -49,19 +48,17 @@ internal sealed class EffectsPage : ScrollPage
 
     private EffectsSettings S => _config.Effects;
 
-    public EffectsPage(AppConfig config, MicEffects fx, bool ownsEngine = false) : base(L.T("麦克风与音效"))
+    public EffectsPage(AppConfig config, MicEffects fx, bool ownsEngine = false) : base(L.T("麦克风"))
     {
         _config = config;
         _fx = fx;
         _ownsEngine = ownsEngine;
         _refresh = Ui.IconButton(Glyph.Refresh, L.T("刷新"), L.T("重新读取设备列表"), _tips);
         _micEq = new EqEditor(L.T("麦克风均衡"));
-        _outputEq = new EqEditor(L.T("HomePod 输出均衡（所有声音）"));
-        _outputEq.Card.Controls.Add(_nightNote);
 
         Content.Controls.Add(BuildMicCard());
         Content.Controls.Add(BuildReverbCard());
-        Content.Controls.Add(new Columns(_micEq.Card, _outputEq.Card) { MinColumnWidth = 300 });
+        Content.Controls.Add(_micEq.Card);
 
         WireEvents();
         LoadDevices();
@@ -76,18 +73,19 @@ internal sealed class EffectsPage : ScrollPage
         var title = Ui.Header(L.T("麦克风"));
         var head = Ui.Row(12, title, title, _micOn);
         // A FieldRow names the row of controls after its caption; the control in it gets the caption too (screen readers).
-        _micDevice.AccessibleName = L.T("设备");
+        _micDevice.AccessibleName = L.T("输入设备");
         _gateThreshold.AccessibleName = L.T("噪声门");
-        _destination.AccessibleName = L.T("送到");
-        var device = new FieldRow(L.T("设备"), Ui.Row(6, _micDevice, _micDevice, _refresh));
+        _destination.AccessibleName = L.T("输出到");
+        var device = new FieldRow(L.T("输入设备"), Ui.Row(6, _micDevice, _micDevice, _refresh));
         var level = new FieldRow(L.T("电平"), _meter);
         var gain = new FieldRow(L.T("增益"), _gain, _gainValue);
         var gate = new FieldRow(L.T("噪声门"), Ui.Row(12, _gateThreshold, _gate, _gateThreshold), _gateValue);
-        var route = new FieldRow(L.T("送到"), Ui.Row(0, null, _destination));
-        var monitor = new FieldRow(L.T("监听设备"), _monitorDevice);
+        var route = new FieldRow(L.T("输出到"), Ui.Row(0, null, _destination));
+        var monitor = new FieldRow(L.T("本机输出设备"), _monitorDevice);
         FieldRow.AlignCaptions(device, level, gain, gate, route, monitor);
         ShowDelayHint();
-        var card = Ui.Card(head, device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _delayHint, _micStatus,
+        var card = Ui.Card(head, _delayHint, Ui.Note(L.T("每次启动 HomePodCast 时麦克风默认关闭。")),
+            device, level, gain, gate, route, monitor, _monitorCaptured, _howl, _micStatus,
             Ui.Row(0, null, _micPrivacy), _routeStatus);
         card.Gap = 8;
         return card;
@@ -99,11 +97,24 @@ internal sealed class EffectsPage : ScrollPage
         var head = Ui.Row(12, title, title, _reverbOn);
         FieldRow[] rows =
         [
-            new(L.T("房间大小"), _room, _roomValue),
-            new(L.T("阻尼"), _damping, _dampingValue),
-            new(L.T("混响比例"), _mix, _mixValue),
-            new(L.T("预延迟"), _preDelay, _preDelayValue),
+            new(L.T("衰减（Room Size）"), _room, _roomValue),
+            new(L.T("高频阻尼（Damping）"), _damping, _dampingValue),
+            new(L.T("干湿比（Wet/Dry）"), _mix, _mixValue),
+            new(L.T("预延迟（Pre-delay）"), _preDelay, _preDelayValue),
         ];
+        string[] hints =
+        [
+            L.T("调大后混响尾音更长。"),
+            L.T("调大后高频衰减更快，混响更柔和。"),
+            L.T("调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。"),
+            L.T("调大后混响更晚出现，原声和混响之间的间隔更长。"),
+        ];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            _tips.SetToolTip(rows[i].Caption, hints[i]);
+            _tips.SetToolTip(rows[i].Field, hints[i]);
+            rows[i].Field.AccessibleDescription = hints[i];
+        }
         FieldRow.AlignCaptions(rows);
         var card = Ui.Card([head, .. rows]);
         card.Gap = 8;
@@ -130,7 +141,6 @@ internal sealed class EffectsPage : ScrollPage
         _mix.Scroll += (_, _) => Edit(() => S.ReverbMix = _mix.Value / 100.0);
         _preDelay.Scroll += (_, _) => Edit(() => S.ReverbPreDelayMs = _preDelay.Value);
         _micEq.Changed += () => Edit(() => { });
-        _outputEq.Changed += () => Edit(() => { });
         _saveDebounce.Tick += (_, _) => Flush();
     }
 
@@ -167,6 +177,7 @@ internal sealed class EffectsPage : ScrollPage
             return;
         }
         _fx.Apply();
+        ShowDelayHint();
         ShowValues();
         UpdateEnabled();
         _saveDebounce.Stop();
@@ -227,11 +238,10 @@ internal sealed class EffectsPage : ScrollPage
         _mix.Value = Percent(s.ReverbMix);
         _preDelay.Value = (int)Math.Round(s.ReverbPreDelayMs);
         s.MicEq ??= new EqSettings();
-        s.OutputEq ??= new EqSettings();
         _micEq.Load(s.MicEq);
-        _outputEq.Load(s.OutputEq);
         _loading = false;
         ShowValues();
+        ShowDelayHint();
         UpdateEnabled();
         UpdateStatus();
     }
@@ -282,14 +292,14 @@ internal sealed class EffectsPage : ScrollPage
 
     private bool ConfirmSpeakers() => MessageBox.Show(FindForm(),
         L.T("监听设备是扬声器：麦克风会再次收到扬声器的声音，可能产生很响的啸叫。\n\n建议戴耳机，或只把人声送到 HomePod。仍要开启本机监听吗？"),
-        L.T("麦克风与音效"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+        L.T("麦克风"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
     private void UpdateStatus()
     {
         var mic = _fx.Mic;
         _meter.SetLevel(mic?.Running == true ? mic.Peak : 0);
-        _micStatus.Text = mic == null ? L.T("麦克风已关闭。")
-            : mic.Error is { } error ? L.F("麦克风打不开：{0}", error)
+        _micStatus.Text = mic == null ? L.T("麦克风监听已关闭。")
+            : mic.Error is { } error ? L.F("无法打开麦克风：{0}", error)
             : !mic.Running ? L.T("正在打开麦克风…")
             : L.F("{0} · {1} Hz · 周期 {2:F1} ms", mic.DeviceName, mic.DeviceRate, mic.PeriodMs) +
               (mic.LowLatency ? L.T("（低延迟模式）") : "");
@@ -304,7 +314,7 @@ internal sealed class EffectsPage : ScrollPage
             lines.Add(_fx.HomePodSource.IsBeingRead ? L.T("HomePod：人声正在推送。") : L.T("HomePod：未在推送（连接音箱后人声才会送出）。"));
         if (_fx.Monitor is { } monitor)
         {
-            lines.Add(monitor.Error is { } monitorError ? L.F("本机监听打不开：{0}", monitorError)
+            lines.Add(monitor.Error is { } monitorError ? L.F("无法启动本机监听：{0}", monitorError)
                 : !monitor.Running ? L.T("正在打开监听设备…")
                 : L.F("本机监听：{0} · 延迟约 {1:F0} ms", monitor.DeviceName, monitor.EstimatedLatencyMs) +
                   (monitor.Underruns > 0 ? L.F(" · 断音 {0} 次", monitor.Underruns) : ""));
@@ -312,15 +322,18 @@ internal sealed class EffectsPage : ScrollPage
         _routeStatus.Text = string.Join("\n", lines);
         // 本机监听 is paused while its device is the one captured for the speaker (MicEffects.MonitorBlocked).
         _monitorCaptured.Collapsed = !(mic != null && _fx.MonitorBlocked);
-        _nightNote.Text = _config.NightMode ? L.T("夜间模式开着：现在用的是「减弱低音」，关掉夜间模式后恢复这里的设置。") : "";
     }
 
     // ---------------------------------------------------------------- lifetime
 
     /// <summary>The latency can change while the app runs (scenes, slider): refreshed when the page is shown.</summary>
     private void ShowDelayHint() =>
-        _delayHint.Text = L.F("经 HomePod 播出的人声会比实际晚约 {0} ms（推流延迟），唱歌请用「本机监听」并戴耳机。",
-            Math.Max(_config.LatencyMs, 100) + 20);
+        _delayHint.Text = S.Destination switch
+        {
+            MicDestination.Monitor => L.T("你的声音只在监听设备（耳机）里播放，不会推到 HomePod。"),
+            MicDestination.Both => L.F("音箱和耳机里都有你的声音；音箱里的晚约 {0} ms。", Math.Max(_config.LatencyMs, 100) + 20),
+            _ => L.F("你的声音会和电脑声音一起从 HomePod 播出，比实际晚约 {0} ms。", Math.Max(_config.LatencyMs, 100) + 20),
+        };
 
     public override void PageShown()
     {
@@ -354,131 +367,6 @@ internal sealed class EffectsPage : ScrollPage
         var config = AppConfig.Load();
         config.Effects ??= new EffectsSettings();
         var page = new EffectsPage(config, new MicEffects(config.Effects), ownsEngine: true);
-        return new ApplicationContext(new PageWindow(page, L.T("麦克风与音效")));
-    }
-
-    // ---------------------------------------------------------------- equalizer
-
-    /// <summary>Preset picker plus one vertical slider per band (−12…+12 dB).</summary>
-    private sealed class EqEditor
-    {
-        private const int Range = 12;
-        private readonly FluentComboBox _preset = new() { MinWidth = 160 }; // wider for longer preset names
-        private readonly FluentSlider[] _bands = new FluentSlider[Equalizer.BandCount];
-        private readonly TextBlock[] _values = new TextBlock[Equalizer.BandCount];
-        private EqSettings _settings = new();
-        private bool _loading;
-
-        public Card Card { get; }
-        public event Action? Changed;
-
-        public EqEditor(string title)
-        {
-            foreach (var p in EqPresets.All) _preset.Items.Add(EqPresets.Name(p));
-            var bands = new EqBands();
-            for (int i = 0; i < Equalizer.BandCount; i++)
-            {
-                _values[i] = new TextBlock("0", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Center };
-                _bands[i] = new FluentSlider
-                {
-                    Orientation = Orientation.Vertical,
-                    Minimum = -Range,
-                    Maximum = Range,
-                    SmallChange = 1,
-                    LargeChange = 3,
-                    PreferredLength = 132,
-                    FillOrigin = 0,
-                    AccessibleName = L.F("{0} Hz", Equalizer.BandLabels[i]),
-                };
-                var label = new TextBlock(Equalizer.BandLabels[i], TextStyle.Caption) { Align = HorizontalAlignment.Center };
-                bands.Add(_values[i], _bands[i], label);
-                _bands[i].Scroll += (_, _) => OnBandChanged();
-            }
-            _preset.AccessibleName = L.T("预设");
-            var preset = new FieldRow(L.T("预设"), Ui.Row(0, null, _preset));
-            Card = Ui.Card(Ui.Header(title), preset, bands);
-            Card.Gap = 10;
-            _preset.SelectionChangeCommitted += (_, _) => OnPresetChanged();
-        }
-
-        public void Load(EqSettings settings)
-        {
-            _settings = settings;
-            if (_settings.Gains is not { Length: Equalizer.BandCount }) _settings.Gains = new double[Equalizer.BandCount];
-            _loading = true;
-            var preset = EqPresets.FromId(settings.Preset);
-            _preset.SelectedIndex = IndexOf(preset);
-            ShowGains(EqPresets.Gains(preset) ?? settings.Gains);
-            _loading = false;
-        }
-
-        private static int IndexOf(EqPreset p) => Math.Max(0, EqPresets.All.ToList().IndexOf(p));
-
-        private void ShowGains(double[] gains)
-        {
-            for (int i = 0; i < Equalizer.BandCount; i++)
-            {
-                int g = Math.Clamp((int)Math.Round(gains[i]), -Range, Range);
-                _bands[i].Value = g;
-                _values[i].Text = g == 0 ? "0" : $"{g:+0;-0}";
-            }
-        }
-
-        private void OnPresetChanged()
-        {
-            if (_loading || _preset.SelectedIndex < 0) return;
-            var preset = EqPresets.All[_preset.SelectedIndex];
-            _settings.Preset = EqPresets.Id(preset);
-            ShowGains(EqPresets.Gains(preset) ?? _settings.Gains);
-            Changed?.Invoke();
-        }
-
-        private void OnBandChanged()
-        {
-            for (int i = 0; i < Equalizer.BandCount; i++)
-            {
-                int g = _bands[i].Value;
-                _values[i].Text = g == 0 ? "0" : $"{g:+0;-0}";
-            }
-            if (_loading) return;
-            // Moving a band turns any preset into a custom curve starting from it.
-            _settings.Gains = _bands.Select(b => (double)b.Value).ToArray();
-            _settings.Preset = EqPresets.Id(EqPreset.Custom);
-            _preset.SelectedIndex = IndexOf(EqPreset.Custom);
-            Changed?.Invoke();
-        }
-    }
-
-    /// <summary>Band columns (value, vertical slider, frequency) spread across the card.</summary>
-    private sealed class EqBands : LayoutPanel
-    {
-        private readonly List<(TextBlock Value, FluentSlider Slider, TextBlock Label)> _columns = [];
-
-        public void Add(TextBlock value, FluentSlider slider, TextBlock label)
-        {
-            _columns.Add((value, slider, label));
-            Controls.AddRange([value, slider, label]);
-        }
-
-        protected override int Arrange(int width, bool apply)
-        {
-            if (_columns.Count == 0) return 0;
-            int colW = width / _columns.Count;
-            int valueH = HeightFor(_columns[0].Value, colW), labelH = HeightFor(_columns[0].Label, colW);
-            int sliderH = _columns[0].Slider.GetPreferredSize(Size.Empty).Height;
-            int sliderW = Dp(32);
-            if (apply)
-            {
-                for (int i = 0; i < _columns.Count; i++)
-                {
-                    int x = i * colW;
-                    var (value, slider, label) = _columns[i];
-                    Place(value, x, 0, colW, valueH);
-                    Place(slider, x + (colW - sliderW) / 2, valueH + Dp(2), sliderW, sliderH);
-                    Place(label, x, valueH + Dp(4) + sliderH, colW, labelH);
-                }
-            }
-            return valueH + Dp(4) + sliderH + labelH;
-        }
+        return new ApplicationContext(new PageWindow(page, L.T("麦克风")));
     }
 }

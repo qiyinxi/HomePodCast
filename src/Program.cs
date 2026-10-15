@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using HomePodCast.Audio;
 using HomePodCast.Net;
+using HomePodCast.Protocol;
 
 namespace HomePodCast;
 
@@ -68,6 +69,9 @@ public static class Program
         var updatedFrom = Update.UpdateInstaller.UpdatedFrom(Environment.GetCommandLineArgs());
         Log.Info($"HomePodCast {Update.ReleaseVersion.CurrentText} starting" + (updatedFrom != null ? $" (after an update from {updatedFrom})" : "") +
                  (AppEnvironment.IsPackaged ? $" from the package {AppEnvironment.PackageFamilyName ?? "?"} (Microsoft Store version)" : ""));
+        // A line of its own: msix-e2e checks how the line above ends.
+        Log.Info($"Windows {Environment.OSVersion.Version}" +
+                 (Protocol.ChaChaPoly.UsesOwnImplementation ? ": no ChaCha20-Poly1305 in Windows, using our own" : ""));
         // The Store version's startup task passes --tray (packaging/msix/AppxManifest.xml); if Windows didn't, the
         // activation kind still says it was the startup task.
         if (!startHidden && Autostart.StartedByStartupTask())
@@ -88,17 +92,27 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
-            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout));
-        if (UI.LanguageMenu.RestartRequested)
+        var args = Environment.GetCommandLineArgs();
+        Application.Run(args.Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
+            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout, AppRestart.Resume(args)));
+        // 「立即重启」 after a .NET update (UI/TrayApp.Runtime.cs), or a new UI language.
+        if ((AppRestart.Requested ?? (UI.LanguageMenu.RestartRequested ? new AppRestart.Request("to apply the UI language") : null)) is { } restart)
         {
             // The Store version starts again through its package (Explorer), so the new copy has package identity too.
-            var (file, arguments) = AppEnvironment.Relaunch;
-            Log.Info("restarting to apply the UI language" + (AppEnvironment.IsPackaged ? $": {file} {arguments}" : ""));
+            var (file, arguments) = AppRestart.CommandFor(restart);
+            bool asShellUser = AppRestart.RunsElevated();
+            Log.Info($"restarting {restart.Why}" + (AppEnvironment.IsPackaged || arguments.Length > 0 ? $": {file} {arguments}" : "") +
+                     (asShellUser ? " (as the signed-in user: this copy runs as administrator)" : ""));
             Log.CloseFile(); // the new copy opens the same log file
             single.ReleaseMutex();
             single.Dispose(); // ...and must be able to create the single-instance mutex
-            Process.Start(file, arguments);
+            if (AppRestart.Start(file, arguments, asShellUser) is { } error)
+            {
+                Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName)); // no new copy holds it
+                Log.Error($"restart: {file} did not start: {error}");
+                Log.CloseFile();
+                return 1;
+            }
         }
         return 0;
     }
@@ -108,13 +122,16 @@ public static class Program
         Console.WriteLine("""
             HomePodCast
               scan [--txt]                           list AirPlay speakers (and stereo pairs)
-              info --host IP                         dump the speaker's /info (read-only)
+              info --host IP [--port N]                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
+              stream --protocol raop --host IP [--port N] [--latency 1000|1500|2000] [--silent | --tone] [--cap 10]
+                     [--encryption 0|1|4]           experimental; password via HOMEPODCAST_RAOP_PASSWORD
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
               autostart on|off|status                the Microsoft Store version's startup task (tests: see packaging/msix)
               firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
+        // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
@@ -259,31 +276,30 @@ public static class Program
         foreach (var d in devices)
         {
             Console.WriteLine("  " + d);
-            if (txt) Console.WriteLine("      " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
+            if (txt) Console.WriteLine($"      experimental receiver={d.Kind} airplay={(d.HasAirPlay ? d.Port : null)} raop={d.RaopPort} " + string.Join(' ', d.Txt.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}={kv.Value}")));
         }
         foreach (var line in StereoPairs.Describe(devices, allHomePods: txt)) Console.WriteLine(line); // experimental stereo pairs
         foreach (var line in HomeTheater.Describe(devices)) Console.WriteLine(line); // Apple TVs and their home-theater HomePods
         return 0;
     }
 
-    /// <summary>`info --host IP`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
+    /// <summary>`info --host IP [--port N]`: the speaker's GET /info, flattened (read-only: no pairing, no stream, no volume).</summary>
     private static async Task<int> Info(string[] args)
     {
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
-        using var rtsp = await RtspConnection.ConnectAsync(host, 7000, CancellationToken.None);
-        var reply = rtsp.Rtsp("GET", "/info");
-        Console.WriteLine($"{host}: {reply.StartLine}");
-        if (reply.IsSuccess && reply.Body.Length > 0)
-        {
-            var info = Protocol.BPlist.ReadDict(reply.Body);
-            foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
-            Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info)); // bit 17: another sender's (or our) session is active
-        }
+        int port = int.Parse(Opt(args, "--port") ?? "7000");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var info = await SpeakerInfoReader.ReadAsync(host, port, timeout.Token);
+        Console.WriteLine($"{host}:{port}: {ReceiverKinds.Classify("", null, info: info)}");
+        foreach (var line in InfoDump.Lines(info)) Console.WriteLine("  " + line);
+        Console.WriteLine("-> " + SpeakerInfoCache.DescribeFlags(info));
         return 0;
     }
 
     private static async Task<int> Stream(string[] args)
     {
+        if (Opt(args, "--protocol") is "raop")
+            return await StreamRaop(args);
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
         int latency = int.Parse(Opt(args, "--latency") ?? "250");
         int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
@@ -338,6 +354,40 @@ public static class Program
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
     }
+    // experimental since 1.1: separate compatibility sender, including a silent protocol-test mode.
+    private static async Task<int> StreamRaop(string[] args)
+    {
+        var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
+        int port = int.Parse(Opt(args, "--port") ?? "7000");
+        int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
+        bool silent = args.Contains("--silent"), tone = args.Contains("--tone");
+        var fifo = new AudioFifo(RaopAudio.SampleRate, targetMs: 20, capMs: 60);
+        using var capture = silent || tone ? null : new LoopbackCapture(fifo, RaopAudio.SampleRate);
+        using var source = tone && !silent ? new ToneGenerator(fifo) : null;
+        capture?.Start(); source?.Start();
+        var floats = new float[RaopAudio.FramesPerPacket * 2];
+        using var client = await RaopClient.ConnectAsync(host, port, new RaopOptions
+        {
+            LatencyMs = int.Parse(Opt(args, "--latency") ?? "2000"),
+            VolumePercent = double.Parse(Opt(args, "--volume") ?? "10"),
+            VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "10"),
+            Txt = new Dictionary<string, string> { ["et"] = Opt(args, "--encryption") ?? "0", ["cn"] = "1" },
+            Password = Environment.GetEnvironmentVariable("HOMEPODCAST_RAOP_PASSWORD"),
+            Log = Log.Info,
+            ReadAudio = pcm =>
+            {
+                fifo.Read(floats);
+                for (int i = 0; i < pcm.Length; i++) pcm[i] = (short)Math.Clamp((int)Math.Round(floats[i] * 32767), short.MinValue, short.MaxValue);
+            },
+        }, CancellationToken.None);
+        var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Lost += reason => lost.TrySetResult(reason);
+        await Task.WhenAny(Task.Delay(TimeSpan.FromSeconds(seconds)), lost.Task);
+        Log.Info($"RAOP sent={client.PacketsSent} rtx={client.RetransmitRequests}/{client.Retransmitted}/{client.RetransmitMisses} ntp={client.TimingRequests}");
+        if (lost.Task.IsCompleted) { Log.Warn(lost.Task.Result); return 1; }
+        return 0;
+    }
+
 }
 
 /// <summary>Test source: N short 880 Hz beeps at the start of every second, generated in real time.</summary>

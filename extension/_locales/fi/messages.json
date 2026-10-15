@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "Äänen viive ylittää kuvan 2000 ms:n rajan. Kuvaa ei voi viivästää riittävästi vastaamaan ääntä."
   }
 }

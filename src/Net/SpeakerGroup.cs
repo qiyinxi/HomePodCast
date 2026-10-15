@@ -2,27 +2,6 @@ using HomePodCast.Audio;
 
 namespace HomePodCast.Net;
 
-/// <summary>
-/// One speaker's session as a SpeakerGroup drives it (AirPlayClient.PrepareAsync in the app, fakes in
-/// tests): pairing, keys, SSRC, NTP timing, event channel and /feedback are all its own, but it has no
-/// sender of its own.
-/// </summary>
-internal interface IGroupMember : IDisposable
-{
-    string Name { get; }
-    RtpTarget Target { get; }
-    int LatencyFrames { get; }
-    int? ArrivalToRenderMs { get; }
-    double? InitialVolumeDb { get; }
-
-    /// <summary>Why the session ended, if it already has (Lost may have fired before anyone listened).</summary>
-    string? LostReason { get; }
-    event Action<string>? Lost;
-    void Record();
-    void Flush(ushort firstSeq, uint rtpBase);
-    void SetVolumePercent(double percent);
-}
-
 /// <summary>How to bring up one member of a group, and its offset from the shared volume (percentage points).</summary>
 internal sealed record MemberSetup(string Label, Func<CancellationToken, Task<IGroupMember>> Prepare, int VolumeOffset = 0);
 
@@ -83,7 +62,8 @@ internal sealed class SpeakerGroup : IDisposable
     /// session to it. If any member fails, whatever did connect is torn down and the failure is thrown.
     /// </summary>
     public static async Task<SpeakerGroup> ConnectAsync(IReadOnlyList<MemberSetup> setups, AudioFifo fifo,
-        double? volumePercent, CancellationToken ct, IAudioEffect? effects = null, Func<double>? volumeCap = null)
+        double? volumePercent, CancellationToken ct, IAudioEffect? effects = null, Func<double>? volumeCap = null,
+        IGroupPacketSource? source = null)
     {
         if (setups.Count == 0) throw new ArgumentException("empty group", nameof(setups));
         var group = new SpeakerGroup(setups, fifo, volumeCap);
@@ -99,6 +79,7 @@ internal sealed class SpeakerGroup : IDisposable
             var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), fifo)
             {
                 Effects = effects, // one chain, run once per packet before the per-speaker encode
+                GroupSource = source,
             };
             group._sender = sender;
             sender.Start(MediaClock.Now + MediaClock.FromMs(250));

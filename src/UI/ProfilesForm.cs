@@ -2,28 +2,31 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI;
 
-internal sealed class ProfilesForm : FluentDialog
+internal sealed class ProfilesPanel : StackPanel
 {
     private readonly AppConfig _config;
-    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440, Placeholder = L.T("选择配置…") };
+    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440, Placeholder = L.T("选择配置…"), AccessibleName = L.T("使用配置") };
     private readonly TextBox _name = new() { MaxLength = UsageProfiles.MaxNameLength, AccessibleName = L.T("配置名称") };
     private readonly FluentButton _apply = new(L.T("应用"), ButtonKind.Primary);
     private readonly FluentButton _delete = new(L.T("删除"), ButtonKind.Subtle);
     private string? _selected;
 
-    public ProfilesForm(TrayApp app) : this(app.Config, app.SaveUsageProfile, app.ApplyUsageProfile, app.DeleteUsageProfile) { }
+    public ProfilesPanel(TrayApp app) : this(app.Config, app.SaveUsageProfile, app.ApplyUsageProfile, app.DeleteUsageProfile) { }
 
-    internal ProfilesForm(AppConfig config, Action<string?, string> saveProfile,
-        Func<string, IWin32Window?, bool> applyProfile, Action<string> deleteProfile) : base(L.T("使用配置"))
+    public event Action? Applied;
+
+    internal ProfilesPanel(AppConfig config, Action<string?, string> saveProfile,
+        Func<string, IWin32Window?, bool> applyProfile, Action<string> deleteProfile)
     {
         _config = config;
-        ContentWidth = 540;
+        Gap = 12;
+        _name.BorderStyle = BorderStyle.FixedSingle;
+        StyleName();
         var help = new TextBlock(L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), wrap: true);
         var fresh = new FluentButton(L.T("新建"));
         var save = new FluentButton(L.T("保存当前设置"));
-        var close = new FluentButton(L.T("关闭")) { DialogResult = DialogResult.Cancel };
-        Body.Controls.AddRange([help, _profiles, new TextBlock(L.T("配置名称")), _name,
-            Ui.Row(8, null, fresh, save), ButtonRow(_delete, _apply, close)]);
+        Controls.AddRange([help, _profiles, new TextBlock(L.T("配置名称")), _name,
+            Ui.Row(8, null, fresh, save), Ui.Row(8, null, _delete, _apply)]);
         _profiles.SelectionChangeCommitted += (_, _) =>
         {
             _selected = Selected()?.Id;
@@ -56,7 +59,7 @@ internal sealed class ProfilesForm : FluentDialog
             }
             catch (Exception ex) { Log.Warn($"profile save failed: {ex.Message}"); MessageBox.Show(this, L.T("保存失败，请稍后重试。"), L.T("使用配置")); }
         };
-        _apply.Click += (_, _) => { if (_selected != null && applyProfile(_selected, this)) DialogResult = DialogResult.OK; };
+        _apply.Click += (_, _) => { if (_selected != null && applyProfile(_selected, FindForm())) Applied?.Invoke(); };
         _delete.Click += (_, _) =>
         {
             if (_selected == null || MessageBox.Show(this, L.T("删除选中的配置吗？"), L.T("使用配置"),
@@ -64,15 +67,26 @@ internal sealed class ProfilesForm : FluentDialog
             deleteProfile(_selected);
             _selected = null; _name.Clear(); Reload();
         };
-        CancelButton = close;
         Reload();
+    }
+
+    private void StyleName()
+    {
+        _name.BackColor = Theme.P.Control;
+        _name.ForeColor = Theme.P.Text;
+    }
+    protected override void OnThemeChanged()
+    {
+        StyleName();
+        base.OnThemeChanged();
     }
 
     private UsageProfile? Selected() => _profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _config.UsageProfiles.Count
         ? _config.UsageProfiles[_profiles.SelectedIndex] : null;
 
-    private void Reload()
+    public void Reload()
     {
+        using var layout = LayoutPanel.BatchRelayout(this);
         _profiles.Items.Clear();
         _profiles.Items.AddRange(_config.UsageProfiles.Select(p => p.Name));
         _profiles.SelectedIndex = _config.UsageProfiles.FindIndex(p => p.Id == _selected);
@@ -81,4 +95,19 @@ internal sealed class ProfilesForm : FluentDialog
     }
 
     private void UpdateButtons() => _apply.Enabled = _delete.Enabled = _selected != null;
+}
+
+internal sealed class ProfilesForm : FluentDialog
+{
+    public ProfilesForm(TrayApp app) : this(app.Config, app.SaveUsageProfile, app.ApplyUsageProfile, app.DeleteUsageProfile) { }
+    internal ProfilesForm(AppConfig config, Action<string?, string> save,
+        Func<string, IWin32Window?, bool> apply, Action<string> delete) : base(L.T("使用配置"))
+    {
+        ContentWidth = 540;
+        var panel = new ProfilesPanel(config, save, apply, delete);
+        var close = new FluentButton(L.T("关闭")) { DialogResult = DialogResult.Cancel };
+        Body.Controls.AddRange([panel, ButtonRow(close)]);
+        panel.Applied += () => DialogResult = DialogResult.OK;
+        CancelButton = close;
+    }
 }

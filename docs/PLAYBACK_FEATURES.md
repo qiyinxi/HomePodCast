@@ -4,7 +4,7 @@
 
 ### Apply your A/V measurement
 
-Connect the speaker, pause other audio and turn the microphone off, then open **Settings → A/V sync test**. Listen to the HomePod rather than the local output. Move the flash until it coincides with the click, then select **Apply this calibration**. The test must capture and send the click successfully; if the speaker connection, capture endpoint, latency or buffer changes, start the test again.
+Connect the speaker, pause other audio and turn the microphone off, then open **A/V sync test**. Listen to the HomePod rather than the local output. Move the flash until it coincides with the click, then select **Apply this calibration**. The test must capture and send the click successfully; if the speaker connection, capture endpoint, latency or buffer changes, start the test again.
 
 The app saves a correction to its estimate for this speaker (or speaker group), actual capture endpoint, default/selected-device choice and per-app routing mode. Home, the browser extension and mpv/VLC all use that correction. Changing latency scenes or the adaptive buffer still changes the resulting delay. **Restore default compensation** removes only the current path's correction. **Done** only remembers the test value. If nothing could be saved, the app says why: no test sound reached the speaker stream, the connection, source or latency changed during the test, or the value is too far from the estimate.
 
@@ -12,7 +12,7 @@ The browser extension adds each site's own offset (its ±5/±20 ms controls) on 
 
 ### Save a playback profile
 
-Choose your speaker, capture device, app destinations and independent send volumes, effects, volume cap, keyboard volume mode and night mode. Open **Home → Manage profiles** or **Settings → Playback profiles**, name the profile and select **Save current settings**. Up to 32 profiles can be stored, each under its own name. Selecting a saved profile lets you rename/overwrite it with current settings or delete it.
+Choose your speaker, capture device, app destinations and independent send volumes, effects, volume cap, keyboard volume mode and night mode. Open **Home → Manage profiles** or **Playback profiles**, name the profile and select **Save current settings**. Up to 32 profiles can be stored, each under its own name. Selecting a saved profile lets you rename/overwrite it with current settings or delete it.
 
 Home's profile picker shows the profile applied last, or **Choose a profile…** until you pick one, and **Apply** restores the whole set in one action. It reconnects only when the speaker, latency or group layout changes, at most once; effects, app destinations, the capture device, the volume cap and night mode apply without interrupting the sound. A profile that switches to another speaker connects as if you had picked it in the list: while another device (an iPhone or a Mac) plays to that speaker, HomePodCast waits until it is free instead of taking it over. A profile saved before any speaker was chosen keeps the current speaker. Speaker addresses are never restored from a profile (they may have changed since): the app uses where it last saw the speaker, or finds it by its ID when connecting. The microphone is switched off on application. Profiles store a volume cap rather than playback loudness: the current saved volume can only be lowered to the cap; a different speaker uses its own volume subject to that cap. Startup, language, update preferences, passwords and calibrations remain separate. A missing capture endpoint keeps capture paused, as with a manual device selection.
 
@@ -26,7 +26,7 @@ Windows session mute or zero volume still silences the HomePod. Below 1% Windows
 
 To mark a stutter when you hear one, give **Mark a stutter** a key in **Settings → Global hotkeys** (it has none by default) and press it while streaming, also in a fullscreen game. It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
 
-**Settings → Tools → Export diagnostics**. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
+**About → Export diagnostics**. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
 
 ### Synchronized browser fullscreen
 
@@ -38,7 +38,7 @@ While a player is fullscreen, through Sync fullscreen or the site's own fullscre
 
 ### 应用音画实测结果
 
-连接音箱，暂停其他音频并关闭麦克风，打开 **设置 → 音画同步测试**。以 HomePod 发出的声音为准，移动闪光直到它和「咔」声同时出现，再点 **应用本次校准**。程序必须成功采集并送出测试音；连接、采集设备、延迟或缓冲变化后需要重新测试。
+连接音箱，暂停其他音频并关闭麦克风，打开 **音画同步测试**。以 HomePod 发出的声音为准，移动闪光直到它和「咔」声同时出现，再点 **应用本次校准**。程序必须成功采集并送出测试音；连接、采集设备、延迟或缓冲变化后需要重新测试。
 
 保存的是实测与估算的差值，按音箱或音箱组、实际采集设备、默认／指定设备选择和按程序分流模式隔离。首页、浏览器插件和 mpv／VLC 使用同一修正值；切换场景和自适应缓冲仍会改变总延迟。**恢复默认补偿** 只清除当前路径的校准；**完成** 只记住测试数值。没能保存时会说明原因：没有检测到送往音箱的测试音、测试期间连接／音源／延迟变了，或者结果和估算相差太大。
 
@@ -46,7 +46,7 @@ While a player is fullscreen, through Sync fullscreen or the site's own fullscre
 
 ### 保存整套使用配置
 
-设置好音箱、采集设备、程序去处和独立音量、音效、音量上限、键盘音量模式、夜间模式，打开 **首页 → 管理配置** 或 **设置 → 使用配置**，命名后点 **保存当前设置**。最多保存 32 个，名称不能重复。选择已有配置后可以改名并用当前设置覆盖，也可以删除。
+设置好音箱、采集设备、程序去处和独立音量、音效、音量上限、键盘音量模式、夜间模式，打开 **首页 → 管理配置** 或 **使用配置**，命名后点 **保存当前设置**。最多保存 32 个，名称不能重复。选择已有配置后可以改名并用当前设置覆盖，也可以删除。
 
 首页的配置列表显示上次应用的配置，还没选过时显示 **选择配置…**；选好后点 **应用**，整套设置一次应用。只有音箱、延迟或多音箱布局变了才重连，最多一次；音效、程序去处、采集设备、音量上限和夜间模式直接生效，不打断声音。切换到另一只音箱的配置和在列表里选音箱一样：如果 iPhone、Mac 等其他设备正在往这只音箱推送，会等它空闲后再连，不会把它挤掉。还没选音箱时保存的配置会保留当前音箱。配置不会恢复保存时的音箱地址（之后可能变了）：用最近一次看到的地址，或者连接时按音箱 ID 查找。应用后麦克风关闭；配置保存音量上限，不保存播放音量：当前保存的音量只会降低到上限，换音箱时使用新音箱自己的音量并受上限限制。开机启动、语言、更新偏好、密码和校准单独保留。采集设备不可用时继续暂停采集，与手动选择设备的行为一致。
 
@@ -60,7 +60,7 @@ Windows 音频会话静音或音量为 0 时，HomePod 也没有声音。Windows
 
 想在听到卡顿时记下时间，先在 **设置 → 全局快捷键** 里给 **标记刚才的卡顿** 设一个组合键（默认没有），推流时按一下即可，全屏游戏里也能用。它记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
 
-**设置 → 工具 → 导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB）；读不了的日志会略过，报告里的 README 会写明。不包含配置文件、密码或录音。脱敏是尽力而为：日志写音箱和组成员名称时会做标记，导出时移除；旧版本日志里的名称按这些日志行的格式移除；当前设置里的名称和标识、地址、设备 ID 和路径会隐藏，统计数字保留。不会上传。分享前请检查内容。
+**关于 → 导出诊断**，选择本机 ZIP 保存位置即可。报告包含统计摘要、最近的脱敏日志和上一份轮转日志（如有，每份最多 2 MB）；读不了的日志会略过，报告里的 README 会写明。不包含配置文件、密码或录音。脱敏是尽力而为：日志写音箱和组成员名称时会做标记，导出时移除；旧版本日志里的名称按这些日志行的格式移除；当前设置里的名称和标识、地址、设备 ID 和路径会隐藏，统计数字保留。不会上传。分享前请检查内容。
 
 ### 浏览器同步全屏
 

@@ -182,7 +182,8 @@ function renderSite() {
       : t('hintNotRunning');
   } else {
     el.effDelay.textContent = String(eff);
-    if (eff > LONG_DELAY_MS) hint = t('hintLongDelay');
+    if (Number(state.status.videoDelayMs) + state.offset > MAX_DELAY_MS) hint = t('hintDelayLimit'); // experimental since 1.1
+    else if (eff > LONG_DELAY_MS) hint = t('hintLongDelay');
   }
   el.hint.textContent = hint;
   el.hint.hidden = !hint;

@@ -14,7 +14,7 @@ public sealed record DiagnosticSnapshot(DateTimeOffset CapturedAt, string Versio
     double BufferTargetMs, long Dropouts, long IdleGaps, long Overflows, long? PacketsSent, long? LateWakeups,
     long? SkippedPackets, long? ResendRequests, long? ResentPackets, long? ResendMisses,
     AdapterKind Adapter, NetworkCategory NetworkCategory, bool CaptureDeviceMissing, bool NoOutputDevice,
-    Net.NetworkVerdict? Network, DateTimeOffset[] AudibleGlitchMarkers);
+    Net.NetworkVerdict? Network, DateTimeOffset[] AudibleGlitchMarkers, ReceiverKind? ReceiverKind = null);
 
 /// <summary>
 /// 标记刚才的卡顿 (a global hotkey, no key by default): when the user heard a stutter, for the report's summary. Only while

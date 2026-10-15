@@ -6,6 +6,35 @@ Streams your Windows PC's sound to a HomePod over AirPlay 2 in real time: a low-
 
 TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a native C# implementation written from scratch: a single exe of about 350 KB, no virtual sound card needed.
 
+## Supported receivers — experimental
+
+Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged.
+
+| Receiver type | Connection | Verification |
+| --- | --- | --- |
+| HomePod | Existing AirPlay 2 realtime | One HomePod 2 on real hardware |
+| Apple TV HD / 4K | AirPlay 2 realtime after PIN pairing | Simulated receiver; hardware untested |
+| Older Apple AirPlay receivers | AirPlay 1 compatibility | shairport-sync in CI; hardware untested |
+| Third-party AirPlay 2 | Realtime, then advertised AirPlay 1, then buffered; remembers the last working mode | shairport-sync AirPlay 2 + nqptp in CI; hardware untested |
+| Third-party AirPlay 1 | AirPlay 1 compatibility | shairport-sync classic in CI |
+| Unknown receivers | Realtime → buffered → AirPlay 1, with each refusal logged | Protocol fakes and software receivers only |
+
+| Mode | Recommended minimum | Default | Choices / range |
+| --- | --- | --- | --- |
+| HomePod realtime | 105 ms with its usual 85 ms processing time | 120 ms; Gaming 105 ms | Existing processing time + 15 … 500 ms |
+| Apple TV realtime | Receiver processing time + 30 ms | 200 ms | Processing time + 15 … 500 ms |
+| Third-party realtime | max(150 ms, processing time + 50 ms) | 250 ms | max(120 ms, processing time + 30 ms) … 500 ms |
+| Third-party buffered | 1.0 s | 2.0 s | 1.0 / 1.5 / 2.0 s |
+| AirPlay 1 compatibility | 1.0 s; AirPort Express 2.0 s | 2.0 s | 1.0 / 1.5 / 2.0 s |
+
+Without a reported third-party processing time, the estimate is 150 ms and the offered floor is 200 ms. Values below the recommendation show a dropout warning. Receivers may ignore the requested latency; these defaults are software-tested starting points.
+
+Speaker info offers a per-device connection override. Compatibility modes replace HomePod scene buttons with their own latency selector; their settings do not overwrite HomePod scenes. The active protocol and reported processing time appear in Speaker info. On first compatibility connection, a one-time notice explains the roughly two-second delay.
+
+Compatibility mode is suited to music, with too much delay for gaming. The browser extension's picture-delay limit remains **2000 ms**; a greater sound delay cannot be fully matched. The A/V sync test can still calibrate the actual offset. Third-party receivers cannot join multi-speaker groups.
+
+FairPlay-protected and MFi-authenticated-only receivers are unsupported. In particular, an XGIMI Z6X was checked by handshake only: its audio session requires FairPlay, so it is **unsupported**, not a verified playback device. Do not infer compatibility from an emulated Apple TV model name. For other receivers, reports should include `HomePodCast.exe scan --txt`, the selected mode, the actual connection delay and the refused request from the log.
+
 ## Measurements
 
 | Scenario | Value |
@@ -26,27 +55,31 @@ Not tested on real hardware:
 
 - HomePod mini, HomePod (1st generation), Apple TV, and AirPlay speakers from other brands
 - **Stereo pairs and multi-room**: built from protocol research and tested only against simulated speakers
+- **Wireless cinema** (one HomePod per channel): tested only against simulated speakers and generated files
 - Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
 
-If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`homepodcast.log`: Settings → Tools → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`).
+If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`homepodcast.log`: About → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`).
 
 ## Features
 
 - AirPlay 2 realtime audio: transient pairing, encrypted throughout, latency adjustable from 100 to 500 ms in 1 ms steps
-- One window with Home, Mixer, Microphone and effects, and Settings; follows Windows light/dark mode
+- One window with Home, Mixer, Microphone, Equalizer and dedicated tool pages; follows Windows light/dark mode
 - Scenes: Recommended (120 ms, the default), Gaming (105 ms), Music (500 ms, the most headroom), Movies (200 ms, works with the browser extension and your video player's audio-delay setting), or your own value
 - Tray app: finds the speaker on its own, reconnects automatically, resumes after sleep, and backs off instead of fighting when another device takes the speaker over
 - Never cuts off another device unasked: while an iPhone or a Mac plays to the HomePod, Connect asks first, and an automatic connect waits until the speaker is free (so does a playback profile that switches to it)
+- Disconnect at night (experimental): for a PC left on with the screens off, the HomePod is let go during the hours you set once the keyboard, mouse and sound have been idle for a while (5 to 120 minutes), so other devices can use it; when the hours end it connects again like the auto-connect at startup, never cutting off a device that is playing
 - Apple TV home theater: a HomePod set up as an Apple TV's speaker (the Apple TV keeps it busy even when idle) is taken over for as long as HomePodCast is connected, with no PIN pairing; the Apple TV reconnects to it the next time it plays. Settings can make Connect ask first instead (experimental, not yet tested with a real Apple TV)
 - Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
 - Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming), see below
-- Microphone to the HomePod with reverb and EQ, low-latency monitoring on headphones, and EQ presets for everything sent to the speaker
+- Microphone monitoring with reverb and mic EQ: choose HomePod, this PC or both, with a destination explanation; off at each start. A separate Equalizer page controls all sound streamed to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
+- Wireless cinema (experimental, not yet tested on real speakers): the audio track of a local 5.1 or 7.1 file with each channel on a HomePod of its own, up to seven plus one for the LFE channel; channels without a speaker fold into the neighboring ones, and speaker delays can be measured with a microphone (at most 25 % volume). See [Wireless cinema](docs/WIRELESS_CINEMA.md#english)
 - Apple TV after a one-time PIN pairing: click Connect and type the 4 digits the TV shows; with HomePods as its home theater speakers, they play the sound (experimental, not yet tested on a real Apple TV)
 - A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
-- Speaker info in Settings: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID
+- Speaker info: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID
 - Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
+- Synchronized viewing window (experimental): for players without an audio-delay setting, a separate module shows a window you pick (or a whole screen) delayed by the HomePod's sound lag, in full screen if you like, with fine adjustment; the picture stays on the graphics card all the way. It is the optional `HomePodCast-video-window-<version>.zip`, not in the Microsoft Store version. See [Synchronized viewing window](docs/VIDEO_WINDOW.md#english)
 - Update check (off by default, see [Updates](#updates)); with the MSI, a new version installs in one click after its SHA-256 is verified
 - Interface in English, Simplified Chinese, Traditional Chinese and Japanese
 
@@ -55,11 +88,12 @@ Playback profiles, per-speaker/source A/V calibration, independent per-app HomeP
 ## Usage
 
 1. Install the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) (x64).
-2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages:
+2. Download HomePodCast from [Releases](https://github.com/qiyinxi/HomePodCast/releases). There are two packages, plus an optional module:
    - **Installer, recommended: `HomePodCast-<version>-x64.msi`.** You choose the install folder (default `C:\Program Files\HomePodCast`). Setup adds a Start menu shortcut and the firewall rule the app needs. To upgrade, run the newer MSI. To uninstall, use Settings → Apps; if you turned on "Start with Windows", turn it off first.
    - **Portable: `HomePodCast-<version>-win-x64.zip`.** Unzip it anywhere and run `HomePodCast.exe`. The first time, it asks to add the firewall rule.
+   - **Optional: `HomePodCast-video-window-<version>.zip`**, the synchronized viewing window (see Features). Unzip it anywhere and choose its folder on the Synchronized viewing page. Updates of the app don't update it: download the module of the same version again.
 
-   The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. If Windows has put your network in the Public category (this can happen after switching from Wi-Fi to Ethernet), the rule doesn't apply: HomePodCast tells you and can open Windows Settings, where you set the network profile type to Private (only for a home network you trust). Both packages keep your settings and the log in `%APPDATA%\HomePodCast`. The Microsoft Store version keeps what it writes in its own storage, `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`, which Windows removes when you uninstall it; Settings → Tools → Log → **Open log folder** opens the right folder in either case.
+   The firewall rule allows the local network only and is active on private networks only. The HomePod needs it to connect back to the PC for clock sync and to request lost packets again. If Windows has put your network in the Public category (this can happen after switching from Wi-Fi to Ethernet), the rule doesn't apply: HomePodCast tells you and can open Windows Settings, where you set the network profile type to Private (only for a home network you trust). Both packages keep your settings and the log in `%APPDATA%\HomePodCast`. The Microsoft Store version keeps what it writes in its own storage, `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`, which Windows removes when you uninstall it; About → Log → **Open log folder** opens the right folder in either case.
 3. The app finds the HomePod and connects by itself. Audio is captured before the Windows volume is applied, so the Windows volume never changes the sound that is sent; the HomePod has its own volume. By default the Windows volume is the HomePod volume: the two stay in step (on connecting, both go to the lower of the two), and muting Windows mutes the HomePod too. If your default output is the PC speakers and you want to hear only the HomePod, set Settings → Keyboard volume keys to "Control the HomePod while streaming" and mute Windows (see [Keyboard volume keys](#keyboard-volume-keys)).
 
 The interface follows the Windows display language (English when HomePodCast has no translation for it). To pick another language, use Settings → Language, or set `"Language"` in `%APPDATA%\HomePodCast\config.json` to a language code such as `"en"`, `"de"` or `"zh-TW"` (the names of the files in `src/i18n`, plus `"zh-CN"`), or to `"auto"`.
@@ -100,7 +134,7 @@ Mixer → Capture device decides which output device's sound is sent; by default
 - If the chosen device is unplugged, disabled or uninstalled, the default output is not used instead (that could send your voice chat to the speaker): capture pauses, the Home page says so, and it resumes when the device is back.
 - Per-app routing still works on top; its rules apply to the apps on that device.
 - With a capture device chosen, "HomePod follows the Windows volume" follows that device's volume, while the volume keys only change the Windows default output. To control the HomePod with the volume keys, make that device the default output.
-- While streaming, the mic's "Monitor on this PC" pauses if it uses the device being captured (for example both follow the default output); otherwise your voice would reach the HomePod twice.
+- While streaming, the mic's "This PC" output pauses if it uses the device being captured (for example both follow the default output); otherwise your voice would reach the HomePod twice.
 
 ## Keyboard volume keys
 
@@ -115,7 +149,7 @@ If the PC has no usable output device (no sound driver, or the device is disable
 
 ## Updates
 
-HomePodCast can look for a newer version among this repository's GitHub releases: Settings → Updates → **Check for updates**. This is the only request it ever makes outside your local network, and only when you ask for it: automatic checking is **off** by default. Turn on "Check for updates automatically" to check about 30 seconds after startup and every 24 hours (development builds never check by themselves). The request is one HTTPS GET of `api.github.com/repos/qiyinxi/HomePodCast/releases` with `HomePodCast/<version>` as its User-Agent: no account, and nothing about your PC or speaker is sent. Each request is written to the log.
+HomePodCast can look for a newer version among this repository's GitHub releases: About → Updates → **Check for updates**. This is the only request it ever makes outside your local network, and only when you ask for it: automatic checking is **off** by default. Turn on "Check for updates automatically" to check about 30 seconds after startup and every 24 hours (development builds never check by themselves). The request is one HTTPS GET of `api.github.com/repos/qiyinxi/HomePodCast/releases` with `HomePodCast/<version>` as its User-Agent: no account, and nothing about your PC or speaker is sent. Each request is written to the log.
 
 - **Update channel**: Stable offers stable releases only; Beta offers betas too, whichever is newest. A beta that is newer than the latest stable release stays until the next stable release (never a downgrade).
 - When an automatic check finds a new version, a tray notification appears once and Home shows a banner with **Update**, **Release notes** and **Skip this version**. A manual check answers in Settings.
@@ -138,7 +172,7 @@ HomePodCast can look for a newer version among this repository's GitHub releases
 5. Where the HomePod stands: in line of sight of the router, not inside a cabinet.
 6. Raise the latency by 10–15 ms: choose Custom under Scene, or press Apply when the Home page suggests it. Below Stream status, the Home page shows how many network hiccups the last 10 minutes had; when they really eat into the margin, a hint says which Wi-Fi hop is to blame (with the PC on a cable, always the HomePod's) and which latency to try. The app never changes the latency by itself. The Dropouts tile counts this connection's gaps: the ones measured on the PC plus the hiccups that ate the margin, which the HomePod likely played as gaps. The HomePod never reports late packets, so that part is an estimate and the number gets a "≈"; hover over the tile to see both parts.
 
-**Reading the log** (`%APPDATA%\HomePodCast\homepodcast.log`, for the Microsoft Store version `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`; Settings → Tools → Log → **Open log folder** shows it): while streaming, the HomePod and the router are pinged every 100 ms, and a round trip over 30 ms or a missing answer is logged as `network: ping to the speaker took 48 ms` (`the router` for the router, `lost` for no answer). The `stats:` line every minute has `rtx=resent/requested`, `rtxMiss=` (packets asked for too late to resend) and `ping=median/p99/max lost=lost/sent router=…`.
+**Reading the log** (`%APPDATA%\HomePodCast\homepodcast.log`, for the Microsoft Store version `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`; About → Log → **Open log folder** shows it): while streaming, the HomePod and the router are pinged every 100 ms, and a round trip over 30 ms or a missing answer is logged as `network: ping to the speaker took 48 ms` (`the router` for the router, `lost` for no answer). The `stats:` line every minute has `rtx=resent/requested`, `rtxMiss=` (packets asked for too late to resend) and `ping=median/p99/max lost=lost/sent router=…`.
 
 - Only the speaker's ping spikes while the router's stays normal: it's the router → HomePod hop; see steps 4 and 5.
 - Both spike at the same time: it's the PC's own Wi-Fi; see steps 1–3. With the PC on a cable it's still the HomePod's hop (the router only answered its own pings late), and the hint says so.

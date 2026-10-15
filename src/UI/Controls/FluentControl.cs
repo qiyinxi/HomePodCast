@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace HomePodCast.UI.Controls;
 
@@ -74,6 +75,12 @@ internal abstract class FluentControl : Control
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Surface);
 
+    protected override void WndProc(ref Message m)
+    {
+        LayoutPanel.KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
+
     protected override void OnMouseEnter(EventArgs e)
     {
         _hover = true;
@@ -125,10 +132,15 @@ internal abstract class FluentControl : Control
         base.OnEnabledChanged(e);
     }
 
+    /// <summary>
+    /// Only a repaint: the window lays itself out once at the new DPI (MainWindow.OnDpiChanged and the dialogs; WinForms'
+    /// font scaling for the others). Windows sends this to every child window, top-down, after the window's WM_DPICHANGED;
+    /// asking for a layout here laid the whole page out once per control. 2026-10-15, the main window moved between the
+    /// maintainer's 150 % and 100 % monitors: about 8 s 「未响应」 per crossing (282 page layouts, 227 000 text measurements).
+    /// </summary>
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
-        RequestLayout();
         Invalidate();
     }
 
@@ -150,7 +162,7 @@ internal abstract class FluentControl : Control
     }
 
     /// <summary>Single-line text height for a style.</summary>
-    protected int LineHeight(TextStyle style) => TextRenderer.MeasureText("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
+    protected int LineHeight(TextStyle style) => TextMeasure.Size("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
 }
 
 internal static class TextFlags
@@ -257,10 +269,15 @@ internal abstract class LayoutPanel : Panel
         return new Size(width, Arrange(width, apply: false));
     }
 
+    /// <summary>Tests: called on this thread for every container (page, card, row) that places its children.</summary>
+    [ThreadStatic] internal static Action<Control>? Arranged;
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         // Not while a subclass is still being built (Controls.Add lays out): only once it is on a parent.
-        if (Width > 0 && Parent != null) Arrange(Width, apply: true);
+        if (Width <= 0 || Parent == null) return;
+        Arranged?.Invoke(this);
+        Arrange(Width, apply: true);
     }
 
     protected virtual void OnThemeChanged() => Invalidate();
@@ -278,6 +295,28 @@ internal abstract class LayoutPanel : Panel
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
 
+    protected override void WndProc(ref Message m)
+    {
+        KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
+
+    /// <summary>
+    /// A container's order of children is its layout order, and stays as the code set it. When a child window's z-order
+    /// changes (WM_WINDOWPOSCHANGED), WinForms re-sorts the parent's children to match it, and the window of a row collapsed
+    /// while the page was built is created when the row is first shown, after the last earlier sibling that already has one.
+    /// 2026-10-15: turning 设置 →「夜间自动断开」 on put 「闲置多久后断开」 above 「时段」 (the second row was shown first).
+    /// Marked SWP_NOZORDER, the message leaves the order alone (our children never overlap).
+    /// </summary>
+    internal static void KeepChildOrder(ref Message m)
+    {
+        const int WM_WINDOWPOSCHANGED = 0x0047, SWP_NOZORDER = 0x0004;
+        if (m.Msg != WM_WINDOWPOSCHANGED || m.LParam == IntPtr.Zero) return;
+        int offset = 2 * IntPtr.Size + 16; // WINDOWPOS: hwnd, hwndInsertAfter, x, y, cx, cy, flags
+        int flags = Marshal.ReadInt32(m.LParam, offset);
+        if ((flags & SWP_NOZORDER) == 0) Marshal.WriteInt32(m.LParam, offset, flags | SWP_NOZORDER);
+    }
+
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
     /// <summary>Height a child wants at <paramref name="width"/> (0 when collapsed).</summary>
@@ -285,27 +324,113 @@ internal abstract class LayoutPanel : Panel
 
     public static int WidthFor(Control c) => IsCollapsed(c) ? 0 : c.GetPreferredSize(Size.Empty).Width;
 
-    /// <summary>Set bounds (only when they changed) and lay a container out again.</summary>
+    /// <summary>
+    /// The windows that showing the hidden <paramref name="root"/> would create (it and every control in it that is not
+    /// collapsed), created now, parents first, while it stays hidden. <paramref name="yield"/> is asked after each one: true
+    /// stops there, and the next call goes on from there. True once they all exist.
+    /// </summary>
+    internal static bool CreateWindows(Control root, Func<bool> yield)
+    {
+        if (!root.IsHandleCreated)
+        {
+            _ = root.Handle;
+            if (yield()) return false;
+        }
+        foreach (var child in root.Controls.Cast<Control>().ToArray())
+            if (!IsCollapsed(child) && !CreateWindows(child, yield)) return false;
+        return true;
+    }
+
+    /// <summary>Set bounds and arrange a container once, including when only its children's sizes changed.</summary>
     public static void Place(Control c, int x, int y, int w, int h)
     {
-        if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
-        if (c is LayoutPanel) c.PerformLayout();
+        bool container = c is LayoutPanel or ScrollPage;
+        if (container) c.SuspendLayout();
+        try
+        {
+            if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+        }
+        finally
+        {
+            // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
+            // doing both multiplies the work at each level of the page's nested cards and rows.
+            if (container) c.ResumeLayout(false);
+        }
+        if (container) c.PerformLayout();
+    }
+
+    /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
+    public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);
+
+    /// <summary>
+    /// A window's WM_DPICHANGED (<paramref name="scale"/>: base.OnDpiChanged and the window's own font and sizes for the new
+    /// DPI), with one layout at the end. Otherwise the font that WinForms and the window set reaches every control, and each
+    /// control asks its container for a layout: every card and row laid out again, once per control below it.
+    /// </summary>
+    public static void ScaleForDpi(Form window, Action scale)
+    {
+        using (BatchLayout(window)) scale();
+        window.Invalidate(true);
+    }
+
+    /// <summary>
+    /// Like <see cref="BatchLayout"/>, but without the layout at the end: what changes meanwhile is laid out by whoever
+    /// lays <paramref name="root"/> out next (MainWindow after a DPI change, a hidden page when it is prepared or shown).
+    /// </summary>
+    public static IDisposable SuspendLayouts(Control root) => new LayoutBatch(root, layout: false);
+
+    private sealed class LayoutBatch : IDisposable
+    {
+        private readonly Control _root;
+        private readonly bool _layout;
+        private readonly List<Control> _containers = [];
+        private bool _disposed;
+
+        public LayoutBatch(Control root, bool layout = true)
+        {
+            _root = root;
+            _layout = layout;
+            Suspend(root);
+        }
+
+        private void Suspend(Control c)
+        {
+            if (c == _root || c is LayoutPanel or ScrollPage)
+            {
+                c.SuspendLayout();
+                _containers.Add(c);
+            }
+            foreach (Control child in c.Controls) Suspend(child);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var c in _containers) c.ResumeLayout(false);
+            if (_layout && !_root.IsDisposed) _root.PerformLayout();
+        }
     }
 
     /// <summary>Measure and position everything again, from the outermost layout container up from <paramref name="from"/>.</summary>
-    public static void Relayout(Control? from)
+    public static void Relayout(Control? from) => RootOf(from)?.PerformLayout();
+
+    /// <summary>
+    /// <see cref="BatchLayout"/> for the page (or dialog) <paramref name="from"/> is on: changes that each ask for a
+    /// <see cref="Relayout"/> (texts, collapsed lines) get one layout of the page at the end.
+    /// </summary>
+    public static IDisposable BatchRelayout(Control from) => BatchLayout(RootOf(from) ?? from);
+
+    /// <summary>The outermost layout container up from <paramref name="from"/>: its page, dialog or window.</summary>
+    private static Control? RootOf(Control? from)
     {
         Control? root = null;
         for (var c = from; c != null; c = c.Parent)
         {
-            if (c is ScrollPage or ILayoutRoot)
-            {
-                root = c;
-                break;
-            }
+            if (c is ScrollPage or ILayoutRoot) return c;
             if (c is LayoutPanel) root = c;
         }
-        root?.PerformLayout();
+        return root;
     }
 }
 
@@ -355,6 +480,12 @@ internal class RowPanel : LayoutPanel
     public Dictionary<Control, int> FixedWidths { get; } = new();
     public int MinHeight { get; set; }
 
+    /// <summary>
+    /// Without <see cref="Fill"/>: when the children don't fit on one line, they go on to the next (each at its own width)
+    /// instead of the widest giving way. For a few buttons with long texts (German) at the window's minimum width.
+    /// </summary>
+    public bool Wrap { get; set; }
+
     private int WidthOf(Control c) => FixedWidths.TryGetValue(c, out var w) ? Dp(w) : WidthFor(c);
 
     /// <summary>With no width proposed: the natural width (every child at its preferred or fixed width).</summary>
@@ -376,6 +507,7 @@ internal class RowPanel : LayoutPanel
         int fillWidth = Math.Max(0, width - gaps - fixedSum);
         var widths = items.Select(c => c == Fill ? fillWidth : WidthOf(c)).ToList();
         int over = widths.Sum() + gaps - width;
+        if (Fill == null && over > 0 && Wrap) return ArrangeLines(items, widths, width, apply);
         if (Fill == null && over > 0)
         {
             // Too narrow (the window's minimum width, long words): the widest child gives way instead of the last ones being
@@ -395,6 +527,42 @@ internal class RowPanel : LayoutPanel
             }
         }
         return height;
+    }
+
+    /// <summary><see cref="Wrap"/>: as many children per line as fit, lines <see cref="Gap"/> apart, each vertically centred.</summary>
+    private int ArrangeLines(List<Control> items, List<int> widths, int width, bool apply)
+    {
+        int gap = Dp(Gap);
+        var lines = new List<List<int>> { new() };
+        int x = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            widths[i] = Math.Min(widths[i], width); // one child wider than the line has it to itself
+            if (lines[^1].Count > 0 && x + widths[i] > width)
+            {
+                lines.Add([]);
+                x = 0;
+            }
+            lines[^1].Add(i);
+            x += widths[i] + gap;
+        }
+        var heights = items.Select((c, i) => HeightFor(c, widths[i])).ToList();
+        int y = 0;
+        foreach (var line in lines)
+        {
+            int lineHeight = Math.Max(Dp(MinHeight), line.Max(i => heights[i]));
+            if (apply)
+            {
+                x = 0;
+                foreach (int i in line)
+                {
+                    Place(items[i], x, y + (lineHeight - heights[i]) / 2, widths[i], heights[i]);
+                    x += widths[i] + gap;
+                }
+            }
+            y += lineHeight + gap;
+        }
+        return y - gap;
     }
 }
 
@@ -451,6 +619,8 @@ internal class Card : LayoutPanel, ISurface
 /// </summary>
 internal class ScrollPage : Panel, ISurface
 {
+    private bool _fontPending;
+
     public ScrollPage(string? title = null)
     {
         Content = new StackPanel { Inset = new Padding(28, 18, 20, 28), Gap = 12 };
@@ -474,9 +644,18 @@ internal class ScrollPage : Panel, ISurface
     /// <summary>The page is no longer visible: stop timers, let go of what it holds.</summary>
     public virtual void PageHidden() { }
 
+    /// <summary>
+    /// Build now, on the hidden page, what <see cref="PageShown"/> would build from the app's state, so that the first visit
+    /// finds it (MainWindow prepares the pages at idle). Never a timer, a read or anything else only a shown page does.
+    /// </summary>
+    public virtual void Prepare() { }
+
     public StackPanel Content { get; }
     public int MaxContentWidth { get; set; } = 1040;
     public Color SurfaceColor => Theme.P.Window;
+
+    /// <summary>The DPI of the page's last layout (0: never laid out).</summary>
+    internal int LayoutDpi { get; private set; }
 
     private void ThemeChanged()
     {
@@ -492,22 +671,46 @@ internal class ScrollPage : Panel, ISurface
         Theme.StyleScrollBars(this);
     }
 
+    /// <summary>
+    /// The window's font for a new DPI reaches a hidden page's controls when the page is shown or prepared, not at once: every
+    /// control's font changed and every window got a new font handle (WM_SETFONT), on every page, for each move to a monitor
+    /// with another scale. 2026-10-15, all 11 pages visited: 636 font changes and 575 new GDI fonts per DPI change.
+    /// </summary>
+    protected override void OnParentFontChanged(EventArgs e)
+    {
+        if (Visible || Parent == null) base.OnParentFontChanged(e);
+        else _fontPending = true;
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        if (Visible) ApplyFont();
+        base.OnVisibleChanged(e);
+    }
+
+    /// <summary>The font change the hidden page left for later (<see cref="OnParentFontChanged"/>), with one layout.</summary>
+    internal void ApplyFont()
+    {
+        if (!_fontPending) return;
+        _fontPending = false;
+        using (LayoutPanel.BatchLayout(this)) base.OnParentFontChanged(EventArgs.Empty);
+    }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (Content is null) return; // AutoScroll lays out during construction
+        LayoutPanel.Arranged?.Invoke(this);
+        LayoutDpi = DeviceDpi;
         int scrollBar = SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi);
         int width = Math.Max(0, Math.Min(Width - scrollBar, Theme.Dp(MaxContentWidth, DeviceDpi)));
+        Content.Inset = Width < Theme.Dp(640, DeviceDpi)
+            ? new Padding(16, 18, 16, 28) : new Padding(28, 18, 20, 28);
         int height = Content.GetPreferredSize(new Size(width, 0)).Height;
         if (AutoScrollMinSize.Height != height) AutoScrollMinSize = new Size(0, height);
         var pos = AutoScrollPosition;
-        LayoutPanel.Place(Content, pos.X, pos.Y, width, height);
+        int left = Math.Max(0, (Width - scrollBar - width) / 2);
+        LayoutPanel.Place(Content, left + pos.X, pos.Y, width, height);
         base.OnLayout(levent);
-    }
-
-    protected override void OnDpiChangedAfterParent(EventArgs e)
-    {
-        base.OnDpiChangedAfterParent(e);
-        PerformLayout();
     }
 
     protected override void Dispose(bool disposing)

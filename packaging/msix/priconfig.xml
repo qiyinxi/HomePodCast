@@ -5,10 +5,12 @@
   (Assets\Name.png) and Windows picks the file that fits. This is "makepri createconfig /dq en-US /pv 10.0.0"
   without its <packaging> section, which would split the scales into resources.scale-*.pri files for resource
   packages (only an app bundle has those; in a single .msix those files would be ignored), and with only the
-  folder indexer, starting at Assets\ (resource names stay relative to the package root: Files/Assets/...).
+  folder indexer. It indexes from the root of build.ps1's pri folder (only the manifest and Assets\), so the names
+  are Files/Assets/Name.png, as the manifest's Assets\Name.png resolves them. 2026-10-13: startIndexAt="Assets"
+  named them Files/Name.png; Windows installed the package anyway, Partner Center refused it.
 -->
 <resources targetOsVersion="10.0.0" majorVersion="1">
-  <index root="\" startIndexAt="Assets">
+  <index root="\" startIndexAt="\">
     <default>
       <qualifier name="Language" value="en-US"/>
       <qualifier name="Contrast" value="standard"/>

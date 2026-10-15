@@ -71,12 +71,11 @@ internal abstract class FluentDialog : Form, ISurface, ILayoutRoot
         PerformLayout();
     }
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-        PerformLayout();
-    }
+    });
 
     private void ThemeChanged()
     {

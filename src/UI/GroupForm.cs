@@ -8,13 +8,13 @@ namespace HomePodCast.UI;
 /// list), or a second speaker that plays in sync with the selected one (multi-room); channel split and
 /// swap; per-speaker volume offsets on top of the linked volume.
 /// </summary>
-internal sealed class GroupForm : FluentDialog
+internal sealed class GroupPanel : StackPanel
 {
     private const int OffsetRange = 30;
 
     private readonly AppConfig _config;
     private readonly string? _tsid;
-    private readonly FluentComboBox _extra = new() { PreferredWidth = 280 };
+    private readonly FluentComboBox _extra = new() { PreferredWidth = 280, AccessibleName = L.T("同时推送到") };
     private readonly ToggleSwitch _split = new(L.T("电脑端分声道"));
     private readonly ToggleSwitch _swap = new(L.T("交换左右"));
     private readonly ToggleSwitch _leaderOnly = new(L.T("只连接主音箱（实验）"));
@@ -25,27 +25,16 @@ internal sealed class GroupForm : FluentDialog
     private List<AirPlayDevice?> _choices = [null];
     private bool _scanned;
 
-    public static void ShowFor(TrayApp app, IWin32Window owner)
-    {
-        string before = PlayLayout(app.Config);
-        using var form = new GroupForm(app.Config);
-        if (form.ShowDialog(owner) != DialogResult.OK) return;
-        app.Config.Save();
-        // Reconnect only if what plays actually changed; a single speaker is never interrupted for nothing.
-        if (PlayLayout(app.Config) != before && (app.Controller.State != StreamState.Idle || app.Controller.WaitingForSpeaker))
-            app.Connect(ConnectTrigger.Reconnect);
-    }
-
     /// <summary>Edits <paramref name="config"/> in place when OK is pressed; the caller saves it.</summary>
-    internal GroupForm(AppConfig config) : base(L.T("多音箱（实验性）"))
+    internal GroupPanel(AppConfig config)
     {
         _config = config;
         var cfg = config;
         _tsid = StereoPairs.TryGetTsid(cfg.DeviceId, out var t) ? t : null;
         _offsets = new Dictionary<string, int>(cfg.GroupVolumeOffsets ?? new());
-        ContentWidth = 520;
+        Gap = 12;
 
-        Body.Controls.Add(new TextBlock(L.T("实验性功能：立体声对和多房间同步还没有在真实设备上验证过，可能不同步、没有声音或连不上。"),
+        Controls.Add(new TextBlock(L.T("实验性功能：立体声对和多房间同步还没有在真实设备上验证过，可能不同步、没有声音或连不上。"),
             TextStyle.BodyStrong, TextRole.Caution, wrap: true));
 
         string current = cfg.DeviceId == null ? L.T("还没有选择音箱")
@@ -57,9 +46,9 @@ internal sealed class GroupForm : FluentDialog
         _extra.Enabled = false;
         var extraRow = new FieldRow(L.T("同时推送到"), Ui.Row(0, null, _extra));
         FieldRow.AlignCaptions(currentRow, extraRow);
-        Body.Controls.Add(currentRow);
-        Body.Controls.Add(extraRow);
-        Body.Controls.Add(Ui.Note(_tsid != null
+        Controls.Add(currentRow);
+        Controls.Add(extraRow);
+        Controls.Add(Ui.Note(_tsid != null
             ? L.T("立体声对的两只音箱会自动一起连接，不需要再选第二台。")
             : L.T("多房间：选择另一台 AirPlay 音箱，和当前音箱按同一时间线同步播放。")));
 
@@ -69,8 +58,8 @@ internal sealed class GroupForm : FluentDialog
             _leaderOnly.Checked = cfg.GroupPairLeaderOnly;
             var mode = Ui.Stack(4, _leaderOnly, Ui.Note(L.T(
                 "默认两只音箱各连一路，都收到完整立体声，由这对音箱自己分左右声道，一般不需要电脑端分声道。打开后只连接主音箱，用来实测它会不会转发给另一只。")));
-            Body.Controls.Add(mode);
-            Body.GapBefore[mode] = 16;
+            Controls.Add(mode);
+            GapBefore[mode] = 16;
         }
         else
         {
@@ -81,47 +70,26 @@ internal sealed class GroupForm : FluentDialog
         _swap.Checked = cfg.GroupSwapChannels;
         var channels = Ui.Stack(4, _split,
             Ui.Note(L.T("勾选后，左边的音箱只放左声道、右边的只放右声道；不勾选时每台都收到完整立体声。")), _swap);
-        Body.Controls.Add(channels);
-        Body.GapBefore[channels] = 16;
+        Controls.Add(channels);
+        GapBefore[channels] = 16;
 
         _memberRows.BackColor = Theme.P.Window;
-        Body.Controls.Add(new TableHost(_memberRows));
+        Controls.Add(new TableHost(_memberRows));
         _state.Text = L.T("正在搜索音箱…");
-        Body.Controls.Add(_state);
-
-        var ok = new FluentButton(L.T("确定"), ButtonKind.Primary) { DialogResult = DialogResult.OK, MinWidth = 96 };
-        var cancel = new FluentButton(L.T("取消")) { DialogResult = DialogResult.Cancel, MinWidth = 96 };
-        var buttons = ButtonRow(ok, cancel);
-        Body.Controls.Add(buttons);
-        Body.GapBefore[buttons] = 20;
-        AcceptButton = ok;
-        CancelButton = cancel;
+        Controls.Add(_state);
 
         _extra.SelectedIndexChanged += (_, _) => ShowMembers();
         _split.CheckedChanged += (_, _) => ShowMembers();
         _swap.CheckedChanged += (_, _) => ShowMembers();
         _leaderOnly.CheckedChanged += (_, _) => ShowMembers();
-        ok.Click += (_, _) => Apply();
         ShowMembers();
-        PerformLayout();
     }
 
-    protected override async void OnShown(EventArgs e)
+    protected override void OnThemeChanged()
     {
-        base.OnShown(e);
-        List<AirPlayDevice> found = [];
-        try
-        {
-            found = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3));
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"group settings scan: {ex.Message}");
-        }
-        if (!IsDisposed) SetFound(found);
+        _memberRows.BackColor = Theme.P.Window;
+        base.OnThemeChanged();
     }
-
-    protected override void OnThemeChanged() => _memberRows.BackColor = Theme.P.Window;
 
     /// <summary>Scan result (raw mDNS list, pairs not merged).</summary>
     internal void SetFound(List<AirPlayDevice> found)
@@ -174,6 +142,7 @@ internal sealed class GroupForm : FluentDialog
 
     private void ShowMembers()
     {
+        using var layout = LayoutPanel.BatchRelayout(this);
         foreach (var (key, slider) in CurrentOffsetSliders()) _offsets[key] = slider.Value;
 
         var members = Members();
@@ -231,7 +200,6 @@ internal sealed class GroupForm : FluentDialog
             : _tsid != null && members.Count < 2 ? L.F("没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。", members.Count)
             : group ? L.T("两台音箱共用一个音量滑块，偏移量加在各自的音量上。")
             : L.T("现在只推送到一台音箱。");
-        PerformLayout();
     }
 
     /// <summary>Which member a leader-only connection would use (the same choice as GroupPlan.PairTargets).</summary>
@@ -291,5 +259,38 @@ internal sealed class GroupForm : FluentDialog
             if (apply) _table.SetBounds(0, 0, Math.Min(width, size.Width), size.Height);
             return size.Height;
         }
+    }
+}
+
+/// <summary>Dialog retained for existing callers; the navigation page uses the same editor.</summary>
+internal sealed class GroupForm : FluentDialog
+{
+    private readonly GroupPanel _editor;
+    internal GroupForm(AppConfig config) : base(L.T("多音箱（实验性）"))
+    {
+        ContentWidth = 520;
+        _editor = new GroupPanel(config);
+        var ok = new FluentButton(L.T("确定"), ButtonKind.Primary) { DialogResult = DialogResult.OK };
+        var cancel = new FluentButton(L.T("取消")) { DialogResult = DialogResult.Cancel };
+        Body.Controls.AddRange([_editor, ButtonRow(ok, cancel)]);
+        ok.Click += (_, _) => Apply();
+        AcceptButton = ok; CancelButton = cancel;
+    }
+    internal void SetFound(List<AirPlayDevice> found) => _editor.SetFound(found);
+    internal void Apply() => _editor.Apply();
+    internal static string PlayLayout(AppConfig config) => GroupPanel.PlayLayout(config);
+    public static void ShowFor(TrayApp app, IWin32Window owner)
+    {
+        using var form = new GroupForm(app.Config);
+        form.SetFound(app.LastScan.ToList());
+        string before = PlayLayout(app.Config);
+        if (form.ShowDialog(owner) != DialogResult.OK) return;
+        Save(app, before);
+    }
+    internal static void Save(TrayApp app, string before)
+    {
+        app.Config.Save();
+        if (PlayLayout(app.Config) != before && (app.Controller.State != StreamState.Idle || app.Controller.WaitingForSpeaker))
+            app.Connect(ConnectTrigger.Reconnect);
     }
 }

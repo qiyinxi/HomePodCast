@@ -4,7 +4,7 @@ namespace HomePodCast.GuiSmoke;
 
 /// <summary>
 /// GUI smoke test of a built HomePodCast.exe (CI job gui-smoke, .github/workflows/build.yml):
-/// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--only id,id…] [--allow-local]</c>.
+/// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--video-window &lt;module folder&gt;] [--only id,id…] [--allow-local]</c>.
 /// Runs the scenarios below one after the other, at 100 % and (when the runner offers it) 150 % display scale; writes
 /// the screenshots, the UI Automation trees and each run's log into the folder, with index.html and report.md; exits 1
 /// when any check failed.
@@ -16,7 +16,8 @@ internal static class Program
     /// <summary>
     /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
     /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
-    /// HomePod, which also walk everything while connected.
+    /// HomePod, which also walk everything while connected; a .NET update under the connected app, and 立即重启; once, the scale goes
+    /// 150 % → 100 % → 150 % while the app runs.
     /// </summary>
     private static readonly Scenario[] Matrix =
     [
@@ -27,9 +28,13 @@ internal static class Program
         new("retrying", "zh-CN", 100),
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
-        new("idle", "zh-CN", 150),
+        new("runtime", "zh-CN", 100),
+        new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),
+        new("compatibility", "zh-CN", 100, Narrow: true),
+        new("compatibility", "en", 100),
+        new("compatibility", "de", 150),
     ];
 
     private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
@@ -61,6 +66,14 @@ internal static class Program
         var scenarios = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal))).ToList();
 
         var report = new Report();
+        // The synchronized viewing window (experimental since 1.1), from the build's module zip, extracted.
+        if (Opt("--video-window") is { } module)
+        {
+            module = Path.GetFullPath(module);
+            if (File.Exists(Path.Combine(module, "HomePodCast.VideoWindow.exe"))) Walker.VideoWindowDir = module;
+            else report.Fail("runner", $"--video-window {module}: no HomePodCast.VideoWindow.exe there");
+        }
+        else report.Warn("runner", "no --video-window: the synchronized viewing window is not checked");
         var total = Stopwatch.StartNew();
         var originalSize = Display.Resolution();
         var originalScale = Display.Scale();
@@ -165,9 +178,13 @@ internal static class Program
             Check(!t.Pattern("{0}，{1:F0} 秒后重试").IsMatch(t.T("正在连接…")), $"{lang}: 「{t.T("正在连接…")}」 is no retry status");
             Check(t.Pattern("正在重连（第 {0} 次）…").IsMatch(t.F("正在重连（第 {0} 次）…", 3)), $"{lang}: 「{t.F("正在重连（第 {0} 次）…", 3)}」");
             Check(t.Pattern("已连接 · {0}").IsMatch(t.F("已连接 · {0}", "Smoke Test HomePod")), $"{lang}: 「{t.F("已连接 · {0}", "Smoke Test HomePod")}」");
-            foreach (var key in new[] { "首页", "混音器", "麦克风与音效", "设置", "连接", "断开", "全局快捷键", "标记刚才的卡顿", "未设置", "使用配置",
+            foreach (var key in new[] { "首页", "混音器", "麦克风", "均衡", "设置", "连接", "断开", "全局快捷键", "标记刚才的卡顿", "未设置", "使用配置",
                          "多音箱（实验性）", "导出诊断", "音箱信息", "HomePod 音响", "打开主界面", "退出", "需要防火墙放行", "当前是公用网络", "自动检查更新",
-                         "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "断音", "重传" })
+                         "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "断音", "重传",
+                         "无线影院（实验性）", "选择影音文件", "播放", "暂停", "停止", "测量音箱延迟", "前左", "低音声道", "侧右",
+                         "同步观影窗口（实验性）", "选择窗口…", "停止采集", "全屏 / F11", "已跟随本机音频状态", "自动扣除显示延迟",
+                         "画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB", "选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。",
+                         "关于", "许可证", "多声道（5.1 / 7.1，实验性）", "切换到浅色", "切换到深色", "音画同步测试", "当前版本 {0}", "检查更新", "更新", "查看说明", "跳过此版本", "立即重启" })
                 Check(lang == "zh-CN" || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
         }
         var scale = Display.Scale();

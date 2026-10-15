@@ -3,12 +3,15 @@ using System.Runtime.InteropServices;
 
 namespace HomePodCast.Audio;
 
+internal delegate void TimestampedMicSamples(ReadOnlySpan<float> stereo, long firstFrameTicks);
+
 /// <summary>
 /// Microphone input for the voice chain: event-driven shared-mode WASAPI capture from a chosen input
 /// (null = the default one, followed when it changes) at the smallest period the driver offers
 /// (IAudioClient3), first channel only → input gain → optional noise gate → 44.1 kHz stereo → the effect
 /// chain → every attached <see cref="AudioTap"/> (the HomePod mixer, the local monitor).
-/// Only levels are measured; the audio itself is never stored or analysed.
+/// Normally only levels are measured. Explicit cinema calibration may inspect transient timestamped samples;
+/// this capture never writes or retains recordings.
 /// </summary>
 public sealed class MicCapture : ITapSource, IDisposable
 {
@@ -86,6 +89,8 @@ public sealed class MicCapture : ITapSource, IDisposable
 
     /// <summary>Raised on the capture thread when the device opens, fails or closes.</summary>
     public event Action? StatusChanged;
+    /// <summary>Transient samples for explicitly requested acoustic calibration, with device QPC timestamps.</summary>
+    internal event TimestampedMicSamples? CalibrationSamples;
 
     public MicCapture(string? deviceId = null)
     {
@@ -205,7 +210,8 @@ public sealed class MicCapture : ITapSource, IDisposable
                     var bytes = new ReadOnlySpan<byte>((void*)data, (int)frames * fmt.BlockAlign);
                     pipeline.Load(bytes, (int)frames, (flags & CoreAudio.BufferFlagsSilent) != 0, GainDb, GateEnabled, GateThresholdDb);
                     capture.ReleaseBuffer(frames);
-                    pipeline.Deliver(_effects, _taps);
+                    long firstTicks = (flags & 0x4) == 0 && qpc != 0 ? (long)(qpc * (Stopwatch.Frequency / 1e7)) : 0;
+                    pipeline.Deliver(_effects, _taps, CalibrationSamples, firstTicks);
 
                     Peak = Math.Max(Peak * 0.9f, pipeline.Peak);
                     Rms = pipeline.Rms;
@@ -267,6 +273,8 @@ internal sealed class MicPipeline
     private float[] _stereo = new float[8192];
     private int _frames;
     private float _gain = 1;
+    private long _inputFrames, _outputFrames;
+    private readonly int _outRate;
 
     public NoiseGate Gate { get; }
     public float Peak { get; private set; }
@@ -276,6 +284,7 @@ internal sealed class MicPipeline
     public MicPipeline(WaveFormat fmt, int outRate)
     {
         _fmt = fmt;
+        _outRate = outRate;
         if (fmt.SampleRate != outRate) _resampler = new Resampler(fmt.SampleRate, outRate);
         _resampled = new List<float>(outRate / 5 * 2);
         _gainCoef = (float)(1 - Math.Exp(-1 / (0.01 * fmt.SampleRate)));
@@ -299,6 +308,7 @@ internal sealed class MicPipeline
             _stereo = new float[frames * 2];
         }
         _frames = frames;
+        _inputFrames += frames;
         var mono = _mono.AsSpan(0, frames);
         if (silent) mono.Clear();
         else FirstChannel(data, frames, _fmt, mono);
@@ -324,7 +334,7 @@ internal sealed class MicPipeline
     }
 
     /// <summary>Mono → stereo, resample to 44.1 kHz, run the effects, push to every tap.</summary>
-    public void Deliver(IAudioEffect[] effects, AudioTap[] taps)
+    public void Deliver(IAudioEffect[] effects, AudioTap[] taps, TimestampedMicSamples? calibration = null, long packetTicks = 0)
     {
         var mono = _mono.AsSpan(0, _frames);
         var stereo = _stereo.AsSpan(0, _frames * 2);
@@ -340,6 +350,13 @@ internal sealed class MicPipeline
         int frames = output.Length / 2;
         if (frames == 0) return;
         foreach (var effect in effects) effect.Process(output, frames);
+        if (calibration != null)
+        {
+            long first = packetTicks == 0 ? 0 : packetTicks + (long)((_outputFrames / (double)_outRate
+                - (_inputFrames - _frames) / (double)_fmt.SampleRate + (_resampler == null ? 0 : 31.0 / _fmt.SampleRate)) * Stopwatch.Frequency);
+            calibration(output, first);
+        }
+        _outputFrames += frames;
         foreach (var tap in taps) tap.Write(output);
     }
 

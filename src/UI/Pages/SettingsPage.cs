@@ -1,16 +1,10 @@
-using System.Diagnostics;
 using HomePodCast.UI.Controls;
-using HomePodCast.Update;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>设置: language and theme, startup, volume cap, volume keys, hotkeys, local players in the 影视 scene
-/// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
-/// experimental multi-speaker dialog, the A/V sync test, updates (check, install, channel, automatic checks), and about.</summary>
+/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume, hotkeys and local players.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
-    public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
-
     private static readonly string[] ThemeModes = [Theme.Auto, Theme.Light, Theme.Dark];
 
     /// <summary>The choices of 「键盘音量键」, in the order shown.</summary>
@@ -26,6 +20,9 @@ internal sealed class SettingsPage : ScrollPage
     private static readonly HomeTheaterMode[] HomeTheaterModes = [HomeTheaterMode.TakeOver, HomeTheaterMode.Ask];
     private readonly Segmented _homeTheater = new(L.T("临时接管"), L.T("先询问"));
     private readonly SettingRow _homeTheaterRow;
+    private readonly ToggleSwitch _night = new();
+    private readonly FluentComboBox _nightFrom = new(), _nightUntil = new(), _nightIdle = new();
+    private readonly SettingRow _nightWindowRow, _nightIdleRow;
     private readonly FluentSlider _cap = Ui.Slider(VolumeLimit.MinCap, 100, 5, 10);
     private readonly TextBlock _capValue = new("", TextStyle.Body) { Align = HorizontalAlignment.Right };
     private readonly TimerDebounce _capWait = new(250);
@@ -39,18 +36,7 @@ internal sealed class SettingsPage : ScrollPage
     private readonly FluentButton _vlcClear = new(L.T("清除"), ButtonKind.Subtle);
     private readonly SettingRow _vlcPasswordRow;
 
-    // 更新: the version and the check's status, the new version's actions, the channel, automatic checks
-    private static readonly UpdateChannel[] Channels = [UpdateChannel.Stable, UpdateChannel.Beta];
-    private readonly FluentButton _check = new(L.T("检查更新"));
-    private readonly SettingRow _checkRow;
-    private readonly FluentButton _install = new(L.T("更新"), ButtonKind.Primary) { MinWidth = 72 };
-    private readonly FluentButton _notes = new(L.T("查看说明"), ButtonKind.Secondary, Glyph.OpenInNew);
-    private readonly FluentButton _skip = new(L.T("跳过此版本"), ButtonKind.Subtle);
-    private readonly SettingRow _availableRow;
-    private readonly Segmented _channel = new(L.T("正式版"), L.T("测试版"));
-    private readonly SettingRow _channelRow;
-    private readonly ToggleSwitch _autoUpdate = new();
-    private readonly SettingRow _autoUpdateRow;
+    public void ShowTheme() => _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(_app.Config.Theme));
 
     public SettingsPage(TrayApp app) : base(L.T("设置"))
     {
@@ -70,6 +56,22 @@ internal sealed class SettingsPage : ScrollPage
         // one): whether the Apple TV takes its HomePod back after we disconnect is still unverified.
         _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）");
         _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）"), "", _homeTheater);
+        // 夜间自动断开 (NightDisconnectPolicy); the window and the idle time show while it is on.
+        var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开（实验性）"), // experimental since 1.1
+            L.T("关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；" +
+                "时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。"), _night);
+        foreach (var time in NightDisconnectPolicy.TimeChoices)
+        {
+            _nightFrom.Items.Add(NightDisconnectPolicy.Format(time));
+            _nightUntil.Items.Add(NightDisconnectPolicy.Format(time));
+        }
+        _nightFrom.AccessibleName = L.T("开始时间");
+        _nightUntil.AccessibleName = L.T("结束时间");
+        _nightWindowRow = new SettingRow(Glyph.None, L.T("时段"), "",
+            Ui.Row(8, null, _nightFrom, new TextBlock(L.T("到")), _nightUntil));
+        _nightIdle.Items.AddRange(NightDisconnectPolicy.IdleChoices.Select(m => L.F("{0} 分钟", m)));
+        _nightIdleRow = new SettingRow(Glyph.None, L.T("闲置多久后断开"),
+            L.T("这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。"), _nightIdle);
 
         var sound = Ui.Section(L.T("音量与快捷键"));
         _cap.AccessibleName = L.T("音量上限"); // the row is named after its title; the slider in it too
@@ -96,48 +98,12 @@ internal sealed class SettingsPage : ScrollPage
         var manualRow = new SettingRow(Glyph.None, "PotPlayer · MPC-HC · MPC-BE",
             L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
 
-        var tools = Ui.Section(L.T("工具"));
-        var profiles = new FluentButton(L.T("管理配置"));
-        var profilesRow = new SettingRow(Glyph.Settings, L.T("使用配置"),
-            L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), profiles);
-        var diagnostic = new FluentButton(L.T("导出诊断"));
-        var diagnosticRow = new SettingRow(Glyph.Info, L.T("诊断报告"),
-            L.T("导出脱敏日志、设备和网络统计；不包含配置文件、密码或录音，也不会上传。"), diagnostic);
-        var group = new FluentButton(L.T("打开"));
-        var groupRow = new SettingRow(Glyph.Devices, L.T("多音箱（实验性）"),
-            L.T("立体声对、多房间同步、分声道和每台音箱的音量偏移。"), group);
-        var sync = new FluentButton(L.T("开始"));
-        var syncRow = new SettingRow(Glyph.Gauge, L.T("音画同步测试"),
-            L.T("听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。"), sync);
-        // The folder Explorer has to open: for the Store version, the package's own storage (AppEnvironment.LogFolder).
-        var logs = new FluentButton(L.T("打开日志文件夹"), ButtonKind.Secondary, Glyph.Folder);
-        var logsRow = new SettingRow(Glyph.Folder, L.T("日志"),
-            L.F("报告问题时请附上这个文件夹里的 {0}：\n{1}", AppConfig.LogFileName, AppEnvironment.LogFolder), logs);
-
-        // Not "更新": that is the button's text, and other languages need two words (Updates / Update).
-        var updates = Ui.Section(L.T("软件更新"));
-        _checkRow = new SettingRow(Glyph.UpdateRestore, L.F("当前版本 {0}", ReleaseVersion.CurrentText), "", _check);
-        _availableRow = new SettingRow(Glyph.Download, "", "", Ui.Row(8, null, _install, _notes, _skip)) { Collapsed = true };
-        _channelRow = new SettingRow(Glyph.Flag, L.T("更新渠道"),
-            L.T("正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。"), _channel);
-        _autoUpdateRow = new SettingRow(Glyph.Recent, L.T("自动检查更新"), "", _autoUpdate);
-
-        var about = Ui.Section(L.T("关于"));
-        var version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "?";
-        var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
-        var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
-
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, sound, cap, _volumeKeysRow, _hotkeysRow,
-            players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, tools, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
-            updates, _checkRow, _availableRow, _channelRow, _autoUpdateRow, about, aboutRow]);
-        foreach (var header in new Control[] { general, sound, players, tools, updates, about }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, cap, _volumeKeysRow, _hotkeysRow,
-                     playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow, profilesRow, diagnosticRow, groupRow, syncRow, logsRow,
-                     _checkRow, _availableRow, _channelRow, _autoUpdateRow, aboutRow })
-            Content.GapBefore[row] = 4;
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+            sound, cap, _volumeKeysRow, _hotkeysRow, players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow]);
+        foreach (var header in new Control[] { general, sound, players }) Content.GapBefore[header] = 20;
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+            cap, _volumeKeysRow, _hotkeysRow, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow }) Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
-        AddSpeakerInfo(before: updates);
-        AddPairings(before: updates);
 
         _language.SelectionChangeCommitted += (_, _) =>
         {
@@ -163,7 +129,6 @@ internal sealed class SettingsPage : ScrollPage
             catch (Exception ex) { MessageBox.Show(FindForm(), L.F("设置开机启动失败：{0}", ex.Message), "HomePodCast"); }
             _autostart.Checked = SafeAutostart();
         };
-        logs.Click += (_, _) => AppEnvironment.OpenLogFolder();
         _autoconnect.Toggled += (_, _) =>
         {
             _app.Config.AutoConnect = _autoconnect.Checked;
@@ -175,6 +140,10 @@ internal sealed class SettingsPage : ScrollPage
             _app.SetHomeTheaterMode(HomeTheaterModes[_homeTheater.SelectedIndex]);
             ShowHomeTheater();
         };
+        _night.Toggled += (_, _) => SetNight();
+        _nightFrom.SelectionChangeCommitted += (_, _) => SetNight();
+        _nightUntil.SelectionChangeCommitted += (_, _) => SetNight();
+        _nightIdle.SelectionChangeCommitted += (_, _) => SetNight();
         _cap.Scroll += (_, _) =>
         {
             _capValue.Text = $"{_cap.Value}%";
@@ -203,26 +172,6 @@ internal sealed class SettingsPage : ScrollPage
         _vlcSave.Click += (_, _) => SaveVlcPassword();
         _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
-        group.Click += (_, _) => GroupForm.ShowFor(_app, FindForm()!);
-        profiles.Click += (_, _) => _app.ShowProfiles(FindForm()!);
-        diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
-        sync.Click += (_, _) => _app.RunSyncTest(FindForm()!);
-        link.Click += (_, _) => OpenRepository();
-        _check.Click += (_, _) => _app.CheckForUpdates();
-        _install.Click += (_, _) =>
-        {
-            if (_app.UpdateState.Downloading) _app.CancelUpdateDownload();
-            else _app.InstallUpdate(FindForm());
-        };
-        _notes.Click += (_, _) => _app.ShowReleaseNotes();
-        _skip.Click += (_, _) => _app.SkipUpdate();
-        _channel.AccessibleName = L.T("更新渠道");
-        _channel.SelectionChangeCommitted += (_, _) =>
-        {
-            if (_channel.SelectedIndex >= 0) _app.SetUpdateChannel(Channels[_channel.SelectedIndex]);
-        };
-        _autoUpdate.Toggled += (_, _) => _app.SetAutoUpdateCheck(_autoUpdate.Checked);
-
         Load();
     }
 
@@ -233,7 +182,6 @@ internal sealed class SettingsPage : ScrollPage
     {
         _capWait.Stop();
         Load();
-        _speakerInfo?.SelectionChanged();
     }
     public void FlushPendingSettings()
     {
@@ -340,6 +288,7 @@ internal sealed class SettingsPage : ScrollPage
 
     private void Load()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         var cfg = _app.Config;
         string current = LanguageMenu.Normalize(cfg.Language);
         _language.SelectedIndex = current == L.Auto ? 0 : Array.FindIndex(LanguageMenu.Choices, c => c.Value == current) + 1;
@@ -347,59 +296,12 @@ internal sealed class SettingsPage : ScrollPage
         ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
         ShowHomeTheater();
+        ShowNight();
         _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
-        ShowUpdate();
-    }
-
-    /// <summary>
-    /// 更新: the check's status under the version, the new version's row with 更新 / 查看说明 / 跳过此版本 while there is
-    /// one (更新 turns into 取消 while it downloads), the channel, and automatic checks (or why this build has none).
-    /// </summary>
-    public void ShowUpdate()
-    {
-        var u = _app.UpdateState;
-        var status = _checkRow.DescriptionText;
-        status.Text = u.Status;
-        status.Role = u.Role;
-        _check.Enabled = !u.Checking && !u.Downloading;
-        // The Microsoft Store version: the Store updates it; nothing here contacts GitHub.
-        _check.Collapsed = _channelRow.Collapsed = _autoUpdateRow.Collapsed = u.Store;
-        if (u.Store)
-        {
-            _availableRow.Collapsed = true;
-            return;
-        }
-
-        _availableRow.Collapsed = u.Available == null;
-        if (u.Available is { } release)
-        {
-            _availableRow.TitleText.Text = L.F("新版本 {0}", release.Version);
-            _availableRow.DescriptionText.Text = u.MsiInstall == false
-                ? L.T("便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。")
-                : L.T("「更新」会下载安装包、用 GitHub 提供的 SHA-256 校验，然后退出 HomePodCast 安装（Windows 会请求管理员权限），装好后自动重新启动。");
-            _install.Text = u.Downloading ? L.T("取消") : L.T("更新");
-            _install.Kind = u.Downloading ? ButtonKind.Secondary : ButtonKind.Primary;
-            _install.Enabled = !u.Checking;
-            _skip.Enabled = !u.Downloading && !u.Checking;
-        }
-
-        _channel.SelectedIndex = Array.IndexOf(Channels, _app.UpdateChannel);
-        _autoUpdate.Checked = _app.Config.AutoUpdateCheck;
-        var autoDesc = _autoUpdateRow.DescriptionText;
-        if (_app.NoAutomaticUpdates != null)
-        {
-            autoDesc.Text = L.F("这是开发版本（{0}），不会自动检查更新；「检查更新」仍然可以用。", ReleaseVersion.CurrentText);
-            autoDesc.Role = TextRole.Caution;
-        }
-        else
-        {
-            autoDesc.Text = L.T("有新版本时弹出通知提醒你，不会自动安装。启动约 30 秒后检查一次，之后每天一次；关闭时只在你点「检查更新」时联网。");
-            autoDesc.Role = TextRole.Secondary;
-        }
     }
 
     /// <summary>Which VLC password is in use, or that VLC refused it (never the password); the buttons' state.</summary>
@@ -480,6 +382,41 @@ internal sealed class SettingsPage : ScrollPage
         _ => L.T("点「连接」时先问你；自动连接会一直等到 HomePod 空闲，而 Apple TV 通常一直连着它。"),
     };
 
+    /// <summary>「夜间自动断开」: the switch, and while it is on the window and the idle time.</summary>
+    private void ShowNight()
+    {
+        using var layout = LayoutPanel.BatchLayout(this);
+        var cfg = _app.Config;
+        _night.Checked = cfg.NightDisconnect;
+        _nightWindowRow.Collapsed = _nightIdleRow.Collapsed = !cfg.NightDisconnect;
+        ShowNightTime(_nightFrom, cfg.NightDisconnectFrom);
+        ShowNightTime(_nightUntil, cfg.NightDisconnectUntil);
+        int idle = Array.IndexOf(NightDisconnectPolicy.IdleChoices, cfg.NightDisconnectIdleMinutes);
+        _nightIdle.SelectedIndex = idle;
+        _nightIdle.Placeholder = idle < 0 ? L.F("{0} 分钟", cfg.NightDisconnectIdleMinutes) : "";
+        bool empty = cfg.NightDisconnectFrom == cfg.NightDisconnectUntil;
+        _nightWindowRow.DescriptionText.Text = empty ? L.T("开始和结束时间相同，不会断开。") : "";
+        _nightWindowRow.DescriptionText.Role = empty ? TextRole.Caution : TextRole.Secondary;
+    }
+
+    /// <summary>A time off the list (a hand-edited config) shows as the box's placeholder, and stays until another is picked.</summary>
+    private static void ShowNightTime(FluentComboBox box, TimeOnly time)
+    {
+        int i = Array.IndexOf(NightDisconnectPolicy.TimeChoices, time);
+        box.SelectedIndex = i;
+        box.Placeholder = i < 0 ? NightDisconnectPolicy.Format(time) : "";
+    }
+
+    private void SetNight()
+    {
+        var cfg = _app.Config;
+        TimeOnly Picked(FluentComboBox box, TimeOnly current) =>
+            box.SelectedIndex >= 0 ? NightDisconnectPolicy.TimeChoices[box.SelectedIndex] : current;
+        _app.SetNightDisconnect(_night.Checked, Picked(_nightFrom, cfg.NightDisconnectFrom), Picked(_nightUntil, cfg.NightDisconnectUntil),
+            _nightIdle.SelectedIndex >= 0 ? NightDisconnectPolicy.IdleChoices[_nightIdle.SelectedIndex] : cfg.NightDisconnectIdleMinutes);
+        ShowNight();
+    }
+
     private static string VolumeKeyModeName(VolumeKeyMode mode) => mode switch
     {
         VolumeKeyMode.WhileStreaming => L.T("推流时控制 HomePod"),
@@ -528,21 +465,15 @@ internal sealed class SettingsPage : ScrollPage
         desc.Role = TextRole.Secondary;
     }
 
-    private void OpenRepository()
-    {
-        try { Process.Start(new ProcessStartInfo(RepositoryUrl) { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"open {RepositoryUrl}: {ex.Message}"); }
-    }
-
     public override void PageShown()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
+        ShowTheme();
         ShowAutostart(); // the Store version's startup task may have been switched in Windows' settings meanwhile
         ShowSoundOptions();
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
         ShowPlayers();
-        _speakerInfo?.PageShown();
-        _pairings?.PageShown();
     }
 
     /// <summary>A password typed but not saved is not kept once the page is left.</summary>
@@ -550,44 +481,6 @@ internal sealed class SettingsPage : ScrollPage
     {
         _vlcPassword.Clear();
         ShowVlcPasswordButtons();
-        _speakerInfo?.PageHidden();
-        _pairings?.PageHidden();
-    }
-
-    // ---------------------------------------------------------------- 音箱信息 (SpeakerInfoPanel.cs)
-
-    private SpeakerInfoPanel? _speakerInfo;
-
-    /// <summary>The 音箱信息 section, just above <paramref name="before"/>: the selected speakers' details, read when shown.</summary>
-    private void AddSpeakerInfo(Control before)
-    {
-        var header = Ui.Section(L.T("音箱信息"));
-        _speakerInfo = new SpeakerInfoPanel(_app);
-        int at = Content.Controls.GetChildIndex(before);
-        Content.Controls.Add(header);
-        Content.Controls.Add(_speakerInfo);
-        Content.Controls.SetChildIndex(header, at);
-        Content.Controls.SetChildIndex(_speakerInfo, at + 1);
-        Content.GapBefore[header] = 20;
-        Content.GapBefore[_speakerInfo] = 4;
-    }
-
-    // ---------------------------------------------------------------- 已配对的电视 (PairingsPanel.cs)
-
-    private PairingsPanel? _pairings;
-
-    /// <summary>The paired TVs (Apple TV), just above <paramref name="before"/>; hidden while there are none.</summary>
-    private void AddPairings(Control before)
-    {
-        var header = Ui.Section(L.T("已配对的电视"));
-        _pairings = new PairingsPanel(_app, header);
-        int at = Content.Controls.GetChildIndex(before);
-        Content.Controls.Add(header);
-        Content.Controls.Add(_pairings);
-        Content.Controls.SetChildIndex(header, at);
-        Content.Controls.SetChildIndex(_pairings, at + 1);
-        Content.GapBefore[header] = 20;
-        Content.GapBefore[_pairings] = 4;
     }
 
     protected override void Dispose(bool disposing)
