@@ -17,6 +17,74 @@ public class CinemaFormTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Opening_a_file_freezes_layout_and_apply_until_success_or_failure(bool openedSuccessfully) => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            Pump(page.UseFile(wav));
+            var ready = new TaskCompletionSource<bool>();
+            page.WaitForFileOpened = _ => ready.Task;
+            var start = page.PlayAsync();
+            page.RefreshStatus(); // the periodic refresh must not re-enable editing while the decoder opens
+            var apply = All<FluentButton>(page).Single(b => b.Text == "应用");
+            var remove = All<FluentButton>(page).Single(b => b.AccessibleName == "移除 书房");
+            Assert.False(apply.Enabled); Assert.False(remove.Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.All(All<FluentComboBox>(page).Where(c => c.AccessibleName?.EndsWith(" 位置") == true), c => Assert.False(c.Enabled));
+            Assert.All(All<FluentSlider>(page).Where(c => c.AccessibleName != "音量"), c => Assert.False(c.Enabled));
+            remove.PerformClick(); apply.PerformClick();
+            ready.SetResult(openedSuccessfully);
+            Pump(start);
+            if (openedSuccessfully)
+            {
+                var (_, speakers, _) = Assert.Single(host.Started);
+                Assert.Equal(2, speakers.Length);
+                Assert.Equal(2, host.Config.GroupSpeakers!.Count);
+                page.PageHidden();
+            }
+            else Assert.Empty(host.Started);
+            Assert.True(apply.Enabled);
+            Assert.True(All<FluentComboBox>(page).Single(c => c.AccessibleName == "书房 位置").Enabled);
+        }
+        finally { File.Delete(wav); }
+    });
+
+    [Fact]
+    public void A_stereo_file_keeps_saved_surround_positions_silent_and_restores_them_for_51() => OnSta(() =>
+    {
+        string surround = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        string stereo = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:04", Name = "后环绕", Position = SpeakerPosition.RearLeft });
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            FluentComboBox Rear() => All<FluentComboBox>(page).Single(c => c.AccessibleName == "后环绕 位置");
+            Pump(page.UseFile(surround));
+            Assert.Equal("后左", Rear().SelectedText); Assert.True(Rear().Enabled);
+            Pump(page.UseFile(stereo));
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text.Contains("此音箱保持静音"));
+            Pump(page.PlayAsync());
+            var (source, layout, _) = Assert.Single(host.Started);
+            Assert.Equal(CinemaRole.RearLeft, layout[2].Role);
+            source.ReadPacket(0);
+            var pcm = new float[RtpSender.FramesPerPacket * 2];
+            source.ReadTarget(2, pcm);
+            Assert.All(pcm, sample => Assert.Equal(0, sample));
+            Assert.Equal(SpeakerPosition.RearLeft, host.Config.GroupSpeakers![2].Position);
+            Pump(page.UseFile(surround));
+            Assert.Equal("后左", Rear().SelectedText); Assert.True(Rear().Enabled);
+        }
+        finally { File.Delete(surround); File.Delete(stereo); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void A_file_opening_in_the_background_cannot_start_after_leaving_its_source(bool hidePage) => OnSta(() =>
     {
         string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
@@ -24,7 +92,7 @@ public class CinemaFormTests
         {
             var host = new FakeHost();
             using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
-            page.UseFile(wav);
+            Pump(page.UseFile(wav));
             var opened = new TaskCompletionSource<bool>();
             page.WaitForFileOpened = _ => opened.Task;
             var start = page.PlayAsync();
@@ -48,7 +116,7 @@ public class CinemaFormTests
             host.Config.MultiRoomDeviceId = null;
             using var form = Form(host);
             Assert.Null(GroupPlan.FromConfig(host.Config));
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             Pump(form.PlayAsync());
             Assert.Single(host.Started);
             Assert.Null(host.Config.GroupCaptureDeviceIds);
@@ -74,6 +142,7 @@ public class CinemaFormTests
             new("客厅", "AA:00:00:00:00:01", IPAddress.Parse("192.168.50.11"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
             new("书房", "AA:00:00:00:00:02", IPAddress.Parse("192.168.50.12"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
             new("Apple TV", "AA:00:00:00:00:03", IPAddress.Parse("192.168.50.13"), 7000, "AppleTV14,1", new Dictionary<string, string>()),
+            new("后环绕", "AA:00:00:00:00:04", IPAddress.Parse("192.168.50.14"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
         ];
         public double? Volume => Config.Volume;
         public double VolumeCap => Config.VolumeCapPercent;
@@ -170,7 +239,7 @@ public class CinemaFormTests
             Assert.Equal(60, volume.Value); // the app's volume
 
             ChooseFronts(form);
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             volume.UserSetValue(10);
             Assert.Equal([10.0], host.Previewed); // the speakers follow the drag
             Assert.True(wait.Enabled);
@@ -206,17 +275,17 @@ public class CinemaFormTests
             var host = new FakeHost();
             using var form = Form(host);
 
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             ChooseFronts(form, right: false);
             Pump(form.PlayAsync());
             Assert.Equal("影院播放失败：至少选择完整立体声，或给左和右各选一台音箱。", Status(form));
 
             ChooseFronts(form);
-            form.UseFile(garbage);
+            Pump(form.UseFile(garbage));
             Pump(form.PlayAsync());
             Assert.Equal("影院播放失败：这个文件在这台电脑上无法解码：Windows 没有它的解码器，或者文件已损坏。", Status(form));
 
-            form.UseFile(garbage + ".missing");
+            Pump(form.UseFile(garbage + ".missing"));
             Pump(form.PlayAsync());
             Assert.Equal("影院播放失败：选的文件不存在或打不开。", Status(form));
             Assert.Empty(host.Started);
@@ -237,7 +306,7 @@ public class CinemaFormTests
             var host = new FakeHost();
             using var form = Form(host);
             ChooseFronts(form);
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             Pump(form.PlayAsync());
             var calibrate = All<FluentButton>(form).Single(b => b.Text == "测量音箱延迟");
 

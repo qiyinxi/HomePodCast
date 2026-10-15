@@ -622,5 +622,6 @@
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Este receptor solo puede reproducir estéreo completo; los canales discretos requieren un HomePod que no forme parte de un par estéreo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Aplica los ajustes con Audio del ordenador en directo seleccionado para actualizar los altavoces de la transmisión en directo. La reproducción de archivos no cambia el grupo de altavoces de la transmisión en directo.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Selecciona al menos un altavoz con Estéreo completo, o asigna un altavoz a Izquierda y otro a Derecha.",
-  "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "La transmisión en directo a un solo altavoz utiliza el modo de baja latencia existente. La posición, el retardo adicional y el desfase de volumen solo se aplican a grupos con varias salidas."
+  "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "La transmisión en directo a un solo altavoz utiliza el modo de baja latencia existente. La posición, el retardo adicional y el desfase de volumen solo se aplican a grupos con varias salidas.",
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Esta fuente no tiene un canal para esta posición, por lo que este altavoz permanece en silencio. Al volver a un archivo multicanal se restaura su posición."
 }

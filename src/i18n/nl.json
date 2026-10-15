@@ -622,5 +622,6 @@
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Deze ontvanger kan alleen volledige stereo afspelen; discrete kanalen vereisen een HomePod die niet bij een stereopaar hoort.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Pas de instellingen toe met Live computeraudio geselecteerd om de luidsprekers voor de livestream bij te werken. Het afspelen van bestanden wijzigt de luidsprekergroep voor de livestream niet.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Kies minstens één luidspreker met Volledige stereo, of wijs één luidspreker toe aan Links en één aan Rechts.",
-  "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Livestreamen naar één luidspreker gebruikt de bestaande modus met lage latentie. Positie, extra vertraging en volumeverschil zijn alleen van toepassing op groepen met meerdere uitgangen."
+  "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Livestreamen naar één luidspreker gebruikt de bestaande modus met lage latentie. Positie, extra vertraging en volumeverschil zijn alleen van toepassing op groepen met meerdere uitgangen.",
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Deze bron heeft geen kanaal voor deze positie, dus deze luidspreker blijft stil. Bij terugschakelen naar een meerkanaalsbestand wordt de positie hersteld."
 }

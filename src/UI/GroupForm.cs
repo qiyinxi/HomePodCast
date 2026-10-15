@@ -21,7 +21,9 @@ internal sealed class GroupPanel : StackPanel
     private List<AirPlayDevice> _found = [], _choices = [];
     private string? _scanSignature;
     private bool _multichannel, _fileSource, _active, _refreshing;
-    private sealed record Row(GroupSpeakerSettings Speaker, FluentComboBox Position, SpeakerPosition[] Positions, FluentSlider Delay, FluentSlider Volume);
+    private uint _fileMask;
+    private sealed record Row(GroupSpeakerSettings Speaker, FluentComboBox Position, SpeakerPosition[] Positions, FluentSlider Delay, FluentSlider Volume,
+        bool RetainedPosition, bool Silent);
 
     internal GroupPanel(AppConfig config)
     {
@@ -95,11 +97,11 @@ internal sealed class GroupPanel : StackPanel
         ShowMembers();
     }
 
-    internal void SetSource(bool multichannel, bool fileSource = false)
+    internal void SetSource(bool multichannel, bool fileSource = false, uint mask = 0)
     {
         fileSource |= multichannel;
-        if (_multichannel == multichannel && _fileSource == fileSource) return;
-        ReadRows(); _multichannel = multichannel; _fileSource = fileSource; ShowMembers();
+        if (_multichannel == multichannel && _fileSource == fileSource && _fileMask == mask) return;
+        ReadRows(); _multichannel = multichannel; _fileSource = fileSource; _fileMask = mask; ShowMembers();
     }
 
     internal void SetPlaybackActive(bool active)
@@ -109,8 +111,8 @@ internal sealed class GroupPanel : StackPanel
         bool singleCapture = !_fileSource && _speakers.Count <= 1;
         foreach (var row in _rows)
         {
-            row.Position.Enabled = !active && !singleCapture && !(_tsid != null && _leaderOnly.Checked);
-            row.Delay.Enabled = row.Volume.Enabled = !active && !singleCapture;
+            row.Position.Enabled = !active && !singleCapture && !row.RetainedPosition && !(_tsid != null && _leaderOnly.Checked);
+            row.Delay.Enabled = row.Volume.Enabled = !active && !singleCapture && !row.Silent;
         }
         _singleNote.Text = singleCapture ? L.T("实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。") : "";
         _add.Enabled = !active && _tsid == null && _choices.Count > 0;
@@ -156,7 +158,9 @@ internal sealed class GroupPanel : StackPanel
         {
             var device = _found.FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(speaker.DeviceId));
             if (device != null) { speaker.Name = device.Name; speaker.Host = device.Address.ToString(); }
-            var positions = _multichannel && DiscreteAllowed(speaker) ? Enum.GetValues<SpeakerPosition>()
+            bool retainedPosition = _fileSource && !_multichannel && !GroupSettings.IsStereoPosition(speaker.Position);
+            bool silent = retainedPosition && _fileMask != 0 && !(speaker.Position == SpeakerPosition.Center && (_fileMask & CinemaChannels.FC) != 0);
+            var positions = retainedPosition ? new[] { speaker.Position } : _multichannel && DiscreteAllowed(speaker) ? Enum.GetValues<SpeakerPosition>()
                 : _multichannel ? [SpeakerPosition.Stereo] : new[] { SpeakerPosition.Stereo, SpeakerPosition.Left, SpeakerPosition.Right };
             var position = new FluentComboBox { AccessibleName = L.F("{0} 位置", speaker.Name), MinWidth = 120 };
             foreach (var p in positions) position.Items.Add(PositionName(p));
@@ -187,10 +191,11 @@ internal sealed class GroupPanel : StackPanel
             var fields = Ui.Row(8, null, positionField, delayField, volumeField, remove);
             fields.Wrap = true;
             var entry = Ui.Stack(4, title, fields);
+            if (silent) entry.Controls.Add(Ui.Note(L.T("此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。")));
             if (ReceiverBlockReason(speaker) is { } blocked) entry.Controls.Add(Ui.Note(blocked));
             if (_multichannel && !DiscreteAllowed(speaker)) entry.Controls.Add(Ui.Note(L.T("此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。")));
             _members.Controls.Add(entry);
-            _rows.Add(new(speaker, position, positions, delay, volume));
+            _rows.Add(new(speaker, position, positions, delay, volume, retainedPosition, silent));
         }
         _choices = StereoPairs.Merge(_found).Where(d => !StereoPairs.IsPairId(d.DeviceId) &&
             _speakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(d.DeviceId))).ToList();

@@ -34,7 +34,9 @@ internal class CinemaPage : ScrollPage
     private string? _path;
     private long _endedAt;
     private bool _fileMultichannel;
+    private uint _fileMask;
     private long _playRequest;
+    private long? _openingRequest;
     internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } =
         source => Task.Run(() => source.WaitOpened(TimeSpan.FromSeconds(10)));
 
@@ -77,7 +79,7 @@ internal class CinemaPage : ScrollPage
         _sourceKind.SelectedIndexChanged += (_, _) =>
         {
             StopPlayback("source changed");
-            _editor.SetSource(_sourceKind.SelectedIndex == 1 && _fileMultichannel, fileSource: _sourceKind.SelectedIndex == 1);
+            _editor.SetSource(_sourceKind.SelectedIndex == 1 && _fileMultichannel, fileSource: _sourceKind.SelectedIndex == 1, mask: _fileMask);
             RefreshStatus();
         };
 
@@ -121,7 +123,7 @@ internal class CinemaPage : ScrollPage
             _volumeWait.Restart();
         };
         _volumeWait.Tick += FlushVolume;
-        _choose.Click += (_, _) => ChooseFile();
+        _choose.Click += async (_, _) => await ChooseFileAsync();
         _play.Click += async (_, _) => await PlayAsync();
         _pause.Click += (_, _) => TogglePause();
         _stop.Click += (_, _) => { StopPlayback("stop"); _status.Text = ""; RefreshStatus(); };
@@ -139,14 +141,14 @@ internal class CinemaPage : ScrollPage
 
     internal void RefreshSpeakers()
     {
-        if (_source != null || _measurement != null) return;
+        if (_source != null || _measurement != null || _openingRequest != null) return;
         if (_layoutSignature != GroupPanel.SettingsSignature(_host.Config))
         {
             int index = Content.Controls.GetChildIndex(_editor);
             _editor.Dispose();
             _editor = new GroupPanel(_host.Config);
             Content.Controls.Add(_editor); Content.Controls.SetChildIndex(_editor, index);
-            _editor.SetSource(_sourceKind.SelectedIndex == 1 && _fileMultichannel, fileSource: _sourceKind.SelectedIndex == 1);
+            _editor.SetSource(_sourceKind.SelectedIndex == 1 && _fileMultichannel, fileSource: _sourceKind.SelectedIndex == 1, mask: _fileMask);
         }
         _editor.SetFound(_host.Speakers.ToList());
         _layoutSignature = GroupPanel.SettingsSignature(_host.Config);
@@ -163,42 +165,71 @@ internal class CinemaPage : ScrollPage
 
     // ---------------------------------------------------------------- playback
 
-    private void ChooseFile()
+    private async Task ChooseFileAsync()
     {
         using var dialog = new OpenFileDialog
         {
             Filter = L.T("影音文件") + "|*.wav;*.mp4;*.m4a;*.m4v;*.mkv;*.mov;*.wma;*.aac;*.ac3;*.ec3|" + L.T("所有文件") + "|*.*",
         };
-        if (dialog.ShowDialog(this) == DialogResult.OK) UseFile(dialog.FileName);
+        if (dialog.ShowDialog(this) == DialogResult.OK) await UseFile(dialog.FileName);
     }
 
     /// <summary>The file to play (the file dialog, or a test).</summary>
-    internal void UseFile(string path)
+    internal async Task UseFile(string path)
     {
         StopPlayback("another file");
-        _path = path;
+        _sourceKind.SelectedIndex = 1;
+        long request = _playRequest;
+        _openingRequest = request;
+        _path = null;
         _file.Text = Path.GetFileName(path);
         _status.Text = "";
+        RefreshStatus();
         try
         {
-            using var reader = new CinemaMediaReader(path);
-            _fileMultichannel = reader.Channels >= 6;
-            _file.Text += " · " + CinemaChannels.DisplayName(reader.Channels, reader.Mask);
+            // Media Foundation requires an MTA thread; the WinForms UI is STA. Keep native open off the UI thread too.
+            var info = await Task.Run(() =>
+            {
+                using var reader = new CinemaMediaReader(path);
+                return (reader.Channels, reader.Mask);
+            });
+            if (IsDisposed || request != _playRequest) return;
+            _path = path;
+            _fileMultichannel = info.Channels >= 6;
+            _fileMask = info.Mask;
+            _file.Text += " · " + CinemaChannels.DisplayName(info.Channels, info.Mask);
+            _editor.SetSource(_fileMultichannel, fileSource: true, mask: _fileMask);
         }
-        catch (CinemaException ex) { _status.Text = ex.Message; _fileMultichannel = false; }
-        _sourceKind.SelectedIndex = 1;
-        _editor.SetSource(_fileMultichannel, fileSource: true);
-        RefreshStatus();
+        catch (CinemaException ex)
+        {
+            if (IsDisposed || request != _playRequest) return;
+            _path = path; _status.Text = ex.Message; _fileMultichannel = false; _fileMask = 0;
+            _editor.SetSource(false, fileSource: true);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"cinema: file inspection failed: {ex.GetType().Name}: {ex.Message}");
+            if (IsDisposed || request != _playRequest) return;
+            _path = path; _status.Text = L.T("出现了意外的错误，详情见日志。"); _fileMultichannel = false; _fileMask = 0;
+            _editor.SetSource(false, fileSource: true);
+        }
+        finally
+        {
+            if (_openingRequest == request) _openingRequest = null;
+            if (!IsDisposed) RefreshStatus();
+        }
     }
 
     private CinemaSpeaker[] SelectedLayout() => _editor.SelectedLayout();
 
     internal async Task PlayAsync()
     {
-        if (_path == null || _measurement != null) return;
+        if (_path == null || _measurement != null || _openingRequest != null) return;
         if (_editor.BlockReason is { } blocked) { _status.Text = blocked; return; }
         StopPlayback("restart");
         long request = _playRequest;
+        _openingRequest = request;
+        RefreshStatus();
         _calibrationStatus.Text = "";
         FlushVolume(); // the slider's value is what the cinema starts with, and it is saved first
         CinemaFileSource? source = null;
@@ -225,16 +256,17 @@ internal class CinemaPage : ScrollPage
         {
             source?.Dispose();
             Log.Warn($"cinema: not started: {ex.LogText}");
-            if (!IsDisposed) _status.Text = L.F("影院播放失败：{0}", ex.Message);
+            if (!IsDisposed && request == _playRequest) _status.Text = L.F("影院播放失败：{0}", ex.Message);
         }
         catch (Exception ex)
         {
             source?.Dispose();
             Log.Warn($"cinema: not started: {ex.GetType().Name}: {ex.Message}");
-            if (!IsDisposed) _status.Text = L.F("影院播放失败：{0}", L.T("出现了意外的错误，详情见日志。"));
+            if (!IsDisposed && request == _playRequest) _status.Text = L.F("影院播放失败：{0}", L.T("出现了意外的错误，详情见日志。"));
         }
         finally
         {
+            if (_openingRequest == request) _openingRequest = null;
             if (!IsDisposed)
             {
                 _play.Enabled = true;
@@ -254,6 +286,7 @@ internal class CinemaPage : ScrollPage
     private void StopPlayback(string reason)
     {
         _playRequest++; // a file still opening must not connect after a source change or after the page is hidden
+        _openingRequest = null;
         _measurement?.Cancel();
         var source = _source;
         _source = null;
@@ -293,14 +326,15 @@ internal class CinemaPage : ScrollPage
         state = source == null ? CinemaState.Ended : _host.CinemaStateOf(source);
 
         bool active = source != null;
-        _play.Enabled = _sourceKind.SelectedIndex == 1 && _path != null && _measurement == null && _editor.BlockReason == null;
+        bool opening = _openingRequest != null;
+        _play.Enabled = !opening && _sourceKind.SelectedIndex == 1 && _path != null && _measurement == null && _editor.BlockReason == null;
         _choose.Enabled = _sourceKind.SelectedIndex == 1 && _measurement == null;
-        _apply.Enabled = !active && _editor.BlockReason == null;
+        _apply.Enabled = !active && !opening && _editor.BlockReason == null;
         _pause.Enabled = _stop.Enabled = active && _measurement == null;
         _pause.Text = source?.Paused == true ? L.T("继续") : L.T("暂停");
         _calibrate.Enabled = state == CinemaState.Playing && _measurement == null && _activeLayout.Length >= 2;
-        _microphone.Enabled = !active;
-        _editor.SetPlaybackActive(active);
+        _microphone.Enabled = !active && !opening;
+        _editor.SetPlaybackActive(active || opening);
         if (source != null)
         {
             string layout = CinemaChannels.DisplayName(source.Channels, source.Mask);
@@ -424,7 +458,7 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         ClientSize = new Size(Theme.Dp(680, DeviceDpi), Theme.Dp(640, DeviceDpi));
     }
     public Color SurfaceColor => Theme.P.Window;
-    internal void UseFile(string path) => _page.UseFile(path);
+    internal Task UseFile(string path) => _page.UseFile(path);
     internal Task PlayAsync() => _page.PlayAsync();
     internal void RefreshStatus() => _page.RefreshStatus();
     protected override void OnShown(EventArgs e) { base.OnShown(e); _page.PageShown(); }
