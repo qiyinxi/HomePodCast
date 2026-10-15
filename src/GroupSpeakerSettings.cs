@@ -47,6 +47,8 @@ public static class GroupSettings
             foreach (var row in cfg.GroupSpeakers)
                 row.VolumeOffset = cfg.GroupVolumeOffsets?.GetValueOrDefault(GroupPlan.Key(row.DeviceId)) ?? 0;
         }
+        if (cfg.DeviceId is { } selected && !StereoPairs.IsPairId(selected) && cfg.GroupSpeakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(selected)))
+            cfg.GroupSpeakers.Insert(0, new() { DeviceId = selected, Name = cfg.DeviceName ?? selected, Host = cfg.Host });
         if (StereoPairs.TryGetTsid(cfg.DeviceId, out var tsid) && found != null)
         {
             var members = StereoPairs.Members(found, tsid);

@@ -5,6 +5,31 @@ namespace HomePodCast.Tests;
 
 public class GroupSettingsTests
 {
+    [Fact]
+    public void Saved_file_speakers_never_activate_or_expand_the_live_group()
+    {
+        var cfg = new AppConfig { DeviceId = "AA:01", Cinema = new() { Speakers = [
+            new() { DeviceId = "AA:01", Role = CinemaRole.FrontLeft },
+            new() { DeviceId = "AA:02", Role = CinemaRole.FrontRight },
+            new() { DeviceId = "AA:03", Role = CinemaRole.Center } ] } };
+        GroupSettings.Normalize(cfg);
+        Assert.Equal(3, cfg.GroupSpeakers!.Count);
+        Assert.Null(GroupPlan.FromConfig(cfg)); // startup keeps the original low-latency single session
+        cfg.MultiRoomDeviceId = "AA:02";
+        Assert.Equal(["AA:01", "AA:02"], GroupPlan.FromConfig(cfg)!.Members.Select(s => s.DeviceId));
+        var saved = UsageProfiles.Capture(cfg);
+        var restored = new AppConfig();
+        UsageProfiles.Apply(restored, saved);
+        Assert.Equal(["AA:01", "AA:02"], GroupPlan.FromConfig(restored)!.Members.Select(s => s.DeviceId));
+        saved.MultiRoomDeviceId = null;
+        UsageProfiles.Apply(restored, saved);
+        Assert.Null(GroupPlan.FromConfig(restored));
+        cfg.GroupCaptureDeviceIds = ["AA:01", "AA:03"];
+        Assert.Equal(["AA:01", "AA:03"], GroupPlan.FromConfig(cfg)!.Members.Select(s => s.DeviceId));
+        cfg.GroupCaptureDeviceIds = ["AA:01"];
+        Assert.Null(GroupPlan.FromConfig(cfg));
+    }
+
     [Theory]
     [InlineData(false, SpeakerPosition.Left, SpeakerPosition.Right)]
     [InlineData(true, SpeakerPosition.Right, SpeakerPosition.Left)]

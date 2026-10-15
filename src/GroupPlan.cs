@@ -50,10 +50,13 @@ public sealed record GroupPlan(
         if (StereoPairs.TryGetTsid(id, out var tsid))
             return new GroupPlan(GroupKind.StereoPair, cfg.DeviceName ?? tsid, tsid, [],
                 cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { PairLeaderOnly = cfg.GroupPairLeaderOnly, SpeakerSettings = settings };
-        if (cfg.GroupSpeakers is { Count: > 1 } rows && rows.Any(s => Key(s.DeviceId) == Key(id)))
+        var rows = cfg.GroupCaptureDeviceIds?.Select(deviceId => settings.GetValueOrDefault(Key(deviceId)))
+            .Where(s => s != null).Cast<GroupSpeakerSettings>().DistinctBy(s => Key(s.DeviceId)).ToArray();
+        if (rows is { Length: > 1 } && rows.Any(s => Key(s.DeviceId) == Key(id)))
             return new GroupPlan(GroupKind.MultiRoom, string.Join(" + ", rows.Select(s => s.Name)), null,
                 rows.Select(s => new GroupMemberRef(s.DeviceId, s.Name, Key(s.DeviceId) == Key(id) ? cfg.Host : s.Host)).ToArray(),
                 false, false, offsets) { SpeakerSettings = settings };
+        if (cfg.GroupCaptureDeviceIds != null) return null;
         if (cfg.MultiRoomDeviceId is { } extra && !StereoPairs.IsPairId(extra) && Key(extra) != Key(id))
             return new GroupPlan(GroupKind.MultiRoom, $"{cfg.DeviceName ?? id} + {cfg.MultiRoomDeviceName ?? extra}", null,
                 [new GroupMemberRef(id, cfg.DeviceName ?? id, cfg.Host), new GroupMemberRef(extra, cfg.MultiRoomDeviceName ?? extra, cfg.MultiRoomHost)],
