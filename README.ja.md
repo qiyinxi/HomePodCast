@@ -58,7 +58,7 @@ HomePodCast は個人プロジェクトで、実機テストは次の 1 組だ�
 - **ワイヤレスシネマ**（チャンネルごとに 1 台の HomePod）：シミュレートしたスピーカーと生成したファイルでのみテスト
 - 物理的なサウンドカードやヘッドセット、ほかの Windows バージョン、PC が有線か Wi‑Fi かによる違い
 
-ほかの機器で試した場合は、機種、ソフトウェアのバージョン、音切れせずに使える最小の遅延設定、ログ（`homepodcast.log`。「バージョン情報 → ログ → ログ フォルダーを開く」で表示できます。場所は `%APPDATA%\HomePodCast`、Microsoft Store 版は `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）を添えて issue でお知らせください。
+ほかの機器で試した場合は、機種、ソフトウェアのバージョン、音切れせずに使える最小の遅延設定、診断レポート（「バージョン情報 → 診断レポート → 診断をエクスポート」。個人情報を除去したログと統計を含む ZIP で、添付する前に中身を確認できます）を添えて issue でお知らせください。元のログ `homepodcast.log` は自分で問題を調べるためのものです。スピーカー名や IP アドレスが含まれるため、公開の issue には添付しないでください。「バージョン情報 → ログ → ログ フォルダーを開く」で表示できます。場所は `%APPDATA%\HomePodCast`、Microsoft Store 版は `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast` です。
 
 ## 機能
 
