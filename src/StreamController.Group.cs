@@ -1,4 +1,5 @@
 using System.Net;
+using System.Collections.Frozen;
 using HomePodCast.Net;
 
 namespace HomePodCast;
@@ -12,8 +13,27 @@ public sealed partial class StreamController
     private (string Key, List<ResolvedMember> Members)? _lastPair;
     private double _groupConnectCap = 100;
     private Audio.IGroupPacketSource? _groupSource;
+    private long _groupGeneration;
+    private sealed record GroupSelection(long Generation, FrozenSet<string> Members);
+    private GroupSelection? _groupSelection;
 
-    internal sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port);
+    internal sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port)
+    {
+        public AirPlayDevice? Device { get; init; }
+    }
+
+    private AirPlayDevice? GroupDevice(string id) => ReceiverLookup?.Invoke(id) ?? ReceiverSettings?.Invoke(id)?.Device(id);
+
+    private bool GroupUsesRaop(AirPlayDevice? device)
+    {
+        if (device == null || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv) return false;
+        var forced = ReceiverSettings?.Invoke(device.DeviceId)?.ProtocolOverride ?? ReceiverProtocol.Auto;
+        return forced == ReceiverProtocol.Raop || forced == ReceiverProtocol.Auto && UsesRaop(device);
+    }
+
+    internal bool MatchesRaopGroupInteraction(RaopInteraction request) => request.GroupGeneration is { } generation
+        && Volatile.Read(ref _groupSelection) is { } selection && selection.Generation == generation
+        && selection.Members.Contains(GroupPlan.Key(request.Device.DeviceId));
 
     /// <summary>Finds every member of a group (tests replace it: no mDNS). Null: <see cref="ResolveGroupAsync"/>.</summary>
     internal Func<GroupPlan, CancellationToken, Task<List<ResolvedMember>>>? ResolveGroupMembers { get; set; }
@@ -35,12 +55,14 @@ public sealed partial class StreamController
     /// One StartGroup's connection: why it connects, the selection's key, whether it has streamed yet, and whether a
     /// speaker ended its last session itself (another sender took it: a home theater's Apple TV is then not fought).
     /// </summary>
-    private sealed class GroupRun(ConnectTrigger trigger, string key, string? takenFrom, Audio.IGroupPacketSource? source)
+    private sealed class GroupRun(ConnectTrigger trigger, string key, string? takenFrom, Audio.IGroupPacketSource? source, long generation)
     {
         public ConnectTrigger Trigger { get; } = trigger;
         public string Key { get; } = key;
         public string? TakenFrom { get; } = takenFrom;
         public Audio.IGroupPacketSource? Source { get; } = source;
+        public long Generation { get; } = generation;
+        public System.Collections.Concurrent.ConcurrentDictionary<string, int> RaopAttempts { get; } = new();
         public volatile bool Streamed;
         public volatile bool EndedBySpeaker;
     }
@@ -54,12 +76,13 @@ public sealed partial class StreamController
         lock (_lifecycle)
         {
             Stop();
-            if (plan.Members.Any(m => UsesRaop(ReceiverLookup?.Invoke(m.DeviceId))))
+            if (source != null && (plan.LocalOutputs.Count > 0 || plan.Members.Any(m => GroupUsesRaop(GroupDevice(m.DeviceId)))))
             {
-                Set(StreamState.Idle, L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"));
+                source.Dispose();
+                Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
                 return;
             }
-            if (plan.Members.Any(m => UsesThirdPartyPath(ReceiverLookup?.Invoke(m.DeviceId))))
+            if (plan.Members.Any(m => GroupDevice(m.DeviceId) is { } device && !GroupUsesRaop(device) && UsesThirdPartyPath(device)))
             {
                 source?.Dispose();
                 Set(StreamState.Idle, L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
@@ -67,7 +90,9 @@ public sealed partial class StreamController
             }
             var cts = new CancellationTokenSource();
             Volatile.Write(ref _groupSource, source); // Stop disposes it (TearDownGroup)
-            var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source);
+            long generation = Interlocked.Increment(ref _groupGeneration);
+            Volatile.Write(ref _groupSelection, new(generation, plan.Members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
+            var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source, generation);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
                 (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text),
@@ -80,10 +105,11 @@ public sealed partial class StreamController
             };
             runner.StreamEnded += (lostReason, stopped) =>
             {
-                if (lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget(); // another sender took a member over
+                if (lostReason is EventChannel.ClosedBySpeaker or Net.RaopClient.ClosedByReceiver) OwnSession.Forget(); // another sender took a member over
                 else OwnSession.Ended(UtcNow(), clean: stopped);
-                run.EndedBySpeaker = lostReason == EventChannel.ClosedBySpeaker;
+                run.EndedBySpeaker = lostReason is EventChannel.ClosedBySpeaker or Net.RaopClient.ClosedByReceiver;
             };
+            runner.StoppedForUserAction += OwnSession.Forget;
             runner.Connected += OnGroupConnected;
             lock (_lock)
             {
@@ -100,10 +126,33 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
-        if (plan.LocalOutputs.Count > 0) return await ConnectLocalGroupAsync(plan, latencyMs, run, ct);
-        var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
+        // A capture collision is refused before resolution, including when that output is optional.
+        foreach (var output in plan.LocalOutputs) LocalOutputSink.CheckCapture(output.DeviceId, LocalCapturedId());
+        var members = (await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct)).Select(m =>
+        {
+            var device = m.Device ?? GroupDevice(m.DeviceId);
+            return m with { Device = device, Port = GroupUsesRaop(device) ? device!.RaopPort ?? device.Port : m.Port };
+        }).ToList();
+        ct.ThrowIfCancellationRequested();
+        if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
+            Volatile.Write(ref _groupSelection, new(run.Generation, members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
+        if (members.Any(m => m.Device is { } d && !GroupUsesRaop(d) && UsesThirdPartyPath(d)))
+        {
+            if (run.Source != null && Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source)
+                run.Source.Dispose();
+            throw new RaopRefusedException(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+        }
+        if (plan.LocalOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device)))
+        {
+            if (run.Source != null)
+            {
+                if (Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source) run.Source.Dispose();
+                throw new RaopRefusedException(L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
+            }
+            return await ConnectLocalGroupAsync(plan, members, latencyMs, run, ct);
+        }
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
-            members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
+            members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address, m.Port)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
         if (run.Source == null) EnsureCapture(ct); // the cinema plays its file: no system capture, no effects chain
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
@@ -153,13 +202,28 @@ public sealed partial class StreamController
             var list = new List<ResolvedMember>();
             foreach (var m in plan.Members)
             {
+                var device = GroupDevice(m.DeviceId);
                 IPAddress address;
-                try { address = await ResolveAsync(m.DeviceId, m.Host, ct); }
+                try
+                {
+                    if (GroupUsesRaop(device))
+                    {
+                        // RAOP's advertised service may live on any port. The original resolver probes fixed 7000.
+                        if (device!.Address.Equals(IPAddress.None))
+                            device = (await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct))
+                                .FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(m.DeviceId))
+                                ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
+                        address = device.Address;
+                    }
+                    else address = await ResolveAsync(m.DeviceId, m.Host, ct);
+                }
                 catch (AirPlayException ex)
                 {
                     throw new AirPlayException(L.F("{0}：{1}", m.Name, ex.Message)) { LogMessage = $"{Log.Name(m.Name)}: {AirPlayException.ForLog(ex)}" };
                 }
-                list.Add(new ResolvedMember(m.DeviceId, $"{m.Name} {address}", address, 7000));
+                list.Add(new ResolvedMember(m.DeviceId, $"{m.Name} {address}", address,
+                    GroupUsesRaop(device) ? device!.RaopPort ?? device.Port : device?.Port ?? 7000)
+                    { Device = device is null ? null : device with { Address = address } });
             }
             return list;
         }
@@ -175,7 +239,7 @@ public sealed partial class StreamController
         var leader = StereoPairs.Leader(StereoPairs.Members(devices, plan.PairTsid!));
         Log.Info($"pair {plan.PairTsid}: {(plan.PairLeaderOnly ? "leader only" : "both members")}, " +
                  string.Join(", ", targets.Select(d => $"{Log.Name(d.Name)} {d.Address}{(d == leader ? " (leader)" : "")}")));
-        var members = targets.Select(d => new ResolvedMember(d.DeviceId, $"{d.Name} {d.Address}", d.Address, d.Port)).ToList();
+        var members = targets.Select(d => new ResolvedMember(d.DeviceId, $"{d.Name} {d.Address}", d.Address, d.Port) { Device = d }).ToList();
         _lastPair = (key, members);
         return members;
     }
@@ -183,6 +247,8 @@ public sealed partial class StreamController
     /// <summary>Called by Stop() after the loop was asked to end.</summary>
     private void TearDownGroup()
     {
+        Interlocked.Increment(ref _groupGeneration);
+        Volatile.Write(ref _groupSelection, null);
         Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
         Interlocked.Exchange(ref _groupSource, null)?.Dispose();
     }

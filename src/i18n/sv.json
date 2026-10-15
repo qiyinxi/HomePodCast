@@ -531,7 +531,6 @@
   "AirPlay 密码": "AirPlay-lösenord",
   "AirPlay 设备密码（实验性）": "AirPlay-mottagarens lösenord (experimentellt)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Ange AirPlay-lösenordet för ”{0}”. Det sparas krypterat endast på den här datorn.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "AirPlay 1-kompatibilitetsmottagare kan inte ingå i grupper med flera högtalare.",
   "自动": "Automatiskt",
   "AirPlay 2 低延迟（实验性）": "AirPlay 2 i realtid (experimentellt)",
   "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 med buffert (experimentellt, inte testat på hårdvara)",
@@ -617,7 +616,7 @@
   "移除": "Ta bort",
   "移除 {0}": "Ta bort {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Realtidsinspelningen mixas först ned till stereo, så bara Full stereo, Vänster eller Höger kan väljas. För 5.1-/7.1-filer kan du tilldela center-, subwoofer- och surroundplaceringar; kanaler utan tilldelning mixas in i närliggande högtalare.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Separata kanaler kräver enskilda HomePod-högtalare: samma typ av mottagare ger gemensam fördröjning och klocka. Stereopar kan bara använda full stereo. Lokala filer stöder ännu inte Apple TV; mottagare från andra tillverkare och AirPlay 1 kan ännu inte ingå i grupper.",
+  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Separata kanaler kräver enskilda HomePod-högtalare. AirPlay 1-mottagare kan ingå i grupper för realtidsströmning, med ungefärlig synkronisering efter kalibrering. Lokala filer stöder bara HomePod-högtalare; AirPlay 2-mottagare från andra tillverkare kan ännu inte ingå i grupper.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Fördröjningen är den extra tid den här högtalaren väntar i millisekunder; ett högre värde ger senare uppspelning. Ljudstyrkejusteringen läggs till den gemensamma ljudstyrkan.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Den här mottagaren kan bara spela full stereo; separata kanaler kräver en HomePod som inte ingår i ett stereopar.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Tillämpa inställningarna med Datorljud i realtid valt för att uppdatera högtalarna för realtidsströmning. Filuppspelning ändrar inte högtalargruppen för realtidsströmning.",
@@ -630,5 +629,6 @@
   "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "”{0}” är för närvarande inte en fristående HomePod och kan inte använda den sparade placeringen för en separat kanal.",
   "找不到所选的输出设备。": "Den valda utdataenheten hittades inte.",
   "本机输出设备正被采集，请改用其他采集设备。": "Den lokala utdataenheten spelas in. Välj en annan inspelningsenhet.",
-  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Gruppfördröjningen är för kort för den här utgången. Öka gruppfördröjningen."
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Gruppfördröjningen är för kort för den här utgången. Öka gruppfördröjningen.",
+  "本地影音文件暂不支持 AirPlay 1 或本机输出分组。": "Uppspelning av lokala mediefiler stöder ännu inte grupper med AirPlay 1 eller lokala utgångar."
 }
