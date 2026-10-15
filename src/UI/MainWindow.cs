@@ -4,7 +4,7 @@ using HomePodCast.UI.Pages;
 
 namespace HomePodCast.UI;
 
-internal enum AppPage { Home, Mixer, Effects, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
+internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
 
 /// <summary>
 /// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
@@ -18,6 +18,7 @@ internal sealed class MainWindow : Form, ISurface
     private readonly HomePage _home;
     private readonly MixerPage _mixer;
     private readonly EffectsPage _effects;
+    private readonly EqualizerPage _equalizer;
     private readonly SettingsPage _settings;
     private readonly AboutPage _about;
     private readonly ProfilesPage _profiles;
@@ -48,7 +49,8 @@ internal sealed class MainWindow : Form, ISurface
 
         _rail.Add(Glyph.Home, L.T("首页"));
         _rail.Add(Glyph.Mixer, L.T("混音器"));
-        _rail.Add(Glyph.Microphone, L.T("麦克风与音效"));
+        _rail.Add(Glyph.Microphone, L.T("麦克风"));
+        _rail.Add(Glyph.Equalizer, L.T("均衡"));
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
         _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）"), label: L.T("多声道")); // experimental since 1.1; hardware untested
@@ -63,12 +65,13 @@ internal sealed class MainWindow : Form, ISurface
         _home = new HomePage(app);
         _mixer = new MixerPage(app);
         _effects = new EffectsPage(app.Config, app.Fx);
+        _equalizer = new EqualizerPage(app.Config, app.Fx);
         _settings = new SettingsPage(app);
         _about = new AboutPage(app);
         _profiles = new ProfilesPage(app);
         _speakers = new SpeakersPage(app);
         _cinema = new CinemaPage(app);
-        _pages = [_home, _mixer, _effects, _speakers, new GroupPage(app), _cinema, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, new GroupPage(app), _cinema, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
@@ -477,6 +480,7 @@ internal sealed class MainWindow : Form, ISurface
         _home.ShowSoundOptions();
         _mixer.ShowSoundOptions();
         _settings.ShowSoundOptions();
+        _equalizer.ShowNightMode();
     }
 
     public void ShowVolume(double percent)
@@ -504,6 +508,7 @@ internal sealed class MainWindow : Form, ISurface
         _home.FlushPendingVolume();
         _mixer.FlushPendingVolume();
         _effects.Flush();
+        _equalizer.Flush();
         _settings.FlushPendingSettings();
         _cinema.Flush();
     }
@@ -517,6 +522,7 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.AudioDevicesChanged();
         _mixer.UpdateState();
         _effects.ReloadConfiguration();
+        _equalizer.ReloadConfiguration();
         _settings.ReloadConfiguration();
         _profiles.Reload();
         _speakers.RefreshDevices();

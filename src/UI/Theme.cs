@@ -307,7 +307,8 @@ internal static partial class Theme
 internal static class Glyph
 {
     public const string Home = "";
-    public const string Mixer = "";
+    public const string Mixer = "\uE8D6"; // Audio; Equalizer has its own navigation item
+    public const string Equalizer = "\uE9E9";
     public const string Microphone = "";
     public const string Settings = "";
     public const string Speaker = "";

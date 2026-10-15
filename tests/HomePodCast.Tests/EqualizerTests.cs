@@ -47,10 +47,22 @@ internal static class Signals
         }
     }
 
-    /// <summary>Bytes allocated by the second run of `action` on this thread (the first warms up JIT and statics).</summary>
+    /// <summary>
+    /// Bytes allocated by the second run of `action` on this thread (the first warms up JIT, OSR and statics on every
+    /// path the action takes). Exact: a real allocation of any size counts, nothing else does.
+    /// </summary>
     public static long Allocated(Action action)
     {
         action();
+        // 2026-10-15: CompressorTests.Process_does_not_allocate failed twice in CI (48 and 4384 bytes) around code that
+        // allocates nothing. At the end of its mark phase a background GC drops every thread's allocation context
+        // without taking the unused rest off that thread's count (gc.cpp: repair_allocation_contexts(FALSE) ->
+        // void_allocation; dotnet/runtime#134724, .NET 10.0.13), so GetAllocatedBytesForCurrentThread jumps by up to
+        // ~8 KB. The compressor loop next to a thread requesting background GCs: 26 of 576 windows counted 176 to 8136
+        // bytes; none with this Collect(0), none with DOTNET_gcConcurrent=0; JIT settings made no difference. A gen0 GC
+        // hands this thread's context back with its count settled, so there is nothing left to drop; a real allocation
+        // opens a new context and is counted in full.
+        GC.Collect(0);
         long before = GC.GetAllocatedBytesForCurrentThread();
         action();
         return GC.GetAllocatedBytesForCurrentThread() - before;

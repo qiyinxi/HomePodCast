@@ -144,15 +144,17 @@ public class CompressorTests(Xunit.Abstractions.ITestOutputHelper output)
         var c = On();
         var chain = new EffectChain(c);
         var packet = Tone(0.7, (double)Packet / Rate);
-        for (int i = 0; i < 200; i++) chain.Process(packet, Packet); // warm up (JIT, statics)
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 5000; i++)
+        // The warm-up run takes the same paths as the measured one (both Enabled states, the fade, the bypass);
+        // Signals.Allocated says why it can demand exactly 0 although a background GC may run meanwhile.
+        long bytes = Signals.Allocated(() =>
         {
-            chain.Process(packet, Packet);
-            c.Enabled = (i / 500) % 2 == 0; // includes the fade/bypass paths
-        }
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            for (int i = 0; i < 5000; i++)
+            {
+                chain.Process(packet, Packet);
+                c.Enabled = (i / 500) % 2 == 0; // includes the fade/bypass paths
+            }
+        });
+        Assert.Equal(0, bytes);
     }
 
     [Fact]
