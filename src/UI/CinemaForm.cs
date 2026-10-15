@@ -322,10 +322,21 @@ internal sealed class CinemaPage : ScrollPage
                 _ => _host.StatusText, // connecting, waiting for a busy speaker, retrying
             };
         }
-        if (!_volume.IsDragging && !_volumeWait.Enabled && _host.Volume is { } volume) ShowVolume(volume);
+        ShowSoundOptions();
     }
 
     // ---------------------------------------------------------------- volume
+
+    /// <summary>The page outlives settings edits; its limit must follow the current global cap.</summary>
+    internal void ShowSoundOptions()
+    {
+        int cap = (int)Math.Round(_host.VolumeCap);
+        _volume.Ceiling = cap;
+        _volume.Mark = cap < 100 ? cap : null;
+        if (!_volume.IsDragging && !_volumeWait.Enabled && _host.Volume is { } volume) ShowVolume(volume);
+    }
+
+    internal void Flush() => FlushVolume();
 
     private void ShowVolume(double percent)
     {

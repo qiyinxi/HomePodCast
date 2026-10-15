@@ -283,6 +283,7 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.FlushPendingVolume();
         _effects.Flush();
         _settings.FlushPendingSettings();
+        _cinema.Flush();
     }
 
     public void FlushLatency() => _home.FlushLatency();
