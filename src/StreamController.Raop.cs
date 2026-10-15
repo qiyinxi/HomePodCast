@@ -4,7 +4,10 @@ using HomePodCast.Protocol;
 
 namespace HomePodCast;
 
-public sealed record RaopInteraction(AirPlayDevice Device, ConnectTrigger Trigger);
+public sealed record RaopInteraction(AirPlayDevice Device, ConnectTrigger Trigger)
+{
+    internal long? GroupGeneration { get; init; }
+}
 
 public sealed partial class StreamController
 {

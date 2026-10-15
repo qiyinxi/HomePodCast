@@ -501,7 +501,12 @@ internal sealed partial class Walker
             Expect(Has(page, "CI compatibility receiver"), "设置", "音箱信息 doesn't name the selected receiver");
             Expect(!Has(page, T("还没有选择音箱")), "设置", "音箱信息 lost the selected receiver");
             Expect(Has(page, T("连接方式（实验性）")), "设置", "connection override is missing"); // experimental since 1.1
-            Expect(Has(page, T("未连接；连接后显示实际协议。")), "设置", "disconnected protocol status is missing");
+            // The kind only in the card's 设备类型 line (named after its caption): until 2026-10-15 a note above the card
+            // repeated it.
+            string kind = T("AirPlay 1 · 兼容模式（实验性）"); // experimental since 1.1
+            int kinds = page.Descendants().Count(n => n.Type == "Text" && n.Shown && (n.Name.Contains(kind, StringComparison.Ordinal)
+                || n.Text.Contains(kind, StringComparison.Ordinal)));
+            Expect(kinds == 1, "设置", $"the receiver's kind 「{kind}」 is shown {kinds} times, not once");
         }
         else
         {

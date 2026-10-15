@@ -553,7 +553,6 @@
   "AirPlay 密码": "Mot de passe AirPlay",
   "AirPlay 设备密码（实验性）": "Mot de passe du récepteur AirPlay (expérimental)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Saisissez le mot de passe AirPlay de « {0} ». Il est stocké chiffré uniquement sur ce PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Les récepteurs en mode de compatibilité AirPlay 1 ne peuvent pas rejoindre des groupes de plusieurs enceintes.",
   "自动": "Automatique",
   "AirPlay 2 低延迟（实验性）": "AirPlay 2 temps réel (expérimental)",
   "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 avec tampon (expérimental, non testé sur matériel)",
@@ -613,9 +612,7 @@
   "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "Le mode de compatibilité convient à la musique, avec trop de latence pour jouer. La vidéo peut être décalée ; le retard d’image est limité à 2000 ms.",
   "建议最低 {0} ms；默认 {1} ms": "Minimum conseillé : {0} ms ; valeur par défaut : {1} ms",
   "低于推荐最低延迟，可能断音": "Sous le minimum conseillé ; le son peut se couper.",
-  "实际连接：{0}": "Connexion active : {0}",
-  "未连接；连接后显示实际协议。": "Déconnecté ; le protocole actif s’affiche après la connexion.",
-  "接收端处理时间：{0} ms": "Traitement du récepteur : {0} ms",
+  "连接协议": "Protocole de connexion",
   "第三方 AirPlay 设备暂不支持多音箱分组。": "Les récepteurs AirPlay tiers ne peuvent pas encore rejoindre des groupes d’enceintes.",
   "许可证": "Licence",
   "切换到浅色": "Passer au mode clair",
@@ -647,7 +644,7 @@
   "移除": "Retirer",
   "移除 {0}": "Retirer {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "La capture en direct est d’abord réduite en stéréo ; seuls Stéréo complète, Gauche ou Droite peuvent être choisis. Pour les fichiers 5.1 / 7.1, vous pouvez attribuer les positions centrale, caisson de basses et surround ; les canaux non attribués sont mixés dans les enceintes voisines.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Les canaux distincts nécessitent des HomePod individuels : un même type de récepteur garantit la même latence et la même horloge. Les paires stéréo acceptent uniquement la stéréo complète. Les fichiers locaux ne prennent pas encore en charge Apple TV ; les récepteurs tiers et AirPlay 1 ne peuvent pas encore rejoindre un groupe.",
+  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Les canaux distincts nécessitent des HomePod individuels. Les récepteurs AirPlay 1 peuvent rejoindre les groupes en direct, avec une synchronisation approximative après étalonnage. Les fichiers locaux prennent uniquement en charge les HomePod ; les récepteurs AirPlay 2 tiers ne peuvent pas encore rejoindre un groupe.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Le délai est le temps d’attente supplémentaire de cette enceinte en millisecondes ; une valeur plus élevée retarde la lecture. Le décalage de volume est ajouté au volume commun.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Ce récepteur peut uniquement lire la stéréo complète ; les canaux discrets nécessitent un HomePod qui ne fait pas partie d’une paire stéréo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Appliquez les réglages avec Audio de l’ordinateur en direct sélectionné pour mettre à jour les enceintes de diffusion en direct. La lecture d’un fichier ne modifie pas le groupe d’enceintes de diffusion en direct.",
@@ -660,5 +657,6 @@
   "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "« {0} » n’est actuellement pas un HomePod individuel et ne peut pas utiliser sa position enregistrée pour un canal distinct.",
   "找不到所选的输出设备。": "Le périphérique de sortie sélectionné est introuvable.",
   "本机输出设备正被采集，请改用其他采集设备。": "Le périphérique de sortie local est capturé. Choisissez un autre périphérique de capture.",
-  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Le délai du groupe est trop court pour cette sortie. Augmentez le délai du groupe."
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Le délai du groupe est trop court pour cette sortie. Augmentez le délai du groupe.",
+  "本地影音文件暂不支持 AirPlay 1 或本机输出分组。": "La lecture de fichiers multimédias locaux ne prend pas encore en charge les groupes avec AirPlay 1 ou des sorties locales."
 }

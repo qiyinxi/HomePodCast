@@ -78,6 +78,40 @@ public class GroupFormTests
     private static readonly AirPlayDevice A = Device("客厅", "AA:01"), B = Device("书房", "AA:02"), Other = Device("接收端", "AA:03", "OtherSpeaker1,1");
     private static FluentComboBox Position(Control panel, string name) => All<FluentComboBox>(panel).Single(c => c.AccessibleName == name + " 位置");
 
+    [Theory]
+    [InlineData(ReceiverProtocol.Auto, true)]
+    [InlineData(ReceiverProtocol.Raop, true)]
+    [InlineData(ReceiverProtocol.AirPlay2Realtime, false)]
+    public void RAOP_can_join_live_groups_but_file_playback_stays_HomePod_only(ReceiverProtocol protocol, bool liveAllowed) => OnSta(() =>
+    {
+        var raop = Device("兼容音箱", "AA:04", "AirPort10,115") with { HasAirPlay = false, RaopPort = 5000 };
+        var cfg = new AppConfig { DeviceId = A.DeviceId, DeviceName = A.Name,
+            MultiRoomDeviceId = raop.DeviceId, MultiRoomDeviceName = raop.Name };
+        var preferences = ReceiverPreferences.Of(raop);
+        preferences.ProtocolOverride = protocol;
+        cfg.ReceiverSettings[RaopPassword.Key(raop.DeviceId)] = preferences;
+        using var panel = new GroupPanel(cfg);
+        panel.SetFound([A, raop]);
+        Assert.Equal(liveAllowed, panel.BlockReason == null);
+        panel.SetSource(false, fileSource: true);
+        Assert.Equal("本地影音文件暂不支持 AirPlay 1 或本机输出分组。", panel.BlockReason);
+        panel.SetSource(false);
+        Assert.Equal(liveAllowed, panel.BlockReason == null);
+    });
+
+    [Fact]
+    public void An_explicit_RAOP_override_allows_a_third_party_live_group_only() => OnSta(() =>
+    {
+        var cfg = new AppConfig { DeviceId = A.DeviceId, DeviceName = A.Name,
+            MultiRoomDeviceId = Other.DeviceId, MultiRoomDeviceName = Other.Name };
+        cfg.ReceiverSettings[RaopPassword.Key(Other.DeviceId)] = ReceiverPreferences.Of(Other) with { ProtocolOverride = ReceiverProtocol.Raop };
+        using var panel = new GroupPanel(cfg);
+        panel.SetFound([A, Other]);
+        Assert.Null(panel.BlockReason);
+        panel.SetSource(false, fileSource: true);
+        Assert.NotNull(panel.BlockReason);
+    });
+
     [Fact]
     public void File_edits_keep_live_positions_and_members_until_live_apply() => OnSta(() =>
     {
@@ -140,7 +174,7 @@ public class GroupFormTests
         Assert.Equal(["完整立体声"], Position(panel, Other.Name).Items);
         Assert.Equal("第三方 AirPlay 设备暂不支持多音箱分组。", panel.BlockReason);
         Assert.Contains(All<TextBlock>(panel), t => t.Text == panel.BlockReason);
-        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("同一种接收端才能共用延迟和时钟"));
+        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("AirPlay 1 可加入实时分组，校准后基本同步"));
         panel.SetSource(false);
         Assert.Equal(["完整立体声", "左", "右"], Position(panel, A.Name).Items);
         Assert.All(panel.SelectedLayout(), s => Assert.Equal(Audio.CinemaRole.Stereo, s.Role));

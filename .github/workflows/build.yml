@@ -543,8 +543,39 @@ jobs:
           path: publish/HomePodCast-stems-*.zip
           if-no-files-found: error
 
+  # The production SSDP/SOAP/HTTP sender against pinned, unmodified gmrender-resurrect.
+  # Its only sink is a PCM file. Both peers live in namespaces with no host/LAN uplink.
+  dlna-compat-e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: DLNA compatibility renderer test
+        run: |
+          mkdir -p test-results/dlna-compat
+          set -o pipefail
+          if ! bash tools/ci/dlna-compat-e2e.sh 2>&1 | tee test-results/dlna-compat/build.log; then
+            {
+              echo '### DLNA software renderer failure'
+              echo '```text'
+              tail -n 160 test-results/dlna-compat/build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Upload DLNA renderer diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dlna-compat-results
+          path: test-results/dlna-compat
+          if-no-files-found: warn
+
   release:
-    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, aac-fixture, airplay-compat-e2e, stem-module]
+    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, aac-fixture, airplay-compat-e2e, dlna-compat-e2e, stem-module]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:

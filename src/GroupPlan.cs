@@ -32,6 +32,8 @@ public sealed record GroupPlan(
     /// <summary>Explicit local endpoints, empty for all existing selections. The full editor follows in P5.</summary>
     public IReadOnlyList<Audio.LocalOutputOptions> LocalOutputs { get; init; } = [];
     public int? GroupDelayMs { get; init; }
+    /// <summary>RAOP outputs are optional unless explicitly required; AirPlay 2 members always remain required.</summary>
+    public IReadOnlyDictionary<string, bool> RequiredOutputs { get; init; } = new Dictionary<string, bool>();
 
     /// <summary>Stereo pair only: one session, to the tight-sync leader (experiment, off by default).</summary>
     public bool PairLeaderOnly { get; init; }
@@ -119,6 +121,8 @@ public sealed record GroupPlan(
         SharedGroupUuid ? new Dictionary<string, object?> { ["groupUUID"] = groupUuid.ToString().ToUpperInvariant() } : null;
 
     public int VolumeOffsetFor(string deviceId) => VolumeOffsets.GetValueOrDefault(Key(deviceId));
+
+    public bool IsRequiredOutput(string deviceId) => RequiredOutputs.Any(p => Key(p.Key) == Key(deviceId) && p.Value);
 
     /// <summary>Config key for a device: its id without separators, upper case.</summary>
     public static string Key(string deviceId) => StreamController.Normalize(deviceId).ToUpperInvariant();

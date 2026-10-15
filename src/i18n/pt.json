@@ -553,7 +553,6 @@
   "AirPlay 密码": "Senha AirPlay",
   "AirPlay 设备密码（实验性）": "Senha do receptor AirPlay (experimental)",
   "为「{0}」填写 AirPlay 密码。密码只在这台电脑上加密保存。": "Insira a senha AirPlay de «{0}». Ela é armazenada criptografada somente neste PC.",
-  "AirPlay 1 兼容模式设备不能加入多音箱分组。": "Receptores no modo de compatibilidade AirPlay 1 não podem participar de grupos com vários alto-falantes.",
   "自动": "Automático",
   "AirPlay 2 低延迟（实验性）": "AirPlay 2 em tempo real (experimental)",
   "AirPlay 2 缓冲（实验性，未在实机上测试）": "AirPlay 2 com buffer (experimental, não testado em hardware)",
@@ -613,9 +612,7 @@
   "兼容模式：适合听音乐，不适合打游戏；看视频时画面可能对不上。画面延迟最多为 2000 ms。": "O modo de compatibilidade é adequado para música, com atraso excessivo para jogos. O vídeo pode ficar fora de sincronia; o atraso da imagem é limitado a 2000 ms.",
   "建议最低 {0} ms；默认 {1} ms": "Mínimo recomendado {0} ms; padrão {1} ms",
   "低于推荐最低延迟，可能断音": "Abaixo do mínimo recomendado; o áudio pode sofrer cortes.",
-  "实际连接：{0}": "Conexão ativa: {0}",
-  "未连接；连接后显示实际协议。": "Desconectado; o protocolo ativo aparece após a conexão.",
-  "接收端处理时间：{0} ms": "Processamento do receptor: {0} ms",
+  "连接协议": "Protocolo de conexão",
   "第三方 AirPlay 设备暂不支持多音箱分组。": "Receptores AirPlay de terceiros ainda não podem participar de grupos de alto-falantes.",
   "许可证": "Licença",
   "切换到浅色": "Mudar para o modo claro",
@@ -647,7 +644,7 @@
   "移除": "Remover",
   "移除 {0}": "Remover {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "A captura em direto é primeiro misturada em estéreo, pelo que só pode escolher Estéreo completo, Esquerda ou Direita. Nos ficheiros 5.1 / 7.1, pode atribuir as posições central, subwoofer e surround; os canais não atribuídos são misturados nas colunas vizinhas.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Os canais separados requerem HomePods individuais: o mesmo tipo de recetor permite partilhar o atraso e o relógio. Os pares estéreo só podem usar estéreo completo. Os ficheiros locais ainda não suportam Apple TV; os recetores de terceiros e AirPlay 1 ainda não podem juntar-se a grupos.",
+  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Os canais separados requerem HomePods individuais. Os recetores AirPlay 1 podem juntar-se a grupos em direto, com sincronização aproximada após a calibração. Os ficheiros locais só suportam HomePods; os recetores AirPlay 2 de terceiros ainda não podem juntar-se a grupos.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "O atraso é o tempo adicional que esta coluna espera em milissegundos; um valor maior atrasa a reprodução. O ajuste de volume é somado ao volume comum.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Este recetor só pode reproduzir estéreo completo; os canais discretos exigem um HomePod que não faça parte de um par estéreo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Aplique as definições com Áudio do computador em direto selecionado para atualizar as colunas da transmissão em direto. A reprodução de ficheiros não altera o grupo de colunas da transmissão em direto.",
@@ -660,5 +657,6 @@
   "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "«{0}» não é atualmente um HomePod individual e não pode usar a posição guardada para um canal separado.",
   "找不到所选的输出设备。": "O dispositivo de saída selecionado não foi encontrado.",
   "本机输出设备正被采集，请改用其他采集设备。": "O dispositivo de saída local está sendo capturado. Escolha outro dispositivo de captura.",
-  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "O atraso do grupo é curto demais para esta saída. Aumente o atraso do grupo."
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "O atraso do grupo é curto demais para esta saída. Aumente o atraso do grupo.",
+  "本地影音文件暂不支持 AirPlay 1 或本机输出分组。": "A reprodução de ficheiros multimédia locais ainda não suporta grupos com AirPlay 1 ou saídas locais."
 }

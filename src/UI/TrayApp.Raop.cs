@@ -70,7 +70,8 @@ internal sealed partial class TrayApp
     }
 
     private bool CanShowRaopDialog(RaopInteraction request) => !_quitting && !_raopDialog
-        && Config.DeviceId != null && RaopPassword.Key(Config.DeviceId) == RaopPassword.Key(request.Device.DeviceId);
+        && (request.GroupGeneration != null ? Controller.MatchesRaopGroupInteraction(request)
+            : Config.DeviceId != null && RaopPassword.Key(Config.DeviceId) == RaopPassword.Key(request.Device.DeviceId));
 }
 
 internal sealed class RaopPasswordDialog : FluentDialog
