@@ -7,15 +7,20 @@
 **Experimental, and never tested with real speakers.** The maintainer has one HomePod; everything below was checked
 only against simulated speakers and generated files. The label stays until it has been tried with several HomePods.
 
-Settings → Tools → Wireless cinema plays the **audio track** of a local media file with each channel on a HomePod of
-its own: front left and right, center, the LFE channel, and side and rear surrounds. It shows no video and does not
-control a video player. Opening the window starts nothing.
+The **Multi-speaker** page combines live PC capture and the **audio track** of a local media file. Choose a source,
+then assign each speaker its position, 0–500 ms extra delay and volume offset. Live capture is downmixed to stereo
+and offers full stereo, left and right; a 5.1/7.1 file also offers center, LFE, rear and side surrounds. It shows no
+video and does not control a video player. Opening the page starts nothing. The single-speaker live path retains
+its low latency; per-output positions, delay and volume offsets become available when another output is added.
 
 ### Speakers and channels
 
-Choose at least a front left and a front right HomePod; every other position is optional, so 2 to 8 HomePods take
-part. Each must be a single HomePod (not a stereo pair). HomePods have no subwoofer output: the 低音声道 (LFE) position
-is a HomePod that plays only the LFE channel.
+Choose at least one full-stereo output, or a left and a right HomePod; every other position is optional, up to eight
+outputs. Multiple full-stereo outputs each receive the complete stereo downmix. Saved surround positions stay silent on stereo files
+and return when a multichannel file is chosen; they are never silently converted to full stereo. Discrete positions require individual
+HomePods, outside a stereo pair: one receiver type gives the channels the same latency and clock. Stereo pairs can use full stereo. Local-file groups cannot use Apple TV yet because that connection path does not
+support its pairing. Third-party receivers and AirPlay 1 compatibility receivers cannot join groups yet; the page
+explains each restriction. HomePods have no subwoofer output: the LFE position is a HomePod playing only LFE.
 
 Windows' own decoder (Media Foundation) reads the file with its speaker mask. Mono, stereo, 5.1 (with rear or side
 surrounds), 6.1 and 7.1 are played; layouts with height speakers or more than 8 channels are refused with a message.
@@ -54,7 +59,8 @@ between speakers as mixed and never depends on the signal. Turn the volume up to
 - The window's volume slider is the app's volume, as on Home: moving it is saved, and the cinema starts at it. A
   volume set while the start still waits in the queue is kept.
 - Each speaker can wait 0 to 500 ms so that all of them reach your seat together. Layout and delays are saved
-  (outside playback profiles); the file path is not.
+  in playback profiles too; the file path is not. Only Apply under live PC capture changes live group membership and
+  positions. Selecting, playing or saving a file layout keeps the next automatic live connection unchanged.
 - Playing a file ends the normal stream and the microphone. EQ, night mode and the microphone mix do not apply; the
   volume limit does. Latency is at least 200 ms. A speaker another device plays to is waited for, never taken over.
 - Connecting from Home, the tray or a hotkey ends the cinema; the window then says so. The window's Stop and closing
@@ -78,7 +84,9 @@ Unit tests (`tests/HomePodCast.Tests`): the channel routing for 2.0, mono, 5.1 w
 and 8 channels and their masks (CinemaTests); one RTP timeline for every speaker, every frame in order through the
 lock-free ring, pause, calibration that cannot get stuck (CinemaTransportTests); the window's volume, waiting, being
 replaced by another connection, stopping and the 25 % measurement ceiling against fake speakers (CinemaSessionTests,
-CinemaFormTests). gui-smoke opens the window in every scenario. Nothing in the tests plays audio or opens a microphone.
+CinemaFormTests). Migration, separate live/file selections and per-device editor rules are covered by GroupSettingsTests
+and GroupFormTests. gui-smoke visits the unified page and captures both source modes in every scenario. Nothing in the
+tests plays audio or opens a microphone.
 
 What needs real HomePods is listed in `docs/device-test-checklist.zh-CN.md` (实验性功能 → 无线影院).
 
@@ -87,13 +95,16 @@ What needs real HomePods is listed in `docs/device-test-checklist.zh-CN.md` (实
 **实验性功能，还没有在真实音箱上测过。** 维护者只有一台 HomePod，下面的内容只用模拟音箱和生成的文件验证过。在多台
 HomePod 上实测之前，这个标注不会去掉。
 
-设置 → 工具 →「无线影院」播放本地影音文件的**音轨**，每个声道送到一台 HomePod：前左、前右、中置、低音声道，以及侧环绕和
-后环绕。它不显示视频，也不控制视频播放器。打开窗口不会开始任何播放。
+「多音箱」页合并电脑实时采集与本地影音文件的**音轨**。选好音源后，每台音箱可设置位置、0–500 毫秒额外延迟和音量偏移。
+实时采集先混成立体声，只能选完整立体声、左、右；5.1／7.1 文件还能选中置、低音、后环绕和侧环绕。这里不显示视频，也不
+控制视频播放器。打开页面不会开始任何播放。单台实时推流保留原来的低延迟路径；添加另一台后才启用每台的位置、延迟和音量偏移。
 
 ### 音箱和声道
 
-至少选择前左和前右两台 HomePod，其他位置可选，所以一共 2 到 8 台。每个位置都要是单独的 HomePod（不能是立体声对）。
-HomePod 没有低音炮输出：「低音声道」这个位置是一台只放 LFE 声道的 HomePod。
+至少选择一台完整立体声输出，或给左、右各选一台 HomePod，其他位置可选，最多八台。多台完整立体声输出都会收到完整的立体声下混。
+已保存的环绕位置在立体声文件中保持静音，切回多声道文件后恢复，不会自动变成完整立体声输出。
+离散位置只能用未组成立体声对的单独 HomePod：同一种接收端才能让各声道共用延迟和时钟。立体声对可选完整立体声；本地文件分组暂不支持 Apple TV，因为该连接路径还不支持它的配对。
+第三方接收端和 AirPlay 1 兼容模式设备暂不能加入分组，页面会分别说明原因。HomePod 没有低音炮输出：「低音」位置是一台只放 LFE 的 HomePod。
 
 Windows 自带的解码器（Media Foundation）读取文件和它的声道掩码。能播放单声道、立体声、5.1（后环绕或侧环绕）、6.1 和
 7.1；带顶部声道或超过 8 个声道的布局会提示不支持。能打开哪些格式取决于 Windows：WAV 和 MP4/M4A 里的 AAC 总能打开，
@@ -128,7 +139,7 @@ MKV、MOV 要看 Windows 能不能读，AC-3、E-AC-3 只有 Windows 装了对�
 ### 音量、延迟和其他连接
 
 - 窗口里的音量滑块就是程序的音量，和首页一样：拖动后会保存，影院按它开始播放。开始播放的请求还在排队时改过的音量会保留。
-- 每台音箱可以额外等待 0 到 500 毫秒，让声音同时到达座位。音箱布局和延迟会保存（不属于使用配置），文件路径不保存。
+- 每台音箱可以额外等待 0 到 500 毫秒，让声音同时到达座位。音箱布局和延迟会保存，也包含在使用配置里；文件路径不保存。只有在电脑实时声音下应用设置，才会更新实时组成员和位置；选择、播放或保存文件布局不会改变下一次自动实时连接。
 - 播放文件会结束普通推流和麦克风。均衡、夜间模式和麦克风混音不作用于影院；音量上限照样生效。延迟至少 200 ms。音箱被其他
   设备占用时只等待，不抢占。
 - 在首页、托盘或用快捷键连接会结束影院，窗口里会写明。窗口的「停止」和关闭窗口只会停止影院自己的推流，不会断开之后建立
@@ -147,7 +158,7 @@ MKV、MOV 要看 Windows 能不能读，AC-3、E-AC-3 只有 Windows 装了对�
 单元测试（`tests/HomePodCast.Tests`）：2.0、单声道、两种掩码的 5.1 和 7.1 在 2、3、5、6、7、8 台音箱上的声道分配和余量
 （CinemaTests）；Windows 解码生成的 16 位和浮点 WAV，1、2、6、8 声道及其掩码（CinemaTests）；所有音箱共用一条 RTP 时间线，
 无锁环形缓冲里每一帧都按顺序送到，暂停，校准不会卡住（CinemaTransportTests）；窗口的音量、等待、被其他连接取代、停止，
-以及测量时 25% 的上限，用模拟音箱测（CinemaSessionTests、CinemaFormTests）。gui-smoke 在每个场景都打开这个窗口。测试不会
-播放声音，也不会打开麦克风。
+以及测量时 25% 的上限，用模拟音箱测（CinemaSessionTests、CinemaFormTests）。GroupSettingsTests 和 GroupFormTests 覆盖配置迁移、
+实时与文件选择互不影响，以及每设备编辑规则。gui-smoke 在每个场景都访问统一页并拍摄两种音源。测试不会播放声音，也不会打开麦克风。
 
 需要真实 HomePod 才能测的部分见 `docs/device-test-checklist.zh-CN.md`（实验性功能 → 无线影院）。

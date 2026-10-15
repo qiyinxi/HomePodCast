@@ -38,6 +38,9 @@ public sealed class UsageSettings
     public bool GroupSwapChannels { get; set; }
     public bool GroupPairLeaderOnly { get; set; }
     public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
+    public List<GroupSpeakerSettings>? GroupSpeakers { get; set; }
+    public List<string>? GroupCaptureDeviceIds { get; set; }
+    public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
 
@@ -62,6 +65,9 @@ public static class UsageProfiles
         Effects = Clone(c.Effects), GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
         GroupPairLeaderOnly = c.GroupPairLeaderOnly,
         GroupVolumeOffsets = c.GroupVolumeOffsets == null ? null : new(c.GroupVolumeOffsets),
+        GroupSpeakers = c.GroupSpeakers == null ? null : GroupSettings.Copy(c.GroupSpeakers),
+        GroupCaptureDeviceIds = c.GroupCaptureDeviceIds == null ? null : new(c.GroupCaptureDeviceIds),
+        GroupCapturePositions = c.GroupCapturePositions == null ? null : new(c.GroupCapturePositions),
         MultiRoomDeviceId = c.MultiRoomDeviceId, MultiRoomDeviceName = c.MultiRoomDeviceName, MultiRoomHost = c.MultiRoomHost,
     };
 
@@ -80,7 +86,13 @@ public static class UsageProfiles
             c.DeviceId = s.DeviceId; c.DeviceName = s.DeviceName; c.Host = host;
             c.GroupSplitChannels = s.GroupSplitChannels; c.GroupSwapChannels = s.GroupSwapChannels;
             c.GroupPairLeaderOnly = s.GroupPairLeaderOnly; c.GroupVolumeOffsets = s.GroupVolumeOffsets;
+            c.GroupSpeakers = s.GroupSpeakers;
+            c.GroupCaptureDeviceIds = s.GroupCaptureDeviceIds;
+            c.GroupCapturePositions = s.GroupCapturePositions;
             c.MultiRoomDeviceId = s.MultiRoomDeviceId; c.MultiRoomDeviceName = s.MultiRoomDeviceName; c.MultiRoomHost = extraHost;
+            if (c.GroupSpeakers != null)
+                foreach (var row in c.GroupSpeakers) row.Host = FreshHost(row.DeviceId, c, scan ?? []);
+            GroupSettings.Normalize(c);
             // Another speaker plays at its own volume, as when it is picked in the list (its processing time is kept the
             // same way: the next connection measures it again).
             if (changedSpeaker) c.Volume = null;

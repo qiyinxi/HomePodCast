@@ -71,8 +71,10 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - **Branches**: `dev` is daily work. Other work goes on its own branch with a PR to `dev` (PR builds run CI). `main`
   changes only through the release PR made by `tools/release.ps1`; never push to it. Tags only through
   `tools/release.ps1`; a pushed tag is never moved or deleted. Details: `docs/RELEASING.md`.
-- **Releases**: don't ask before publishing a beta. Publish one whenever dev's CI is green and there is something
-  worth trying, and tell the maintainer afterwards. A stable 1.0.0 or later needs the maintainer's OK.
+- **Releases**: don't ask before publishing a beta. Publish one whenever there is something worth trying on dev and
+  dev's CI hasn't failed on it, and tell the maintainer afterwards. `tools/release.ps1 -Beta` releases a snapshot of
+  origin/dev from any clone or worktree: it runs CI on `release/snapshot/vX.Y.Z-beta.N` unless dev's CI already passed
+  on that commit, so pushes to dev don't interrupt it. A stable 1.0.0 or later needs the maintainer's OK.
 - **Experimental features**: a feature first released in 1.Y.z is labelled experimental (UI, README, release notes)
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never
@@ -88,8 +90,13 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   to your own, never to the other agent's branch, not even a merge or a one-line fix. A problem in the other agent's
   open PR goes in a review comment on that PR, or to the maintainer.
 - **Your worktrees.** Claude works in `.claude/worktrees/<name>`, Codex in `.worktrees/<name>` or its own worktree
-  folder. Don't edit, build, commit in or remove a worktree the other agent made. Remove your own
-  (`git worktree remove`) once its PR is merged or closed. The main checkout stays on `dev` (hard rules above).
+  folder. Don't edit, build, commit in or remove a worktree the other agent made. The main checkout stays on `dev`
+  (hard rules above).
+- **Clean up after a merge** (the maintainer, 2026-10-15). As soon as your PR is merged or closed:
+  - its branch on GitHub: GitHub deletes it on merge (repository setting since 2026-10-15); for a PR closed without merging, `git push origin --delete <branch>`;
+  - remove the worktree: `git worktree remove <path>`;
+  - delete the local branch: `git branch -D <branch>`, after checking `git merge-base --is-ancestor <branch> origin/dev`, because `-d` refuses while the main checkout's `dev` is behind.
+  Only your own branches and worktrees.
 - **The board.** The work items live on the maintainer's private GitHub project board, «HomePodCast» (project 1 of
   qiyinxi: https://github.com/users/qiyinxi/projects/1, since 2026-10-15). Its items are drafts and stay drafts:
   never convert one to an issue, because the repository is public. Read the board with
@@ -112,7 +119,7 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   - Don't archive items. Views keep finished work apart (2026-10-15):
     - 「待办与进行中」 (table) and 「看板」 (board) hide 已完成 and 搁置;
     - 「等你决定」 lists the questions for the maintainer;
-    - 「已完成与搁置」 holds the rest.
+    - 「已完成」 and 「搁置」 hold the rest, one view each.
     The status alone decides which view an item is in.
 - **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
   fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
@@ -135,8 +142,10 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   again. Merge your own PRs yourself. Review the other agent's PR before you merge it: read the diff, and check that
   the earlier review findings are fixed. If it isn't ready, leave a review comment saying what is missing.
   Drafts are never merged.
-- **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
-  and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
+- **One release at a time.** `tools/release.ps1 -Beta` refuses while a PR to main is open, a promotion or another tag
+  build is running, or a snapshot branch pushed from another checkout exists; `tools/release.ps1 -Status` shows all of
+  them. The other agent may be in the middle of one: wait for it, and never take over its snapshot (`-Continue`).
+  Before `-Promote`, check the same by hand (`-Status`, `gh pr list --base main`, `gh run list --limit 5`).
 - **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
   `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order, and it gets a
   board item that links to it. Progress goes in the PRs and on the board, not in the plan.

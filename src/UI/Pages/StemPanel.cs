@@ -26,7 +26,7 @@ internal sealed class StemPanel : Card
 
     /// <summary>The guide (docs/MUSIC_STEMS.md) on main, at the section in the user's language.</summary>
     internal static string GuideUrl(string language) =>
-        $"{SettingsPage.RepositoryUrl}/blob/main/docs/MUSIC_STEMS.md#{(language is "zh-CN" or "zh-TW" ? "简体中文" : "english")}";
+        $"{AboutPage.RepositoryUrl}/blob/main/docs/MUSIC_STEMS.md#{(language is "zh-CN" or "zh-TW" ? "简体中文" : "english")}";
 
     public StemPanel(TrayApp app)
     {

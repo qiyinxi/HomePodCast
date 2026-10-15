@@ -13,7 +13,7 @@ internal sealed class FakeMember(string name, FakeReceiver rx, ConcurrentQueue<s
     public FakeReceiver Receiver { get; } = rx;
     public string? FailOn { get; init; }
     public RtpTarget Target { get; } = rx.Target(channels);
-    public int LatencyFrames => 4630;
+    public int LatencyFrames { get; init; } = 4630;
     public int? ArrivalToRenderMs { get; init; } = 90;
     public double? InitialVolumeDb { get; init; } = -15;
     public string? LostReason { get; set; }
@@ -77,6 +77,33 @@ public class SpeakerGroupTests : IDisposable
     public void Dispose()
     {
         foreach (var rx in _receivers) rx.Dispose();
+    }
+
+    [Fact]
+    public async Task Output_contract_retains_group_loss_mute_and_volume_offsets()
+    {
+        var a = Member("A");
+        var b = Member("B");
+        using var group = await SpeakerGroup.ConnectAsync([a.Setup(), b.Setup(volumeOffset: 10)], Fifo(), 30, default,
+            volumeCap: () => 40);
+        IOutputSink sink = group;
+        Assert.Equal(OutputKind.AirPlay2, sink.Kind);
+        Assert.Equal(OutputState.Streaming, sink.State);
+        Assert.Equal(105, sink.MinLatencyMs);
+        Assert.NotNull(sink.Timeline);
+        sink.SetVolume(30, mute: true);
+        Assert.Equal(0, a.Volumes[^1]);
+        Assert.Equal(0, b.Volumes[^1]);
+        sink.SetVolume(30);
+        Assert.Equal(30, a.Volumes[^1]);
+        Assert.Equal(40, b.Volumes[^1]);
+        a.Lose("test loss");
+        Assert.Equal(OutputState.Lost, sink.State);
+        Assert.Contains("test loss", await sink.Lost);
+        Assert.Equal("test loss", sink.LostReason);
+        sink.Dispose();
+        Assert.Equal(OutputState.Stopped, sink.State);
+        Assert.True(a.Disposed && b.Disposed);
     }
 
     [Fact]

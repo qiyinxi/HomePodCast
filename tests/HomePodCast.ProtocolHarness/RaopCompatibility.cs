@@ -55,7 +55,7 @@ internal static class RaopCompatibility
             }
         });
         long sourceFrame = 0;
-        using var client = await RaopClient.ConnectAsync(IPAddress.Parse(host), port, new RaopOptions
+        using var output = await RaopOutputSink.ConnectAsync(IPAddress.Parse(host), port, new RaopOptions
         {
             Txt = new Dictionary<string, string> { ["et"] = "0,1", ["cn"] = "1" }, EncryptionOverride = encryption,
             LatencyMs = latency, Password = password == "-" ? null : password,
@@ -65,11 +65,12 @@ internal static class RaopCompatibility
                 for (int i = 0; i < pcm.Length; i += 2, sourceFrame++) { pcm[i] = Signal(sourceFrame, 0); pcm[i + 1] = Signal(sourceFrame, 1); }
             },
         }, deadline.Token);
+        var client = output.Client;
         var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         client.Lost += error => lost.TrySetResult(error);
         await Task.WhenAny(Task.Delay(TimeSpan.FromSeconds(10), deadline.Token), lost.Task);
         if (lost.Task.IsCompleted) throw new Exception("RAOP session lost: " + lost.Task.Result);
-        client.Dispose();
+        output.Dispose();
         collecting.Cancel();
         try { await read; } catch (OperationCanceledException) { }
         Console.WriteLine($"RAOP diagnostic: sent={client.PacketsSent}, timing={client.TimingRequests}, decodedBytes={received.Count}, marker={markerOffset}");

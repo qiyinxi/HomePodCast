@@ -13,6 +13,7 @@ namespace HomePodCast.Net;
 /// apart (a speaker spike with a quiet router is the router → speaker hop). 2026-10-08: a stutter while someone raised
 /// an arm coincided with the only retransmit request in 15 minutes, and one with a phone near the speaker with none.
 /// Every spike is also raised as <see cref="Spike"/> for the 首页 network status (<see cref="NetworkHealth"/>).
+/// Nothing is pinged before <see cref="Start"/>, so a handler subscribed before that gets every spike.
 /// <para>
 /// Each target has its own background thread that pings with the blocking <see cref="Ping.Send(IPAddress, int, byte[], PingOptions)"/>.
 /// 2026-10-14: <see cref="Ping.SendPingAsync(IPAddress, TimeSpan, byte[], PingOptions, CancellationToken)"/> left one
@@ -56,6 +57,7 @@ internal sealed class NetworkWatch : IDisposable
     private readonly ManualResetEventSlim _stop = new(); // no kernel handle: nothing ever asks for its WaitHandle
     private readonly Probe _speaker;
     private readonly Probe? _router;
+    private int _started;
 
     public NetworkWatch(IPAddress speaker, IPAddress? router = null) : this(speaker, router, IntervalMs, SystemEchoFactory)
     {
@@ -71,11 +73,23 @@ internal sealed class NetworkWatch : IDisposable
         _speaker = new Probe("the speaker", speaker, PingTarget.Speaker, RaiseSpike, intervalMs, echo);
         router ??= RouterFor(speaker);
         if (router != null && !router.Equals(speaker)) _router = new Probe("the router", router, PingTarget.Router, RaiseSpike, intervalMs, echo);
-        Start(_speaker);
-        if (_router != null) Start(_router);
     }
 
-    private void Start(Probe probe) =>
+    /// <summary>
+    /// Starts pinging (once; a second call does nothing) and returns this watch. Subscribe to <see cref="Spike"/> first:
+    /// a spike raised before that is gone. Not done by the constructor: 2026-10-15, a test that subscribed right after
+    /// it found no spike at all (CI run 38710133779), as its fake answered so fast that the probe had made all its pings
+    /// before the subscription; with every core busy that happened in about 1 run of 4.
+    /// </summary>
+    public NetworkWatch Start()
+    {
+        if (Interlocked.Exchange(ref _started, 1) != 0) return this;
+        StartThread(_speaker);
+        if (_router != null) StartThread(_router);
+        return this;
+    }
+
+    private void StartThread(Probe probe) =>
         new Thread(() => probe.Run(_stop)) { IsBackground = true, Name = $"HomePodCast ping ({probe.Target})" }.Start();
 
     /// <summary>
@@ -93,7 +107,7 @@ internal sealed class NetworkWatch : IDisposable
     public string TakeSummary() =>
         "ping=" + _speaker.TakeSummary() + (_router is { } r ? " router=" + r.TakeSummary() : "");
 
-    /// <summary>Stops both probes; each ends after the ping it is waiting for (a second at most).</summary>
+    /// <summary>Stops both probes (or keeps them from starting); each ends after the ping it is waiting for (a second at most).</summary>
     public void Dispose() => _stop.Set();
 
     /// <summary>The round trip a probe counts for <paramref name="reply"/>: its own, or -1 for no answer within <see cref="TimeoutMs"/>.</summary>

@@ -100,6 +100,7 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
+        if (plan.LocalOutputs.Count > 0) return await ConnectLocalGroupAsync(plan, latencyMs, run, ct);
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
             members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
@@ -117,7 +118,8 @@ public sealed partial class StreamController
         var prepare = PrepareGroupMember ??
                       (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
-            c => prepare(m, options, plan.ChannelsFor(i), c), plan.VolumeOffsetFor(m.DeviceId))).ToList();
+            c => prepare(m, options, plan.ChannelsFor(i, m.DeviceId), c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId,
+            plan.DelayTrimFor(m.DeviceId))).ToList();
         // A volume, mute or cap change from now on finds no group to send to until GroupRunner publishes it:
         // OnGroupConnected pushes again if anything changed meanwhile.
         _groupConnectCap = options.VolumeCapPercent;

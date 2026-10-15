@@ -17,7 +17,9 @@ internal static class GroupCli
 {
     public const string Usage =
         "  group (--hosts IP1,IP2 | --pair [TSID] [--leader-only]) [--latency MS] [--seconds N] [--volume PCT] [--offsets A,B]\n" +
-        "        [--split] [--swap] [--no-group-uuid] [--tone] [--verbose]";
+        "        [--split] [--swap] [--no-group-uuid] [--tone] [--verbose]\n" +
+        "        [--local ENDPOINT_ID,...] [--local-extra-ms MS] [--local-trim-ms MS] [--local-required]\n" +
+        "        [--capture ENDPOINT_ID] [--group-delay MS] [--cap PCT]"; // experimental since 1.2
 
     public static async Task<int> Run(string[] args)
     {
@@ -25,6 +27,8 @@ internal static class GroupCli
         int latency = int.Parse(Opt(args, "--latency") ?? "250");
         int seconds = int.Parse(Opt(args, "--seconds") ?? "15");
         double? volume = Opt(args, "--volume") is { } v ? double.Parse(v, CultureInfo.InvariantCulture) : null;
+        double cap = VolumeLimit.Clamp(double.Parse(Opt(args, "--cap") ?? "100", CultureInfo.InvariantCulture), 100);
+        var localOptions = ParseLocalOutputs(args);
         var offsets = (Opt(args, "--offsets") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList();
         var plan = new GroupPlan(pair ? GroupKind.StereoPair : GroupKind.MultiRoom, "cli", null, [],
             args.Contains("--split"), args.Contains("--swap"), new Dictionary<string, int>())
@@ -32,22 +36,33 @@ internal static class GroupCli
             PairLeaderOnly = args.Contains("--leader-only"),
             SharedGroupUuid = !args.Contains("--no-group-uuid"),
         };
-        var hosts = pair ? await FindPair(args, plan) : Hosts(args);
+        var hosts = pair ? await FindPair(args, plan) : Hosts(args, localOptions.Count > 0 ? 1 : 2);
         bool tone = args.Contains("--tone");
 
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60);
-        using var capture = tone ? null : new LoopbackCapture(fifo, RtpSender.SampleRate);
+        string? captureId = Opt(args, "--capture");
+        // This command's settings are ephemeral: never save them over the GUI's real profile.
+        using ICaptureSource? capture = tone ? null : captureId == null ? new LoopbackCapture(fifo, RtpSender.SampleRate)
+            : new RoutedCapture(fifo, RtpSender.SampleRate, new AppRouting(new AppConfig { CaptureDeviceId = captureId }, () => { }));
         using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         capture?.Start();
         toneGen?.Start();
 
-        var options = new StreamOptions(latency, null) { SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()) };
+        using var locals = localOptions.Count == 0 ? null : await LocalOutputSet.PrepareAsync(localOptions,
+            () => tone ? null : captureId ?? capture?.EndpointId, () => cap, CancellationToken.None);
+        int? groupDelay = locals == null ? null : StreamController.CoordinatedDelay(latency, locals,
+            Opt(args, "--group-delay") is { } gd ? int.Parse(gd) : null);
+        var options = new StreamOptions(groupDelay is { } delay ? Math.Min(2000, delay - TimelinePump.HeadroomMs) : latency, null)
+        {
+            SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()), VolumeCapPercent = cap,
+        };
         var setups = hosts.Select((host, i) => new MemberSetup(host.ToString(),
             async ct => (IGroupMember)await AirPlayClient.PrepareAsync(host, 7000, options, plan.ChannelsFor(i), ct),
             i < offsets.Count ? offsets[i] : 0)).ToList();
 
         var sw = Stopwatch.StartNew();
-        using var group = await SpeakerGroup.ConnectAsync(setups, fifo, volume, CancellationToken.None);
+        using var group = await SpeakerGroup.ConnectAsync(setups, fifo, volume, CancellationToken.None,
+            volumeCap: () => cap, localOutputs: locals, groupDelayMs: groupDelay);
         Log.Info($"group streaming after {sw.ElapsedMilliseconds} ms setup; " + string.Join(", ", group.Members.Select((m, i) =>
             $"{setups[i].Label}: {Log.Name(m!.Name)} a2r={m.ArrivalToRenderMs}ms {group.Sender!.Streams[i].Channels}")));
 
@@ -64,11 +79,23 @@ internal static class GroupCli
         return 0;
     }
 
-    private static List<IPAddress> Hosts(string[] args)
+    internal static IReadOnlyList<LocalOutputOptions> ParseLocalOutputs(string[] args)
+    {
+        var result = (Opt(args, "--local") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(id => new LocalOutputOptions(id, id)
+            {
+                ExtraLatencyMs = int.Parse(Opt(args, "--local-extra-ms") ?? "200"),
+                TrimMs = int.Parse(Opt(args, "--local-trim-ms") ?? "0"), Required = args.Contains("--local-required"),
+            }).ToArray();
+        foreach (var option in result) option.Validate();
+        return result;
+    }
+
+    private static List<IPAddress> Hosts(string[] args, int minimum)
     {
         var hosts = (Opt(args, "--hosts") ?? throw new ArgumentException("--hosts IP1,IP2 or --pair [TSID] required"))
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(IPAddress.Parse).ToList();
-        if (hosts.Count < 2) throw new ArgumentException("--hosts needs at least two addresses");
+        if (hosts.Count < minimum) throw new ArgumentException($"--hosts needs at least {minimum} addresses");
         return hosts;
     }
 

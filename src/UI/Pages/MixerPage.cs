@@ -60,7 +60,7 @@ internal sealed class MixerPage : ScrollPage
         _captureRow.DescriptionText.Wrap = true;
 
         _routeDefault.Enabled = AppRouting.Supported;
-        _routeRow = new SettingRow(Glyph.Devices, L.T("没单独设置的程序送到"), "", _routeDefault);
+        _routeRow = new SettingRow(Glyph.Devices, L.T("默认输出到"), L.T("适用于未单独设置输出目标的应用。"), _routeDefault);
         _routeRow.DescriptionText.Wrap = true;
 
         var appVolume = new FluentButton(L.T("打开 Windows 应用音量设置"), ButtonKind.Link, Glyph.OpenInNew);
@@ -85,7 +85,8 @@ internal sealed class MixerPage : ScrollPage
         Content.Controls.AddRange([appsHeader, _rows, _empty, note]);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
-        _empty.Collapsed = true;
+        // _empty stays shown until the first refresh (PageShown, before the page is painted): a page built ahead of its first
+        // visit (MainWindow) then has its window, and finding no app creates none.
 
         _master.Scroll += (_, _) =>
         {
@@ -640,7 +641,7 @@ internal sealed class MixerPage : ScrollPage
                 Compact = true,
                 EqualWidths = false,
                 Enabled = AppRouting.Supported,
-                AccessibleName = L.F("{0} 送到", _app.Name),
+                AccessibleName = L.F("{0} 输出到", _app.Name),
             };
             seg.SelectionChangeCommitted += (_, _) =>
             {

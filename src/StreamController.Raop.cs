@@ -43,8 +43,7 @@ public sealed partial class StreamController
                 int selectedLatency = CompatibilityLatency?.Invoke(device.DeviceId) ?? 2000;
                 EffectiveLatencyMs = selectedLatency is 1000 or 1500 or 2000 ? selectedLatency : 2000;
                 var audio = new float[RaopAudio.FramesPerPacket * 2];
-                var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var client = await Net.RaopClient.ConnectAsync(device.Address, device.RaopPort ?? device.Port, new RaopOptions
+                using var output = await RaopOutputSink.ConnectAsync(device.Address, device.RaopPort ?? device.Port, new RaopOptions
                 {
                     LatencyMs = EffectiveLatencyMs, VolumePercent = Muted ? 0 : Volume, VolumeCapPercent = VolumeCapPercent,
                     Txt = device.RaopTxt ?? device.Txt, Password = ReceiverPassword?.Invoke(device.DeviceId), Log = Log.Info,
@@ -55,8 +54,8 @@ public sealed partial class StreamController
                         for (int i = 0; i < pcm.Length; i++) pcm[i] = float.IsFinite(audio[i])
                             ? (short)Math.Clamp((int)Math.Round(audio[i] * 32767), short.MinValue, short.MaxValue) : (short)0;
                     },
-                }, ct);
-                client.Lost += reason => lost.TrySetResult(reason);
+                }, ct, device.DeviceId, device.Name);
+                var client = output.Client;
                 lock (_lock) { if (!ct.IsCancellationRequested) _raopClient = mine = client; }
                 if (mine == null) { client.Dispose(); break; }
                 client.VolumeCapPercent = VolumeCapPercent;
@@ -64,9 +63,9 @@ public sealed partial class StreamController
                 PushVolume();
                 OwnSession.Began(key, UtcNow()); streamed = true; began = UtcNow();
                 Set(StreamState.Streaming, L.F("{0} · AirPlay 1 兼容模式（实验性）", device.Name)); // experimental since 1.1
-                using var network = new NetworkWatch(device.Address);
+                using var network = new NetworkWatch(device.Address).Start();
                 _net = network;
-                lostReason = await lost.Task.WaitAsync(ct);
+                lostReason = await output.Lost.WaitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (RaopPasswordRequiredException ex)
