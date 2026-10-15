@@ -29,6 +29,9 @@ internal sealed class GroupPanel : StackPanel
         _tsid = StereoPairs.TryGetTsid(config.DeviceId, out var tsid) ? tsid : null;
         GroupSettings.Normalize(config);
         _speakers = GroupSettings.Copy(config.GroupSpeakers!);
+        if (config.GroupCaptureDeviceIds == null)
+            foreach (var speaker in _speakers)
+                speaker.VolumeOffset = config.GroupVolumeOffsets?.GetValueOrDefault(GroupPlan.Key(speaker.DeviceId)) ?? 0;
         _capturePositions = new(config.GroupCapturePositions ?? []);
         if (config.GroupCaptureDeviceIds == null && GroupPlan.FromConfig(config) is { Kind: GroupKind.MultiRoom } legacy)
             for (int i = 0; i < legacy.Members.Count; i++)
@@ -53,7 +56,7 @@ internal sealed class GroupPanel : StackPanel
             _leaderOnly.Checked = config.GroupPairLeaderOnly;
             Controls.Add(_leaderOnly);
             Controls.Add(Ui.Note(L.T("默认两只音箱各连一路，都收到完整立体声，由这对音箱自己分左右声道，一般不需要电脑端分声道。打开后只连接主音箱，用来实测它会不会转发给另一只。")));
-            _leaderOnly.CheckedChanged += (_, _) => ShowMembers();
+            _leaderOnly.CheckedChanged += (_, _) => { ReadRows(); ShowMembers(); };
         }
         else _leaderOnly.Dispose();
         Controls.Add(Ui.Note(L.T("延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。")));

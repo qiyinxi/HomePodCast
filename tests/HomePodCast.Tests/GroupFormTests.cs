@@ -10,6 +10,19 @@ namespace HomePodCast.Tests;
 /// <summary>Per-output settings, against synthetic scans. No window is shown, no receiver is contacted.</summary>
 public class GroupFormTests
 {
+    [Fact]
+    public void The_unified_editor_imports_the_latest_legacy_offset() => OnSta(() =>
+    {
+        var cfg = new AppConfig { DeviceId = A.DeviceId, DeviceName = A.Name, MultiRoomDeviceId = B.DeviceId,
+            MultiRoomDeviceName = B.Name, GroupVolumeOffsets = new() { [GroupPlan.Key(B.DeviceId)] = -5 } };
+        GroupSettings.Normalize(cfg);
+        cfg.GroupVolumeOffsets![GroupPlan.Key(B.DeviceId)] = -9;
+        using var panel = new GroupPanel(cfg);
+        Assert.Equal(-9, All<FluentSlider>(panel).Single(s => s.AccessibleName == "书房 音量偏移").Value);
+        panel.Apply();
+        Assert.Equal(-9, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor(B.DeviceId));
+    });
+
     private static AirPlayDevice Device(string name, string id, string model = "AudioAccessory6,1") =>
         new(name, id, IPAddress.Parse("192.0.2.10"), 7000, model, new Dictionary<string, string>());
     private static readonly AirPlayDevice A = Device("客厅", "AA:01"), B = Device("书房", "AA:02"), Other = Device("接收端", "AA:03", "OtherSpeaker1,1");
