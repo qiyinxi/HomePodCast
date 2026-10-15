@@ -843,14 +843,22 @@ function Merge-MainIntoDev([string] $version) {
     $body = "dev contains main's merge commit again (no file changes)."
     $manual = "git switch dev; git pull --ff-only; git merge --no-ff -m `"$subject`" -m `"$body`" $Remote/main; git push $Remote dev"
     $branch = "$(Invoke-Git branch --show-current)"
-    $cleanDev = $branch -eq 'dev' -and -not (Get-DirtyFile) -and (Get-RevParse HEAD) -eq (Get-RevParse "$Remote/dev")
     if ($WhatIf) {
+        # Behind $Remote/dev is fine: the real run fetches and fast-forwards first.
+        $cleanDev = $branch -eq 'dev' -and -not (Get-DirtyFile) -and (Test-Ancestor HEAD "$Remote/dev")
         if ($cleanDev) { Write-Plan "merge $Remote/main into dev ('$subject'), check that no file changed and push dev" }
         else { Write-Plan "print the commands to merge main into dev, since this checkout is not a clean dev at $Remote/dev: $manual" }
         return
     }
     Invoke-Git fetch --quiet $Remote
     if (Test-Ancestor "$Remote/main" "$Remote/dev") { Write-Info 'dev already contains main'; return }
+    # dev moves while a promotion waits on CI: that's what the snapshot branches allow (2026-10-15: a PR merged into
+    # dev during the 1.1.0 promotion left this checkout behind, and dev had to be merged by hand). Catch up first.
+    if ($branch -eq 'dev' -and -not (Get-DirtyFile) -and (Get-RevParse HEAD) -ne (Get-RevParse "$Remote/dev") -and
+        (Test-Ancestor HEAD "$Remote/dev")) {
+        Invoke-Git merge --ff-only --quiet "$Remote/dev"
+        Write-Info "dev fast-forwarded to $(Get-Short (Get-RevParse HEAD))"
+    }
     $cleanDev = $branch -eq 'dev' -and -not (Get-DirtyFile) -and (Get-RevParse HEAD) -eq (Get-RevParse "$Remote/dev")
     if (-not $cleanDev) { Write-Caution "dev not touched (this checkout is not a clean dev at $Remote/dev); do it by hand: $manual"; return }
     & git merge --no-ff --no-edit -m $subject -m $body "$Remote/main" | Out-Host
