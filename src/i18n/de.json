@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Höhere Werte bedeuten mehr Hall und weniger Direktsignal; 0% ist nur Direktsignal, 100% nur Hall.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Höhere Werte vergrößern den Abstand zwischen Direktsignal und einsetzendem Hall.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Wirkt auf den gesamten zum HomePod gestreamten Ton, einschließlich Computerton und Mikrofon.",
-  "适用于未单独设置输出目标的应用。": "Gilt für Apps ohne individuell festgelegtes Ausgabeziel."
+  "适用于未单独设置输出目标的应用。": "Gilt für Apps ohne individuell festgelegtes Ausgabeziel.",
+  "找不到所选的输出设备。": "Das ausgewählte Ausgabegerät wurde nicht gefunden.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Das lokale Ausgabegerät wird aufgenommen. Wähle ein anderes Aufnahmegerät.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Die Gruppenverzögerung ist für diese Ausgabe zu kurz. Erhöhe die Gruppenverzögerung."
 }

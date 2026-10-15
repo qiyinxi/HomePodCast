@@ -2,8 +2,8 @@ using HomePodCast.Audio;
 
 namespace HomePodCast.Net;
 
-internal enum OutputKind { AirPlay2, Raop }
-internal enum OutputState { Streaming, Lost, Stopped }
+internal enum OutputKind { AirPlay2, Raop, Local }
+internal enum OutputState { Preparing, Streaming, Lost, Stopped }
 internal readonly record struct OutputStats(long PacketsSent, long RetransmitRequests, long Retransmitted, long RetransmitMisses);
 
 /// <summary>

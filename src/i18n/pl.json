@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Zwiększ, aby uzyskać więcej pogłosu i mniej sygnału bezpośredniego; 0% to sam sygnał bezpośredni, 100% sam pogłos.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Zwiększ, aby opóźnić początek pogłosu i oddzielić go od sygnału bezpośredniego.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Dotyczy całego dźwięku wysyłanego do HomePoda, w tym dźwięku komputera i mikrofonu.",
-  "适用于未单独设置输出目标的应用。": "Dotyczy aplikacji bez indywidualnego celu wyjściowego."
+  "适用于未单独设置输出目标的应用。": "Dotyczy aplikacji bez indywidualnego celu wyjściowego.",
+  "找不到所选的输出设备。": "Nie znaleziono wybranego urządzenia wyjściowego.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Dźwięk z lokalnego urządzenia wyjściowego jest przechwytywany. Wybierz inne urządzenie przechwytywania.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Opóźnienie grupy jest zbyt małe dla tego wyjścia. Zwiększ opóźnienie grupy."
 }

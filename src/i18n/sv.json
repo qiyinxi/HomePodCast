@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Öka för mer efterklang och mindre direktljud; 0% är bara direktljud, 100% bara efterklang.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Öka för att fördröja efterklangens början och öka avståndet till direktljudet.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Gäller allt ljud som strömmas till HomePod, inklusive datorljud och mikrofon.",
-  "适用于未单独设置输出目标的应用。": "Gäller appar utan en egen inställd utdatadestination."
+  "适用于未单独设置输出目标的应用。": "Gäller appar utan en egen inställd utdatadestination.",
+  "找不到所选的输出设备。": "Den valda utdataenheten hittades inte.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Den lokala utdataenheten spelas in. Välj en annan inspelningsenhet.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Gruppfördröjningen är för kort för den här utgången. Öka gruppfördröjningen."
 }

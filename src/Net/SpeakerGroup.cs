@@ -32,6 +32,9 @@ internal sealed class SpeakerGroup : IOutputSink
     private RtpSender? _sender;
     private int _disposed;
     private readonly Func<double> _volumeCap;
+    private LocalOutputSet? _localOutputs;
+    private TimelinePump? _pump;
+    private CancellationTokenSource? _outputStop;
 
     private SpeakerGroup(IReadOnlyList<MemberSetup> setups, AudioFifo fifo, Func<double>? volumeCap)
     {
@@ -65,6 +68,7 @@ internal sealed class SpeakerGroup : IOutputSink
     public OutputStats Stats => new(_sender?.PacketsSent ?? 0, _sender?.RetransmitRequests ?? 0,
         _sender?.Retransmitted ?? 0, _sender?.RetransmitMisses ?? 0);
     public TimelineBuffer? Timeline { get; private set; }
+    public IReadOnlyList<LocalOutputStatus> LocalOutputs => _localOutputs?.Status ?? [];
 
     public void SetVolume(double percent, bool mute = false) => SetVolumePercent(mute ? 0 : percent);
 
@@ -76,12 +80,15 @@ internal sealed class SpeakerGroup : IOutputSink
     /// </summary>
     public static async Task<SpeakerGroup> ConnectAsync(IReadOnlyList<MemberSetup> setups, AudioFifo fifo,
         double? volumePercent, CancellationToken ct, IAudioEffect? effects = null, Func<double>? volumeCap = null,
-        IGroupPacketSource? source = null)
+        IGroupPacketSource? source = null, LocalOutputSet? localOutputs = null, int? groupDelayMs = null)
     {
         if (setups.Count == 0) throw new ArgumentException("empty group", nameof(setups));
         var group = new SpeakerGroup(setups, fifo, volumeCap);
+        group._localOutputs = localOutputs;
         try
         {
+            if (localOutputs != null && (source != null || groupDelayMs is null))
+                throw new ArgumentException("Local outputs require a coordinated capture timeline and group delay");
             await group.PrepareAllAsync(ct);
             var members = group._members.Select(m => m!).ToArray();
 
@@ -89,26 +96,51 @@ internal sealed class SpeakerGroup : IOutputSink
             await group.EachAsync((m, _) => m.Record(), ct);
 
             // One timeline: same RTP base and T0 for all; per-session keys, SSRCs and sequence numbers.
-            if (source == null)
+            long? coordinatedT0 = null;
+            if (localOutputs != null)
+            {
+                coordinatedT0 = MediaClock.Now + MediaClock.FromMs(250);
+                var pump = new TimelinePump(fifo, effects, localOutputs.HistoryMs(groupDelayMs!.Value), coordinatedT0);
+                group._pump = pump;
+                group.Timeline = pump.Timeline;
+                pump.Failed += reason => group.OnOutputLost(group.Name, reason);
+                source = new TimelineGroupSource(pump.Timeline, members.Select(m => m.Target.Channels).ToArray(),
+                    members.Max(m => m.LatencyFrames), groupDelayMs.Value, () => group._sender?.OnsetSent);
+            }
+            else if (source == null)
             {
                 var timelineSource = new GroupTimelineSource(fifo, members.Select(m => m.Target.Channels).ToArray(),
                     effects, () => group._sender?.OnsetSent);
                 source = timelineSource;
                 group.Timeline = timelineSource.Timeline;
             }
-            var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), fifo)
+            // RtpSender's legacy stall handler discards its FIFO. In a mixed group that FIFO belongs to the
+            // producer, so give this history-only consumer a private empty one; a stalled AirPlay leg cannot
+            // drop captured audio that the healthy local outputs still need. The original sender stays unchanged.
+            var senderFifo = localOutputs == null ? fifo : new AudioFifo(RtpSender.SampleRate, 0, 0);
+            var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), senderFifo)
             {
                 Effects = effects, // one chain, run once per packet before the per-speaker encode
                 GroupSource = source,
             };
             group._sender = sender;
-            sender.Start(MediaClock.Now + MediaClock.FromMs(250));
+            long t0 = coordinatedT0 ?? MediaClock.Now + MediaClock.FromMs(250);
+            group._pump?.Start(t0);
+            sender.Start(t0 + (localOutputs == null ? 0 : MediaClock.FromMs(TimelinePump.HeadroomMs)));
             await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), ct);
 
             group.MasterVolume = VolumeLimit.Clamp(
                 volumePercent ?? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0), group.VolumeCapPercent);
             await group.EachAsync((m, i) => m.SetVolumePercent(
                 MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), ct);
+
+            if (localOutputs != null)
+            {
+                await localOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, ct);
+                group._outputStop = new CancellationTokenSource();
+                _ = group.WatchLocalOutputs(localOutputs, group._outputStop.Token);
+                group.ThrowIfLost();
+            }
 
             Log.Info($"group streaming: {string.Join(" + ", setups.Select((s, i) => $"{MemberForLog(s, i)} [{sender.Streams[i].Channels}]"))}, " +
                      $"rtpBase={sender.RtpBase} latency={sender.LatencyFrames} frames");
@@ -190,10 +222,34 @@ internal sealed class SpeakerGroup : IOutputSink
         if (_lost.Task.IsCompleted) throw new AirPlayException(_lost.Task.Result) { LogMessage = _lostForLog };
     }
 
+    private async Task WatchLocalOutputs(LocalOutputSet outputs, CancellationToken ct)
+    {
+        try
+        {
+            await outputs.Lost.WaitAsync(ct);
+            OnOutputLost(outputs.LostOutputName ?? Name, outputs.LostReason ?? "local output lost");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
+
+    private void OnOutputLost(string name, string reason)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        lock (_lost)
+        {
+            if (_lost.Task.IsCompleted) return;
+            LostReason = reason;
+            _lostForLog = $"{Log.Name(name)} lost ({reason})";
+            Log.Warn($"group: {_lostForLog}; reconnecting required outputs");
+            _lost.TrySetResult(L.F("{0}：{1}", name, reason));
+        }
+    }
+
     /// <summary>Linked volume: each speaker gets the shared volume plus its own offset, never above the cap.</summary>
     public void SetVolumePercent(double master)
     {
         MasterVolume = master;
+        _localOutputs?.SetVolume(master);
         double cap = VolumeCapPercent;
         for (int i = 0; i < _members.Length; i++)
         {
@@ -226,7 +282,11 @@ internal sealed class SpeakerGroup : IOutputSink
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _outputStop?.Cancel();
+        _localOutputs?.Dispose();
         _sender?.Dispose(); // stop the shared timeline first, then end every session
+        _pump?.Dispose();
+        _outputStop?.Dispose();
         IGroupMember?[] members;
         lock (_members) members = _members.ToArray();
         var teardowns = members.Where(m => m != null).Select(m => Task.Run(m!.Dispose)).ToArray();

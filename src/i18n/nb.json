@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Øk for mer romklang og mindre direktelyd; 0% er bare direktelyd, 100% er bare romklang.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Øk for å forsinke starten på romklangen og øke avstanden fra direktelyden.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Gjelder all lyd som strømmes til HomePod, inkludert datamaskinlyd og mikrofon.",
-  "适用于未单独设置输出目标的应用。": "Gjelder apper uten et individuelt utdatamål."
+  "适用于未单独设置输出目标的应用。": "Gjelder apper uten et individuelt utdatamål.",
+  "找不到所选的输出设备。": "Den valgte utdataenheten ble ikke funnet.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Den lokale utdataenheten tas opp. Velg en annen opptaksenhet.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Gruppeforsinkelsen er for kort for denne utgangen. Øk gruppeforsinkelsen."
 }

@@ -100,6 +100,7 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
+        if (plan.LocalOutputs.Count > 0) return await ConnectLocalGroupAsync(plan, latencyMs, run, ct);
         var members = await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct);
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
             members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);

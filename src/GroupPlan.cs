@@ -29,6 +29,10 @@ public sealed record GroupPlan(
     bool SwapChannels,
     IReadOnlyDictionary<string, int> VolumeOffsets)
 {
+    /// <summary>Explicit local endpoints, empty for all existing selections. The full editor follows in P5.</summary>
+    public IReadOnlyList<Audio.LocalOutputOptions> LocalOutputs { get; init; } = [];
+    public int? GroupDelayMs { get; init; }
+
     /// <summary>Stereo pair only: one session, to the tight-sync leader (experiment, off by default).</summary>
     public bool PairLeaderOnly { get; init; }
 

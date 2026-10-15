@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Increase for more reverb and less dry sound; 0% is dry only, 100% is reverb only.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Increase to delay the reverb onset, leaving more time between the dry sound and reverb.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Applies to all sound streamed to the HomePod, including computer audio and the microphone.",
-  "适用于未单独设置输出目标的应用。": "Applies to apps without an individual output destination."
+  "适用于未单独设置输出目标的应用。": "Applies to apps without an individual output destination.",
+  "找不到所选的输出设备。": "The selected output device could not be found.",
+  "本机输出设备正被采集，请改用其他采集设备。": "The local output device is being captured. Choose another capture device.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "The group delay is too short for this output. Increase the group delay."
 }
