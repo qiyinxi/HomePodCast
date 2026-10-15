@@ -617,11 +617,12 @@
   "移除": "Entfernen",
   "移除 {0}": "{0} entfernen",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Die Live-Aufnahme wird zuerst auf Stereo heruntergemischt; daher sind nur Volles Stereo, Links oder Rechts wählbar. Bei 5.1-/7.1-Dateien lassen sich Center-, Subwoofer- und Surround-Positionen zuweisen; nicht zugewiesene Kanäle werden in benachbarte Lautsprecher gemischt.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Getrennte Kanäle erfordern einzelne HomePods: Nur ein Empfängertyp ermöglicht dieselbe Latenz und denselben Takt. Stereopaare und Apple TV können nur vollständiges Stereo nutzen. Drittanbieter- und AirPlay-1-Empfänger können Gruppen noch nicht beitreten.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Getrennte Kanäle erfordern einzelne HomePods: Nur ein Empfängertyp ermöglicht dieselbe Latenz und denselben Takt. Stereopaare können nur volles Stereo nutzen. Lokale Dateien unterstützen Apple TV noch nicht; Drittanbieter- und AirPlay-1-Empfänger können Gruppen noch nicht beitreten.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Die Verzögerung ist die zusätzliche Wartezeit dieses Lautsprechers in Millisekunden; ein höherer Wert bedeutet spätere Wiedergabe. Der Lautstärkeversatz wird zur gemeinsamen Lautstärke addiert.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Dieser Empfänger kann nur volles Stereo wiedergeben; diskrete Kanäle erfordern einen HomePod, der keinem Stereopaar angehört.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Wenden Sie die Einstellungen mit ausgewähltem Live-Audio vom Computer an, um die Lautsprecher für den Live-Stream zu aktualisieren. Die Dateiwiedergabe ändert die Lautsprechergruppe für den Live-Stream nicht.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Wählen Sie mindestens einen Lautsprecher mit der Einstellung „Volles Stereo“ aus oder weisen Sie Links und Rechts je einen Lautsprecher zu.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Beim Live-Streaming an einen einzelnen Lautsprecher wird der bisherige Modus mit niedriger Latenz verwendet. Position, zusätzliche Verzögerung und Lautstärkeversatz gelten nur für Gruppen mit mehreren Ausgängen.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Diese Quelle hat keinen Kanal für diese Position, daher bleibt dieser Lautsprecher stumm. Eine Mehrkanaldatei stellt seine Position wieder her."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Diese Quelle hat keinen Kanal für diese Position, daher bleibt dieser Lautsprecher stumm. Eine Mehrkanaldatei stellt seine Position wieder her.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Die Gruppenwiedergabe lokaler Dateien unterstützt noch keine Verbindungen mit gekoppelten Apple-TV-Geräten. Verwenden Sie einen HomePod."
 }

@@ -617,11 +617,12 @@
   "移除": "Retirer",
   "移除 {0}": "Retirer {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "La capture en direct est d’abord réduite en stéréo ; seuls Stéréo complète, Gauche ou Droite peuvent être choisis. Pour les fichiers 5.1 / 7.1, vous pouvez attribuer les positions centrale, caisson de basses et surround ; les canaux non attribués sont mixés dans les enceintes voisines.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Les canaux distincts nécessitent des HomePod individuels : un même type de récepteur garantit la même latence et la même horloge. Les paires stéréo et Apple TV acceptent uniquement la stéréo complète. Les récepteurs tiers et AirPlay 1 ne peuvent pas encore rejoindre un groupe.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Les canaux distincts nécessitent des HomePod individuels : un même type de récepteur garantit la même latence et la même horloge. Les paires stéréo acceptent uniquement la stéréo complète. Les fichiers locaux ne prennent pas encore en charge Apple TV ; les récepteurs tiers et AirPlay 1 ne peuvent pas encore rejoindre un groupe.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Le délai est le temps d’attente supplémentaire de cette enceinte en millisecondes ; une valeur plus élevée retarde la lecture. Le décalage de volume est ajouté au volume commun.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Ce récepteur peut uniquement lire la stéréo complète ; les canaux discrets nécessitent un HomePod qui ne fait pas partie d’une paire stéréo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Appliquez les réglages avec Audio de l’ordinateur en direct sélectionné pour mettre à jour les enceintes de diffusion en direct. La lecture d’un fichier ne modifie pas le groupe d’enceintes de diffusion en direct.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Choisissez au moins une enceinte en Stéréo complète, ou attribuez une enceinte à Gauche et une à Droite.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "La diffusion en direct vers une seule enceinte utilise le mode à faible latence existant. La position, le délai supplémentaire et le décalage de volume s’appliquent uniquement aux groupes avec plusieurs sorties.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Cette source ne contient aucun canal pour cette position : cette enceinte reste muette. Revenir à un fichier multicanal rétablit sa position."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Cette source ne contient aucun canal pour cette position : cette enceinte reste muette. Revenir à un fichier multicanal rétablit sa position.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "La lecture de fichiers locaux en groupe ne prend pas encore en charge les connexions à Apple TV avec jumelage. Utilisez un HomePod."
 }

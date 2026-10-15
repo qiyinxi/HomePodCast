@@ -617,11 +617,12 @@
   "移除": "Verwijderen",
   "移除 {0}": "{0} verwijderen",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Live-opname wordt eerst naar stereo gemixt, dus alleen Volledige stereo, Links of Rechts is beschikbaar. Voor 5.1-/7.1-bestanden kun je de midden-, subwoofer- en surroundposities toewijzen; niet-toegewezen kanalen worden in naburige luidsprekers gemixt.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Afzonderlijke kanalen vereisen losse HomePods: hetzelfde type ontvanger zorgt voor gelijke vertraging en klok. Stereoparen en Apple TV kunnen alleen volledige stereo gebruiken. Ontvangers van derden en AirPlay 1 kunnen nog niet aan groepen worden toegevoegd.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Afzonderlijke kanalen vereisen losse HomePods: hetzelfde type ontvanger zorgt voor gelijke vertraging en klok. Stereoparen kunnen alleen volledige stereo gebruiken. Lokale bestanden ondersteunen Apple TV nog niet; ontvangers van derden en AirPlay 1 kunnen nog niet aan groepen worden toegevoegd.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "De vertraging is de extra wachttijd van deze luidspreker in milliseconden; een hogere waarde betekent later afspelen. Het volumeverschil wordt bij het gezamenlijke volume opgeteld.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Deze ontvanger kan alleen volledige stereo afspelen; discrete kanalen vereisen een HomePod die niet bij een stereopaar hoort.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Pas de instellingen toe met Live computeraudio geselecteerd om de luidsprekers voor de livestream bij te werken. Het afspelen van bestanden wijzigt de luidsprekergroep voor de livestream niet.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Kies minstens één luidspreker met Volledige stereo, of wijs één luidspreker toe aan Links en één aan Rechts.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Livestreamen naar één luidspreker gebruikt de bestaande modus met lage latentie. Positie, extra vertraging en volumeverschil zijn alleen van toepassing op groepen met meerdere uitgangen.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Deze bron heeft geen kanaal voor deze positie, dus deze luidspreker blijft stil. Bij terugschakelen naar een meerkanaalsbestand wordt de positie hersteld."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Deze bron heeft geen kanaal voor deze positie, dus deze luidspreker blijft stil. Bij terugschakelen naar een meerkanaalsbestand wordt de positie hersteld.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Groepsweergave van lokale bestanden ondersteunt nog geen verbindingen met gekoppelde Apple TV-apparaten. Gebruik een HomePod."
 }

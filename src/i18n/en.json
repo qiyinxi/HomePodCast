@@ -617,11 +617,12 @@
   "移除": "Remove",
   "移除 {0}": "Remove {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Live capture is mixed down to stereo first, so only Full stereo, Left or Right can be selected. For 5.1 / 7.1 files, you can assign center, subwoofer and surround positions; unassigned channels are mixed into neighboring speakers.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Discrete channels require individual HomePods: one receiver type gives them the same latency and clock. Stereo pairs and Apple TV can only use full stereo. Third-party and AirPlay 1 receivers cannot join groups yet.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Discrete channels require individual HomePods: one receiver type gives them the same latency and clock. Stereo pairs can only use full stereo. Local files do not support Apple TV yet; third-party and AirPlay 1 receivers cannot join groups yet.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Delay is the extra time this speaker waits in milliseconds; a higher value plays later. The volume offset is added to the shared volume.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "This receiver can only play full stereo; discrete channels require a HomePod that is not part of a stereo pair.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Apply settings with Live computer audio selected to update the speakers for live streaming. File playback does not change the live streaming speaker group.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Select at least one Full stereo speaker, or assign one speaker each to Left and Right.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Live streaming to a single speaker uses the existing low latency mode. Position, extra delay and volume offset apply only to groups with multiple outputs.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "This source has no channel for this position, so this speaker stays silent. Switching back to a multichannel file restores its position."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "This source has no channel for this position, so this speaker stays silent. Switching back to a multichannel file restores its position.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Local file playback in a group does not yet support connections to paired Apple TV devices. Use a HomePod."
 }

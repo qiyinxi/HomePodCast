@@ -18,9 +18,9 @@ its low latency; per-output positions, delay and volume offsets become available
 Choose at least one full-stereo output, or a left and a right HomePod; every other position is optional, up to eight
 outputs. Multiple full-stereo outputs each receive the complete stereo downmix. Saved surround positions stay silent on stereo files
 and return when a multichannel file is chosen; they are never silently converted to full stereo. Discrete positions require individual
-HomePods, outside a stereo pair: one receiver type gives the channels the same latency and clock. Apple TV and stereo
-pairs can use full stereo. Third-party receivers and AirPlay 1 compatibility receivers cannot join groups yet; the
-page explains the restriction. HomePods have no subwoofer output: the LFE position is a HomePod playing only LFE.
+HomePods, outside a stereo pair: one receiver type gives the channels the same latency and clock. Stereo pairs can use full stereo. Local-file groups cannot use Apple TV yet because that connection path does not
+support its pairing. Third-party receivers and AirPlay 1 compatibility receivers cannot join groups yet; the page
+explains each restriction. HomePods have no subwoofer output: the LFE position is a HomePod playing only LFE.
 
 Windows' own decoder (Media Foundation) reads the file with its speaker mask. Mono, stereo, 5.1 (with rear or side
 surrounds), 6.1 and 7.1 are played; layouts with height speakers or more than 8 channels are refused with a message.
@@ -103,8 +103,8 @@ HomePod 上实测之前，这个标注不会去掉。
 
 至少选择一台完整立体声输出，或给左、右各选一台 HomePod，其他位置可选，最多八台。多台完整立体声输出都会收到完整的立体声下混。
 已保存的环绕位置在立体声文件中保持静音，切回多声道文件后恢复，不会自动变成完整立体声输出。
-离散位置只能用未组成立体声对的单独 HomePod：同一种接收端才能让各声道共用延迟和时钟。Apple TV 和立体声对可选完整立体声。
-第三方接收端和 AirPlay 1 兼容模式设备暂不能加入分组，页面会说明原因。HomePod 没有低音炮输出：「低音」位置是一台只放 LFE 的 HomePod。
+离散位置只能用未组成立体声对的单独 HomePod：同一种接收端才能让各声道共用延迟和时钟。立体声对可选完整立体声；本地文件分组暂不支持 Apple TV，因为该连接路径还不支持它的配对。
+第三方接收端和 AirPlay 1 兼容模式设备暂不能加入分组，页面会分别说明原因。HomePod 没有低音炮输出：「低音」位置是一台只放 LFE 的 HomePod。
 
 Windows 自带的解码器（Media Foundation）读取文件和它的声道掩码。能播放单声道、立体声、5.1（后环绕或侧环绕）、6.1 和
 7.1；带顶部声道或超过 8 个声道的布局会提示不支持。能打开哪些格式取决于 Windows：WAV 和 MP4/M4A 里的 AAC 总能打开，

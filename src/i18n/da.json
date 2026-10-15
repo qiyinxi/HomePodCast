@@ -617,11 +617,12 @@
   "移除": "Fjern",
   "移除 {0}": "Fjern {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Realtidsoptagelse nedmikses først til stereo, så kun Fuld stereo, Venstre eller Højre kan vælges. For 5.1-/7.1-filer kan du tildele center-, subwoofer- og surroundplaceringer; ikke-tildelte kanaler mikses ind i de nærmeste højttalere.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Separate kanaler kræver individuelle HomePods: samme modtagertype giver fælles forsinkelse og ur. Stereopar og Apple TV kan kun bruge fuld stereo. Modtagere fra tredjeparter og AirPlay 1 kan endnu ikke indgå i grupper.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Separate kanaler kræver individuelle HomePods: samme modtagertype giver fælles forsinkelse og ur. Stereopar kan kun bruge fuld stereo. Lokale filer understøtter endnu ikke Apple TV; modtagere fra tredjeparter og AirPlay 1 kan endnu ikke indgå i grupper.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Forsinkelsen er den ekstra tid, denne højttaler venter i millisekunder; en højere værdi giver senere afspilning. Lydstyrkejusteringen lægges til den fælles lydstyrke.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Denne modtager kan kun afspille fuld stereo; diskrete kanaler kræver en HomePod, som ikke indgår i et stereopar.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Anvend indstillingerne med Computerlyd i realtid valgt for at opdatere højttalerne til streaming i realtid. Filafspilning ændrer ikke højttalergruppen til streaming i realtid.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Vælg mindst én højttaler med Fuld stereo, eller tildel en højttaler til henholdsvis Venstre og Højre.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Streaming i realtid til én højttaler bruger den eksisterende tilstand med lav latenstid. Placering, ekstra forsinkelse og lydstyrkejustering gælder kun for grupper med flere udgange.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Denne kilde har ingen kanal til denne placering, så højttaleren forbliver lydløs. Skift tilbage til en flerkanalsfil for at gendanne placeringen."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Denne kilde har ingen kanal til denne placering, så højttaleren forbliver lydløs. Skift tilbage til en flerkanalsfil for at gendanne placeringen.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Gruppeafspilning af lokale filer understøtter endnu ikke forbindelser til parrede Apple TV-enheder. Brug en HomePod."
 }

@@ -617,11 +617,12 @@
   "移除": "Remover",
   "移除 {0}": "Remover {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "A captura em direto é primeiro misturada em estéreo, pelo que só pode escolher Estéreo completo, Esquerda ou Direita. Nos ficheiros 5.1 / 7.1, pode atribuir as posições central, subwoofer e surround; os canais não atribuídos são misturados nas colunas vizinhas.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Os canais separados requerem HomePods individuais: o mesmo tipo de recetor permite partilhar o atraso e o relógio. Os pares estéreo e a Apple TV só podem usar estéreo completo. Os recetores de terceiros e AirPlay 1 ainda não podem juntar-se a grupos.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Os canais separados requerem HomePods individuais: o mesmo tipo de recetor permite partilhar o atraso e o relógio. Os pares estéreo só podem usar estéreo completo. Os ficheiros locais ainda não suportam Apple TV; os recetores de terceiros e AirPlay 1 ainda não podem juntar-se a grupos.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "O atraso é o tempo adicional que esta coluna espera em milissegundos; um valor maior atrasa a reprodução. O ajuste de volume é somado ao volume comum.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Este recetor só pode reproduzir estéreo completo; os canais discretos exigem um HomePod que não faça parte de um par estéreo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Aplique as definições com Áudio do computador em direto selecionado para atualizar as colunas da transmissão em direto. A reprodução de ficheiros não altera o grupo de colunas da transmissão em direto.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Escolha pelo menos uma coluna com Estéreo completo, ou atribua uma coluna a Esquerda e outra a Direita.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "A transmissão em direto para uma só coluna usa o modo de baixa latência existente. A posição, o atraso adicional e o ajuste de volume só se aplicam a grupos com várias saídas.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Esta fonte não tem um canal para esta posição, pelo que esta coluna fica em silêncio. Ao voltar a um ficheiro multicanal, a posição é restaurada."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Esta fonte não tem um canal para esta posição, pelo que esta coluna fica em silêncio. Ao voltar a um ficheiro multicanal, a posição é restaurada.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "A reprodução de ficheiros locais em grupo ainda não suporta ligações a dispositivos Apple TV emparelhados. Utilize um HomePod."
 }

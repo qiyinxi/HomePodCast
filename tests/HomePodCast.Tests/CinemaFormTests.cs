@@ -14,6 +14,25 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaFormTests
 {
+    [Fact]
+    public void Local_file_groups_explain_and_block_the_unsupported_apple_tv_pairing_path() => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:03", Name = "Apple TV", Position = SpeakerPosition.Stereo });
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            Pump(page.UseFile(wav));
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "应用").Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text == "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。");
+            Pump(page.PlayAsync());
+            Assert.Empty(host.Started);
+        }
+        finally { File.Delete(wav); }
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

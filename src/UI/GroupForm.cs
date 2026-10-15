@@ -42,7 +42,7 @@ internal sealed class GroupPanel : StackPanel
         Controls.Add(new TextBlock(L.T("实验性功能：立体声对和多房间同步还没有在真实设备上验证过，可能不同步、没有声音或连不上。"),
             TextStyle.BodyStrong, TextRole.Caution, wrap: true)); // experimental since 1.1; hardware untested
         Controls.Add(Ui.Note(L.T("实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。")));
-        Controls.Add(Ui.Note(L.T("离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。")));
+        Controls.Add(Ui.Note(L.T("离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。")));
         Controls.Add(_members);
         Controls.Add(Ui.Row(8, _add, _add, _addButton));
         _addButton.Click += (_, _) =>
@@ -131,6 +131,7 @@ internal sealed class GroupPanel : StackPanel
             ?? _config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(speaker.DeviceId))?.Device(speaker.DeviceId);
         return device?.Kind switch
         {
+            ReceiverKind.AppleTv when _fileSource => L.T("本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。"),
             ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1 => L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"),
             ReceiverKind.ThirdPartyAirPlay2 or ReceiverKind.Unknown => L.T("第三方 AirPlay 设备暂不支持多音箱分组。"),
             _ => null,

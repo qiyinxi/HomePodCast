@@ -617,11 +617,12 @@
   "移除": "Poista",
   "移除 {0}": "Poista {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Reaaliaikainen kaappaus miksataan ensin stereoksi, joten valittavissa ovat vain Täysi stereo, Vasen ja Oikea. 5.1-/7.1-tiedostoille voi määrittää keski-, subwoofer- ja tilakaiutinpaikat; määrittämättömät kanavat miksataan viereisiin kaiuttimiin.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Erilliset kanavat vaativat yksittäisiä HomePod-kaiuttimia: sama vastaanotintyyppi takaa yhteisen viiveen ja kellon. Stereoparit ja Apple TV voivat käyttää vain täyttä stereota. Muiden valmistajien ja AirPlay 1:n vastaanottimia ei vielä voi liittää ryhmiin.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Erilliset kanavat vaativat yksittäisiä HomePod-kaiuttimia: sama vastaanotintyyppi takaa yhteisen viiveen ja kellon. Stereoparit voivat käyttää vain täyttä stereota. Paikalliset tiedostot eivät vielä tue Apple TV:tä; muiden valmistajien ja AirPlay 1:n vastaanottimia ei vielä voi liittää ryhmiin.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Viive on tämän kaiuttimen ylimääräinen odotusaika millisekunteina; suurempi arvo myöhentää toistoa. Äänenvoimakkuuden korjaus lisätään yhteiseen äänenvoimakkuuteen.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Tämä vastaanotin voi toistaa vain täyttä stereoääntä; erilliset kanavat vaativat HomePodin, joka ei kuulu stereopariin.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Päivitä reaaliaikaisen suoratoiston kaiuttimet ottamalla asetukset käyttöön, kun Tietokoneen ääni reaaliajassa on valittuna. Tiedoston toisto ei muuta reaaliaikaisen suoratoiston kaiutinryhmää.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Valitse vähintään yksi kaiutin asetuksella Täysi stereo tai määritä Vasen- ja Oikea-paikkaan kumpaankin oma kaiutin.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Reaaliaikainen suoratoisto yhteen kaiuttimeen käyttää nykyistä pienen viiveen tilaa. Sijainti, lisäviive ja äänenvoimakkuuden korjaus vaikuttavat vain ryhmissä, joissa on useita lähtöjä.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Tässä lähteessä ei ole kanavaa tälle sijainnille, joten kaiutin pysyy hiljaisena. Sijainti palautuu, kun vaihdat takaisin monikanavatiedostoon."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "Tässä lähteessä ei ole kanavaa tälle sijainnille, joten kaiutin pysyy hiljaisena. Sijainti palautuu, kun vaihdat takaisin monikanavatiedostoon.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Paikallisten tiedostojen ryhmätoisto ei vielä tue yhteyksiä paritettuihin Apple TV -laitteisiin. Käytä HomePodia."
 }

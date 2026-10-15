@@ -617,11 +617,12 @@
   "移除": "Usuń",
   "移除 {0}": "Usuń {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Dźwięk przechwytywany na żywo jest najpierw miksowany do stereo, więc można wybrać tylko Pełne stereo, Lewy lub Prawy. Dla plików 5.1 / 7.1 można przypisać pozycje centralną, subwoofera i surround; nieprzypisane kanały są miksowane do sąsiednich głośników.",
-  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对和 Apple TV 只能选择完整立体声；第三方和 AirPlay 1 接收端暂不能加入分组。": "Oddzielne kanały wymagają pojedynczych HomePodów: ten sam typ odbiornika zapewnia wspólne opóźnienie i zegar. Pary stereo i Apple TV mogą korzystać tylko z pełnego stereo. Odbiorniki innych firm i AirPlay 1 nie mogą jeszcze dołączać do grup.",
+  "离散声道只支持单独的 HomePod：同一种接收端才能共用延迟和时钟。立体声对只能选择完整立体声；本地文件暂不支持 Apple TV，第三方和 AirPlay 1 接收端暂不能加入分组。": "Oddzielne kanały wymagają pojedynczych HomePodów: ten sam typ odbiornika zapewnia wspólne opóźnienie i zegar. Pary stereo mogą korzystać tylko z pełnego stereo. Pliki lokalne nie obsługują jeszcze Apple TV; odbiorniki innych firm i AirPlay 1 nie mogą jeszcze dołączać do grup.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Opóźnienie to dodatkowy czas oczekiwania tego głośnika w milisekundach; wyższa wartość oznacza późniejsze odtwarzanie. Przesunięcie głośności jest dodawane do wspólnej głośności.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Ten odbiornik może odtwarzać tylko pełne stereo; kanały dyskretne wymagają HomePoda, który nie należy do pary stereo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Zastosuj ustawienia przy wybranym źródle Dźwięk komputera na żywo, aby zaktualizować głośniki transmisji na żywo. Odtwarzanie pliku nie zmienia grupy głośników transmisji na żywo.",
   "至少选择完整立体声，或给左和右各选一台音箱。": "Wybierz co najmniej jeden głośnik z ustawieniem Pełne stereo lub przypisz po jednym głośniku do pozycji Lewy i Prawy.",
   "实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。": "Transmisja na żywo do jednego głośnika korzysta z dotychczasowego trybu niskiego opóźnienia. Pozycja, dodatkowe opóźnienie i przesunięcie głośności działają tylko w grupach z wieloma wyjściami.",
-  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "To źródło nie ma kanału dla tej pozycji, więc głośnik pozostaje wyciszony. Powrót do pliku wielokanałowego przywraca jego pozycję."
+  "此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。": "To źródło nie ma kanału dla tej pozycji, więc głośnik pozostaje wyciszony. Powrót do pliku wielokanałowego przywraca jego pozycję.",
+  "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Grupowe odtwarzanie plików lokalnych nie obsługuje jeszcze połączeń ze sparowanymi urządzeniami Apple TV. Użyj HomePoda."
 }
