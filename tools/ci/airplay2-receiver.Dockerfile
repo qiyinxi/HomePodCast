@@ -2,7 +2,7 @@
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git autoconf automake libtool pkg-config libpopt-dev libconfig-dev \
-    libavahi-client-dev avahi-daemon dbus libssl-dev libsoxr-dev libplist-dev libsodium-dev \
+    libavahi-client-dev avahi-daemon avahi-utils dbus libssl-dev libsoxr-dev libplist-dev libsodium-dev \
     libavutil-dev libavcodec-dev libavformat-dev uuid-dev libgcrypt-dev xxd ffmpeg ca-certificates
 RUN git clone --depth 1 --branch 1.2.4 https://github.com/mikebrady/nqptp.git /nqptp \
     && cd /nqptp && test "$(git rev-parse HEAD)" = 591f425d9da69f1c4e09f3ad09611b758937b3e5 \
