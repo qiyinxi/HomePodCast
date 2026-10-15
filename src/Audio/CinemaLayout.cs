@@ -219,7 +219,7 @@ internal sealed class CinemaMatrix
     {
         if (speakers.Count is < 1 or > 8 || (!speakers.Any(s => s.Role == CinemaRole.Stereo) &&
             (!speakers.Any(s => s.Role == CinemaRole.FrontLeft) || !speakers.Any(s => s.Role == CinemaRole.FrontRight))))
-            throw new CinemaException(L.T("至少要给前左和前右各选一台音箱。"), "layout: a full-stereo output or front left and front right are needed");
+            throw new CinemaException(L.T("至少选择完整立体声，或给左和右各选一台音箱。"), "layout: a full-stereo output or front left and front right are needed");
         if (speakers.Any(s => string.IsNullOrWhiteSpace(s.DeviceId) || StereoPairs.IsPairId(s.DeviceId)))
             throw new CinemaException(L.T("立体声对不能用在无线影院里，请选单独的 HomePod。"), "layout: a stereo pair or an empty device id");
         if (speakers.Where(s => s.Role != CinemaRole.Stereo).Select(s => s.Role).Distinct().Count() != speakers.Count(s => s.Role != CinemaRole.Stereo) ||

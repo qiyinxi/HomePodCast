@@ -14,14 +14,199 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaFormTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_saved_surround_position_is_preserved_and_blocked_until_its_receiver_is_independent_again(bool joinsPair) => OnSta(() =>
+    {
+        string surround = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        string stereo = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:04", Name = "后环绕", Position = SpeakerPosition.RearLeft });
+            var rear = host.Found.Single(d => d.DeviceId == "AA:00:00:00:00:04");
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            FluentComboBox Rear() => All<FluentComboBox>(page).Single(c => c.AccessibleName == "后环绕 位置");
+            Pump(page.UseFile(surround));
+            Assert.True(Rear().Enabled); Assert.Equal("后左", Rear().SelectedText);
+            host.Found.Remove(rear);
+            if (joinsPair) host.Found.Add(rear with { Txt = new Dictionary<string, string> { ["tsid"] = "saved-speaker-pair" } });
+            page.RefreshSpeakers(); page.RefreshStatus();
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "应用").Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text.Contains(joinsPair ? "当前不是独立的 HomePod" : "无法确认它是否支持已保存的离散位置"));
+            Pump(page.PlayAsync());
+            Assert.Empty(host.Started);
+            Assert.Equal(SpeakerPosition.RearLeft, host.Config.GroupSpeakers![2].Position);
+            Assert.Empty(host.Config.Cinema.Speakers);
+            Pump(page.UseFile(stereo));
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.True(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled); // the retained stereo-file role stays silent
+            host.Found.RemoveAll(d => d.DeviceId == rear.DeviceId); host.Found.Add(rear);
+            page.RefreshSpeakers();
+            Pump(page.UseFile(surround));
+            Assert.True(Rear().Enabled); Assert.Equal("后左", Rear().SelectedText);
+            Pump(page.PlayAsync());
+            Assert.Equal(CinemaRole.RearLeft, Assert.Single(host.Started).Speakers[2].Role);
+            Assert.Equal(CinemaRole.RearLeft, host.Config.Cinema.Speakers[2].Role);
+        }
+        finally { File.Delete(surround); File.Delete(stereo); }
+    });
+
+    [Fact]
+    public void Local_file_groups_explain_and_block_the_unsupported_apple_tv_pairing_path() => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:03", Name = "Apple TV", Position = SpeakerPosition.Stereo });
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            Pump(page.UseFile(wav));
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "应用").Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text == "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。");
+            Pump(page.PlayAsync());
+            Assert.Empty(host.Started);
+        }
+        finally { File.Delete(wav); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Opening_a_file_freezes_layout_and_apply_until_success_or_failure(bool openedSuccessfully) => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            Pump(page.UseFile(wav));
+            var ready = new TaskCompletionSource<bool>();
+            page.WaitForFileOpened = _ => ready.Task;
+            var start = page.PlayAsync();
+            page.RefreshStatus(); // the periodic refresh must not re-enable editing while the decoder opens
+            var apply = All<FluentButton>(page).Single(b => b.Text == "应用");
+            var remove = All<FluentButton>(page).Single(b => b.AccessibleName == "移除 书房");
+            Assert.False(apply.Enabled); Assert.False(remove.Enabled);
+            Assert.False(All<FluentButton>(page).Single(b => b.Text == "播放").Enabled);
+            Assert.All(All<FluentComboBox>(page).Where(c => c.AccessibleName?.EndsWith(" 位置") == true), c => Assert.False(c.Enabled));
+            Assert.All(All<FluentSlider>(page).Where(c => c.AccessibleName != "音量"), c => Assert.False(c.Enabled));
+            remove.PerformClick(); apply.PerformClick();
+            ready.SetResult(openedSuccessfully);
+            Pump(start);
+            if (openedSuccessfully)
+            {
+                var (_, speakers, _) = Assert.Single(host.Started);
+                Assert.Equal(2, speakers.Length);
+                Assert.Equal(2, host.Config.GroupSpeakers!.Count);
+                page.PageHidden();
+            }
+            else Assert.Empty(host.Started);
+            Assert.True(apply.Enabled);
+            Assert.True(All<FluentComboBox>(page).Single(c => c.AccessibleName == "书房 位置").Enabled);
+        }
+        finally { File.Delete(wav); }
+    });
+
+    [Fact]
+    public void A_stereo_file_keeps_saved_surround_positions_silent_and_restores_them_for_51() => OnSta(() =>
+    {
+        string surround = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        string stereo = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.GroupSpeakers!.Add(new() { DeviceId = "AA:00:00:00:00:04", Name = "后环绕", Position = SpeakerPosition.RearLeft });
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            FluentComboBox Rear() => All<FluentComboBox>(page).Single(c => c.AccessibleName == "后环绕 位置");
+            Pump(page.UseFile(surround));
+            Assert.Equal("后左", Rear().SelectedText); Assert.True(Rear().Enabled);
+            Pump(page.UseFile(stereo));
+            Assert.Equal("后左", Rear().SelectedText); Assert.False(Rear().Enabled);
+            Assert.Contains(All<TextBlock>(page), t => t.Text.Contains("此音箱保持静音"));
+            Pump(page.PlayAsync());
+            var (source, layout, _) = Assert.Single(host.Started);
+            Assert.Equal(CinemaRole.RearLeft, layout[2].Role);
+            Assert.True(SpinWait.SpinUntil(() => source.BufferedFrames >= RtpSender.FramesPerPacket, TimeSpan.FromSeconds(2)));
+            Assert.True(source.ReadPacket(0));
+            var pcm = new float[RtpSender.FramesPerPacket * 2];
+            source.ReadTarget(0, pcm);
+            Assert.Contains(pcm, sample => Math.Abs(sample) > 0.001f); // prove the packet contains the generated file, not startup silence
+            source.ReadTarget(2, pcm);
+            Assert.All(pcm, sample => Assert.Equal(0, sample));
+            Assert.Equal(SpeakerPosition.RearLeft, host.Config.GroupSpeakers![2].Position);
+            Pump(page.UseFile(surround));
+            Assert.Equal("后左", Rear().SelectedText); Assert.True(Rear().Enabled);
+        }
+        finally { File.Delete(surround); File.Delete(stereo); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_file_opening_in_the_background_cannot_start_after_leaving_its_source(bool hidePage) => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            Pump(page.UseFile(wav));
+            var opened = new TaskCompletionSource<bool>();
+            page.WaitForFileOpened = _ => opened.Task;
+            var start = page.PlayAsync();
+            Assert.False(start.IsCompleted);
+            if (hidePage) page.PageHidden();
+            else All<FluentComboBox>(page).Single(c => c.AccessibleName == "音源").SelectedIndex = 0;
+            opened.SetResult(true);
+            Pump(start);
+            Assert.Empty(host.Started);
+        }
+        finally { File.Delete(wav); }
+    });
+
+    [Fact]
+    public void Playing_and_stopping_a_file_never_activates_a_saved_live_group() => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.MultiRoomDeviceId = null;
+            using var form = Form(host);
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            Pump(form.UseFile(wav));
+            Pump(form.PlayAsync());
+            Assert.Single(host.Started);
+            Assert.Null(host.Config.GroupCaptureDeviceIds);
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            host.State = CinemaState.Ended;
+            form.RefreshStatus();
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            var restored = new AppConfig();
+            UsageProfiles.Apply(restored, UsageProfiles.Capture(host.Config));
+            Assert.Null(GroupPlan.FromConfig(restored));
+        }
+        finally { File.Delete(wav); }
+    });
+
     private sealed class FakeHost : ICinemaHost
     {
-        public AppConfig Config { get; } = new() { Volume = 60 };
-        public IReadOnlyList<AirPlayDevice> Speakers { get; } =
+        public AppConfig Config { get; } = new() { Volume = 60, DeviceId = "AA:00:00:00:00:01", DeviceName = "客厅",
+            MultiRoomDeviceId = "AA:00:00:00:00:02", MultiRoomDeviceName = "书房", GroupSpeakers = [
+                new() { DeviceId = "AA:00:00:00:00:01", Name = "客厅", Position = SpeakerPosition.Left },
+                new() { DeviceId = "AA:00:00:00:00:02", Name = "书房", Position = SpeakerPosition.Right } ] };
+        public IReadOnlyList<AirPlayDevice> Speakers => Found;
+        public List<AirPlayDevice> Found { get; } =
         [
             new("客厅", "AA:00:00:00:00:01", IPAddress.Parse("192.168.50.11"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
             new("书房", "AA:00:00:00:00:02", IPAddress.Parse("192.168.50.12"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
             new("Apple TV", "AA:00:00:00:00:03", IPAddress.Parse("192.168.50.13"), 7000, "AppleTV14,1", new Dictionary<string, string>()),
+            new("后环绕", "AA:00:00:00:00:04", IPAddress.Parse("192.168.50.14"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
         ];
         public double? Volume => Config.Volume;
         public double VolumeCap => Config.VolumeCapPercent;
@@ -62,13 +247,12 @@ public class CinemaFormTests
 
     private static CinemaForm Form(FakeHost host, ManualDebounce? wait = null) => new(host, inputs: [], volumeWait: wait ?? new ManualDebounce());
 
-    /// <summary>Front left 客厅, front right 书房 (the Apple TV is not offered).</summary>
+    /// <summary>The shared per-device position controls, never a second cinema layout.</summary>
     private static void ChooseFronts(Form form, bool right = true)
     {
-        var combos = All<FluentComboBox>(form).Where(c => c.AccessibleName is "前左" or "前右").ToList();
-        Assert.Equal(["（不使用）", "客厅", "书房"], combos[0].Items.Cast<string>());
-        combos.Single(c => c.AccessibleName == "前左").SelectedIndex = 1;
-        combos.Single(c => c.AccessibleName == "前右").SelectedIndex = right ? 2 : 0;
+        var combos = All<FluentComboBox>(form).Where(c => c.AccessibleName?.EndsWith(" 位置") == true).ToList();
+        combos.Single(c => c.AccessibleName == "客厅 位置").SelectedIndex = 1;
+        combos.Single(c => c.AccessibleName == "书房 位置").SelectedIndex = right ? 2 : 1;
     }
 
     private static void Pump(Task task)
@@ -119,7 +303,7 @@ public class CinemaFormTests
             Assert.Equal(60, volume.Value); // the app's volume
 
             ChooseFronts(form);
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             volume.UserSetValue(10);
             Assert.Equal([10.0], host.Previewed); // the speakers follow the drag
             Assert.True(wait.Enabled);
@@ -155,17 +339,17 @@ public class CinemaFormTests
             var host = new FakeHost();
             using var form = Form(host);
 
+            Pump(form.UseFile(wav));
             ChooseFronts(form, right: false);
-            form.UseFile(wav);
             Pump(form.PlayAsync());
-            Assert.Equal("影院播放失败：至少要给前左和前右各选一台音箱。", Status(form));
+            Assert.Equal("影院播放失败：至少选择完整立体声，或给左和右各选一台音箱。", Status(form));
 
             ChooseFronts(form);
-            form.UseFile(garbage);
+            Pump(form.UseFile(garbage));
             Pump(form.PlayAsync());
             Assert.Equal("影院播放失败：这个文件在这台电脑上无法解码：Windows 没有它的解码器，或者文件已损坏。", Status(form));
 
-            form.UseFile(garbage + ".missing");
+            Pump(form.UseFile(garbage + ".missing"));
             Pump(form.PlayAsync());
             Assert.Equal("影院播放失败：选的文件不存在或打不开。", Status(form));
             Assert.Empty(host.Started);
@@ -186,7 +370,7 @@ public class CinemaFormTests
             var host = new FakeHost();
             using var form = Form(host);
             ChooseFronts(form);
-            form.UseFile(wav);
+            Pump(form.UseFile(wav));
             Pump(form.PlayAsync());
             var calibrate = All<FluentButton>(form).Single(b => b.Text == "测量音箱延迟");
 

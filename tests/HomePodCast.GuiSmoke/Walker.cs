@@ -41,7 +41,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -259,7 +259,7 @@ internal sealed partial class Walker
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
-            if (page == "多声道（5.1 / 7.1，实验性）") CheckCinema(tree, page);
+            if (page == "多音箱（实验性）") tree = CheckCinema(tree, page);
             CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
@@ -571,18 +571,32 @@ internal sealed partial class Walker
         Expect(row != null && Has(row, T("未设置")), where, $"「{T("标记刚才的卡顿")}」 is not 「{T("未设置")}」 by default");
     }
 
-    /// <summary>无线影院: every speaker position, nothing playable before a file is chosen, no measurement without playback.</summary>
-    private void CheckCinema(Node tree, string where)
+    /// <summary>The unified page: source switching, shared per-device rows, no file playback or measurement on opening.</summary>
+    private Node CheckCinema(Node tree, string where)
     {
-        foreach (var role in new[] { "前左", "前右", "中置", "低音声道", "后左", "后右", "侧左", "侧右" })
-            Expect(tree.Descendants().Any(n => n.Type == "Text" && n.Name == T(role)), where, $"no speaker row 「{T(role)}」");
+        Expect(Find(tree, n => n.Type == "ComboBox" && n.Name == T("音源")) != null, where, "no shared source selector");
+        Expect(tree.Descendants().All(n => !n.Says(T("电脑端分声道")) && !n.Says(T("交换左右"))), where, "legacy split/swap controls remain");
         foreach (var disabled in new[] { "播放", "暂停", "停止", "测量音箱延迟" })
         {
             var button = Find(tree, n => n.Type == "Button" && n.Says(T(disabled)));
             Expect(button is { Enabled: false }, where,
                 button == null ? $"no 「{T(disabled)}」 button" : $"「{T(disabled)}」 is enabled before a file plays");
         }
-        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true }, where, $"「{T("选择影音文件")}」 is not enabled");
+        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: false }, where, $"「{T("选择影音文件")}」 is enabled for live capture");
+        var source = Find(tree, n => n.Type == "ComboBox" && n.Name == T("音源"));
+        if (source != null)
+        {
+            Native.Msaa(source.Hwnd)?.set_accValue(0, T("本地影音文件"));
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true },
+                "file source enables its picker", 5000);
+            tree = Uia.Snapshot(MainWindow());
+            Layout(tree, where + " / file source");
+            ShootPage(where, "file-source");
+            Native.Msaa(source.Hwnd)?.set_accValue(0, T("电脑实时声音"));
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: false },
+                "live source disables its picker", 5000);
+        }
+        return Uia.Snapshot(MainWindow());
     }
 
     // ---------------------------------------------------------------- 同步观影窗口 (modules/VideoWindow)
@@ -902,7 +916,6 @@ internal sealed partial class Walker
         "均衡" => "equalizer",
         "音箱信息" => "speakers",
         "多音箱（实验性）" => "groups",
-        "多声道（5.1 / 7.1，实验性）" => "multichannel",
         "同步观影窗口（实验性）" => "viewing",
         "音画同步测试" => "sync-test",
         "使用配置" => "profiles",
