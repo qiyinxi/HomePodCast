@@ -4,7 +4,7 @@ namespace HomePodCast.Net;
 
 /// <summary>How to bring up one member of a group, and its offset from the shared volume (percentage points).</summary>
 internal sealed record MemberSetup(string Label, Func<CancellationToken, Task<IGroupMember>> Prepare, int VolumeOffset = 0,
-    string? Id = null);
+    string? Id = null, int DelayTrimMs = 0);
 
 /// <summary>A member of a group failed; Member says which one.</summary>
 internal sealed class GroupMemberException(string member, Exception inner)
@@ -83,6 +83,7 @@ internal sealed class SpeakerGroup : IOutputSink
         IGroupPacketSource? source = null, LocalOutputSet? localOutputs = null, int? groupDelayMs = null)
     {
         if (setups.Count == 0) throw new ArgumentException("empty group", nameof(setups));
+        if (setups.Any(s => s.DelayTrimMs is < 0 or > 500)) throw new ArgumentOutOfRangeException(nameof(setups), "Speaker delay must be 0..500 ms");
         var group = new SpeakerGroup(setups, fifo, volumeCap);
         group._localOutputs = localOutputs;
         try
@@ -105,12 +106,13 @@ internal sealed class SpeakerGroup : IOutputSink
                 group.Timeline = pump.Timeline;
                 pump.Failed += reason => group.OnOutputLost(group.Name, reason);
                 source = new TimelineGroupSource(pump.Timeline, members.Select(m => m.Target.Channels).ToArray(),
-                    members.Max(m => m.LatencyFrames), groupDelayMs.Value, () => group._sender?.OnsetSent);
+                    members.Max(m => m.LatencyFrames), groupDelayMs.Value, () => group._sender?.OnsetSent,
+                    setups.Select(s => s.DelayTrimMs).ToArray());
             }
             else if (source == null)
             {
                 var timelineSource = new GroupTimelineSource(fifo, members.Select(m => m.Target.Channels).ToArray(),
-                    effects, () => group._sender?.OnsetSent);
+                    effects, () => group._sender?.OnsetSent, setups.Select(s => s.DelayTrimMs).ToArray());
                 source = timelineSource;
                 group.Timeline = timelineSource.Timeline;
             }

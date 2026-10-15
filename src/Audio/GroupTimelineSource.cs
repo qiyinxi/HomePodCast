@@ -8,7 +8,7 @@ namespace HomePodCast.Audio;
 /// Timestamps are the group's source-read deadlines, after the FIFO's existing adaptive capture buffering.
 /// </summary>
 internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelMode> channels, IAudioEffect? effects,
-    Func<Action<long>?> onset) : IGroupPacketSource
+    Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null) : IGroupPacketSource
 {
     private readonly float[] _pcm = new float[RtpSender.FramesPerPacket * 2];
     private long _packetFrame;
@@ -40,7 +40,8 @@ internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelM
 
     public void ReadTarget(int index, Span<float> stereo)
     {
-        Timeline.ReadFrames(_packetFrame, stereo);
+        long trimFrames = (long)Math.Round((trimsMs?[index] ?? 0) * RtpSender.SampleRate / 1000.0);
+        Timeline.ReadFrames(_packetFrame - trimFrames, stereo);
         var mode = channels[index];
         if (mode == ChannelMode.Stereo) return;
         int channel = mode == ChannelMode.LeftOnly ? 0 : 1;

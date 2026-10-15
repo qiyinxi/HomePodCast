@@ -87,4 +87,57 @@ public class TimelinePumpTests
         Assert.True(renderer.Render(8 * 48000 + 960, new(8 * 48000, pump.Timeline.OriginTicks + MediaClock.FromMs(8000)), pcm));
         Assert.All(pcm, value => Assert.InRange(value, 0.2499f, 0.2501f));
     }
+
+    [Fact]
+    public void Half_frame_transport_offset_uses_one_integer_cursor_including_skips()
+    {
+        var timeline = new TimelineBuffer(44100, 200000, 0);
+        timeline.WriteFrames(-500, Enumerable.Range(-500, 160000).SelectMany(frame => new[] { (float)frame, -(float)frame }).ToArray());
+        using var source = new TimelineGroupSource(timeline, [ChannelMode.Stereo], 88200, 2025, () => null);
+        var pcm = new float[704];
+        long first = timeline.FrameAt(MediaClock.FromMs(-5));
+        for (int packet = 0; packet < 443; packet++)
+        {
+            Assert.True(source.ReadPacket(MediaClock.FromMs(20) + (long)(packet * 352.0 * MediaClock.Frequency / 44100)));
+            source.ReadTarget(0, pcm);
+            Assert.Equal(first + packet * 352, pcm[0]);
+            Assert.Equal(-pcm[0], pcm[1]);
+        }
+        source.SkipPackets(2);
+        source.ReadPacket(MediaClock.FromMs(20) + (long)(445 * 352.0 * MediaClock.Frequency / 44100));
+        source.ReadTarget(0, pcm);
+        Assert.Equal(first + 445 * 352, pcm[0]);
+    }
+
+    [Fact]
+    public void Per_speaker_positive_delay_reads_older_audio_in_both_group_sources()
+    {
+        foreach (bool mixed in new[] { false, true })
+        {
+            var fifo = new AudioFifo(44100, 0, 1000);
+            var signal = TestAudio.Signal(352 * 6);
+            fifo.Write(signal);
+            var actual = new float[704];
+            if (mixed)
+            {
+                using var pump = new TimelinePump(fifo, null, 5000, 0);
+                for (int packet = 0; packet < 5; packet++) pump.Produce((long)(packet * 352.0 * MediaClock.Frequency / 44100));
+                using var source = new TimelineGroupSource(pump.Timeline, [ChannelMode.Stereo, ChannelMode.Stereo], 10584, 260, () => null, [0, 10]);
+                for (int packet = 0; packet < 4; packet++) source.ReadPacket(MediaClock.FromMs(20) + (long)(packet * 352.0 * MediaClock.Frequency / 44100));
+                source.ReadTarget(0, actual);
+                Assert.Equal(signal[(1056 * 2)..((1056 + 352) * 2)], actual);
+                source.ReadTarget(1, actual);
+            }
+            else
+            {
+                using var source = new GroupTimelineSource(fifo, [ChannelMode.Stereo, ChannelMode.Stereo], null, () => null, [0, 10]);
+                long t0 = source.Timeline.TicksAt(1024);
+                for (int packet = 0; packet < 4; packet++) source.ReadPacket(t0 + (long)(packet * 352.0 * MediaClock.Frequency / 44100));
+                source.ReadTarget(0, actual);
+                Assert.Equal(signal[(1056 * 2)..((1056 + 352) * 2)], actual);
+                source.ReadTarget(1, actual);
+            }
+            Assert.Equal(signal[((1056 - 441) * 2)..((1056 - 441 + 352) * 2)], actual);
+        }
+    }
 }

@@ -43,7 +43,8 @@ public sealed partial class StreamController
             var prepare = PrepareGroupMember ??
                           (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
             var setups = members.Select((m, i) => new MemberSetup(m.Label,
-                c => prepare(m, options, plan.ChannelsFor(i), c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId)).ToList();
+                c => prepare(m, options, plan.ChannelsFor(i, m.DeviceId), c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId,
+                plan.DelayTrimFor(m.DeviceId))).ToList();
             _groupConnectCap = options.VolumeCapPercent;
             var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, Effects,
                 () => VolumeCapPercent, localOutputs: locals, groupDelayMs: EffectiveLatencyMs);

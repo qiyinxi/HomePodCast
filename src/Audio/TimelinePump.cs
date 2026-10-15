@@ -78,15 +78,20 @@ internal sealed class TimelinePump(AudioFifo fifo, IAudioEffect? effects, int hi
 
 /// <summary>Adapts a shared source history to the unchanged group RTP sender's transport deadlines.</summary>
 internal sealed class TimelineGroupSource(TimelineBuffer timeline, IReadOnlyList<ChannelMode> channels,
-    int latencyFrames, int groupDelayMs, Func<Action<long>?> onset) : IGroupPacketSource
+    int latencyFrames, int groupDelayMs, Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null) : IGroupPacketSource
 {
     private readonly float[] _pcm = new float[RtpSender.FramesPerPacket * 2];
     private int _quietFrames;
+    private long? _nextFrame;
+    private long _packetFrame;
 
     public bool ReadPacket(long deadline)
     {
         long source = deadline + (long)(latencyFrames * (double)MediaClock.Frequency / RtpSender.SampleRate) - MediaClock.FromMs(groupDelayMs);
-        bool complete = timeline.ReadFrames(timeline.FrameAt(source), _pcm);
+        // A half-frame delay offset plus truncated QPC packet deadlines can otherwise alternate 351/353 steps.
+        _packetFrame = _nextFrame ?? timeline.FrameAt(source);
+        _nextFrame = checked(_packetFrame + RtpSender.FramesPerPacket);
+        bool complete = timeline.ReadFrames(_packetFrame, _pcm);
         if (onset() is { } report)
         {
             for (int i = 0; i < RtpSender.FramesPerPacket; i++)
@@ -105,11 +110,17 @@ internal sealed class TimelineGroupSource(TimelineBuffer timeline, IReadOnlyList
 
     public void ReadTarget(int index, Span<float> stereo)
     {
-        _pcm.CopyTo(stereo);
+        int trim = trimsMs?[index] ?? 0;
+        if (trim == 0) _pcm.CopyTo(stereo);
+        else timeline.ReadFrames(_packetFrame - (long)Math.Round(trim * RtpSender.SampleRate / 1000.0), stereo);
         if (channels[index] == ChannelMode.Stereo) return;
         int channel = channels[index] == ChannelMode.LeftOnly ? 0 : 1;
         for (int i = 0; i < stereo.Length / 2; i++) stereo[i * 2] = stereo[i * 2 + 1] = stereo[i * 2 + channel];
     }
-    public void SkipPackets(int packets) { }
+    public void SkipPackets(int packets)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(packets);
+        if (_nextFrame is { } frame) _nextFrame = checked(frame + packets * (long)RtpSender.FramesPerPacket);
+    }
     public void Dispose() { }
 }
