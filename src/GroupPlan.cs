@@ -48,7 +48,8 @@ public sealed record GroupPlan(
         var offsets = new Dictionary<string, int>(cfg.GroupVolumeOffsets ?? new());
         var settings = GroupSettings.Copy(cfg.GroupSpeakers ?? []).ToDictionary(s => Key(s.DeviceId));
         foreach (var (key, row) in settings) row.Position = cfg.GroupCapturePositions?.GetValueOrDefault(key) ?? SpeakerPosition.Stereo;
-        foreach (var (key, row) in settings) offsets[key] = row.VolumeOffset;
+        if (cfg.GroupCaptureDeviceIds != null)
+            foreach (var (key, row) in settings) offsets[key] = row.VolumeOffset;
         if (StereoPairs.TryGetTsid(id, out var tsid))
             return new GroupPlan(GroupKind.StereoPair, cfg.DeviceName ?? tsid, tsid, [],
                 cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { PairLeaderOnly = cfg.GroupPairLeaderOnly, SpeakerSettings = settings,
