@@ -6,6 +6,25 @@ namespace HomePodCast.Tests;
 public class GroupSettingsTests
 {
     [Fact]
+    public void Legacy_group_controls_remain_effective_until_a_new_live_layout_is_applied()
+    {
+        var cfg = new AppConfig { DeviceId = "AA:01", MultiRoomDeviceId = "AA:02", GroupSplitChannels = true };
+        GroupSettings.Normalize(cfg);
+        Assert.True(cfg.GroupSplitChannels);
+        Assert.Equal(ChannelMode.LeftOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        cfg.GroupSwapChannels = true; // the old GroupPanel still writes these fields
+        Assert.Equal(ChannelMode.RightOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        cfg.GroupSplitChannels = false;
+        Assert.Equal(ChannelMode.Stereo, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        GroupSettings.Normalize(cfg);
+        cfg.GroupSplitChannels = true;
+        Assert.Equal(ChannelMode.RightOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        cfg.GroupCaptureDeviceIds = ["AA:01", "AA:02"];
+        cfg.GroupCapturePositions = new() { [GroupPlan.Key("AA:01")] = SpeakerPosition.Left, [GroupPlan.Key("AA:02")] = SpeakerPosition.Right };
+        Assert.Equal(ChannelMode.LeftOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+    }
+
+    [Fact]
     public void Loading_and_resaving_keeps_file_and_capture_positions_independent()
     {
         string path = Path.Combine(Path.GetTempPath(), "hpc-group-" + Guid.NewGuid().ToString("N"), "config.json");
@@ -83,7 +102,7 @@ public class GroupSettingsTests
         GroupSettings.Normalize(cfg);
         Assert.Equal([first, second], cfg.GroupSpeakers!.Select(s => s.Position));
         Assert.Equal(-5, cfg.GroupSpeakers![1].VolumeOffset);
-        Assert.False(cfg.GroupSplitChannels); Assert.False(cfg.GroupSwapChannels);
+        Assert.True(cfg.GroupSplitChannels); Assert.Equal(swap, cfg.GroupSwapChannels); // old controls remain usable until new Apply
         var plan = GroupPlan.FromConfig(cfg)!;
         Assert.Equal(swap ? ChannelMode.RightOnly : ChannelMode.LeftOnly, plan.ChannelsFor(0));
         cfg.GroupSpeakers[0].DelayMs = 42;
@@ -103,7 +122,7 @@ public class GroupSettingsTests
         Assert.True(cfg.GroupSplitChannels);
         GroupSettings.Normalize(cfg, [right, left]);
         Assert.Equal([SpeakerPosition.Right, SpeakerPosition.Left], cfg.GroupSpeakers!.Select(s => s.Position));
-        Assert.False(cfg.GroupSplitChannels);
+        Assert.True(cfg.GroupSplitChannels);
         Assert.Equal(ChannelMode.RightOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(0, left.DeviceId));
     }
 
