@@ -13,10 +13,13 @@ internal readonly record struct OutputStats(long PacketsSent, long RetransmitReq
 internal interface IOutputSink : IDisposable
 {
     OutputKind Kind { get; }
+    string Id { get; }
+    string Name { get; }
     int MinLatencyMs { get; }
     OutputState State { get; }
     Task<string> Lost { get; }
     string? LostReason { get; }
     OutputStats Stats { get; }
+    TimelineBuffer? Timeline { get; }
     void SetVolume(double percent, bool mute = false);
 }

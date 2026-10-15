@@ -117,7 +117,7 @@ public sealed partial class StreamController
         var prepare = PrepareGroupMember ??
                       (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
-            c => prepare(m, options, plan.ChannelsFor(i), c), plan.VolumeOffsetFor(m.DeviceId))).ToList();
+            c => prepare(m, options, plan.ChannelsFor(i), c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId)).ToList();
         // A volume, mute or cap change from now on finds no group to send to until GroupRunner publishes it:
         // OnGroupConnected pushes again if anything changed meanwhile.
         _groupConnectCap = options.VolumeCapPercent;
