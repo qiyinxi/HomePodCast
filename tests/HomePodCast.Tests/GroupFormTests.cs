@@ -11,6 +11,22 @@ namespace HomePodCast.Tests;
 public class GroupFormTests
 {
     [Fact]
+    public void A_partial_pair_scan_cannot_reassign_the_remaining_member_to_the_first_channel() => OnSta(() =>
+    {
+        var (left, right) = StereoPairTests.IdlePair();
+        var cfg = new AppConfig { DeviceId = StereoPairs.PairId(StereoPairs.Tsid(left)!), GroupSplitChannels = true };
+        using var panel = new GroupPanel(cfg);
+        panel.SetFound([left, right]);
+        Assert.Equal("右", Position(panel, right.Name).SelectedText);
+        panel.SetFound([right]);
+        Assert.Equal("右", Position(panel, right.Name).SelectedText);
+        Assert.Contains("两只都在线", panel.BlockReason);
+        panel.SetFound([right, left]);
+        panel.Apply();
+        Assert.Equal(ChannelMode.RightOnly, GroupPlan.FromConfig(cfg)!.ChannelsFor(1, right.DeviceId));
+    });
+
+    [Fact]
     public void The_unified_editor_imports_the_latest_legacy_offset() => OnSta(() =>
     {
         var cfg = new AppConfig { DeviceId = A.DeviceId, DeviceName = A.Name, MultiRoomDeviceId = B.DeviceId,

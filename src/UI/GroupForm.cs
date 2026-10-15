@@ -87,8 +87,9 @@ internal sealed class GroupPanel : StackPanel
             // Legacy split/swap needs the pair's stable mDNS member order; never guess it from a partial scan.
             GroupSettings.Normalize(_config, found);
             foreach (var (key, position) in _config.GroupCapturePositions ?? []) _capturePositions.TryAdd(key, position);
-            if (_config.GroupCaptureDeviceIds == null && GroupPlan.FromConfig(_config) is { } legacy)
-                foreach (var (member, index) in StereoPairs.Members(found, _tsid).Select((m, i) => (m, i)))
+            var pairMembers = StereoPairs.Members(found, _tsid);
+            if (_config.GroupCaptureDeviceIds == null && pairMembers.Count == 2 && GroupPlan.FromConfig(_config) is { } legacy)
+                foreach (var (member, index) in pairMembers.Select((m, i) => (m, i)))
                     _capturePositions[GroupPlan.Key(member.DeviceId)] = PositionFor(legacy.ChannelsFor(index, member.DeviceId));
             foreach (var saved in _config.GroupSpeakers ?? [])
                 if (_speakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(saved.DeviceId)))
@@ -136,7 +137,20 @@ internal sealed class GroupPanel : StackPanel
         };
     }
 
-    internal string? BlockReason => _speakers.Select(ReceiverBlockReason).FirstOrDefault(reason => reason != null);
+    internal string? BlockReason
+    {
+        get
+        {
+            if (_tsid != null)
+            {
+                int count = StereoPairs.Members(_found, _tsid).Count;
+                if (count == 0) return L.T("找不到音箱：请确认它已通电、和电脑在同一网络");
+                if (count != 2 && !_leaderOnly.Checked)
+                    return L.F("没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。", count);
+            }
+            return _speakers.Select(ReceiverBlockReason).FirstOrDefault(reason => reason != null);
+        }
+    }
 
     private void ReadRows()
     {
