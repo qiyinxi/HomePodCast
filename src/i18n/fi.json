@@ -626,5 +626,8 @@
   "调大后混响更多、原声更少；0% 为纯原声，100% 为纯混响。": "Suurempi arvo lisää kaikua ja vähentää suoraa ääntä; 0% on vain suoraa ääntä ja 100% vain kaikua.",
   "调大后混响更晚出现，原声和混响之间的间隔更长。": "Suurempi arvo viivästyttää kaiun alkua ja kasvattaa suoran äänen ja kaiun välistä aikaa.",
   "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。": "Vaikuttaa kaikkeen HomePodiin lähetettyyn ääneen, myös tietokoneen ääneen ja mikrofoniin.",
-  "适用于未单独设置输出目标的应用。": "Koskee sovelluksia, joille ei ole asetettu omaa lähtökohdetta."
+  "适用于未单独设置输出目标的应用。": "Koskee sovelluksia, joille ei ole asetettu omaa lähtökohdetta.",
+  "找不到所选的输出设备。": "Valittua toistolaitetta ei löytynyt.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Paikallisen toistolaitteen ääntä tallennetaan. Valitse toinen kaappauslaite.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Ryhmän viive on liian lyhyt tälle lähdölle. Kasvata ryhmän viivettä."
 }

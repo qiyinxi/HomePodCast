@@ -11,6 +11,25 @@ namespace HomePodCast.Tests;
 public class RaopTests
 {
     [Fact]
+    public void Output_history_keeps_non_integral_QPC_packets_contiguous()
+    {
+        var timeline = new HomePodCast.Audio.TimelineBuffer(44100, 44100, 0);
+        var history = new RaopOutputSink.PacketHistory(timeline);
+        // This is the production RAOP deadline formula, at the phase that used to overlap packet four.
+        long start = (long)Math.Round(2_500_114 * (double)MediaClock.Frequency / 10_000_000);
+        long first = timeline.FrameAt(start);
+        var pcm = new short[704];
+        var actual = new float[704];
+        for (int packet = 0; packet < 1000; packet++)
+        {
+            Array.Fill(pcm, (short)(packet - 500));
+            history.Write(start + (long)(packet * 352.0 * MediaClock.Frequency / 44100), pcm);
+            Assert.True(timeline.ReadFrames(first + packet * 352L, actual));
+            Assert.All(actual, sample => Assert.Equal((packet - 500) / 32768f, sample));
+        }
+    }
+
+    [Fact]
     public async Task Output_sink_preserves_RAOP_audio_timeline_cap_mute_and_teardown()
     {
         using var fake = new FakeRaop(false, false);

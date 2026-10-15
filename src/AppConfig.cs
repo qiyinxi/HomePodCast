@@ -65,6 +65,15 @@ public sealed class AppConfig
     /// <summary>Per-speaker volume offset in percentage points, keyed by GroupPlan.Key(deviceId).</summary>
     public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
 
+    /// <summary>Shared speaker positions, acoustic delay trims and volume offsets; null imports older layouts.</summary>
+    public List<GroupSpeakerSettings>? GroupSpeakers { get; set; }
+
+    /// <summary>Explicit live-capture members. Null preserves the older primary + MultiRoom selection; saved files never activate a group.</summary>
+    public List<string>? GroupCaptureDeviceIds { get; set; }
+
+    /// <summary>Positions last applied to live capture; file edits never change the next automatic connection's channels.</summary>
+    public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
+
     /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
@@ -239,6 +248,7 @@ public sealed class AppConfig
                 cfg.Effects ??= new();
                 cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
                 AvCalibrations.Normalize(cfg);
+                GroupSettings.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }

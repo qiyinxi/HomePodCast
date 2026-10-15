@@ -215,8 +215,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
         int first = (_historyWrite - RtpSender.FramesPerPacket - delay + 2 * Capacity) % Capacity;
         for (int f = 0; f < stereo.Length / 2; f++)
         {
-            float value = matrix.Sample(index, _history.AsSpan((first + f) % Capacity * Stride, matrix.Channels));
-            stereo[f * 2] = stereo[f * 2 + 1] = value;
+            var (left, right) = matrix.StereoSample(index, _history.AsSpan((first + f) % Capacity * Stride, matrix.Channels));
+            stereo[f * 2] = left; stereo[f * 2 + 1] = right;
         }
     }
 

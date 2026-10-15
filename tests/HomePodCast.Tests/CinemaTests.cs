@@ -8,6 +8,28 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaTests
 {
+    [Fact]
+    public void Full_stereo_targets_keep_left_and_right_and_share_the_existing_downmix()
+    {
+        var speakers = new[] { new CinemaSpeaker { DeviceId = "AA:01", Role = CinemaRole.Stereo },
+            new CinemaSpeaker { DeviceId = "AA:02", Role = CinemaRole.Stereo } };
+        var stereo = new CinemaMatrix(2, Stereo, speakers);
+        Assert.Equal((0.25f, -0.5f), stereo.StereoSample(0, [0.25f, -0.5f]));
+        Assert.Equal((0.25f, -0.5f), stereo.StereoSample(1, [0.25f, -0.5f]));
+        foreach (var mask in new[] { Rear51, Side51, Surround71 })
+        {
+            int channels = System.Numerics.BitOperations.PopCount(mask);
+            var full = new CinemaMatrix(channels, mask, speakers);
+            var fronts = new CinemaMatrix(channels, mask, Layout(L2));
+            Assert.Equal(fronts.Scale, full.Scale);
+            for (int c = 0; c < channels; c++)
+            {
+                var frame = new float[channels]; frame[c] = 1;
+                Assert.Equal((fronts.Sample(0, frame), fronts.Sample(1, frame)), full.StereoSample(0, frame));
+            }
+        }
+    }
+
     private static readonly Dictionary<string, CinemaRole> Roles = new()
     {
         ["FL"] = CinemaRole.FrontLeft, ["FR"] = CinemaRole.FrontRight, ["C"] = CinemaRole.Center, ["Sub"] = CinemaRole.Subwoofer,
