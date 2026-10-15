@@ -29,7 +29,7 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
 
 第三方裝置未回報處理時間時以 150 ms 估算，介面最低提供 200 ms。低於建議值會提示可能斷音。接收端可能忽略要求的延遲；預設值僅為經軟體測試的起點。
 
-設定 → 音箱資訊可按裝置指定連線方式。相容模式使用自己的延遲選擇器取代 HomePod 情境按鈕，不覆寫 HomePod 情境；設定中會顯示實際協定與回報的處理時間。首次相容連線會提示約兩秒延遲。
+音箱資訊可按裝置指定連線方式。相容模式使用自己的延遲選擇器取代 HomePod 情境按鈕，不覆寫 HomePod 情境；設定中會顯示實際協定與回報的處理時間。首次相容連線會提示約兩秒延遲。
 
 相容模式適合音樂，不適合遊戲。瀏覽器擴充功能的畫面延遲上限仍為 **2000 ms**，聲音延遲更大時無法完全對齊；影音同步測試仍可校準實際偏移。第三方接收端無法加入多音箱群組。
 
@@ -58,7 +58,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - **無線影院**（每個聲道一台 HomePod）：只用模擬揚聲器和產生的檔案測試過
 - 實體音效卡和耳機、其他 Windows 版本，以及電腦走有線或無線網路的差別
 
-如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及記錄檔（`homepodcast.log`：「設定 → 工具 → 記錄檔 → 開啟記錄檔資料夾」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
+如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及記錄檔（`homepodcast.log`：「關於 → 記錄檔 → 開啟記錄檔資料夾」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
 
 ## 功能
 
@@ -91,9 +91,9 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 2. 從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下載 HomePodCast，有兩種套件，另有一個選用模組：
    - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
-   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「設定 → 工具」裡選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
+   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「同步觀影視窗」頁選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
 
-   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定和記錄檔都儲存在 `%APPDATA%\HomePodCast`。Microsoft Store 版寫入的檔案放在它自己的儲存空間：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，解除安裝時由 Windows 刪除；不論哪種版本，「設定 → 工具 → 記錄檔 → 開啟記錄檔資料夾」開啟的都是正確的資料夾。
+   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定和記錄檔都儲存在 `%APPDATA%\HomePodCast`。Microsoft Store 版寫入的檔案放在它自己的儲存空間：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，解除安裝時由 Windows 刪除；不論哪種版本，「關於 → 記錄檔 → 開啟記錄檔資料夾」開啟的都是正確的資料夾。
 3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 Windows 音量就是 HomePod 音量：兩邊保持一致（連線時對齊到較小的那個），Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
 
 介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
@@ -172,7 +172,7 @@ HomePodCast 可以到本儲存庫的 GitHub Releases 尋找新版本：「設定
 5. HomePod 的位置：放在「看得見」路由器的地方，不要放進櫃子裡。
 6. 把延遲加 10–15 ms：在「場景」中選「自訂」調整，或在首頁出現提示時直接按「套用」。首頁「串流狀態」下方會顯示最近 10 分鐘的網路抖動次數；抖動真的吃掉餘裕時，提示會說明是哪一段 Wi‑Fi 的問題（電腦接網路線時一定是 HomePod 那一段），並給出建議的延遲。程式不會自己改延遲。「斷音」一格算的是這次連線中的斷音：電腦這邊實測的，加上吃掉餘裕的網路抖動（HomePod 很可能因此斷了一下）。HomePod 從不回報晚到的封包，所以後者是估計，數字前會加「≈」；滑鼠停在這一格上可以看到兩部分各是多少。
 
-**如何看記錄檔**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「設定 → 工具 → 記錄檔 → 開啟記錄檔資料夾」可以直接開啟）：串流時每 100 ms ping 一次 HomePod 和路由器，往返超過 30 ms 或沒有回應時記一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，沒有回應是 `lost`）。每分鐘的 `stats:` 行裡有 `rtx=已重送/要求`、`rtxMiss=`（來不及重送的封包）和 `ping=中位數/p99/最大 lost=遺失/總數 router=…`。
+**如何看記錄檔**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「關於 → 記錄檔 → 開啟記錄檔資料夾」可以直接開啟）：串流時每 100 ms ping 一次 HomePod 和路由器，往返超過 30 ms 或沒有回應時記一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，沒有回應是 `lost`）。每分鐘的 `stats:` 行裡有 `rtx=已重送/要求`、`rtxMiss=`（來不及重送的封包）和 `ping=中位數/p99/最大 lost=遺失/總數 router=…`。
 
 - 只有揚聲器的 ping 突增、路由器正常：問題在路由器 → HomePod 這一段，見第 4、5 點。
 - 揚聲器和路由器同時突增：問題在電腦這一段，見第 1–3 點。電腦接網路線時問題仍在 HomePod 那一段（只是路由器回自己的 ping 慢了），提示也會這樣說。

@@ -67,7 +67,7 @@ internal sealed partial class Walker
                 throw new StepFailed("System.Net.Http.dll is loaded already: 「检查更新」 can't show a failed load");
 
             // 「检查更新」: System.Net.Http can't be loaded; the update row says why, and the watch finds the runtime gone.
-            Navigate("设置");
+            Navigate("关于");
             Uia.Invoke(Button("检查更新"));
             string status = T(".NET 已更新，请重启 HomePodCast 后再试");
             WaitUntil(() => Has(Uia.Snapshot(MainWindow()), status), $"「{status}」 in 设置 → 软件更新", 20_000, fail: false);

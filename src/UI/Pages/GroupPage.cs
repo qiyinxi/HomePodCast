@@ -10,6 +10,7 @@ internal sealed class GroupPage : ScrollPage
     public GroupPage(TrayApp app) : base(L.T("多音箱（实验性）")) // experimental since 1.1; hardware untested
     {
         _app = app;
+        TitleText!.Wrap = true;
         var apply = new FluentButton(L.T("应用"), ButtonKind.Primary);
         Content.Controls.Add(apply);
         apply.Click += (_, _) =>

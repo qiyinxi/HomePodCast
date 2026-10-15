@@ -9,6 +9,7 @@ internal sealed class ViewingPage : ScrollPage
     public ViewingPage(TrayApp app) : base(L.T("同步观影窗口（实验性）")) // experimental since 1.1
     {
         _app = app;
+        TitleText!.Wrap = true;
         if (!Players.VideoWindowModule.Offered) return;
         var open = new FluentButton(L.T("打开"), ButtonKind.Primary);
         var module = new FluentButton(L.T("选择模块…"));

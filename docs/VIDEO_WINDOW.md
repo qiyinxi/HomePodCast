@@ -13,7 +13,7 @@ version doesn't have it.
    [Releases](https://github.com/qiyinxi/HomePodCast/releases) and extract it anywhere. It needs Windows 10 version
    2004 or later and the .NET 10 Desktop Runtime (x64). HomePodCast's updates don't update the module: download it again
    for the new version (the window says so when the two versions differ).
-2. In Settings → Tools → **Synchronized viewing window (experimental)**, choose the module's folder with
+2. In **Synchronized viewing**, choose the module's folder with
    **Choose module…**, then click **Open**.
 3. Turn off other synchronization first: the player's own audio delay, HomePodCast's "Adjust players in the Movies
    scene" and the browser extension's picture delay. With both, the picture is delayed twice.
@@ -65,7 +65,7 @@ API references: [Windows screen capture](https://learn.microsoft.com/en-us/windo
 1. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载和 HomePodCast 同一版本的
    `HomePodCast-video-window-<版本>.zip`，解压到任意位置。需要 Windows 10 2004 或更新版本，以及 .NET 10 桌面运行时（x64）。
    HomePodCast 更新时模块不会跟着更新，请重新下载新版本的模块（两边版本不同时，窗口里会提示）。
-2. 在「设置 → 工具 → 同步观影窗口（实验性）」用「选择模块…」选择模块所在的文件夹，然后点「打开」。
+2. 在「同步观影窗口」用「选择模块…」选择模块所在的文件夹，然后点「打开」。
 3. 先关掉其他同步补偿：播放器自己的音频延迟、HomePodCast 的「影视场景自动调整播放器」、浏览器插件的画面延迟。同时开着，画面会被延后两次。
 4. 「选择窗口…」打开 Windows 的选择器，在那里选一个窗口或整块屏幕；Windows 会在它周围保留黄色的采集边框。
    取消不影响正在进行的采集；换了来源，旧画面会清掉。不采集鼠标指针。采集期间，这个窗口不出现在任何屏幕采集里

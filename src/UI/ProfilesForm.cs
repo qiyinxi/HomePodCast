@@ -73,6 +73,7 @@ internal sealed class ProfilesPanel : StackPanel
 
     public void Reload()
     {
+        using var layout = LayoutPanel.BatchRelayout(this);
         _profiles.Items.Clear();
         _profiles.Items.AddRange(_config.UsageProfiles.Select(p => p.Name));
         _profiles.SelectedIndex = _config.UsageProfiles.FindIndex(p => p.Id == _selected);

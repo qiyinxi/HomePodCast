@@ -7,7 +7,7 @@ namespace HomePodCast.UI;
 internal enum AppPage { Home, Mixer, Effects, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
 
 /// <summary>
-/// The one window: a navigation rail (首页 / 混音器 / 麦克风与音效 / 设置) and the pages. Light or dark
+/// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
 /// with the system (or the "Theme" setting), dark title bar and Mica where Windows has them. Everything
 /// is laid out in code for the window's DPI. Closing only hides it; the tray flyout quits.
 /// </summary>
@@ -44,9 +44,9 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Mixer, L.T("混音器"));
         _rail.Add(Glyph.Microphone, L.T("麦克风与音效"));
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
-        _rail.Add(Glyph.Devices, L.T("多音箱（实验性）")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
+        _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
+        _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）"), label: L.T("多声道")); // experimental since 1.1; hardware untested
+        _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）"), label: L.T("同步观影窗口")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
         _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
@@ -219,7 +219,7 @@ internal sealed class MainWindow : Form, ISurface
 
     // ---------------------------------------------------------------- what TrayApp tells the window
 
-    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); }
+    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Cinema) _cinema.RefreshSpeakers(); }
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);

@@ -41,7 +41,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风与音效", "设置"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风与音效", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -156,10 +156,9 @@ internal sealed partial class Walker
                     "compatibility latency selector is missing");
                 Expect(Has(tree, "2000 ms"), page, "compatibility default is not 2000 ms");
             }
-            if (page == "设置")
-            {
-                tree = CheckSettings(false, compatibility: true);
-            }
+            if (page == "音箱信息") tree = CheckSpeakers(false, compatibility: true);
+            if (page == "关于") tree = CheckAbout();
+            if (page == "设置") CheckSettings();
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
         }
@@ -255,22 +254,44 @@ internal sealed partial class Walker
             Navigate(page);
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
-            if (page == "设置") tree = CheckSettings(connected);
+            if (page == "设置") CheckSettings();
+            if (page == "音箱信息") tree = CheckSpeakers(connected);
+            if (page == "关于") tree = CheckAbout();
+            if (page == "多声道（5.1 / 7.1，实验性）") CheckCinema(tree, page);
             CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
             if (page == "首页") Flyout(connected);
         }
 
+        Navigate("设置");
         Dialog("hotkeys", Button("快捷键…"), "全局快捷键", "关闭", CheckHotkeys);
-        Dialog("profiles", Button("管理配置"), "使用配置", "关闭");
-        Dialog("multi-speaker", ButtonInRow("多音箱（实验性）", "打开"), "多音箱（实验性）", "取消", ready: tree =>
-            !tree.Descendants().Any(n => n.Name == T("正在搜索音箱…")));
-        // Opening it starts nothing (no file, no microphone); 关闭 must leave the connection to the fake HomePod as it was.
-        Dialog("cinema", ButtonInRow("无线影院（实验性）", "打开"), "无线影院（实验性）", "关闭", CheckCinema);
+        Navigate("首页");
+        Uia.Invoke(Button("管理配置"));
+        WaitUntil(() => TryPagePane(Uia.Snapshot(MainWindow()), "使用配置") != null, "profile management page", 8000);
+        Layout(Uia.Snapshot(MainWindow()), "使用配置");
+        CheckThemeSwitch();
         if (VideoWindowDir != null) ViewingWindow(connected);
 
         WalkNarrow();
+    }
+
+    private void CheckThemeSwitch()
+    {
+        Navigate("关于");
+        for (int i = 0; i < 2; i++)
+        {
+            var tree = Uia.Snapshot(MainWindow());
+            var toggle = Find(tree, n => n.Type == "Button" && (n.Name == T("切换到浅色") || n.Name == T("切换到深色")))
+                ?? throw new StepFailed("no accessible theme switch");
+            string before = toggle.Name;
+            Uia.Invoke(toggle);
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" &&
+                (n.Name == T("切换到浅色") || n.Name == T("切换到深色")) && n.Name != before) != null, "theme switch", 5000);
+            Thread.Sleep(300);
+            Layout(Uia.Snapshot(MainWindow()), "theme switch");
+            Shoot(MainWindow(), "theme-toggle-" + i, "client fade completed");
+        }
     }
 
     private void WalkNarrow()
@@ -389,13 +410,13 @@ internal sealed partial class Walker
 
     private void CheckNavigation(Node tree, bool compact = false)
     {
-        var settings = Find(tree, n => n.Type == "TabItem" && n.Name == T("设置"));
+        var settings = Find(tree, n => n.Type == "TabItem" && n.Name == T("关于"));
         Expect(settings?.Parent != null, "navigation", "no settings navigation item");
         if (settings?.Parent is not { } rail) return;
         int dpi = (int)Native.GetDpiForWindow(MainWindow());
         int gap = 8 * dpi / 96;
         Expect(Math.Abs(rail.Rect.Bottom - settings.Rect.Bottom - gap) <= 2, "navigation",
-            "settings is not pinned to the bottom of the rail");
+            "About is not pinned to the bottom of the rail");
         if (compact)
             Expect(rail.Rect.Width <= 64 * dpi / 96 + 1, "navigation", "narrow window did not compact the navigation rail");
     }
@@ -431,7 +452,7 @@ internal sealed partial class Walker
         }
     }
 
-    private Node CheckSettings(bool connected, bool compatibility = false)
+    private Node CheckSpeakers(bool connected, bool compatibility = false)
     {
         // 音箱信息 reads the speaker when the page is shown: wait for 读取中… to go.
         var tree = Uia.Snapshot(MainWindow());
@@ -441,11 +462,8 @@ internal sealed partial class Walker
             Thread.Sleep(300);
             tree = Uia.Snapshot(MainWindow());
         }
-        var page = PagePane(tree, "设置");
-        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "设置", $"no 「{T("导出诊断")}」 button (设置 → 工具)");
-        Expect(Has(page, T("工具")), "设置", $"no 「{T("工具")}」 section");
+        var page = PagePane(tree, "音箱信息");
         Expect(Has(page, T("手动添加 AirPlay 设备（实验性）")), "设置", "manual AirPlay receiver row missing"); // experimental since 1.1
-        Expect(Has(page, T("音箱信息")), "设置", $"no 「{T("音箱信息")}」 section");
         if (connected)
         {
             Expect(Has(page, _fake!.Name), "设置", $"音箱信息 doesn't name 「{_fake.Name}」");
@@ -463,6 +481,14 @@ internal sealed partial class Walker
             Expect(Has(page, T("还没有选择音箱")), "设置", $"音箱信息 doesn't say 「{T("还没有选择音箱")}」");
         }
 
+        return tree;
+    }
+
+    private void CheckSettings()
+    {
+        var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
+        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）" })
+            Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
         var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
@@ -470,6 +496,14 @@ internal sealed partial class Walker
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
 
+    }
+
+    private Node CheckAbout()
+    {
+        var tree = Uia.Snapshot(MainWindow());
+        var page = PagePane(tree, "关于");
+        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "关于", "diagnostic export missing");
+        Expect(Has(page, T("许可证")), "关于", "license missing");
         // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
         // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
         // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
@@ -535,9 +569,10 @@ internal sealed partial class Walker
     private void ViewingWindow(bool connected)
     {
         string title = T("同步观影窗口（实验性）"); // experimental since 1.1
+        Navigate("同步观影窗口（实验性）");
         try
         {
-            Uia.Invoke(ButtonInRow("同步观影窗口（实验性）", "打开"));
+            Uia.Invoke(Button("打开"));
             var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 设置", 20_000);
             Thread.Sleep(1200);
             var tree = Uia.Snapshot(viewer);
@@ -837,6 +872,13 @@ internal sealed partial class Walker
         "首页" => "home",
         "混音器" => "mixer",
         "麦克风与音效" => "effects",
+        "音箱信息" => "speakers",
+        "多音箱（实验性）" => "groups",
+        "多声道（5.1 / 7.1，实验性）" => "multichannel",
+        "同步观影窗口（实验性）" => "viewing",
+        "音画同步测试" => "sync-test",
+        "使用配置" => "profiles",
+        "关于" => "about",
         _ => "settings",
     };
 

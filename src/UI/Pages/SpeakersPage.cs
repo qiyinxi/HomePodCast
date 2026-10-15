@@ -12,7 +12,7 @@ internal sealed class SpeakersPage : ScrollPage
     private readonly PairingsPanel _pairings;
     private readonly StackPanel _list = new() { Gap = 4 };
     private List<SelectedSpeaker> _devices = [];
-    private string? _selected, _signature;
+    private string? _selected, _signature, _stateSignature;
     private bool _shown;
 
     public SpeakersPage(TrayApp app) : base(L.T("音箱信息"))
@@ -43,6 +43,11 @@ internal sealed class SpeakersPage : ScrollPage
             { Model = d.Model, HasAirPlay = d.HasAirPlay, RaopPort = d.RaopPort }))
             .GroupBy(d => GroupPlan.Key(d.DeviceId)).Select(g => g.First()).ToList();
         string signature = string.Join(";", devices.Select(d => $"{d.DeviceId}|{d.Name}|{d.Address}|{d.Port}"));
+        string state = $"{_app.Controller.State}|{_app.Controller.ActiveProtocol}|{_app.Config.ArrivalToRenderMs}|" +
+            string.Join(";", _app.Config.ReceiverSettings.Select(kv => $"{kv.Key}:{kv.Value.ProtocolOverride}:{kv.Value.ArrivalToRenderMs}"));
+        if (signature == _signature && state == _stateSignature) return;
+        _stateSignature = state;
+        using var batch = LayoutPanel.BatchLayout(this);
         if (signature != _signature)
         {
             using var layout = LayoutPanel.BatchLayout(this);
@@ -51,7 +56,7 @@ internal sealed class SpeakersPage : ScrollPage
             foreach (Control old in _list.Controls.Cast<Control>().ToList()) old.Dispose();
             foreach (var device in devices)
             {
-                var choose = new FluentButton(device.Name, ButtonKind.Subtle, Glyph.Speaker)
+                var choose = new FluentButton(device.Name, device.DeviceId == _selected ? ButtonKind.Secondary : ButtonKind.Subtle, Glyph.Speaker)
                 { AccessibleName = device.Name, AccessibleDescription = device.Address?.ToString() };
                 choose.Click += (_, _) => Inspect(device.DeviceId);
                 _list.Controls.Add(choose);
@@ -67,6 +72,8 @@ internal sealed class SpeakersPage : ScrollPage
         if (_devices.All(d => d.DeviceId != id) || id == _selected) return;
         using var layout = LayoutPanel.BatchLayout(this);
         _selected = id;
+        foreach (var (button, i) in _list.Controls.OfType<FluentButton>().Select((button, i) => (button, i)))
+            button.Kind = _devices[i].DeviceId == id ? ButtonKind.Secondary : ButtonKind.Subtle;
         _receiverConnection.RefreshSelection();
         _speakerInfo.SelectionChanged();
     }
@@ -98,8 +105,8 @@ internal sealed class SpeakersPage : ScrollPage
         }
         protected override int Arrange(int width, bool apply)
         {
-            bool columns = width >= Dp(720);
-            int listWidth = columns ? Dp(200) : width;
+            bool columns = width >= Dp(620);
+            int listWidth = columns ? Dp(170) : width;
             int listHeight = Math.Min(Dp(columns ? 420 : 160), HeightFor(_list, Math.Max(0, listWidth - Dp(20))));
             int detailWidth = columns ? width - listWidth - Dp(16) : width;
             int detailHeight = HeightFor(_detail, detailWidth);

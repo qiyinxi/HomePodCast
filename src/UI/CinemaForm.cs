@@ -38,6 +38,7 @@ internal sealed class CinemaPage : ScrollPage
         : base(L.T("多声道（5.1 / 7.1，实验性）")) // experimental since 1.1; hardware untested
     {
         _host = host;
+        TitleText!.Wrap = true;
         var config = host.Config;
         config.Cinema ??= new CinemaSettings();
         var body = Content;
@@ -143,8 +144,30 @@ internal sealed class CinemaPage : ScrollPage
 
     public override void PageShown()
     {
+        RefreshSpeakers();
         _timer.Start();
         RefreshStatus();
+    }
+
+    internal void RefreshSpeakers()
+    {
+        if (_source != null || _measurement != null) return;
+        var found = _host.Speakers.Where(d => d.Kind == ReceiverKind.HomePod && !StereoPairs.IsPairId(d.DeviceId))
+            .GroupBy(d => GroupPlan.Key(d.DeviceId)).Select(g => g.First()).ToList();
+        foreach (var device in _devices)
+            if (found.All(d => GroupPlan.Key(d.DeviceId) != GroupPlan.Key(device.DeviceId))) found.Add(device);
+        if (found.Select(d => (d.DeviceId, d.Name, d.Address)).SequenceEqual(_devices.Select(d => (d.DeviceId, d.Name, d.Address)))) return;
+        using var layout = LayoutPanel.BatchLayout(this);
+        var selected = _rows.Select(row => row.Choice.SelectedIndex > 0 && row.Choice.SelectedIndex <= _devices.Count
+            ? _devices[row.Choice.SelectedIndex - 1].DeviceId : null).ToList();
+        _devices.Clear(); _devices.AddRange(found);
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            var choice = _rows[i].Choice;
+            choice.Items.Clear(); choice.Items.Add(L.T("（不使用）"));
+            foreach (var device in _devices) choice.Items.Add(device.Name);
+            choice.SelectedIndex = selected[i] == null ? 0 : _devices.FindIndex(d => d.DeviceId == selected[i]) + 1;
+        }
     }
 
     public override void PageHidden()

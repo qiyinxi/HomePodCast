@@ -47,9 +47,9 @@ internal sealed class NavRail : LayoutPanel, ISurface
 
     public IReadOnlyList<NavItem> Items => _items;
 
-    public NavItem Add(string glyph, string text, bool bottom = false)
+    public NavItem Add(string glyph, string text, bool bottom = false, string? label = null)
     {
-        var item = new NavItem(glyph, text) { TabStop = false, AccessibleName = text };
+        var item = new NavItem(glyph, label ?? text) { TabStop = false, AccessibleName = text };
         int index = _items.Count;
         item.Click += (_, _) => Select(index, user: true);
         item.KeyDown += (_, e) => OnItemKey(index, e);
@@ -134,7 +134,7 @@ internal sealed class NavRail : LayoutPanel, ISurface
             _viewport.AutoScrollMinSize = new Size(0, Math.Max(0, bodyHeight));
             int scrollWidth = bodyHeight > available ? SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi) : 0;
             Place(_main, 0, _viewport.AutoScrollPosition.Y, Math.Max(0, width - Dp(8) - scrollWidth), Math.Max(0, bodyHeight));
-            int y = Math.Max(inset, Height - footerHeight - inset);
+            int y = Math.Max(inset, Height - footerHeight - inset + Dp(4));
             Place(_themeButton, Dp(4), y, width - Dp(8), Dp(38));
             foreach (var item in _footer)
             {

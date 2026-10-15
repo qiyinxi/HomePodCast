@@ -2,9 +2,7 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>设置: language and theme, startup, letting the speaker go at night, volume cap, volume keys, hotkeys, local players in the 影视 scene
-/// (how to switch on their interfaces, and a VLC password for when VLC's own cannot be read or is refused), the
-/// preferences. Feature and maintenance pages have their own navigation entries.</summary>
+/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume, hotkeys and local players.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     private static readonly string[] ThemeModes = [Theme.Auto, Theme.Light, Theme.Dark];
