@@ -42,6 +42,23 @@ public class SidebarPagesTests
         page.PageHidden();
     });
 
+    [Fact]
+    public void Editing_an_inactive_receiver_protocol_does_not_reconnect_the_active_speaker() => Sta.Run(() =>
+    {
+        var config = TestApp.Config();
+        var app = TestApp.Create(config);
+        var other = new AirPlayDevice("Other receiver", "11:22:33:44:55:66", System.Net.IPAddress.Parse("192.0.2.11"),
+            7000, "OtherSpeaker1,1", new Dictionary<string, string>());
+        app.Controller.ReceiverLookup = id => id == other.DeviceId ? other : null;
+        using var window = new MainWindow(app);
+        typeof(TrayApp).GetField("_form", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(app, window);
+        typeof(TrayApp).GetField("_wantConnected", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.SetValue(app, true);
+        app.SetReceiverProtocol(other.DeviceId, ReceiverProtocol.Raop);
+        Assert.Equal(ReceiverProtocol.Raop, config.ReceiverSettings[RaopPassword.Key(other.DeviceId)].ProtocolOverride);
+        Assert.Equal(TestApp.DeviceId, config.DeviceId);
+        Assert.Equal(StreamState.Idle, app.Controller.State);
+    });
+
     [Theory]
     [InlineData(Theme.Light)]
     [InlineData(Theme.Dark)]

@@ -39,7 +39,7 @@ internal sealed class SpeakersPage : ScrollPage
     public void RefreshDevices()
     {
         if (!_shown) return;
-        var devices = _app.SelectedSpeakers().Concat(_app.LastScan.Select(d => new SelectedSpeaker(d.DeviceId, d.Name, d.Address, d.Txt, d.Port)
+        var devices = _app.SelectedSpeakers().Concat(ManualAirPlayDevice.Include(_app.LastScan, _app.Config.ManualDevices).Select(d => new SelectedSpeaker(d.DeviceId, d.Name, d.Address, d.Txt, d.Port)
             { Model = d.Model, HasAirPlay = d.HasAirPlay, RaopPort = d.RaopPort }))
             .GroupBy(d => GroupPlan.Key(d.DeviceId)).Select(g => g.First()).ToList();
         string signature = string.Join(";", devices.Select(d => $"{d.DeviceId}|{d.Name}|{d.Address}|{d.Port}"));

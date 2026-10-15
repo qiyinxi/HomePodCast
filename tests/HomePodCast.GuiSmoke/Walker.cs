@@ -288,6 +288,7 @@ internal sealed partial class Walker
             Uia.Invoke(toggle);
             WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" &&
                 (n.Name == T("切换到浅色") || n.Name == T("切换到深色")) && n.Name != before) != null, "theme switch", 5000);
+            Shoot(MainWindow(), "theme-fade-" + i, "client theme transition");
             Thread.Sleep(300);
             Layout(Uia.Snapshot(MainWindow()), "theme switch");
             Shoot(MainWindow(), "theme-toggle-" + i, "client fade completed");

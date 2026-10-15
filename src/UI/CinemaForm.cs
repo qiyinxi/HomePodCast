@@ -175,6 +175,7 @@ internal sealed class CinemaPage : ScrollPage
         _timer.Stop();
         FlushVolume();
         StopPlayback("page hidden");
+        _status.Text = "";
         RefreshStatus();
     }
 

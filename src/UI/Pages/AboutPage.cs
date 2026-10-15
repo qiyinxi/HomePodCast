@@ -30,7 +30,6 @@ internal sealed class AboutPage : ScrollPage
             L.T("正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。"), _channel);
         _autoUpdateRow = new SettingRow(Glyph.Recent, L.T("自动检查更新"), "", _autoUpdate);
 
-        var about = Ui.Section(L.T("关于"));
         var version = typeof(AboutPage).Assembly.GetName().Version?.ToString(3) ?? "?";
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
@@ -39,7 +38,7 @@ internal sealed class AboutPage : ScrollPage
         var licenseRow = new SettingRow(Glyph.Info, L.T("许可证"), "GNU General Public License v3.0", license);
         var logs = new FluentButton(L.T("打开日志文件夹"), ButtonKind.Secondary, Glyph.Folder);
         var diagnostic = new FluentButton(L.T("导出诊断"));
-        Content.Controls.AddRange([about, aboutRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow,
+        Content.Controls.AddRange([aboutRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow,
             Ui.Section(L.T("日志")), new SettingRow(Glyph.Folder, L.T("日志"),
                 L.F("报告问题时请附上这个文件夹里的 {0}：\n{1}", AppConfig.LogFileName, AppEnvironment.LogFolder), logs),
             new SettingRow(Glyph.Info, L.T("诊断报告"),
@@ -63,6 +62,7 @@ internal sealed class AboutPage : ScrollPage
     /// </summary>
     public void ShowUpdate()
     {
+        using var layout = LayoutPanel.BatchLayout(this);
         var u = _app.UpdateState;
         _updateRow.Show(u);
         // The Microsoft Store version: the Store updates it; nothing here contacts GitHub.
