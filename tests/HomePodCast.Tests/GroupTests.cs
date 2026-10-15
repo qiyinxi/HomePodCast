@@ -13,7 +13,7 @@ internal sealed class FakeMember(string name, FakeReceiver rx, ConcurrentQueue<s
     public FakeReceiver Receiver { get; } = rx;
     public string? FailOn { get; init; }
     public RtpTarget Target { get; } = rx.Target(channels);
-    public int LatencyFrames => 4630;
+    public int LatencyFrames { get; init; } = 4630;
     public int? ArrivalToRenderMs { get; init; } = 90;
     public double? InitialVolumeDb { get; init; } = -15;
     public string? LostReason { get; set; }

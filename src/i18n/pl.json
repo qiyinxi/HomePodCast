@@ -627,5 +627,8 @@
   "本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。": "Grupowe odtwarzanie plików lokalnych nie obsługuje jeszcze połączeń ze sparowanymi urządzeniami Apple TV. Użyj HomePoda.",
   "实时组仍在使用的音箱，请在电脑实时声音下移除并应用。": "Aby usunąć głośnik nadal używany przez grupę transmisji na żywo, wybierz Dźwięk komputera na żywo, usuń go i zastosuj ustawienia.",
   "未发现「{0}」，无法确认它是否支持已保存的离散位置。": "Nie znaleziono „{0}”, więc nie można potwierdzić, czy obsługuje zapisaną pozycję dla oddzielnego kanału.",
-  "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "„{0}” nie jest obecnie pojedynczym HomePodem i nie może używać zapisanej pozycji dla oddzielnego kanału."
+  "「{0}」当前不是独立的 HomePod，不能使用已保存的离散位置。": "„{0}” nie jest obecnie pojedynczym HomePodem i nie może używać zapisanej pozycji dla oddzielnego kanału.",
+  "找不到所选的输出设备。": "Nie znaleziono wybranego urządzenia wyjściowego.",
+  "本机输出设备正被采集，请改用其他采集设备。": "Dźwięk z lokalnego urządzenia wyjściowego jest przechwytywany. Wybierz inne urządzenie przechwytywania.",
+  "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Opóźnienie grupy jest zbyt małe dla tego wyjścia. Zwiększ opóźnienie grupy."
 }

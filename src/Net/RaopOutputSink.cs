@@ -36,18 +36,33 @@ internal sealed class RaopOutputSink : IOutputSink
         string? id = null, string? name = null)
     {
         var timeline = new TimelineBuffer(RaopAudio.SampleRate, RaopAudio.SampleRate * 5, MediaClock.Now);
-        var audio = new float[RaopAudio.FramesPerPacket * 2];
+        var history = new PacketHistory(timeline);
         var client = await RaopClient.ConnectAsync(host, port, options with
         {
             ReadTimedAudio = (ticks, pcm) =>
             {
                 if (options.ReadTimedAudio is { } read) read(ticks, pcm);
                 else options.ReadAudio?.Invoke(pcm);
-                for (int i = 0; i < pcm.Length; i++) audio[i] = pcm[i] / 32768f;
-                timeline.Write(ticks, audio);
+                history.Write(ticks, pcm);
             },
         }, ct);
         return new RaopOutputSink(client, timeline, id ?? $"{host}:{port}", name ?? host.ToString());
+    }
+
+    internal sealed class PacketHistory(TimelineBuffer timeline)
+    {
+        private readonly float[] _audio = new float[RaopAudio.FramesPerPacket * 2];
+        private long? _nextFrame;
+
+        public void Write(long ticks, ReadOnlySpan<short> pcm)
+        {
+            for (int i = 0; i < pcm.Length; i++) _audio[i] = pcm[i] / 32768f;
+            // A truncated QPC packet deadline can round one frame backwards relative to the previous packet's end.
+            // RAOP's RTP clock advances by whole packets, so anchor the history once and retain that same cadence.
+            long frame = _nextFrame ?? timeline.FrameAt(ticks);
+            timeline.WriteFrames(frame, _audio.AsSpan(0, pcm.Length));
+            _nextFrame = checked(frame + pcm.Length / 2);
+        }
     }
 
     private void OnLost(string reason) => _lost.TrySetResult(reason);

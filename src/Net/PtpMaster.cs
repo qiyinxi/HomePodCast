@@ -17,7 +17,7 @@ public sealed class PtpMaster : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly byte[] _ownAnnounce;
     private readonly Task[] _tasks;
-    private long _betterUntil;
+    private long _betterUntil; // when we are (or were) master again: a better clock's hold ends or it withdrew
     private ulong _betterGrandmaster;
     private readonly object _election = new();
     private int _disposed;
@@ -40,16 +40,18 @@ public sealed class PtpMaster : IDisposable
     /// <summary>Let the receiver's wake-up election finish before anchoring or consuming live audio.</summary>
     internal async Task WaitForStableMasterAsync(CancellationToken ct)
     {
-        long began = Stopwatch.GetTimestamp(), stable = began;
-        while (Stopwatch.GetTimestamp() - began < Stopwatch.Frequency * 2)
+        long began = Stopwatch.GetTimestamp(), deadline = began + Stopwatch.Frequency * 2;
+        while (true)
         {
             ct.ThrowIfCancellationRequested();
+            // Stable since the last hold ended, as the election recorded it, not as earlier polls happened to see it.
+            // 2026-10-15: a CI test process stalled for 2.9 s between two polls; the wait woke past its budget and
+            // gave up on a clock nobody had disputed. A dispute that comes and goes between polls counts just the same.
             long now = Stopwatch.GetTimestamp();
-            if (!IsMaster) stable = now;
-            else if (now - stable >= Stopwatch.Frequency / 4) return;
+            if (now - Math.Max(began, Interlocked.Read(ref _betterUntil)) >= Stopwatch.Frequency / 4) return;
+            if (now >= deadline) throw new IOException("PTP could not establish a stable master clock");
             await Task.Delay(20, ct);
         }
-        throw new IOException("PTP could not establish a stable master clock");
     }
 
     /// <summary>Only an explicit third-party session may instantiate this; tests use loopback and private ports.</summary>
@@ -112,8 +114,13 @@ public sealed class PtpMaster : IDisposable
                             Interlocked.Exchange(ref _betterUntil, Stopwatch.GetTimestamp() + Stopwatch.Frequency * 3);
                         }
                         // 2026-10-14: nqptp 1.2.4 wakes a master with a better announce, then a worse
-                        // one 150 ms later. That same clock withdrawing its candidacy ends the hold.
-                        else if (identity == _betterGrandmaster) Interlocked.Exchange(ref _betterUntil, 0);
+                        // one 150 ms later. That same clock withdrawing its candidacy ends the hold now,
+                        // which is when the wait for a stable master starts counting again.
+                        else if (identity == _betterGrandmaster)
+                        {
+                            long now = Stopwatch.GetTimestamp();
+                            if (now < Interlocked.Read(ref _betterUntil)) Interlocked.Exchange(ref _betterUntil, now);
+                        }
                     }
                 }
                 else if (type == PtpPackets.DelayRequest && IsMaster)

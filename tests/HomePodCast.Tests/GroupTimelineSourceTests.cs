@@ -5,6 +5,50 @@ namespace HomePodCast.Tests;
 
 public class GroupTimelineSourceTests
 {
+    [Fact]
+    public void Non_integral_start_time_keeps_packets_contiguous_and_skips_whole_packets()
+    {
+        var fifo = new AudioFifo(44100, 0, 1000);
+        using var source = new GroupTimelineSource(fifo, [ChannelMode.Stereo], null, () => null);
+        // At 10 MHz this offset used to round the first four packets to 11026, 11378, 11730, 12081:
+        // packet four overlapped packet three by one frame and threw on the RTP sender's thread.
+        long t0 = source.Timeline.OriginTicks + (long)Math.Round(2_500_114 * (double)MediaClock.Frequency / 10_000_000);
+        long first = source.Timeline.FrameAt(t0);
+        var pcm = new float[704];
+        for (int packet = 0; packet < 1000; packet++)
+        {
+            Array.Fill(pcm, (float)packet);
+            fifo.Write(pcm);
+            Assert.True(source.ReadPacket(t0 + (long)(packet * 352.0 * MediaClock.Frequency / 44100)));
+            source.ReadTarget(0, pcm);
+            Assert.All(pcm, value => Assert.Equal(packet, value));
+            Assert.True(source.Timeline.ReadFrames(first + packet * 352L, pcm));
+            Assert.All(pcm, value => Assert.Equal(packet, value));
+        }
+        source.SkipPackets(3);
+        Array.Fill(pcm, 0.25f); fifo.Write(pcm);
+        source.ReadPacket(t0 + (long)(1003 * 352.0 * MediaClock.Frequency / 44100));
+        source.ReadTarget(0, pcm);
+        Assert.All(pcm, value => Assert.Equal(0.25f, value));
+        Assert.False(source.Timeline.ReadFrames(first + 1000 * 352L, pcm));
+        Assert.All(pcm, value => Assert.Equal(0, value));
+        Assert.True(source.Timeline.ReadFrames(first + 1003 * 352L, pcm));
+    }
+
+    [Fact]
+    public void A_skip_before_the_first_packet_anchors_at_the_first_actual_deadline()
+    {
+        var fifo = new AudioFifo(44100, 0, 1000);
+        using var source = new GroupTimelineSource(fifo, [ChannelMode.Stereo], null, () => null);
+        source.SkipPackets(5);
+        fifo.Write(Enumerable.Repeat(0.25f, 704).ToArray());
+        long deadline = source.Timeline.TicksAt(5 * 352);
+        Assert.True(source.ReadPacket(deadline));
+        var pcm = new float[704];
+        Assert.True(source.Timeline.ReadFrames(5 * 352, pcm));
+        Assert.All(pcm, value => Assert.Equal(0.25f, value));
+    }
+
     private sealed class Gain : IAudioEffect
     {
         public int Calls;
