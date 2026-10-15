@@ -6,6 +6,22 @@ namespace HomePodCast.Tests;
 public class GroupSettingsTests
 {
     [Fact]
+    public void Legacy_volume_offsets_remain_authoritative_until_new_live_apply()
+    {
+        var cfg = new AppConfig { DeviceId = "AA:01", MultiRoomDeviceId = "AA:02",
+            GroupVolumeOffsets = new() { [GroupPlan.Key("AA:02")] = -5 } };
+        GroupSettings.Normalize(cfg);
+        Assert.Equal(-5, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor("AA:02"));
+        cfg.GroupVolumeOffsets![GroupPlan.Key("AA:02")] = -9; // the old GroupPanel writes only this dictionary
+        Assert.Equal(-9, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor("AA:02"));
+        cfg.GroupVolumeOffsets.Clear();
+        Assert.Equal(0, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor("AA:02"));
+        cfg.GroupCaptureDeviceIds = ["AA:01", "AA:02"];
+        cfg.GroupSpeakers![1].VolumeOffset = -3;
+        Assert.Equal(-3, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor("AA:02"));
+    }
+
+    [Fact]
     public void Legacy_group_controls_remain_effective_until_a_new_live_layout_is_applied()
     {
         var cfg = new AppConfig { DeviceId = "AA:01", MultiRoomDeviceId = "AA:02", GroupSplitChannels = true };
