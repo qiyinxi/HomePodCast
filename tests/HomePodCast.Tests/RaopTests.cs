@@ -11,6 +11,39 @@ namespace HomePodCast.Tests;
 public class RaopTests
 {
     [Fact]
+    public async Task Output_sink_preserves_RAOP_audio_timeline_cap_mute_and_teardown()
+    {
+        using var fake = new FakeRaop(false, false);
+        using var output = await RaopOutputSink.ConnectAsync(IPAddress.Loopback, fake.Port, new RaopOptions
+        {
+            Txt = new Dictionary<string, string> { ["et"] = "0", ["cn"] = "1" },
+            VolumePercent = 80, VolumeCapPercent = 10, EndTimeout = TimeSpan.FromSeconds(10),
+            ReadAudio = pcm => { for (int i = 0; i < pcm.Length; i++) pcm[i] = (short)(i - 352); },
+        }, CancellationToken.None);
+        IOutputSink sink = output;
+        Assert.Equal(OutputKind.Raop, sink.Kind);
+        Assert.Equal(OutputState.Streaming, sink.State);
+        Assert.Equal(2000, sink.MinLatencyMs);
+        var first = await fake.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var decoded = DecodeEscape(fake.Decrypt(first.Buffer[12..]));
+        Assert.Equal(Enumerable.Range(0, 704).Select(i => (short)(i - 352)), decoded);
+        var history = new float[704];
+        Assert.True(sink.Timeline!.ReadAt(output.Client.StartedAt, 0, 0, history));
+        Assert.Equal(decoded.Select(v => v / 32768f), history);
+        Assert.Contains("volume: -27.000000", fake.LastVolume);
+        sink.SetVolume(80, mute: true);
+        Assert.Contains("volume: -144.000000", fake.LastVolume);
+        sink.SetVolume(80);
+        Assert.Contains("volume: -27.000000", fake.LastVolume);
+        sink.Dispose();
+        await fake.TornDown.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(OutputState.Stopped, sink.State);
+        Assert.True(sink.Stats.PacketsSent >= 1);
+        Assert.Contains("FLUSH", fake.Methods);
+        Assert.Equal("TEARDOWN", fake.Methods[^1]);
+    }
+
+    [Fact]
     public void ALAC_escape_frame_decodes_signed_stereo_samples()
     {
         var pcm = Enumerable.Range(0, 704).Select(i => unchecked((short)(i * 101 - 32768))).ToArray();

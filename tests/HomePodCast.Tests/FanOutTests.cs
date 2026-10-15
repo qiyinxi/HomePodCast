@@ -43,6 +43,44 @@ public class FanOutTests
     }
 
     [Fact]
+    public void Group_timeline_adapter_preserves_wire_bytes_for_every_channel_mode() => WithoutStalls(() =>
+    {
+        var key = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var modes = new[] { ChannelMode.Stereo, ChannelMode.LeftOnly, ChannelMode.RightOnly };
+        var before = new List<byte[]>();
+        for (int pass = 0; pass < 2; pass++)
+        {
+            using var a = new FakeReceiver(key, 0x12345678);
+            using var b = new FakeReceiver(key, 0x87654321);
+            using var c = new FakeReceiver(key, 0x11223344);
+            var (fifo, signal) = Primed();
+            var source = new GroupTimelineSource(fifo, modes, null, () => null);
+            var sender = new RtpSender([a.Target(modes[0], 65530), b.Target(modes[1], 65520), c.Target(modes[2], 65510)],
+                4630, fifo, 0xFFFFF000u) { GroupSource = pass == 0 ? null : source };
+            if (!Play(sender, 250)) return false;
+            var receivers = new[] { a, b, c };
+            for (int i = 0; i < receivers.Length; i++)
+            {
+                var packets = receivers[i].Audio.Take(20).ToArray();
+                Assert.Equal(20, packets.Length);
+                var bytes = packets.SelectMany(p => p.Bytes).ToArray();
+                if (pass == 0) before.Add(bytes);
+                else Assert.Equal(before[i], bytes); // headers, ciphertext, authentication tags and counter: byte for byte
+                for (int packet = 0; packet < packets.Length; packet++)
+                    Assert.Equal(TestAudio.ExpectedPayload(signal, packet, modes[i]), receivers[i].Decrypt(packets[packet].Bytes));
+            }
+            if (pass == 1)
+            {
+                var reader = source.Timeline.CreateReader(sender.T0);
+                var pcm = new float[704];
+                Assert.True(reader.Read(pcm));
+                Assert.Equal(signal[..704], pcm);
+            }
+        }
+        return true;
+    });
+
+    [Fact]
     public void Single_speaker_wire_bytes_match_the_sender_before_groups_existed() => WithoutStalls(() =>
     {
         // SHA-256 of the first 20 packets as sent by the pre-group RtpSender for exactly these inputs

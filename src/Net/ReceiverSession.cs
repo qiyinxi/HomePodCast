@@ -34,8 +34,9 @@ internal sealed class RealtimeReceiverSession(AirPlayClient client) : IReceiverS
     public void Dispose() => client.Dispose();
 }
 
-internal sealed class LegacyReceiverSession(RaopClient client, AirPlayDevice device) : IReceiverSession
+internal sealed class LegacyReceiverSession(RaopOutputSink output, AirPlayDevice device) : IReceiverSession
 {
+    private RaopClient client => output.Client;
     public ReceiverProtocol Protocol => ReceiverProtocol.Raop;
     public IReadOnlyDictionary<string, object?> Info { get; } = new Dictionary<string, object?> { ["name"] = device.Name, ["model"] = device.Model };
     public int LatencyMs => client.LatencyFrames * 1000 / HomePodCast.Protocol.RaopAudio.SampleRate;
@@ -46,8 +47,8 @@ internal sealed class LegacyReceiverSession(RaopClient client, AirPlayDevice dev
     public string? LostReason => client.LostReason;
     public Action<long>? OnsetSent { get => client.OnsetSent; set => client.OnsetSent = value; }
     public event Action<string>? Lost { add => client.Lost += value; remove => client.Lost -= value; }
-    public void SetVolume(double percent) => client.SetVolume(percent);
-    public void Dispose() => client.Dispose();
+    public void SetVolume(double percent) => output.SetVolume(percent);
+    public void Dispose() => output.Dispose();
 }
 
 public sealed record ReceiverConnectOptions(int LatencyMs, double? VolumePercent, double VolumeCapPercent,

@@ -9,6 +9,7 @@ using HomePodCast.Protocol;
 namespace HomePodCast.Net;
 
 public delegate void RaopPcmReader(Span<short> stereoPcm);
+internal delegate void RaopTimedPcmReader(long sourceTicks, Span<short> stereoPcm);
 public sealed record RaopOptions
 {
     public int LatencyMs { get; init; } = 2000;
@@ -18,6 +19,7 @@ public sealed record RaopOptions
     public IReadOnlyDictionary<string, string>? Txt { get; init; }
     public int? EncryptionOverride { get; init; }
     public RaopPcmReader? ReadAudio { get; init; }
+    internal RaopTimedPcmReader? ReadTimedAudio { get; init; }
     public Action<string>? Log { get; init; }
     internal RSA? RsaPublicKey { get; init; }
 
@@ -269,7 +271,8 @@ public sealed class RaopClient : IDisposable
                     firstSync = false; nextSync += MediaClock.FromMs(1000);
                 }
                 pcm.AsSpan().Clear();
-                _options.ReadAudio?.Invoke(pcm);
+                if (_options.ReadTimedAudio is { } read) read(deadline, pcm);
+                else _options.ReadAudio?.Invoke(pcm);
                 int peak = 0;
                 foreach (short sample in pcm) peak = Math.Max(peak, Math.Abs((int)sample));
                 if (peak > 1311)

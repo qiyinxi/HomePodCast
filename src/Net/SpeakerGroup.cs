@@ -3,7 +3,8 @@ using HomePodCast.Audio;
 namespace HomePodCast.Net;
 
 /// <summary>How to bring up one member of a group, and its offset from the shared volume (percentage points).</summary>
-internal sealed record MemberSetup(string Label, Func<CancellationToken, Task<IGroupMember>> Prepare, int VolumeOffset = 0);
+internal sealed record MemberSetup(string Label, Func<CancellationToken, Task<IGroupMember>> Prepare, int VolumeOffset = 0,
+    string? Id = null);
 
 /// <summary>A member of a group failed; Member says which one.</summary>
 internal sealed class GroupMemberException(string member, Exception inner)
@@ -19,7 +20,7 @@ internal sealed class GroupMemberException(string member, Exception inner)
 /// All-or-nothing: if any member fails to set up, or is lost later, the group fails as a whole and the
 /// caller reconnects every member, so the speakers always restart together on a fresh common timeline.
 /// </summary>
-internal sealed class SpeakerGroup : IDisposable
+internal sealed class SpeakerGroup : IOutputSink
 {
     private readonly MemberSetup[] _setups;
     private readonly IGroupMember?[] _members;
@@ -55,6 +56,18 @@ internal sealed class SpeakerGroup : IDisposable
 
     public double MasterVolume { get; private set; }
 
+    public OutputKind Kind => OutputKind.AirPlay2;
+    public string Id => string.Join("|", _setups.Select(s => s.Id ?? s.Label));
+    public string Name => string.Join(" + ", _setups.Select(s => s.Label));
+    public int MinLatencyMs => (int)Math.Ceiling((_sender?.LatencyFrames ?? 0) * 1000.0 / RtpSender.SampleRate);
+    public OutputState State => Volatile.Read(ref _disposed) != 0 ? OutputState.Stopped
+        : _lost.Task.IsCompleted ? OutputState.Lost : OutputState.Streaming;
+    public OutputStats Stats => new(_sender?.PacketsSent ?? 0, _sender?.RetransmitRequests ?? 0,
+        _sender?.Retransmitted ?? 0, _sender?.RetransmitMisses ?? 0);
+    public TimelineBuffer? Timeline { get; private set; }
+
+    public void SetVolume(double percent, bool mute = false) => SetVolumePercent(mute ? 0 : percent);
+
     public int? ArrivalToRenderMs => _members.Max(m => m?.ArrivalToRenderMs);
 
     /// <summary>
@@ -76,6 +89,13 @@ internal sealed class SpeakerGroup : IDisposable
             await group.EachAsync((m, _) => m.Record(), ct);
 
             // One timeline: same RTP base and T0 for all; per-session keys, SSRCs and sequence numbers.
+            if (source == null)
+            {
+                var timelineSource = new GroupTimelineSource(fifo, members.Select(m => m.Target.Channels).ToArray(),
+                    effects, () => group._sender?.OnsetSent);
+                source = timelineSource;
+                group.Timeline = timelineSource.Timeline;
+            }
             var sender = new RtpSender(members.Select(m => m.Target).ToArray(), members.Max(m => m.LatencyFrames), fifo)
             {
                 Effects = effects, // one chain, run once per packet before the per-speaker encode

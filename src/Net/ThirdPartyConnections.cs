@@ -117,7 +117,7 @@ internal static class ThirdPartyConnections
         var audio = new float[RaopAudio.FramesPerPacket * 2];
         int latency = settings?.CompatibilityLatencyMs ?? 2000;
         if (!ReceiverLatencies.CompatibilityChoices.Contains(latency)) latency = 2000;
-        var client = await RaopClient.ConnectAsync(device.Address, device.RaopPort ?? device.Port, new RaopOptions
+        var output = await RaopOutputSink.ConnectAsync(device.Address, device.RaopPort ?? device.Port, new RaopOptions
         {
             LatencyMs = latency, VolumePercent = options.VolumePercent, VolumeCapPercent = options.VolumeCapPercent,
             Password = options.Password, Txt = device.RaopTxt ?? device.Txt, Log = options.Log,
@@ -127,7 +127,7 @@ internal static class ThirdPartyConnections
                 for (int i = 0; i < pcm.Length; i++) pcm[i] = float.IsFinite(audio[i])
                     ? (short)Math.Clamp((int)Math.Round(audio[i] * 32767), short.MinValue, short.MaxValue) : (short)0;
             },
-        }, ct);
-        return new LegacyReceiverSession(client, device);
+        }, ct, device.DeviceId, device.Name);
+        return new LegacyReceiverSession(output, device);
     }
 }
