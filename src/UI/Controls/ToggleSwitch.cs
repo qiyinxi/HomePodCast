@@ -74,7 +74,7 @@ internal sealed class ToggleSwitch : FluentControl
         var track = TrackSize;
         int h = Math.Max(track.Height + Dp(8), LineHeight(TextStyle.Body) + Dp(4));
         if (string.IsNullOrEmpty(Text)) return new Size(track.Width + Dp(4), h);
-        int text = TextRenderer.MeasureText(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width;
+        int text = TextMeasure.Size(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width;
         return new Size(track.Width + Dp(12) + text + Dp(4), h);
     }
 

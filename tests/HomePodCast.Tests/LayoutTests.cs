@@ -218,6 +218,36 @@ public class LayoutTests
         Assert.True(content.Bottom + row.Padding.Bottom <= row.Height);
     });
 
+    [Fact]
+    public void Controls_collapsed_before_the_window_was_shown_come_back_in_their_place() => Sta.Run(() =>
+    {
+        // 2026-10-15: turning 夜间自动断开 on put its second row above its first. Rows collapsed while the page was built get
+        // their windows only when shown; WinForms then sorted the children after the windows' z-order.
+        using var form = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000), Opacity = 0, ShowInTaskbar = false };
+        var buttons = new[] { "Check", "Install", "Notes", "Skip" }.Select(t => new FluentButton(t)).ToArray();
+        var row = Ui.Row(null, buttons);
+        var stack = new StackPanel();
+        var rows = Enumerable.Range(0, 4).Select(i => new CountingStack { Collapsed = i is 1 or 2 }).ToArray();
+        foreach (var r in rows) r.Controls.Add(new TextBlock($"Row {r.GetHashCode()}"));
+        stack.Controls.Add(row);
+        stack.Controls.AddRange(rows);
+        foreach (var b in buttons.Skip(1)) b.Collapsed = true;
+        form.Controls.Add(stack);
+        form.Show();
+        LayoutPanel.Place(stack, 0, 0, 600, 400);
+
+        rows[2].Collapsed = false; // the later one first, as `a.Collapsed = b.Collapsed = false` does
+        rows[1].Collapsed = false;
+        buttons[3].Collapsed = buttons[2].Collapsed = buttons[1].Collapsed = false;
+        Application.DoEvents();
+
+        Assert.Equal<Control>(buttons, row.Controls.Cast<Control>());
+        Assert.Equal<Control>([row, .. rows], stack.Controls.Cast<Control>());
+        Assert.True(rows[1].Bottom < rows[2].Top);
+        Assert.True(buttons[1].Right < buttons[2].Left && buttons[2].Right < buttons[3].Left);
+        form.Hide();
+    });
+
     private sealed class CountingStack : StackPanel
     {
         public int Applied;

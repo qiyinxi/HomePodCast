@@ -155,14 +155,12 @@ internal sealed class MainWindow : Form, ISurface
         Invalidate(true);
     }
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
         MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
-        PerformLayout();
-        Invalidate(true);
-    }
+    });
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
@@ -213,6 +211,7 @@ internal sealed class MainWindow : Form, ISurface
     {
         _home.UpdateState();
         _mixer.UpdateState();
+        _settings.RefreshReceiverInfo();
     }
 
     /// <summary>An output device was added, removed, enabled, disabled, or the default changed.</summary>
@@ -240,6 +239,9 @@ internal sealed class MainWindow : Form, ISurface
         _home.ShowUpdate();
         _settings.ShowUpdate();
     }
+
+    /// <summary>The .NET runtime this copy started on was found gone: 首页's restart notice.</summary>
+    public void ShowRuntimeNotice() => _home.ShowRuntimeNotice();
 
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
     public void Flush()

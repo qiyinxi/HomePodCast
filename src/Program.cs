@@ -92,17 +92,27 @@ public static class Program
         L.Use(config.Language);
         UI.Theme.Mode = config.Theme;
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
-        Application.Run(Environment.GetCommandLineArgs().Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
-            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout));
-        if (UI.LanguageMenu.RestartRequested)
+        var args = Environment.GetCommandLineArgs();
+        Application.Run(args.Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
+            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout, AppRestart.Resume(args)));
+        // 「立即重启」 after a .NET update (UI/TrayApp.Runtime.cs), or a new UI language.
+        if ((AppRestart.Requested ?? (UI.LanguageMenu.RestartRequested ? new AppRestart.Request("to apply the UI language") : null)) is { } restart)
         {
             // The Store version starts again through its package (Explorer), so the new copy has package identity too.
-            var (file, arguments) = AppEnvironment.Relaunch;
-            Log.Info("restarting to apply the UI language" + (AppEnvironment.IsPackaged ? $": {file} {arguments}" : ""));
+            var (file, arguments) = AppRestart.CommandFor(restart);
+            bool asShellUser = AppRestart.RunsElevated();
+            Log.Info($"restarting {restart.Why}" + (AppEnvironment.IsPackaged || arguments.Length > 0 ? $": {file} {arguments}" : "") +
+                     (asShellUser ? " (as the signed-in user: this copy runs as administrator)" : ""));
             Log.CloseFile(); // the new copy opens the same log file
             single.ReleaseMutex();
             single.Dispose(); // ...and must be able to create the single-instance mutex
-            Process.Start(file, arguments);
+            if (AppRestart.Start(file, arguments, asShellUser) is { } error)
+            {
+                Log.OpenFile(Path.Combine(AppConfig.Directory, AppConfig.LogFileName)); // no new copy holds it
+                Log.Error($"restart: {file} did not start: {error}");
+                Log.CloseFile();
+                return 1;
+            }
         }
         return 0;
     }

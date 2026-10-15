@@ -27,8 +27,10 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <param name="testOsd">Show the volume OSD once running (<c>gui --osd</c>, "muted" for <c>--osd-muted</c>; for testing its look).</param>
     /// <param name="updatedFrom">The version before an update (<c>--updated-from=</c>, passed by the update helper).</param>
     /// <param name="flyoutSignal">Set by a second <c>gui --flyout</c> (a test switch): open the flyout in this running instance.</param>
+    /// <param name="resume">Started again by 「立即重启」 (<c>--resume=</c>, AppRestart): connect as the copy before was (true) or
+    /// not (false), whatever 启动后自动连接 says; null for an ordinary start.</param>
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
-        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null)
+        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null, bool? resume = null)
     {
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
@@ -74,6 +76,7 @@ internal sealed partial class TrayApp : ApplicationContext
         InitRaop();
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
         InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
+        InitRuntimeWatch(resume); // after InitUpdate: its balloon (TrayApp.Runtime.cs)
 
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         NetworkChange.NetworkAddressChanged += (_, _) => _ui.Post(_ =>
@@ -115,7 +118,8 @@ internal sealed partial class TrayApp : ApplicationContext
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
             // In the night window with nobody at the PC (a restart for Windows Update), 夜间自动断开 connects at its end instead.
-            if (Config.AutoConnect && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
+            // After 「立即重启」 (resume): connected again if it was, whatever 启动后自动连接 says, and not if it wasn't.
+            if ((resume ?? Config.AutoConnect) && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
         }
         RefreshDevices();
     }
@@ -163,7 +167,7 @@ internal sealed partial class TrayApp : ApplicationContext
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
         string id = Config.DeviceId;
         string? host = Config.Host;
-        int latency = Config.LatencyMs;
+        int latency = ReceiverSelection?.Value ?? Config.LatencyMs;
         double? volume = Config.Volume;
         int asOf = Controller.VolumeChanges;
         if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
@@ -200,7 +204,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Config.DeviceId = device.DeviceId;
         Config.DeviceName = device.Name;
         Config.Host = device.Address.ToString();
-        if (device.Kind is not (ReceiverKind.HomePod or ReceiverKind.AppleTv))
+        if (device.Kind != ReceiverKind.HomePod)
             {
             string key = RaopPassword.Key(device.DeviceId);
             var previous = Config.ReceiverSettings.GetValueOrDefault(key);
@@ -212,6 +216,7 @@ internal sealed partial class TrayApp : ApplicationContext
                 updated.RealtimeLatencyMs = previous.RealtimeLatencyMs;
                 updated.ArrivalToRenderMs = previous.ArrivalToRenderMs;
                 updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
+                updated.CompatibilityNoticeShown = previous.CompatibilityNoticeShown;
             }
             Config.ReceiverSettings[key] = updated;
         }
@@ -321,18 +326,18 @@ internal sealed partial class TrayApp : ApplicationContext
         using var testRoute = Routing.BeginSyncTestRoute();
         int predicted = LatencyTuner.SoundLagMs(snapshot.EffectiveLatencyMs, Config, snapshot.CaptureExtraMs,
             snapshot.FifoTargetMs, snapshot.Context);
-        var expectedSender = Controller.ActiveSender;
+        var expectedSender = Controller.AudioSessionIdentity;
         using var test = new SyncTestForm(predicted, snapshot.Context.CaptureEndpointId, HasCurrentCalibration,
-            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.ActiveSender, expectedSender));
+            () => IsCalibrationSnapshotCurrent(snapshot) && ReferenceEquals(Controller.AudioSessionIdentity, expectedSender));
 
         // Probe our own share of the latency: Windows mix -> packet leaving the PC.
-        var sender = Controller.ActiveSender;
+        var sender = Controller.AudioSessionIdentity;
         var scheduled = new System.Collections.Concurrent.ConcurrentQueue<long>();
         var local = new List<double>();
         test.ClickScheduled += when => scheduled.Enqueue(when);
         if (sender != null)
         {
-            sender.OnsetSent = sent =>
+            Controller.ObserveAudioOnset(sent =>
             {
                 while (scheduled.TryPeek(out var w) && sent - w > MediaClock.FromMs(400)) scheduled.TryDequeue(out _);
                 if (scheduled.TryDequeue(out var when) && sent >= when)
@@ -340,14 +345,14 @@ internal sealed partial class TrayApp : ApplicationContext
                     double ms = MediaClock.ToMs(sent - when);
                     lock (local) local.Add(ms);
                     Log.Info($"probe: click left the PC {ms:F1} ms after entering the Windows mix " +
-                             $"(+{sender.LatencyFrames * 1000.0 / RtpSender.SampleRate:F0} ms requested playout delay)");
+                             $"(+{snapshot.EffectiveLatencyMs:F0} ms requested playout delay)");
                 }
-            };
+            });
         }
 
         DialogResult result;
         try { result = test.ShowDialog(owner); }
-        finally { if (sender != null) sender.OnsetSent = null; }
+        finally { if (sender != null && ReferenceEquals(Controller.AudioSessionIdentity, sender)) Controller.ObserveAudioOnset(null); }
         double[] localTimes;
         lock (local) localTimes = local.ToArray();
         if (localTimes.Length > 0)
@@ -432,12 +437,15 @@ internal sealed partial class TrayApp : ApplicationContext
         // Our session ends with the sleep: after a long one the speaker's flag is no longer ours (TrayApp.Takeover.cs).
         if (e.Mode == PowerModes.Suspend) OnSuspending();
         if (e.Mode == PowerModes.Resume)
+        {
+            _runtimeWatch?.CheckSoon("after a wake from sleep"); // an update may have replaced .NET before the sleep (TrayApp.Runtime.cs)
             _ui.Post(async _ =>
             {
                 await Task.Delay(3000); // let Wi-Fi come back
                 if (CheckNight()) return; // woken in the night window with nobody there, or after it: 夜间自动断开 decides
                 if (_wantConnected) Connect(ConnectTrigger.Reconnect);
             }, null);
+        }
     }
 
     private void KickIfWanted()
@@ -469,6 +477,7 @@ internal sealed partial class TrayApp : ApplicationContext
             Config.Volume = volume;
             Config.Save();
         }
+        RememberReceiverConnection();
         UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
         _form.UpdateState();
@@ -512,6 +521,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _form.Flush();
         _tray.Visible = false;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        _runtimeWatch?.Dispose();
         DisposeFirewall();
         DisposeUpdate();
         DisposeNightDisconnect();

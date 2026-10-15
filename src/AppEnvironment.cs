@@ -178,12 +178,18 @@ internal static partial class AppEnvironment
     /// removes it at once, while the runtime's loaded DLLs can only be moved aside. A self-contained copy (the Store
     /// package) has its runtime in its own folder, which nothing removes under it.
     /// </summary>
-    internal static bool RuntimeGone(string runtimeFolder, Func<string, bool> fileExists)
+    internal static bool RuntimeGone(string runtimeFolder, Func<string, bool> fileExists) =>
+        IsSharedRuntime(runtimeFolder) && !fileExists(Path.Combine(runtimeFolder.TrimEnd('\\', '/'), "Microsoft.NETCore.App.deps.json"));
+
+    /// <summary>
+    /// <paramref name="runtimeFolder"/> is a version folder of the shared runtime (…\shared\Microsoft.NETCore.App\&lt;version&gt;),
+    /// which a .NET update can remove under a running app; a self-contained copy's runtime is in its own folder.
+    /// </summary>
+    internal static bool IsSharedRuntime(string runtimeFolder)
     {
         var folder = runtimeFolder.TrimEnd('\\', '/');
-        if (folder.Length == 0 || !string.Equals(Path.GetFileName(Path.GetDirectoryName(folder)), "Microsoft.NETCore.App",
-                StringComparison.OrdinalIgnoreCase)) return false;
-        return !fileExists(Path.Combine(folder, "Microsoft.NETCore.App.deps.json"));
+        return folder.Length > 0 && string.Equals(Path.GetFileName(Path.GetDirectoryName(folder)), "Microsoft.NETCore.App",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // ---------------------------------------------------------------- Windows

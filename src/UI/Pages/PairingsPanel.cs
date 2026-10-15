@@ -14,6 +14,7 @@ internal sealed class PairingsPanel : StackPanel
     private readonly Action<string> _forget;
     private readonly TextBlock _header;
     private bool _shown;
+    private IReadOnlyList<PairedDevice>? _shownList;
 
     public PairingsPanel(TrayApp app, TextBlock header) : this(app.Pairings, app.ForgetPairing, header)
     {
@@ -61,6 +62,10 @@ internal sealed class PairingsPanel : StackPanel
             Log.Warn($"pairings: {ex.Message}");
             paired = [];
         }
+        // Read on every visit to 设置; the rows are built again only when the list changed (their windows take about 1.4 ms
+        // each to create on the maintainer's PC, 2026-10-15).
+        if (_shownList != null && paired.SequenceEqual(_shownList)) return;
+        _shownList = paired;
         foreach (Control old in Controls.Cast<Control>().ToList())
         {
             Controls.Remove(old);

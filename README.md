@@ -6,6 +6,35 @@ Streams your Windows PC's sound to a HomePod over AirPlay 2 in real time: a low-
 
 TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a native C# implementation written from scratch: a single exe of about 350 KB, no virtual sound card needed.
 
+## Supported receivers — experimental
+
+Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged.
+
+| Receiver type | Connection | Verification |
+| --- | --- | --- |
+| HomePod | Existing AirPlay 2 realtime | One HomePod 2 on real hardware |
+| Apple TV HD / 4K | AirPlay 2 realtime after PIN pairing | Simulated receiver; hardware untested |
+| Older Apple AirPlay receivers | AirPlay 1 compatibility | shairport-sync in CI; hardware untested |
+| Third-party AirPlay 2 | Realtime, then advertised AirPlay 1, then buffered; remembers the last working mode | shairport-sync AirPlay 2 + nqptp in CI; hardware untested |
+| Third-party AirPlay 1 | AirPlay 1 compatibility | shairport-sync classic in CI |
+| Unknown receivers | Realtime → buffered → AirPlay 1, with each refusal logged | Protocol fakes and software receivers only |
+
+| Mode | Recommended minimum | Default | Choices / range |
+| --- | --- | --- | --- |
+| HomePod realtime | 105 ms with its usual 85 ms processing time | 120 ms; Gaming 105 ms | Existing processing time + 15 … 500 ms |
+| Apple TV realtime | Receiver processing time + 30 ms | 200 ms | Processing time + 15 … 500 ms |
+| Third-party realtime | max(150 ms, processing time + 50 ms) | 250 ms | max(120 ms, processing time + 30 ms) … 500 ms |
+| Third-party buffered | 1.0 s | 2.0 s | 1.0 / 1.5 / 2.0 s |
+| AirPlay 1 compatibility | 1.0 s; AirPort Express 2.0 s | 2.0 s | 1.0 / 1.5 / 2.0 s |
+
+Without a reported third-party processing time, the estimate is 150 ms and the offered floor is 200 ms. Values below the recommendation show a dropout warning. Receivers may ignore the requested latency; these defaults are software-tested starting points.
+
+Settings → Speaker info offers a per-device connection override. Compatibility modes replace HomePod scene buttons with their own latency selector; their settings do not overwrite HomePod scenes. The active protocol and reported processing time appear in Settings. On first compatibility connection, a one-time notice explains the roughly two-second delay.
+
+Compatibility mode is suited to music, with too much delay for gaming. The browser extension's picture-delay limit remains **2000 ms**; a greater sound delay cannot be fully matched. The A/V sync test can still calibrate the actual offset. Third-party receivers cannot join multi-speaker groups.
+
+FairPlay-protected and MFi-authenticated-only receivers are unsupported. In particular, an XGIMI Z6X was checked by handshake only: its audio session requires FairPlay, so it is **unsupported**, not a verified playback device. Do not infer compatibility from an emulated Apple TV model name. For other receivers, reports should include `HomePodCast.exe scan --txt`, the selected mode, the actual connection delay and the refused request from the log.
+
 ## Measurements
 
 | Scenario | Value |

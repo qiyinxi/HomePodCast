@@ -163,5 +163,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "O atraso do som excede o limite da imagem de 2000 ms. A imagem não pode ser atrasada o suficiente para coincidir."
   }
 }

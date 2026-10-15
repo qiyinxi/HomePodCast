@@ -76,5 +76,8 @@
         "content": "$1"
       }
     }
+  },
+  "hintDelayLimit": {
+    "message": "De geluidsvertraging overschrijdt de beeldlimiet van 2000 ms. Het beeld kan niet voldoende worden vertraagd om gelijk te lopen."
   }
 }

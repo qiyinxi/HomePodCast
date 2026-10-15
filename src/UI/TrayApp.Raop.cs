@@ -63,6 +63,7 @@ internal sealed partial class TrayApp
         if (settings.ProtocolOverride == protocol) return;
         settings.ProtocolOverride = protocol;
         Config.Save();
+        _form.UpdateState(); RaiseStateChanged();
         if (_wantConnected) Connect(ConnectTrigger.Reconnect);
     }
 

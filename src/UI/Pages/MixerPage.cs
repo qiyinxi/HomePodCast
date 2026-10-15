@@ -7,8 +7,8 @@ namespace HomePodCast.UI.Pages;
 /// 混音器: the speaker's volume, which output device is captured (采集设备: the Windows default output, or a
 /// device of the user's choice for routing by sound card), where apps without their own rule go (HomePod /
 /// 本机 / 两者) and what routing does now, and one bordered row per app on the captured device with a live
-/// level meter, its destination, volume and mute. App rows are created while the page is visible; everything
-/// is sized for the page's DPI.
+/// level meter, its destination, volume and mute. App rows are created while the page is visible and kept, without
+/// their audio sessions, while it is hidden; everything is sized for the page's DPI.
 /// </summary>
 internal sealed class MixerPage : ScrollPage
 {
@@ -285,8 +285,28 @@ internal sealed class MixerPage : ScrollPage
         _active = false;
         _meterTimer.Stop();
         _refreshTimer.Stop();
-        ClearRows();
+        ReleaseSessions();
     }
+
+    /// <summary>
+    /// Leaving the page lets go of the apps' audio sessions but keeps their rows: shown again with the same apps, the rows
+    /// take the fresh sessions (<see cref="RefreshApps"/>) instead of being built again. 2026-10-15 on the maintainer's PC:
+    /// a window handle takes about 1.4 ms to create, and five apps' rows have 70 of them, 100 of the 160 ms that switching
+    /// to 混音器 took.
+    /// </summary>
+    private void ReleaseSessions()
+    {
+        foreach (var row in _byKey.Values)
+        {
+            row.FlushSend();
+            row.ResetMeter();
+        }
+        foreach (var a in _apps) a.Dispose();
+        _apps = [];
+    }
+
+    /// <summary>The apps the rows show, in their order.</summary>
+    private IEnumerable<string> RowKeys() => _rows.Controls.OfType<AppRow>().Select(r => r.Key);
 
     private void ClearRows()
     {
@@ -301,9 +321,12 @@ internal sealed class MixerPage : ScrollPage
 
     // ---------------------------------------------------------------- app rows
 
+    /// <summary>The apps playing on a device (null: the default output); tests give made-up ones.</summary>
+    internal Func<string?, List<AppAudio>> FindApps { get; set; } = AppAudio.Enumerate;
+
     private void RefreshApps()
     {
-        var fresh = AppAudio.Enumerate(_app.Routing.CaptureDeviceId); // the apps on the captured device
+        var fresh = FindApps(_app.Routing.CaptureDeviceId); // the apps on the captured device
 #if DEBUG
         if (DemoApps)
         {
@@ -315,21 +338,35 @@ internal sealed class MixerPage : ScrollPage
         foreach (var own in fresh.Where(IsOwn)) own.Dispose();
         fresh.RemoveAll(IsOwn);
         _empty.Collapsed = fresh.Count > 0; // also when nothing changed: the first refresh may find no apps at all
-        if (fresh.Select(a => a.Key).SequenceEqual(_apps.Select(a => a.Key)))
+        if (fresh.Select(a => a.Key).SequenceEqual(RowKeys()))
         {
-            foreach (var a in fresh) a.Dispose();
+            if (_apps.Count == 0)
+            {
+                // Shown again with the apps it was left with (ReleaseSessions): the same rows, on the fresh sessions.
+                foreach (var app in fresh) _byKey[app.Key].Bind(app);
+                _apps = fresh;
+            }
+            else
+            {
+                foreach (var a in fresh) a.Dispose();
+            }
             SyncValues();
             return;
         }
+        // The page lays the new rows out once, at their width (each Add laid the list out, and the new row at a default 200 px).
         SuspendLayout();
+        _rows.SuspendLayout();
         ClearRows();
         _apps = fresh;
         foreach (var app in fresh)
         {
             var row = new AppRow(app, this);
             _byKey[app.Key] = row;
+            row.SuspendLayout();
             _rows.Controls.Add(row);
+            row.ResumeLayout(false);
         }
+        _rows.ResumeLayout(false);
         ResumeLayout(false);
         LayoutPanel.Relayout(_rows);
     }
@@ -470,7 +507,7 @@ internal sealed class MixerPage : ScrollPage
     /// </summary>
     private sealed class AppRow : Card
     {
-        private readonly AppAudio _app;
+        private AppAudio _app; // the sessions of one process (Key); a fresh enumeration's after the page was left (Bind)
         private readonly MixerPage _page;
         private readonly AppIconBox _icon;
         private readonly TextBlock _name;
@@ -490,6 +527,7 @@ internal sealed class MixerPage : ScrollPage
         public AppRow(AppAudio app, MixerPage page)
         {
             _app = app;
+            Key = app.Key;
             _page = page;
             Padding = new Padding(12, 8, 12, 8);
             _icon = new AppIconBox(app.Icon);
@@ -550,6 +588,14 @@ internal sealed class MixerPage : ScrollPage
             };
             _sendWait.Tick += FlushSend;
         }
+
+        /// <summary>The process (AppAudio.Key): its name, icon and destination stay this row's.</summary>
+        public string Key { get; }
+
+        /// <summary>The same process's sessions from a fresh enumeration (the old ones were let go when the page was left).</summary>
+        public void Bind(AppAudio app) => _app = app;
+
+        public void ResetMeter() => _meter.Reset();
 
         /// <summary>Save (and log) a HomePod level the slider set, if it has not been yet.</summary>
         public void FlushSend()

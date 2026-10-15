@@ -194,11 +194,11 @@ internal sealed partial class VolumeOsd : Form
         var nameFont = Theme.Font(TextStyle.Caption, dpi);
         var valueFont = Theme.Font(TextStyle.BodyStrong, dpi);
         string value = _percent is { } v ? $"{Math.Round(v):0}" : "--";
-        int lineH = TextRenderer.MeasureText("Ag", valueFont, Size.Empty, TextFlags.Measure).Height;
+        int lineH = TextMeasure.Size("Ag", valueFont, Size.Empty, TextFlags.Measure).Height;
         int barT = Dp(4), barGap = Dp(7);
         int top = (Height - (lineH + barGap + barT)) / 2;
 
-        int valueW = TextRenderer.MeasureText("100", valueFont, Size.Empty, TextFlags.Measure).Width;
+        int valueW = TextMeasure.Size("100", valueFont, Size.Empty, TextFlags.Measure).Width;
         TextRenderer.DrawText(g, "HomePod", nameFont, new Rectangle(x, top, right - x - valueW - gap, lineH), p.TextSecondary, TextFlags.Line);
         TextRenderer.DrawText(g, value, valueFont, new Rectangle(right - valueW, top, valueW, lineH), _muted ? p.TextDisabled : p.Text,
             TextFlags.Line | TextFormatFlags.Right);

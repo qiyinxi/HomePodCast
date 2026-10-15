@@ -53,6 +53,16 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   tables in `src/i18n/*.json`. Add, rename or remove the entry in every table: `LocalizationTests` fails on a missing
   one and lists unused ones in its output (it doesn't fail on those), so remove a text's entries with the text. No
   brackets that can wrap alone at a line start in CJK text.
+- **Names of settings and controls** use the established professional term, as audio software and Windows itself say
+  it, with the English term in parentheses where it helps. Explanations go in the description line or the tooltip,
+  never in the name. Invented descriptive phrases are easy to misread. The maintainer's examples, 2026-10-15:
+  - 「麦克风监听」, not 「使用麦克风」 or 「把麦克风混进推流」;
+  - 衰减（Room Size）, 高频阻尼（Damping）, 干湿比（Wet/Dry）, 预延迟（Pre-delay）, not 「房间大小」 or 「混响比例」.
+- **Pages stay small.** Each page in the left navigation holds a limited number of features. A crowded page is worse
+  than one more page, so a feature that doesn't belong gets its own page rather than another section. That is why
+  设置 sits at the bottom of the nav rail. Example (2026-10-15): the output equalizer leaves 「麦克风与音效」 for a page
+  of its own, and doesn't move into 混音器. Keep long explanations short or collapsed, so that controls further down
+  stay visible.
 - **Bilingual documents** (README, release notes, RELEASING.md): English first, then 简体中文 with the same content.
 - **Comments** follow the surrounding code: say why, and date field observations ("2026-10-12: …") that a rule rests on.
 - **Commits**: a short subject line (under 60 characters, what changed, e.g. "Network hint: count possible dropouts"),
@@ -80,9 +90,33 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
 - **Your worktrees.** Claude works in `.claude/worktrees/<name>`, Codex in `.worktrees/<name>` or its own worktree
   folder. Don't edit, build, commit in or remove a worktree the other agent made. Remove your own
   (`git worktree remove`) once its PR is merged or closed. The main checkout stays on `dev` (hard rules above).
-- **Look before you start.** Run `git fetch` and `gh pr list --state open` first. If an open PR or a fresh branch of the
-  other agent covers the same feature or the same files, don't start a parallel one: tell the maintainer, and build
-  on it only if they say so.
+- **The board.** The work items live on the maintainer's private GitHub project board, «HomePodCast» (project 1 of
+  qiyinxi: https://github.com/users/qiyinxi/projects/1, since 2026-10-15). Its items are drafts and stay drafts:
+  never convert one to an issue, because the repository is public. Read the board with
+  `gh project item-list 1 --owner qiyinxi --format json`; the gh token needs the `project` scope.
+  - Fields: Status (待办 / 进行中 / 等你决定 / 已完成 / 搁置), 负责人 (Claude / Codex / 维护者), 领域, 优先级, 链接.
+  - Item bodies are in Chinese, under the headings 背景 / 需求 / 相关. An item for the other agent also gets a
+    `给 Codex 的提示词` (or `给 Claude 的提示词`) section, in English.
+  - **Bugs first, and without waiting** (the maintainer, 2026-10-15). A bug is something broken: a regression, a crash
+    or a CI failure. Bugs are Claude's, whoever's code they are in. Claude fixes them right away, unless the
+    maintainer says not to, and puts them on the board with Claude as 负责人 and the status 进行中.
+  - Codex adds the bugs it finds to the board, with 负责人 Claude, and doesn't fix them, unless the maintainer assigns
+    one to Codex. Codex still keeps its own open PRs green.
+  - **Requirements wait for the maintainer.** A requirement is a new feature, a change of behaviour or an idea. It goes
+    on the board first, with no 负责人 and the status 待办. Then ask the maintainer whether Claude or Codex does it,
+    and start nothing (no subagents either) until they have assigned it. Work the maintainer asked for in your own
+    session counts as assigned. When it's unclear whether something is a bug or a requirement, ask.
+  - A question only the maintainer can answer gets the status 等你决定.
+  - When you start an assigned item, set it to 进行中. When it is finished, set 已完成 and add the result and links to its
+    body.
+  - Don't archive items. Views keep finished work apart (2026-10-15):
+    - 「待办与进行中」 (table) and 「看板」 (board) hide 已完成 and 搁置;
+    - 「等你决定」 lists the questions for the maintainer;
+    - 「已完成与搁置」 holds the rest.
+    The status alone decides which view an item is in.
+- **Look before you start.** Run `git fetch` and `gh pr list --state open` and read the board first. If an open PR, a
+  fresh branch or a 进行中 item of the other agent covers the same feature or the same files, don't start a parallel
+  one: tell the maintainer, and build on it only if they say so.
 - **Claim with a draft PR.** Push the branch and open a draft PR to `dev` with your first commit. Its description
   gives the scope and the files it will change, so the other agent can see the area is taken. Mark it ready for review
   when CI is green.
@@ -104,8 +138,8 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
 - **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
   and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
 - **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
-  `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order. Progress goes in
-  the PRs, not in the plan.
+  `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order, and it gets a
+  board item that links to it. Progress goes in the PRs and on the board, not in the plan.
 - **Real speakers, one agent at a time.** Only the agent the maintainer asked, in its own session, talks to the HomePod
   or any other speaker, even with `stream --silent`. Subagents never do; their tests stay with the in-process fakes.
 

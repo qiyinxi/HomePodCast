@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace HomePodCast.UI.Controls;
 
@@ -74,6 +75,12 @@ internal abstract class FluentControl : Control
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Surface);
 
+    protected override void WndProc(ref Message m)
+    {
+        LayoutPanel.KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
+
     protected override void OnMouseEnter(EventArgs e)
     {
         _hover = true;
@@ -125,10 +132,15 @@ internal abstract class FluentControl : Control
         base.OnEnabledChanged(e);
     }
 
+    /// <summary>
+    /// Only a repaint: the window lays itself out once at the new DPI (MainWindow.OnDpiChanged and the dialogs; WinForms'
+    /// font scaling for the others). Windows sends this to every child window, top-down, after the window's WM_DPICHANGED;
+    /// asking for a layout here laid the whole page out once per control. 2026-10-15, the main window moved between the
+    /// maintainer's 150 % and 100 % monitors: about 8 s 「未响应」 per crossing (282 page layouts, 227 000 text measurements).
+    /// </summary>
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
-        RequestLayout();
         Invalidate();
     }
 
@@ -150,7 +162,7 @@ internal abstract class FluentControl : Control
     }
 
     /// <summary>Single-line text height for a style.</summary>
-    protected int LineHeight(TextStyle style) => TextRenderer.MeasureText("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
+    protected int LineHeight(TextStyle style) => TextMeasure.Size("Ag国", StyleFont(style), Size.Empty, TextFlags.Measure).Height;
 }
 
 internal static class TextFlags
@@ -257,10 +269,15 @@ internal abstract class LayoutPanel : Panel
         return new Size(width, Arrange(width, apply: false));
     }
 
+    /// <summary>Tests: called on this thread for every container (page, card, row) that places its children.</summary>
+    [ThreadStatic] internal static Action<Control>? Arranged;
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         // Not while a subclass is still being built (Controls.Add lays out): only once it is on a parent.
-        if (Width > 0 && Parent != null) Arrange(Width, apply: true);
+        if (Width <= 0 || Parent == null) return;
+        Arranged?.Invoke(this);
+        Arrange(Width, apply: true);
     }
 
     protected virtual void OnThemeChanged() => Invalidate();
@@ -277,6 +294,28 @@ internal abstract class LayoutPanel : Panel
     }
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
+
+    protected override void WndProc(ref Message m)
+    {
+        KeepChildOrder(ref m);
+        base.WndProc(ref m);
+    }
+
+    /// <summary>
+    /// A container's order of children is its layout order, and stays as the code set it. When a child window's z-order
+    /// changes (WM_WINDOWPOSCHANGED), WinForms re-sorts the parent's children to match it, and the window of a row collapsed
+    /// while the page was built is created when the row is first shown, after the last earlier sibling that already has one.
+    /// 2026-10-15: turning 设置 →「夜间自动断开」 on put 「闲置多久后断开」 above 「时段」 (the second row was shown first).
+    /// Marked SWP_NOZORDER, the message leaves the order alone (our children never overlap).
+    /// </summary>
+    internal static void KeepChildOrder(ref Message m)
+    {
+        const int WM_WINDOWPOSCHANGED = 0x0047, SWP_NOZORDER = 0x0004;
+        if (m.Msg != WM_WINDOWPOSCHANGED || m.LParam == IntPtr.Zero) return;
+        int offset = 2 * IntPtr.Size + 16; // WINDOWPOS: hwnd, hwndInsertAfter, x, y, cx, cy, flags
+        int flags = Marshal.ReadInt32(m.LParam, offset);
+        if ((flags & SWP_NOZORDER) == 0) Marshal.WriteInt32(m.LParam, offset, flags | SWP_NOZORDER);
+    }
 
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
@@ -305,6 +344,17 @@ internal abstract class LayoutPanel : Panel
 
     /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
     public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);
+
+    /// <summary>
+    /// A window's WM_DPICHANGED (<paramref name="scale"/>: base.OnDpiChanged and the window's own font and sizes for the new
+    /// DPI), with one layout at the end. Otherwise the font that WinForms and the window set reaches every control, and each
+    /// control asks its container for a layout: every card and row laid out again, once per control below it.
+    /// </summary>
+    public static void ScaleForDpi(Form window, Action scale)
+    {
+        using (BatchLayout(window)) scale();
+        window.Invalidate(true);
+    }
 
     private sealed class LayoutBatch : IDisposable
     {
@@ -338,19 +388,24 @@ internal abstract class LayoutPanel : Panel
     }
 
     /// <summary>Measure and position everything again, from the outermost layout container up from <paramref name="from"/>.</summary>
-    public static void Relayout(Control? from)
+    public static void Relayout(Control? from) => RootOf(from)?.PerformLayout();
+
+    /// <summary>
+    /// <see cref="BatchLayout"/> for the page (or dialog) <paramref name="from"/> is on: changes that each ask for a
+    /// <see cref="Relayout"/> (texts, collapsed lines) get one layout of the page at the end.
+    /// </summary>
+    public static IDisposable BatchRelayout(Control from) => BatchLayout(RootOf(from) ?? from);
+
+    /// <summary>The outermost layout container up from <paramref name="from"/>: its page, dialog or window.</summary>
+    private static Control? RootOf(Control? from)
     {
         Control? root = null;
         for (var c = from; c != null; c = c.Parent)
         {
-            if (c is ScrollPage or ILayoutRoot)
-            {
-                root = c;
-                break;
-            }
+            if (c is ScrollPage or ILayoutRoot) return c;
             if (c is LayoutPanel) root = c;
         }
-        root?.PerformLayout();
+        return root;
     }
 }
 
@@ -583,6 +638,7 @@ internal class ScrollPage : Panel, ISurface
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (Content is null) return; // AutoScroll lays out during construction
+        LayoutPanel.Arranged?.Invoke(this);
         int scrollBar = SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi);
         int width = Math.Max(0, Math.Min(Width - scrollBar, Theme.Dp(MaxContentWidth, DeviceDpi)));
         Content.Inset = Width < Theme.Dp(640, DeviceDpi)
@@ -593,12 +649,6 @@ internal class ScrollPage : Panel, ISurface
         int left = Math.Max(0, (Width - scrollBar - width) / 2);
         LayoutPanel.Place(Content, left + pos.X, pos.Y, width, height);
         base.OnLayout(levent);
-    }
-
-    protected override void OnDpiChangedAfterParent(EventArgs e)
-    {
-        base.OnDpiChangedAfterParent(e);
-        PerformLayout();
     }
 
     protected override void Dispose(bool disposing)
