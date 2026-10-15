@@ -130,6 +130,49 @@ public class DlnaDiscoveryTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Withdrawal_during_description_fetch_does_not_resurrect_renderer(bool byeBye)
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        renderer.Delays["Description"] = TimeSpan.FromMilliseconds(100);
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var reply = Task.Run(async () =>
+        {
+            var search = await responder.ReceiveAsync(guard.Token);
+            await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri)), search.RemoteEndPoint, guard.Token);
+            while (renderer.Requests.IsEmpty) await Task.Delay(5, guard.Token);
+            string withdrawal = byeBye ? ByeBye() : Advertisement(renderer.DescriptionUri).Replace("max-age=1800", "max-age=0");
+            await responder.SendAsync(Encoding.ASCII.GetBytes(withdrawal), search.RemoteEndPoint, guard.Token);
+        });
+        Assert.Empty(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!));
+        await reply;
+    }
+
+    [Fact]
+    public async Task New_alive_after_byebye_can_complete_while_old_description_is_pending()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        renderer.Delays["Description"] = TimeSpan.FromMilliseconds(100);
+        using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var reply = Task.Run(async () =>
+        {
+            var search = await responder.ReceiveAsync(guard.Token);
+            byte[] alive = Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri));
+            await responder.SendAsync(alive, search.RemoteEndPoint, guard.Token);
+            while (renderer.Requests.IsEmpty) await Task.Delay(5, guard.Token);
+            await responder.SendAsync(Encoding.ASCII.GetBytes(ByeBye()), search.RemoteEndPoint, guard.Token);
+            await responder.SendAsync(alive, search.RemoteEndPoint, guard.Token);
+        });
+        Assert.Single(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!));
+        await reply;
+    }
+
+    [Theory]
     [InlineData("LOCATION: http://192.0.2.1/description.xml")]
     [InlineData("LOCATION: http://user:pass@127.0.0.1/description.xml")]
     [InlineData("CACHE-CONTROL: max-age=-1")]
@@ -155,8 +198,7 @@ public class DlnaDiscoveryTests
         cache.Add(device with { Name = "Updated name" }, now.AddSeconds(20), revision);
         Assert.Equal("Updated name", Assert.Single(cache.Devices(now)).Name);
         Assert.Empty(cache.Devices(now.AddSeconds(21)));
-        string bye = "NOTIFY * HTTP/1.1\r\nNT: urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
-            + "NTS: ssdp:byebye\r\nUSN: uuid:fake-renderer::urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n";
+        string bye = ByeBye();
         Assert.True(DlnaDiscovery.TryParseAdvertisement(Encoding.ASCII.GetBytes(bye), IPAddress.Loopback, out var advertisement));
         Assert.True(advertisement.ByeBye);
         cache.Remove(advertisement.Udn, advertisement.Address);
@@ -187,6 +229,9 @@ public class DlnaDiscoveryTests
     internal static string Advertisement(Uri location) => "HTTP/1.1 200 OK\r\n"
         + "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\nUSN: uuid:fake-renderer::urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
         + $"LOCATION: {location}\r\nCACHE-CONTROL: max-age=1800\r\n\r\n";
+
+    private static string ByeBye() => "NOTIFY * HTTP/1.1\r\nNT: urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
+        + "NTS: ssdp:byebye\r\nUSN: uuid:fake-renderer::urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n";
 
     private static DlnaDevice Parse(string xml) => DlnaDevice.ParseDescription(Encoding.UTF8.GetBytes(xml),
         IPAddress.Loopback, new Uri("http://127.0.0.1:12345/device/description.xml"));

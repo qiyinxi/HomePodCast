@@ -100,14 +100,14 @@ internal static class DlnaDiscovery
                     var packet = await socket.ReceiveAsync(deadline.Token).ConfigureAwait(false);
                     if (!TryParseAdvertisement(packet.Buffer, packet.RemoteEndPoint.Address, out var advertisement)) continue;
                     if (Interlocked.Increment(ref advertisements) > MaxAdvertisements) continue;
-                    if (advertisement.ByeBye)
+                    if (advertisement.ByeBye || advertisement.Expires <= DateTimeOffset.UtcNow)
                     {
                         cache.Remove(advertisement.Udn, advertisement.Address);
                         continue;
                     }
-                    string key = $"{advertisement.Address}|{advertisement.Udn}|{advertisement.Location}";
-                    if (!pending.TryAdd(key, 0)) continue;
                     long revision = cache.ObserveAlive(advertisement.Udn, advertisement.Address);
+                    string key = $"{advertisement.Address}|{advertisement.Udn}|{advertisement.Location}|{revision}";
+                    if (!pending.TryAdd(key, 0)) continue;
                     var bind = ((IPEndPoint)socket.Client.LocalEndPoint!).Address;
                     var client = clients.GetValueOrDefault(bind) ?? clients.Values.FirstOrDefault();
                     if (client is not null) fetches.Add(FetchAsync(client, advertisement, key, revision));
@@ -203,9 +203,7 @@ internal static class DlnaDiscovery
             lock (_gate)
             {
                 var key = (udn.ToUpperInvariant(), address);
-                long revision = _revisions.GetValueOrDefault(key) + 1;
-                _revisions[key] = revision;
-                return revision;
+                return _revisions.GetValueOrDefault(key);
             }
         }
 

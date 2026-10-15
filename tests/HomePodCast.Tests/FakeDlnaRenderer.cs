@@ -27,6 +27,7 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
     internal bool Muted { get; set; }
     internal string? DescriptionOverride { get; set; }
     internal Func<Uri, CancellationToken, Task>? OnPlayAsync { get; set; }
+    internal Func<string, CancellationToken, Task>? AfterActionAsync { get; set; }
     internal Uri DescriptionUri { get; }
     internal DlnaDevice Device => DlnaDevice.ParseDescription(Encoding.UTF8.GetBytes(Description), IPAddress.Loopback, DescriptionUri);
     internal string Description => DescriptionOverride ?? DlnaDiscoveryTests.Description(
@@ -67,6 +68,7 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
                 Requests.Enqueue(new(method, path, soapAction, body));
                 if (method == "GET" && path == "/description.xml")
                 {
+                    if (Delays.TryGetValue("Description", out var descriptionDelay)) await Task.Delay(descriptionDelay, _stop.Token);
                     await ReplyAsync(stream, 200, Description, _stop.Token);
                     return;
                 }
@@ -107,6 +109,7 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
                     case "SetMute": Muted = Arg("DesiredMute") == "1"; break;
                     default: throw new InvalidOperationException($"Unexpected fake action {action}.");
                 }
+                if (AfterActionAsync is { } afterAction) await afterAction(action, _stop.Token);
                 await ReplyAsync(stream, 200, Envelope(result), _stop.Token);
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

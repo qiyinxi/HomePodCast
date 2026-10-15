@@ -27,6 +27,8 @@ internal static class DlnaCli
         }
         bool scan = args.Contains("--scan"), silent = args.Contains("--silent");
         string? udn = Opt("--udn"), capture = Opt("--capture");
+        if (capture != null && string.IsNullOrWhiteSpace(capture))
+            throw new ArgumentException("--capture requires a nonempty endpoint ID.");
         int seconds = int.Parse(Opt("--seconds") ?? "15", CultureInfo.InvariantCulture);
         double volume = double.Parse(Opt("--volume") ?? "10", CultureInfo.InvariantCulture);
         double cap = double.Parse(Opt("--cap") ?? "25", CultureInfo.InvariantCulture);

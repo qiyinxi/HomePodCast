@@ -28,8 +28,10 @@ internal sealed class DlnaClient : IAsyncDisposable
     private readonly object _lifecycle = new();
     private Task? _monitor, _dispose;
     private int _stopping;
+    private int _losing;
     private double _gain;
     private bool _remoteVolume = true, _remoteMute = true, _assigned;
+    private string _previousUri = "";
     private DlnaStreamServer? _server;
 
     private DlnaClient(DlnaDevice device, DlnaClientOptions options, CancellationToken ct)
@@ -53,6 +55,8 @@ internal sealed class DlnaClient : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options.ReadAudio);
         ArgumentNullException.ThrowIfNull(options.IsPrivateNetwork);
         ValidateVolume(options.VolumePercent, options.VolumeCapPercent);
+        if (options.PreferredFormat is { } format && !Enum.IsDefined(format) || !Enum.IsDefined(options.Framing))
+            throw new ArgumentOutOfRangeException(nameof(options));
         if (options.PollInterval < TimeSpan.FromMilliseconds(20) || options.PollInterval > TimeSpan.FromSeconds(30)
             || options.PullTimeout < TimeSpan.FromMilliseconds(20) || options.PullTimeout > TimeSpan.FromMinutes(2))
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -77,10 +81,13 @@ internal sealed class DlnaClient : IAsyncDisposable
         // Inspect before changing volume or URI: a failed inspection never authorizes takeover.
         string state = await _control.GetTransportInfoAsync(ct).ConfigureAwait(false);
         string previousUri = await _control.GetMediaInfoAsync(ct).ConfigureAwait(false);
-        if (!_options.TakeOver && (state is "PLAYING" or "PAUSED_PLAYBACK" or "TRANSITIONING" || previousUri.Length > 0 && state != "STOPPED" && state != "NO_MEDIA_PRESENT"))
+        if (!_options.TakeOver && !IsAvailable(state))
             throw new InvalidOperationException("The DLNA renderer is in use; explicit takeover is required.");
+        _previousUri = previousUri;
         Format = SelectFormat(await _control.GetProtocolInfoAsync(ct).ConfigureAwait(false), _options.PreferredFormat);
-        await SetVolumeAsync(_options.VolumePercent, _options.Muted, ct).ConfigureAwait(false);
+        // During explicit takeover, never unmute the previous content: an unsupported volume action
+        // only attenuates our PCM and cannot cap somebody else's currently playing media.
+        await SetVolumeAsync(_options.VolumePercent, true, ct).ConfigureAwait(false);
         _server = new DlnaStreamServer(new(_options.LocalAddress, _rendererAddress, Format, ReadAudio, _options.IsPrivateNetwork)
         {
             Framing = _options.Framing,
@@ -88,8 +95,10 @@ internal sealed class DlnaClient : IAsyncDisposable
         _server.Start();
         // Some renderers prefetch before SetAVTransportURI/Play returns. Serve bounded PCM immediately;
         // waiting for the SOAP reply here would deadlock those renderers.
+        await RequireOwnershipAsync(ct).ConfigureAwait(false);
         _assigned = true;
         await _control.SetAvTransportUriAsync(StreamUri, Metadata(StreamUri, Format), ct).ConfigureAwait(false);
+        await SetVolumeAsync(_options.VolumePercent, _options.Muted, ct).ConfigureAwait(false);
         await _control.PlayAsync(ct).ConfigureAwait(false);
         await StreamServer.FirstGetTicks.WaitAsync(_options.PullTimeout, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
@@ -106,16 +115,41 @@ internal sealed class DlnaClient : IAsyncDisposable
             Volatile.Write(ref _gain, 0);
             double capped = Math.Min(percent, _options.VolumeCapPercent);
             if (_remoteVolume)
-                try { await _control.SetVolumeAsync((int)Math.Floor(capped), linked.Token).ConfigureAwait(false); }
+                try
+                {
+                    await RequireOwnershipAsync(linked.Token).ConfigureAwait(false);
+                    await _control.SetVolumeAsync((int)Math.Floor(capped), linked.Token).ConfigureAwait(false);
+                }
                 catch (DlnaActionException ex) when (ex.IsUnsupportedAction) { _remoteVolume = false; }
             if (_remoteMute)
-                try { await _control.SetMuteAsync(muted, linked.Token).ConfigureAwait(false); }
+                try
+                {
+                    await RequireOwnershipAsync(linked.Token).ConfigureAwait(false);
+                    await _control.SetMuteAsync(muted, linked.Token).ConfigureAwait(false);
+                }
                 catch (DlnaActionException ex) when (ex.IsUnsupportedAction) { _remoteMute = false; }
+            await RequireOwnershipAsync(linked.Token).ConfigureAwait(false);
             // Remote and digital volume are alternatives. Digital mute remains available even when
             // the renderer omits RenderingControl; authentication/network errors never trigger fallback.
             Volatile.Write(ref _gain, muted ? 0 : _remoteVolume ? 1 : capped / 100);
         }
         finally { _commands.Release(); }
+    }
+
+    private async Task RequireOwnershipAsync(CancellationToken ct)
+    {
+        if (!_assigned)
+        {
+            if (_options.TakeOver) return;
+            string state = await _control.GetTransportInfoAsync(ct).ConfigureAwait(false);
+            string uri = await _control.GetMediaInfoAsync(ct).ConfigureAwait(false);
+            if (IsAvailable(state) && uri == _previousUri) return;
+            Lose("DLNA renderer became busy during connection.");
+            throw new InvalidOperationException("The DLNA renderer became busy; explicit takeover is required.");
+        }
+        if (await _control.GetMediaInfoAsync(ct).ConfigureAwait(false) == StreamUri.AbsoluteUri) return;
+        Lose("DLNA renderer was taken over by another controller.");
+        throw new InvalidOperationException("The DLNA session no longer owns this renderer.");
     }
 
     private void ReadAudio(long ticks, Span<short> stereo)
@@ -149,10 +183,11 @@ internal sealed class DlnaClient : IAsyncDisposable
 
     private void Lose(string reason)
     {
+        if (Interlocked.Exchange(ref _losing, 1) != 0) return;
         Volatile.Write(ref _gain, 0);
-        _lost.TrySetResult(reason);
         _server?.Dispose();
         _stop.Cancel();
+        _lost.TrySetResult(reason);
     }
 
     public Task StopAsync() => DisposeAsync().AsTask();
@@ -200,6 +235,8 @@ internal sealed class DlnaClient : IAsyncDisposable
             throw new ArgumentOutOfRangeException(nameof(percent));
     }
 
+    private static bool IsAvailable(string state) => state is "STOPPED" or "NO_MEDIA_PRESENT";
+
     internal static DlnaAudioFormat SelectFormat(IEnumerable<string> protocols, DlnaAudioFormat? preferred = null)
     {
         var formats = protocols.ToArray();
@@ -216,7 +253,7 @@ internal sealed class DlnaClient : IAsyncDisposable
         var fields = protocol.Split(':', 4);
         if (fields.Length != 4 || !fields[0].Equals("http-get", StringComparison.OrdinalIgnoreCase) && fields[0] != "*") return false;
         var mime = fields[2].Split(';', StringSplitOptions.TrimEntries);
-        bool wildcard = mime[0] is "*" or "audio/*";
+        bool wildcard = mime[0] == "*" || mime[0].Equals("audio/*", StringComparison.OrdinalIgnoreCase);
         if (!wildcard && !(format == DlnaAudioFormat.L16 ? mime[0].Equals("audio/L16", StringComparison.OrdinalIgnoreCase)
             : mime[0].Equals("audio/wav", StringComparison.OrdinalIgnoreCase))) return false;
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

@@ -13,6 +13,7 @@ public class DlnaClientTests
     [InlineData("http-get:*:audio/L16:*", "L16")]
     [InlineData("http-get:*:audio/L16;RATE=\"44100\";CHANNELS=2:*", "L16")]
     [InlineData("http-get:*:audio/*:*", "L16")]
+    [InlineData("http-get:*:AUDIO/*:*", "L16")]
     [InlineData("http-get:*:*:*", "L16")]
     [InlineData("*:*:audio/L16;rate=*;channels=*:*", "L16")]
     [InlineData("http-get:*:audio/wav:*", "Wav")]
@@ -61,8 +62,18 @@ public class DlnaClientTests
         Assert.Equal(25, fake.Volume);
         Assert.Equal(DlnaAudioFormat.L16, client.Format);
         Assert.Equal(10000, pull.FirstSample);
+        var requests = fake.Requests.Where(r => r.Method == "POST").ToArray();
         string[] actions = Actions(fake);
-        Assert.Equal(new[] { "GetTransportInfo", "GetMediaInfo", "GetProtocolInfo", "SetVolume", "SetMute", "SetAVTransportURI", "Play" }, actions);
+        Assert.Equal(new[] { "GetTransportInfo", "GetMediaInfo", "GetProtocolInfo" }, actions.Take(3));
+        int assignIndex = Array.IndexOf(actions, "SetAVTransportURI"), playIndex = Array.IndexOf(actions, "Play");
+        Assert.True(Array.IndexOf(actions, "SetVolume") < assignIndex);
+        Assert.True(assignIndex < playIndex);
+        Assert.All(requests.Take(playIndex).Where(r => r.SoapAction.EndsWith("#SetVolume")), r =>
+            Assert.Equal("25", Argument(r, "DesiredVolume")));
+        Assert.All(requests.Take(assignIndex).Where(r => r.SoapAction.EndsWith("#SetMute")), r =>
+            Assert.Equal("1", Argument(r, "DesiredMute")));
+        Assert.Contains(requests.Skip(assignIndex + 1).Take(playIndex - assignIndex - 1), r =>
+            r.SoapAction.EndsWith("#SetMute") && Argument(r, "DesiredMute") == "0");
         Assert.Equal(client.StreamUri.AbsoluteUri, fake.CurrentUri);
         Assert.Equal("PLAYING", fake.TransportState);
         var setUri = Assert.Single(fake.Requests, r => r.SoapAction.EndsWith("#SetAVTransportURI"));
@@ -126,15 +137,39 @@ public class DlnaClientTests
     }
 
     [Theory]
-    [InlineData("PLAYING")]
-    [InlineData("PAUSED_PLAYBACK")]
-    [InlineData("TRANSITIONING")]
-    [InlineData("UNKNOWN")]
-    public async Task Busy_renderer_is_inspected_without_any_write_command(string state)
+    [InlineData("PLAYING", "http://192.0.2.10/phone")]
+    [InlineData("PAUSED_PLAYBACK", "http://192.0.2.10/phone")]
+    [InlineData("TRANSITIONING", "http://192.0.2.10/phone")]
+    [InlineData("UNKNOWN", "http://192.0.2.10/phone")]
+    [InlineData("UNKNOWN", "")]
+    public async Task Busy_renderer_is_inspected_without_any_write_command(string state, string currentUri)
     {
-        await using var fake = new FakeDlnaRenderer { TransportState = state, CurrentUri = "http://192.0.2.10/phone" };
+        await using var fake = new FakeDlnaRenderer { TransportState = state, CurrentUri = currentUri };
         await Assert.ThrowsAsync<InvalidOperationException>(() => DlnaClient.ConnectAsync(fake.Device, Options()));
         Assert.Equal(new[] { "GetTransportInfo", "GetMediaInfo" }, Actions(fake));
+    }
+
+    [Theory]
+    [InlineData("PLAYING")]
+    [InlineData("STOPPED")]
+    public async Task Renderer_changed_during_protocol_negotiation_is_refused_before_any_write(string newState)
+    {
+        await using var fake = new FakeDlnaRenderer();
+        var inspectingProtocols = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseProtocols = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fake.AfterActionAsync = async (action, ct) =>
+        {
+            if (action != "GetProtocolInfo") return;
+            inspectingProtocols.TrySetResult();
+            await releaseProtocols.Task.WaitAsync(ct);
+        };
+        var pending = DlnaClient.ConnectAsync(fake.Device, Options());
+        await inspectingProtocols.Task.WaitAsync(Guard);
+        fake.CurrentUri = "http://192.0.2.10/replacement";
+        fake.TransportState = newState;
+        releaseProtocols.TrySetResult();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pending);
+        Assert.DoesNotContain(Actions(fake), action => action is "SetVolume" or "SetMute" or "SetAVTransportURI" or "Play" or "Stop");
     }
 
     [Fact]
@@ -146,6 +181,65 @@ public class DlnaClientTests
         await using var client = await DlnaClient.ConnectAsync(fake.Device, Options() with { TakeOver = true });
         Assert.Equal(client.StreamUri.AbsoluteUri, fake.CurrentUri);
         Assert.Equal("PLAYING", fake.TransportState);
+    }
+
+    [Fact]
+    public async Task Takeover_with_unsupported_volume_mutes_old_content_before_assigning_our_URI()
+    {
+        await using var fake = new FakeDlnaRenderer
+        {
+            TransportState = "PLAYING", CurrentUri = "http://192.0.2.10/phone", Volume = 100,
+        };
+        fake.Faults["SetVolume"] = 401;
+        await using var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        await using var client = await DlnaClient.ConnectAsync(fake.Device,
+            Options() with { TakeOver = true, VolumePercent = 80 });
+        var requests = fake.Requests.ToArray();
+        int assignIndex = Array.FindIndex(requests, r => r.SoapAction.EndsWith("#SetAVTransportURI"));
+        Assert.True(assignIndex > 0);
+        Assert.Contains(requests.Take(assignIndex), r => r.SoapAction.EndsWith("#SetMute") && Argument(r, "DesiredMute") == "1");
+        Assert.DoesNotContain(requests.Take(assignIndex), r => r.SoapAction.EndsWith("#SetMute") && Argument(r, "DesiredMute") == "0");
+        Assert.Single(fake.Requests, r => r.SoapAction.EndsWith("#SetVolume"));
+        Assert.Equal(2500, pull.FirstSample);
+    }
+
+    [Fact]
+    public async Task Volume_change_after_replacement_detects_loss_without_writing_remote_controls()
+    {
+        await using var fake = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        await using var client = await DlnaClient.ConnectAsync(fake.Device, Options());
+        int before = fake.Requests.Count;
+        fake.CurrentUri = "http://192.0.2.10/replacement";
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SetVolumeAsync(15, false));
+        Assert.Contains("taken over", await client.Lost.WaitAsync(Guard));
+        Assert.DoesNotContain(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetVolume") || r.SoapAction.EndsWith("#SetMute"));
+        Assert.True(client.StreamServer.IsStopped);
+        await client.DisposeAsync();
+        Assert.DoesNotContain(Actions(fake), a => a == "Stop");
+    }
+
+    [Fact]
+    public async Task Replacement_between_volume_and_mute_prevents_the_second_remote_write()
+    {
+        await using var fake = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        await using var client = await DlnaClient.ConnectAsync(fake.Device, Options());
+        int before = fake.Requests.Count;
+        fake.AfterActionAsync = (action, _) =>
+        {
+            if (action == "SetVolume") fake.CurrentUri = "http://192.0.2.10/replacement";
+            return Task.CompletedTask;
+        };
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SetVolumeAsync(15, true));
+        Assert.Contains("taken over", await client.Lost.WaitAsync(Guard));
+        Assert.Single(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetVolume"));
+        Assert.DoesNotContain(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetMute"));
+        await client.DisposeAsync();
+        Assert.DoesNotContain(Actions(fake), a => a == "Stop");
     }
 
     [Fact]
@@ -267,6 +361,9 @@ public class DlnaClientTests
 
     private static string[] Actions(FakeDlnaRenderer fake) => fake.Requests.Where(r => r.Method == "POST")
         .Select(r => r.SoapAction[(r.SoapAction.LastIndexOf('#') + 1)..]).ToArray();
+
+    private static string Argument(FakeDlnaRenderer.Request request, string name) =>
+        XDocument.Parse(request.Body).Descendants().Single(e => e.Name.LocalName == name).Value;
 
     private static async Task AssertListenerClosedAsync(Uri uri)
     {

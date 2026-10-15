@@ -14,6 +14,13 @@ public class DlnaCliTests
     }
 
     [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public void Blank_capture_never_falls_back_to_the_default_endpoint(string capture) => Assert.Throws<ArgumentException>(() =>
+        DlnaCli.Parse(["dlna", "--udn", "uuid:test", "--capture", capture]));
+
+    [Theory]
     [InlineData("NaN")]
     [InlineData("Infinity")]
     [InlineData("-1")]
