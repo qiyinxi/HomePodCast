@@ -8,7 +8,9 @@
   tag must name exactly the code of a beta that was published and tested. For -Tag on commit -Sha:
     1. the tag is vX.Y.Z, vX.Y.Z-beta.N or vX.Y.Z-rc.N, and X.Y.Z is the <Version> in src/HomePodCast.csproj at -Sha;
     2. -Sha already has a successful run of the build workflow from a push to dev, main or release/** (the tag
-       build itself, -ExcludeRunId, doesn't count);
+       build itself, -ExcludeRunId, doesn't count). release/** covers both the promotion branch release/X.Y.Z and a
+       beta's snapshot branch release/snapshot/vX.Y.Z-beta.N, which tools/release.ps1 -Beta pushes when dev's own run
+       on the commit hasn't passed (a push to dev cancels that run; the snapshot's run is in a concurrency group of its own);
     3. stable tags (vX.Y.Z) only: -Sha is on main, and a vX.Y.Z-beta.N (or -rc.N) tag points to a commit with the
        same source tree as -Sha and is published (not a draft) as a GitHub prerelease.
   It reads everything through the GitHub API (gh api), so it needs no history in the checkout. Any failure is
@@ -110,7 +112,8 @@ function Test-ReleaseTag([string] $tag, [string] $sha, [string] $repo, [string] 
         $log.Add("version $version = <Version> in $Csproj at $short")
     }
 
-    # 2. A branch run of this workflow already passed on this commit
+    # 2. A branch run of this workflow already passed on this commit. release/* takes slashes too (-like), so a
+    # beta's snapshot branch release/snapshot/vX.Y.Z-beta.N counts (tools/release.ps1 -Beta).
     $runs = @((Invoke-Api "repos/$repo/actions/workflows/$workflow/runs?head_sha=$sha&event=push&per_page=100").workflow_runs |
         Where-Object { ($_.head_branch -in 'dev', 'main' -or $_.head_branch -like 'release/*') -and $_.id -ne $excludeRunId } |
         Sort-Object id -Descending)

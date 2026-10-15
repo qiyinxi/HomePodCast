@@ -71,8 +71,10 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - **Branches**: `dev` is daily work. Other work goes on its own branch with a PR to `dev` (PR builds run CI). `main`
   changes only through the release PR made by `tools/release.ps1`; never push to it. Tags only through
   `tools/release.ps1`; a pushed tag is never moved or deleted. Details: `docs/RELEASING.md`.
-- **Releases**: don't ask before publishing a beta. Publish one whenever dev's CI is green and there is something
-  worth trying, and tell the maintainer afterwards. A stable 1.0.0 or later needs the maintainer's OK.
+- **Releases**: don't ask before publishing a beta. Publish one whenever there is something worth trying on dev and
+  dev's CI hasn't failed on it, and tell the maintainer afterwards. `tools/release.ps1 -Beta` releases a snapshot of
+  origin/dev from any clone or worktree: it runs CI on `release/snapshot/vX.Y.Z-beta.N` unless dev's CI already passed
+  on that commit, so pushes to dev don't interrupt it. A stable 1.0.0 or later needs the maintainer's OK.
 - **Experimental features**: a feature first released in 1.Y.z is labelled experimental (UI, README, release notes)
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never
@@ -135,8 +137,10 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   again. Merge your own PRs yourself. Review the other agent's PR before you merge it: read the diff, and check that
   the earlier review findings are fixed. If it isn't ready, leave a review comment saying what is missing.
   Drafts are never merged.
-- **One release at a time.** Before `tools/release.ps1`, check that no release PR is open (`gh pr list --base main`)
-  and no tag build is running (`gh run list --limit 5`). The other agent may be in the middle of one: wait for it.
+- **One release at a time.** `tools/release.ps1 -Beta` refuses while a PR to main is open, a promotion or another tag
+  build is running, or a snapshot branch pushed from another checkout exists; `tools/release.ps1 -Status` shows all of
+  them. The other agent may be in the middle of one: wait for it, and never take over its snapshot (`-Continue`).
+  Before `-Promote`, check the same by hand (`-Status`, `gh pr list --base main`, `gh run list --limit 5`).
 - **Plans for the other agent** go in the main checkout's `docs/plans/` (private: excluded through
   `.git/info/exclude`, never committed or pushed). A plan names the branches, worktrees and PR order, and it gets a
   board item that links to it. Progress goes in the PRs and on the board, not in the plan.
