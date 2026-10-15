@@ -10,7 +10,7 @@ internal sealed class SpeakersPage : ScrollPage
     private readonly SpeakerInfoPanel _speakerInfo;
     private readonly ReceiverConnectionPanel _receiverConnection;
     private readonly PairingsPanel _pairings;
-    private readonly StackPanel _list = new() { Gap = 4 };
+    private readonly StackPanel _list = new() { Gap = 4, AccessibleRole = AccessibleRole.List, AccessibleName = L.T("音箱信息") };
     private List<SelectedSpeaker> _devices = [];
     private string? _selected, _signature, _stateSignature;
     private bool _shown;
@@ -56,9 +56,23 @@ internal sealed class SpeakersPage : ScrollPage
             foreach (Control old in _list.Controls.Cast<Control>().ToList()) old.Dispose();
             foreach (var device in devices)
             {
-                var choose = new FluentButton(device.Name, device.DeviceId == _selected ? ButtonKind.Secondary : ButtonKind.Subtle, Glyph.Speaker)
-                { AccessibleName = device.Name, AccessibleDescription = device.Address?.ToString() };
+                var choose = new NavItem(Glyph.Speaker, device.Name)
+                {
+                    Selected = device.DeviceId == _selected, AccessibleName = device.Name,
+                    AccessibleDescription = device.Address?.ToString(), AccessibleRole = AccessibleRole.ListItem, TabStop = true,
+                };
+                int index = _list.Controls.Count;
                 choose.Click += (_, _) => Inspect(device.DeviceId);
+                choose.KeyDown += (_, e) =>
+                {
+                    int target = e.KeyCode switch { Keys.Up => index - 1, Keys.Down => index + 1, Keys.Home => 0, Keys.End => devices.Count - 1, _ => -1 };
+                    if (e.Modifiers != Keys.None || target < 0 || target >= devices.Count) return;
+                    e.Handled = true;
+                    Inspect(devices[target].DeviceId);
+                    var item = _list.Controls[target];
+                    item.Focus();
+                    (_list.Parent as Panel)?.ScrollControlIntoView(item);
+                };
                 _list.Controls.Add(choose);
             }
             _signature = signature;
@@ -72,8 +86,8 @@ internal sealed class SpeakersPage : ScrollPage
         if (_devices.All(d => d.DeviceId != id) || id == _selected) return;
         using var layout = LayoutPanel.BatchLayout(this);
         _selected = id;
-        foreach (var (button, i) in _list.Controls.OfType<FluentButton>().Select((button, i) => (button, i)))
-            button.Kind = _devices[i].DeviceId == id ? ButtonKind.Secondary : ButtonKind.Subtle;
+        foreach (var (button, i) in _list.Controls.OfType<NavItem>().Select((button, i) => (button, i)))
+            button.Selected = _devices[i].DeviceId == id;
         _receiverConnection.RefreshSelection();
         _speakerInfo.SelectionChanged();
     }

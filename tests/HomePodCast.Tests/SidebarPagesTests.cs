@@ -22,6 +22,7 @@ public class SidebarPagesTests
         All<FluentButton>(page).Single(b => b.Text == L.T("保存当前设置")).PerformClick();
         All<FluentButton>(page).Single(b => b.Text == L.T("应用")).PerformClick();
         Assert.Equal("saved", applied);
+        Assert.All(All<FluentComboBox>(page), combo => Assert.False(string.IsNullOrWhiteSpace(combo.AccessibleName)));
         Assert.Equal(DialogResult.None, host.DialogResult);
         Assert.True(host.Visible);
     });
@@ -37,6 +38,9 @@ public class SidebarPagesTests
         using var host = Host(page);
         page.PageShown();
         page.Inspect("other");
+        var list = TestApp.Field<StackPanel>(page, "_list");
+        Assert.All(list.Controls.OfType<NavItem>(), item => Assert.Equal(AccessibleRole.ListItem, item.AccessibilityObject.Role));
+        Assert.Single(list.Controls.OfType<NavItem>().Where(item => item.Selected));
         Assert.Equal(TestApp.DeviceId, config.DeviceId);
         Assert.Equal("other", TestApp.Field<string>(page, "_selected"));
         page.PageHidden();
@@ -73,6 +77,7 @@ public class SidebarPagesTests
             window.ClientSize = new Size(600, 430); window.Show(); Application.DoEvents();
             var rail = TestApp.Field<NavRail>(window, "_rail");
             Assert.NotEqual(window.SurfaceColor, rail.SurfaceColor);
+            Assert.Equal(rail.Items.Count, rail.Items.Select(item => item.Glyph).Distinct().Count());
             var about = rail.Items.Last();
             Assert.True(rail.ClientRectangle.Contains(about.Bounds));
             var action = TestApp.Field<NavItem>(rail, "_themeButton");

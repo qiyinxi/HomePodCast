@@ -14,7 +14,7 @@ internal sealed class GroupPanel : StackPanel
 
     private readonly AppConfig _config;
     private readonly string? _tsid;
-    private readonly FluentComboBox _extra = new() { PreferredWidth = 280 };
+    private readonly FluentComboBox _extra = new() { PreferredWidth = 280, AccessibleName = L.T("同时推送到") };
     private readonly ToggleSwitch _split = new(L.T("电脑端分声道"));
     private readonly ToggleSwitch _swap = new(L.T("交换左右"));
     private readonly ToggleSwitch _leaderOnly = new(L.T("只连接主音箱（实验）"));

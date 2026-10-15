@@ -12,7 +12,7 @@ internal sealed class GroupPage : ScrollPage
         _app = app;
         TitleText!.Wrap = true;
         var apply = new FluentButton(L.T("应用"), ButtonKind.Primary);
-        Content.Controls.Add(apply);
+        Content.Controls.Add(Ui.Row(8, null, apply));
         apply.Click += (_, _) =>
         {
             string before = GroupForm.PlayLayout(app.Config);

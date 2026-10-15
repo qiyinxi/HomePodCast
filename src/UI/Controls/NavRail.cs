@@ -209,7 +209,7 @@ internal sealed class NavItem : FluentControl
 
     public override Size GetPreferredSize(Size proposedSize)
     {
-        int text = TextMeasure.Size(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width;
+        int text = TextMeasure.Size(Text, Theme.FontFor(TextStyle.Body, DeviceDpi, Text), Size.Empty, TextFlags.Measure).Width;
         return new Size(Dp(16 + 16 + 14) + text + Dp(16), Dp(38));
     }
 
@@ -229,7 +229,7 @@ internal sealed class NavItem : FluentControl
         if (!_compact)
         {
             x += Dp(16 + 14);
-            TextRenderer.DrawText(g, Text, StyleFont(TextStyle.Body), new Rectangle(x, 0, Width - x - Dp(8), Height), P.Text, TextFlags.Line);
+            TextRenderer.DrawText(g, Text, Theme.FontFor(TextStyle.Body, DeviceDpi, Text), new Rectangle(x, 0, Width - x - Dp(8), Height), P.Text, TextFlags.Line);
         }
         if (FocusVisible) DrawFocusRing(g, r, Dp(5));
     }
@@ -239,9 +239,9 @@ internal sealed class NavItem : FluentControl
     private sealed class NavAccessible(NavItem owner) : ControlAccessibleObject(owner)
     {
         public override AccessibleStates State =>
-            base.State | (owner.AccessibleRole == AccessibleRole.PageTab ? AccessibleStates.Selectable : AccessibleStates.None) | (owner.Selected ? AccessibleStates.Selected : AccessibleStates.None);
+            base.State | (owner.AccessibleRole is AccessibleRole.PageTab or AccessibleRole.ListItem ? AccessibleStates.Selectable : AccessibleStates.None) | (owner.Selected ? AccessibleStates.Selected : AccessibleStates.None);
 
-        public override string DefaultAction => owner.AccessibleRole == AccessibleRole.PageTab ? L.T("选择") : owner.AccessibleName ?? owner.Text;
+        public override string DefaultAction => owner.AccessibleRole is AccessibleRole.PageTab or AccessibleRole.ListItem ? L.T("选择") : owner.AccessibleName ?? owner.Text;
 
         public override void DoDefaultAction() => owner.OnClick(EventArgs.Empty);
     }

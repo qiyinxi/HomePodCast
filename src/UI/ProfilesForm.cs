@@ -5,7 +5,7 @@ namespace HomePodCast.UI;
 internal sealed class ProfilesPanel : StackPanel
 {
     private readonly AppConfig _config;
-    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440, Placeholder = L.T("选择配置…") };
+    private readonly FluentComboBox _profiles = new() { PreferredWidth = 440, Placeholder = L.T("选择配置…"), AccessibleName = L.T("使用配置") };
     private readonly TextBox _name = new() { MaxLength = UsageProfiles.MaxNameLength, AccessibleName = L.T("配置名称") };
     private readonly FluentButton _apply = new(L.T("应用"), ButtonKind.Primary);
     private readonly FluentButton _delete = new(L.T("删除"), ButtonKind.Subtle);
@@ -20,6 +20,8 @@ internal sealed class ProfilesPanel : StackPanel
     {
         _config = config;
         Gap = 12;
+        _name.BorderStyle = BorderStyle.FixedSingle;
+        StyleName();
         var help = new TextBlock(L.T("保存音箱、采集设备、程序分流、音效、音量上限和夜间模式，之后一键切换。切换后麦克风关闭。"), wrap: true);
         var fresh = new FluentButton(L.T("新建"));
         var save = new FluentButton(L.T("保存当前设置"));
@@ -66,6 +68,17 @@ internal sealed class ProfilesPanel : StackPanel
             _selected = null; _name.Clear(); Reload();
         };
         Reload();
+    }
+
+    private void StyleName()
+    {
+        _name.BackColor = Theme.P.Control;
+        _name.ForeColor = Theme.P.Text;
+    }
+    protected override void OnThemeChanged()
+    {
+        StyleName();
+        base.OnThemeChanged();
     }
 
     private UsageProfile? Selected() => _profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _config.UsageProfiles.Count
