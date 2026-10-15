@@ -117,10 +117,7 @@ run_case() {
     return 1
   fi
 }
-for round in $(seq 1 8); do
-  echo "================ TEMPORARY STABILITY LOOP: round $round of 8 ================"
-  run_case realtime 500
-  run_case buffered 1000
-  run_case buffered 1500
-  run_case buffered 2000
-done
+run_case realtime 500
+run_case buffered 1000
+run_case buffered 1500
+run_case buffered 2000
