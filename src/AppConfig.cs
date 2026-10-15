@@ -71,6 +71,9 @@ public sealed class AppConfig
     /// <summary>Explicit live-capture members. Null preserves the older primary + MultiRoom selection; saved files never activate a group.</summary>
     public List<string>? GroupCaptureDeviceIds { get; set; }
 
+    /// <summary>Positions last applied to live capture; file edits never change the next automatic connection's channels.</summary>
+    public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
+
     /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }

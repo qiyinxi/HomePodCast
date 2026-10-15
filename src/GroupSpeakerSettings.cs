@@ -61,11 +61,16 @@ public static class GroupSettings
         var legacy = StereoPairs.TryGetTsid(cfg.DeviceId, out var pair)
             ? found == null ? [] : StereoPairs.Members(found, pair).Select(d => d.DeviceId).ToList()
             : new[] { cfg.DeviceId, cfg.MultiRoomDeviceId }.Where(id => id != null).Cast<string>().DistinctBy(GroupPlan.Key).ToList();
+        if (cfg.GroupCapturePositions == null && legacy.Count > 0 && (!StereoPairs.IsPairId(cfg.DeviceId) || legacy.Count == 2))
+            cfg.GroupCapturePositions = legacy.Select((id, i) => (id, position: cfg.GroupSplitChannels && legacy.Count == 2
+                ? (i == 0) != cfg.GroupSwapChannels ? SpeakerPosition.Left : SpeakerPosition.Right : SpeakerPosition.Stereo))
+                .ToDictionary(x => GroupPlan.Key(x.id), x => x.position);
         if (cfg.GroupSplitChannels && legacy.Count == 2)
         {
             for (int i = 0; i < 2; i++)
                 if (cfg.GroupSpeakers.FirstOrDefault(s => GroupPlan.Key(s.DeviceId) == GroupPlan.Key(legacy[i])) is { } row)
-                    row.Position = (i == 0) != cfg.GroupSwapChannels ? SpeakerPosition.Left : SpeakerPosition.Right;
+                    if (!(cfg.Cinema?.Speakers ?? []).Any(s => GroupPlan.Key(s.DeviceId) == GroupPlan.Key(row.DeviceId)))
+                        row.Position = (i == 0) != cfg.GroupSwapChannels ? SpeakerPosition.Left : SpeakerPosition.Right;
             cfg.GroupSplitChannels = cfg.GroupSwapChannels = false;
         }
         else if (!cfg.GroupSplitChannels) cfg.GroupSwapChannels = false;

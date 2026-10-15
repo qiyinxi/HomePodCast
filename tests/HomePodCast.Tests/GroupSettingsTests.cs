@@ -6,6 +6,49 @@ namespace HomePodCast.Tests;
 public class GroupSettingsTests
 {
     [Fact]
+    public void Loading_and_resaving_keeps_file_and_capture_positions_independent()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "hpc-group-" + Guid.NewGuid().ToString("N"), "config.json");
+        try
+        {
+            var cfg = new AppConfig { DeviceId = "AA:01", MultiRoomDeviceId = "AA:02", Cinema = new() { Speakers = [
+                new() { DeviceId = "AA:01", Role = CinemaRole.FrontLeft }, new() { DeviceId = "AA:02", Role = CinemaRole.FrontRight } ] } };
+            cfg.Save(path);
+            cfg = AppConfig.Load(path);
+            Assert.Equal(ChannelMode.Stereo, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+            cfg.GroupCaptureDeviceIds = ["AA:01", "AA:02"];
+            cfg.GroupCapturePositions = new() { [GroupPlan.Key("AA:01")] = SpeakerPosition.Left, [GroupPlan.Key("AA:02")] = SpeakerPosition.Right };
+            cfg.GroupSpeakers![0].Position = SpeakerPosition.Center;
+            cfg.Save(path);
+            var loaded = AppConfig.Load(path);
+            Assert.Equal(SpeakerPosition.Center, loaded.GroupSpeakers![0].Position);
+            Assert.Equal(ChannelMode.LeftOnly, GroupPlan.FromConfig(loaded)!.ChannelsFor(0));
+            Assert.Equal(ChannelMode.RightOnly, GroupPlan.FromConfig(loaded)!.ChannelsFor(1));
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(path)!, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData(false, ChannelMode.Stereo, ChannelMode.Stereo)]
+    [InlineData(true, ChannelMode.LeftOnly, ChannelMode.RightOnly)]
+    public void Cinema_positions_cannot_rewrite_live_capture_positions(bool split, ChannelMode a, ChannelMode b)
+    {
+        var cfg = new AppConfig { DeviceId = "AA:01", MultiRoomDeviceId = "AA:02", GroupSplitChannels = split,
+            Cinema = new() { Speakers = [new() { DeviceId = "AA:01", Role = CinemaRole.FrontLeft },
+                new() { DeviceId = "AA:02", Role = CinemaRole.FrontRight }] } };
+        GroupSettings.Normalize(cfg);
+        Assert.Equal([SpeakerPosition.Left, SpeakerPosition.Right], cfg.GroupSpeakers!.Select(s => s.Position));
+        Assert.Equal(a, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        Assert.Equal(b, GroupPlan.FromConfig(cfg)!.ChannelsFor(1));
+        cfg.GroupSpeakers![0].Position = SpeakerPosition.Center; // a later file-only save
+        Assert.Equal(a, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
+        var restored = new AppConfig();
+        UsageProfiles.Apply(restored, UsageProfiles.Capture(cfg));
+        Assert.Equal(a, GroupPlan.FromConfig(restored)!.ChannelsFor(0));
+        Assert.Equal(b, GroupPlan.FromConfig(restored)!.ChannelsFor(1));
+    }
+
+    [Fact]
     public void Saved_file_speakers_never_activate_or_expand_the_live_group()
     {
         var cfg = new AppConfig { DeviceId = "AA:01", Cinema = new() { Speakers = [
@@ -39,7 +82,7 @@ public class GroupSettingsTests
             GroupSwapChannels = swap, GroupVolumeOffsets = new() { [GroupPlan.Key("AA:02")] = -5 } };
         GroupSettings.Normalize(cfg);
         Assert.Equal([first, second], cfg.GroupSpeakers!.Select(s => s.Position));
-        Assert.Equal(-5, cfg.GroupSpeakers[1].VolumeOffset);
+        Assert.Equal(-5, cfg.GroupSpeakers![1].VolumeOffset);
         Assert.False(cfg.GroupSplitChannels); Assert.False(cfg.GroupSwapChannels);
         var plan = GroupPlan.FromConfig(cfg)!;
         Assert.Equal(swap ? ChannelMode.RightOnly : ChannelMode.LeftOnly, plan.ChannelsFor(0));
@@ -72,7 +115,7 @@ public class GroupSettingsTests
             new() { DeviceId = "AA:02", Role = CinemaRole.FrontRight, DelayMs = 30 } ] } };
         GroupSettings.Normalize(cfg);
         Assert.Equal([12, 30], cfg.GroupSpeakers!.Select(s => s.DelayMs));
-        cfg.GroupSpeakers[1].Position = SpeakerPosition.Stereo;
+        cfg.GroupSpeakers![1].Position = SpeakerPosition.Stereo;
         GroupSettings.Normalize(cfg);
         Assert.Equal(SpeakerPosition.Stereo, cfg.GroupSpeakers[1].Position);
         var single = new AppConfig { DeviceId = "AA:01" };
