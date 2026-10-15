@@ -63,7 +63,7 @@ public sealed partial class StreamController
                 PushVolume();
                 OwnSession.Began(key, UtcNow()); streamed = true; began = UtcNow();
                 Set(StreamState.Streaming, L.F("{0} · AirPlay 1 兼容模式（实验性）", device.Name)); // experimental since 1.1
-                using var network = new NetworkWatch(device.Address);
+                using var network = new NetworkWatch(device.Address).Start();
                 _net = network;
                 lostReason = await output.Lost.WaitAsync(ct);
             }
