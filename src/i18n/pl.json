@@ -614,5 +614,9 @@
   "实际连接：{0}": "Aktywne połączenie: {0}",
   "未连接；连接后显示实际协议。": "Brak połączenia; aktywny protokół pojawi się po połączeniu.",
   "接收端处理时间：{0} ms": "Czas przetwarzania odbiornika: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Odbiorniki AirPlay innych producentów nie mogą jeszcze dołączać do grup głośników."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Odbiorniki AirPlay innych producentów nie mogą jeszcze dołączać do grup głośników.",
+  "许可证": "Licencja",
+  "切换到浅色": "Przełącz na tryb jasny",
+  "切换到深色": "Przełącz na tryb ciemny",
+  "多声道（5.1 / 7.1，实验性）": "Wielokanałowy (5.1 / 7.1, eksperymentalny)"
 }

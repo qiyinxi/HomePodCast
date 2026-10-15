@@ -9,18 +9,41 @@ internal sealed class NavRail : LayoutPanel, ISurface
     private readonly List<NavItem> _items = [];
     private readonly List<NavItem> _footer = [];
     private readonly ToolTip _tips = new();
+    private readonly Panel _viewport = new() { AutoScroll = true };
+    private readonly StackPanel _main = new() { Gap = 4 };
+    private readonly NavItem _themeButton = new(Glyph.Moon, "") { AccessibleRole = AccessibleRole.PushButton, TabStop = true };
     private int _selected = -1;
 
     public NavRail()
     {
         TabStop = false;
         AccessibleRole = AccessibleRole.PageTabList;
+        _viewport.Controls.Add(_main);
+        Controls.AddRange([_viewport, _themeButton]);
+        _themeButton.Click += (_, _) => ThemeRequested?.Invoke();
+        ShowTheme();
     }
 
-    public Color SurfaceColor => Theme.P.Window;
+    public Color SurfaceColor => Theme.P.IsDark ? Color.FromArgb(24, 24, 24) : Color.FromArgb(230, 230, 230);
 
     /// <summary>The user picked an item (mouse or keyboard); the argument is its index.</summary>
     public event Action<int>? Navigate;
+    public event Action? ThemeRequested;
+
+    private void ShowTheme()
+    {
+        string action = Theme.IsDark ? L.T("切换到浅色") : L.T("切换到深色");
+        _themeButton.Text = Theme.IsDark ? L.T("浅色") : L.T("深色");
+        _themeButton.Glyph = Theme.IsDark ? Glyph.Sun : Glyph.Moon;
+        _themeButton.AccessibleName = action;
+        _tips.SetToolTip(_themeButton, action);
+    }
+    protected override void OnThemeChanged()
+    {
+        ShowTheme();
+        _viewport.BackColor = SurfaceColor;
+        base.OnThemeChanged();
+    }
 
     public IReadOnlyList<NavItem> Items => _items;
 
@@ -33,7 +56,8 @@ internal sealed class NavRail : LayoutPanel, ISurface
         _items.Add(item);
         if (bottom) _footer.Add(item);
         _tips.SetToolTip(item, text); // compact navigation keeps the full page name on hover
-        Controls.Add(item);
+        if (bottom) Controls.Add(item);
+        else _main.Controls.Add(item);
         return item;
     }
 
@@ -53,6 +77,7 @@ internal sealed class NavRail : LayoutPanel, ISurface
             _items[i].Selected = i == index;
             _items[i].TabStop = i == index;
         }
+        if (!_footer.Contains(_items[index])) EnsureVisible(_items[index]);
         if (user && changed) Navigate?.Invoke(index);
     }
 
@@ -66,6 +91,8 @@ internal sealed class NavRail : LayoutPanel, ISurface
             Keys.End => _items.Count - 1,
             _ => -1,
         };
+        int direction = e.KeyCode is Keys.Up or Keys.End ? -1 : 1;
+        while (target >= 0 && target < _items.Count && _items[target].Collapsed) target += direction;
         if (target < 0 || target >= _items.Count || e.Modifiers != Keys.None) return;
         e.Handled = true;
         Select(target, user: true);
@@ -82,36 +109,48 @@ internal sealed class NavRail : LayoutPanel, ISurface
         return full <= clientWidth / 3 && clientWidth - full >= Dp(560) ? full : Dp(64);
     }
 
-    protected override int Arrange(int width, bool apply)
+    private void EnsureVisible(NavItem item)
     {
-        int y = Dp(8), x = Dp(4), w = width - Dp(8);
-        bool compact = width < PreferredWidth();
-        foreach (var item in _items.Except(_footer))
-        {
-            int h = item.GetPreferredSize(Size.Empty).Height;
-            if (apply)
-            {
-                item.Compact = compact;
-                Place(item, x, y, w, h);
-            }
-            y += h + Dp(4);
-        }
-        int footerHeight = _footer.Sum(item => item.GetPreferredSize(Size.Empty).Height + Dp(4));
-        int footerY = Math.Max(y, Height - Dp(8) - footerHeight + Dp(4));
-        foreach (var item in _footer)
-        {
-            int h = item.GetPreferredSize(Size.Empty).Height;
-            if (apply)
-            {
-                item.Compact = compact;
-                Place(item, x, footerY, w, h);
-            }
-            footerY += h + Dp(4);
-        }
-        return y + footerHeight + Dp(8);
+        int top = item.Top + _viewport.AutoScrollPosition.Y;
+        int scroll = -_viewport.AutoScrollPosition.Y;
+        if (top < 0) scroll += top;
+        else if (top + item.Height > _viewport.ClientSize.Height) scroll += top + item.Height - _viewport.ClientSize.Height;
+        if (scroll != -_viewport.AutoScrollPosition.Y) _viewport.AutoScrollPosition = new Point(0, Math.Max(0, scroll));
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(SurfaceColor);
+    protected override int Arrange(int width, bool apply)
+    {
+        int step = Dp(42), inset = Dp(8);
+        int footerHeight = step * (_footer.Count + 1);
+        int available = Math.Max(0, Height - footerHeight - 2 * inset);
+        int bodyHeight = _items.Except(_footer).Count(i => !i.Collapsed) * step - Dp(4);
+        bool compact = width < PreferredWidth();
+        if (apply)
+        {
+            foreach (var item in _items) item.Compact = compact;
+            _themeButton.Compact = compact;
+            _viewport.SetBounds(Dp(4), inset, Math.Max(0, width - Dp(8)), available);
+            _viewport.BackColor = SurfaceColor;
+            _viewport.AutoScrollMinSize = new Size(0, Math.Max(0, bodyHeight));
+            int scrollWidth = bodyHeight > available ? SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi) : 0;
+            Place(_main, 0, _viewport.AutoScrollPosition.Y, Math.Max(0, width - Dp(8) - scrollWidth), Math.Max(0, bodyHeight));
+            int y = Math.Max(inset, Height - footerHeight - inset);
+            Place(_themeButton, Dp(4), y, width - Dp(8), Dp(38));
+            foreach (var item in _footer)
+            {
+                y += step;
+                Place(item, Dp(4), y, width - Dp(8), Dp(38));
+            }
+        }
+        return bodyHeight + footerHeight + 2 * inset;
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        e.Graphics.Clear(SurfaceColor);
+        using var pen = new Pen(Theme.P.CardBorder, Math.Max(1, DeviceDpi / 96));
+        e.Graphics.DrawLine(pen, Width - 1, 0, Width - 1, Height);
+    }
 
     protected override void Dispose(bool disposing)
     {
@@ -135,7 +174,7 @@ internal sealed class NavItem : FluentControl
         Text = text;
     }
 
-    public string Glyph { get; }
+    public string Glyph { get; set; }
 
     public bool Compact
     {
@@ -200,9 +239,9 @@ internal sealed class NavItem : FluentControl
     private sealed class NavAccessible(NavItem owner) : ControlAccessibleObject(owner)
     {
         public override AccessibleStates State =>
-            base.State | AccessibleStates.Selectable | (owner.Selected ? AccessibleStates.Selected : AccessibleStates.None);
+            base.State | (owner.AccessibleRole == AccessibleRole.PageTab ? AccessibleStates.Selectable : AccessibleStates.None) | (owner.Selected ? AccessibleStates.Selected : AccessibleStates.None);
 
-        public override string DefaultAction => L.T("选择");
+        public override string DefaultAction => owner.AccessibleRole == AccessibleRole.PageTab ? L.T("选择") : owner.AccessibleName ?? owner.Text;
 
         public override void DoDefaultAction() => owner.OnClick(EventArgs.Empty);
     }

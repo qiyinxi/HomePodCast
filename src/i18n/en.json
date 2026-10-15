@@ -614,5 +614,9 @@
   "实际连接：{0}": "Active connection: {0}",
   "未连接；连接后显示实际协议。": "Disconnected; the active protocol appears after connecting.",
   "接收端处理时间：{0} ms": "Receiver processing time: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Third-party AirPlay receivers cannot join multi-speaker groups yet."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Third-party AirPlay receivers cannot join multi-speaker groups yet.",
+  "许可证": "License",
+  "切换到浅色": "Switch to light mode",
+  "切换到深色": "Switch to dark mode",
+  "多声道（5.1 / 7.1，实验性）": "Multichannel (5.1 / 7.1, experimental)"
 }

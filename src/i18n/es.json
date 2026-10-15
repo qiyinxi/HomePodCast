@@ -614,5 +614,9 @@
   "实际连接：{0}": "Conexión activa: {0}",
   "未连接；连接后显示实际协议。": "Desconectado; el protocolo activo se muestra al conectar.",
   "接收端处理时间：{0} ms": "Procesamiento del receptor: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Los receptores AirPlay de terceros aún no pueden unirse a grupos de altavoces."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Los receptores AirPlay de terceros aún no pueden unirse a grupos de altavoces.",
+  "许可证": "Licencia",
+  "切换到浅色": "Cambiar al modo claro",
+  "切换到深色": "Cambiar al modo oscuro",
+  "多声道（5.1 / 7.1，实验性）": "Multicanal (5.1 / 7.1, experimental)"
 }

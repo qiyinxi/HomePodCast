@@ -614,5 +614,9 @@
   "实际连接：{0}": "Aktiv forbindelse: {0}",
   "未连接；连接后显示实际协议。": "Afbrudt; den aktive protokol vises efter tilslutning.",
   "接收端处理时间：{0} ms": "Modtagerens behandlingstid: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-modtagere fra tredjeparter kan endnu ikke indgå i højttalergrupper."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-modtagere fra tredjeparter kan endnu ikke indgå i højttalergrupper.",
+  "许可证": "Licens",
+  "切换到浅色": "Skift til lyst tema",
+  "切换到深色": "Skift til mørkt tema",
+  "多声道（5.1 / 7.1，实验性）": "Flerkanal (5.1 / 7.1, eksperimentel)"
 }

@@ -614,5 +614,9 @@
   "实际连接：{0}": "Aktiivinen yhteys: {0}",
   "未连接；连接后显示实际协议。": "Ei yhteyttä; aktiivinen protokolla näytetään yhdistämisen jälkeen.",
   "接收端处理时间：{0} ms": "Vastaanottimen käsittelyaika: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Kolmannen osapuolen AirPlay-vastaanottimia ei vielä voi lisätä kaiutinryhmiin."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Kolmannen osapuolen AirPlay-vastaanottimia ei vielä voi lisätä kaiutinryhmiin.",
+  "许可证": "Lisenssi",
+  "切换到浅色": "Vaihda vaaleaan tilaan",
+  "切换到深色": "Vaihda tummaan tilaan",
+  "多声道（5.1 / 7.1，实验性）": "Monikanava (5.1 / 7.1, kokeellinen)"
 }

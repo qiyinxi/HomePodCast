@@ -9,20 +9,15 @@ namespace HomePodCast.UI;
 /// until it has been): a local file's channels to one HomePod each, and an explicitly started acoustic alignment.
 /// Nothing starts when the window opens; closing it stops what it started, and only that.
 /// </summary>
-internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
+internal sealed class CinemaPage : ScrollPage
 {
-    private const int ContentWidth = 680; // 96-DPI units
-
     private readonly ICinemaHost _host;
-    private readonly ScrollPage _page;
-    private readonly RowPanel _footer;
     private readonly TextBlock _file = Ui.Note();
     private readonly TextBlock _status = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
     private readonly TextBlock _calibrationStatus = Ui.Note();
     private readonly FluentButton _choose = new(L.T("选择影音文件"));
     private readonly FluentButton _play = new(L.T("播放"), ButtonKind.Primary), _pause = new(L.T("暂停")), _stop = new(L.T("停止"));
     private readonly FluentButton _calibrate = new(L.T("测量音箱延迟"));
-    private readonly FluentButton _close = new(L.T("关闭")) { DialogResult = DialogResult.Cancel, MinWidth = 96 };
     private readonly FluentComboBox _microphone = new() { MinWidth = 160 };
     private readonly FluentSlider _volume = Ui.Slider(0, 100, 1, 5);
     private readonly TextBlock _volumeValue = new("");
@@ -37,31 +32,15 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
     private string? _path;
     private long _endedAt;
 
-    public static void ShowFor(TrayApp app, IWin32Window? owner)
-    {
-        using var form = new CinemaForm(app);
-        form.ShowDialog(owner);
-    }
-
     /// <param name="inputs">The microphones to offer (null: the system's capture endpoints).</param>
     /// <param name="volumeWait">The volume slider's save debounce (tests pass a manual one).</param>
-    internal CinemaForm(ICinemaHost host, IReadOnlyList<AudioEndpoint>? inputs = null, IDebounce? volumeWait = null)
+    internal CinemaPage(ICinemaHost host, IReadOnlyList<AudioEndpoint>? inputs = null, IDebounce? volumeWait = null)
+        : base(L.T("多声道（5.1 / 7.1，实验性）")) // experimental since 1.1; hardware untested
     {
         _host = host;
         var config = host.Config;
         config.Cinema ??= new CinemaSettings();
-        Theme.Watch();
-        AutoScaleMode = AutoScaleMode.None;
-        // experimental since 1.1; never tested on real hardware, so the label stays until it has been
-        Text = L.T("无线影院（实验性）");
-        Icon = Icons.App; StartPosition = FormStartPosition.CenterParent;
-        ShowInTaskbar = false; MinimizeBox = false;
-        BackColor = Theme.P.Window;
-        Font = Theme.Font(TextStyle.Body, DeviceDpi);
-
-        _page = new ScrollPage(Text);
-        var body = _page.Content;
-        body.Inset = new Padding(24, 16, 20, 16);
+        var body = Content;
         body.Controls.Add(new TextBlock(L.T("实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。"),
             TextStyle.BodyStrong, TextRole.Caution, wrap: true));
         body.Controls.Add(Ui.Note(L.T("把本地影音文件的每个声道送到一台 HomePod：5.1 和 7.1 的环绕声道、中置和低音声道各自独立播放；没有分配音箱的声道混入相邻的音箱，立体声和单声道文件只用前面的音箱。这里只播放音轨，不显示视频。")));
@@ -136,12 +115,6 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         body.Controls.Add(_status);
         FieldRow.AlignCaptions([.. fieldRows]);
 
-        var spacer = new TextBlock();
-        _footer = Ui.Row(8, spacer, spacer, _close); // 关闭 at the bottom right, outside the scrolling page
-        Controls.Add(_page);
-        Controls.Add(_footer);
-        CancelButton = _close;
-
         _volumeWait = volumeWait ?? new TimerDebounce(600);
         _volume.Scroll += (_, _) =>
         {
@@ -156,14 +129,8 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         _stop.Click += (_, _) => { StopPlayback("stop"); _status.Text = ""; RefreshStatus(); };
         _calibrate.Click += async (_, _) => await CalibrateAsync();
         _timer.Tick += (_, _) => RefreshStatus();
-        _timer.Start();
-        Theme.Changed += ThemeChanged;
         RefreshStatus();
     }
-
-    public Color SurfaceColor => Theme.P.Window;
-
-    private int Dp(float value) => Theme.Dp(value, DeviceDpi);
 
     internal static string RoleName(CinemaRole role) => role switch
     {
@@ -174,51 +141,18 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
 
     private static string Milliseconds(int ms) => L.F("{0} 毫秒", ms);
 
-    // ---------------------------------------------------------------- layout
-
-    protected override void OnLoad(EventArgs e)
+    public override void PageShown()
     {
-        base.OnLoad(e);
-        // As tall as the content, but never taller than the screen (8 speaker rows at 150 % are not): the page scrolls then.
-        int width = Dp(ContentWidth);
-        int content = _page.Content.GetPreferredSize(new Size(width - SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi), 0)).Height;
-        var area = Screen.FromControl(Owner ?? (Control)this).WorkingArea;
-        int chrome = Height - ClientSize.Height;
-        int height = Math.Min(content + FooterHeight(width), area.Height - chrome - Dp(16));
-        ClientSize = new Size(width, height);
-        MinimumSize = new Size(Dp(560) + Width - ClientSize.Width, Math.Min(Dp(360), height) + chrome);
-        if (Owner != null) CenterToParent();
+        _timer.Start();
+        RefreshStatus();
     }
 
-    private int FooterHeight(int width) => _footer.GetPreferredSize(new Size(Math.Max(0, width - Dp(48)), 0)).Height + Dp(28);
-
-    protected override void OnLayout(LayoutEventArgs levent)
+    public override void PageHidden()
     {
-        base.OnLayout(levent);
-        if (_footer is null || _page is null) return; // Form setters lay out before the constructor is done
-        int w = ClientSize.Width, h = ClientSize.Height, footer = FooterHeight(w);
-        _page.SetBounds(0, 0, w, Math.Max(0, h - footer));
-        LayoutPanel.Place(_footer, Dp(24), Math.Max(0, h - footer) + Dp(14), Math.Max(0, w - Dp(48)), footer - Dp(28));
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        Theme.StyleWindow(this);
-    }
-
-    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
-    {
-        base.OnDpiChanged(e);
-        Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-    });
-
-    private void ThemeChanged()
-    {
-        if (IsDisposed) return;
-        BackColor = Theme.P.Window;
-        Theme.StyleWindow(this);
-        Invalidate(true);
+        _timer.Stop();
+        FlushVolume();
+        StopPlayback("page hidden");
+        RefreshStatus();
     }
 
     // ---------------------------------------------------------------- playback
@@ -441,18 +375,43 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
         }
     }
 
-    protected override void OnFormClosed(FormClosedEventArgs e)
-    {
-        FlushVolume();
-        StopPlayback("window closed");
-        _timer.Dispose();
-        (_volumeWait as IDisposable)?.Dispose();
-        base.OnFormClosed(e);
-    }
-
     protected override void Dispose(bool disposing)
     {
-        if (disposing) Theme.Changed -= ThemeChanged;
+        if (disposing)
+        {
+            FlushVolume();
+            StopPlayback("window closed");
+            _timer.Dispose();
+            (_volumeWait as IDisposable)?.Dispose();
+        }
         base.Dispose(disposing);
+    }
+}
+
+internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
+{
+    private readonly CinemaPage _page;
+    internal CinemaForm(ICinemaHost host, IReadOnlyList<AudioEndpoint>? inputs = null, IDebounce? volumeWait = null)
+    {
+        AutoScaleMode = AutoScaleMode.None;
+        Text = L.T("无线影院（实验性）"); // experimental since 1.1; hardware untested
+        Icon = Icons.App; StartPosition = FormStartPosition.CenterParent;
+        _page = new CinemaPage(host, inputs, volumeWait);
+        _page.Dock = DockStyle.Fill;
+        Controls.Add(_page);
+        ClientSize = new Size(Theme.Dp(680, DeviceDpi), Theme.Dp(640, DeviceDpi));
+    }
+    public Color SurfaceColor => Theme.P.Window;
+    internal void UseFile(string path) => _page.UseFile(path);
+    internal Task PlayAsync() => _page.PlayAsync();
+    internal void RefreshStatus() => _page.RefreshStatus();
+    internal static string RoleName(CinemaRole role) => CinemaPage.RoleName(role);
+    protected override void OnShown(EventArgs e) { base.OnShown(e); _page.PageShown(); }
+    protected override void OnFormClosed(FormClosedEventArgs e) { _page.PageHidden(); base.OnFormClosed(e); }
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () => base.OnDpiChanged(e));
+    public static void ShowFor(TrayApp app, IWin32Window? owner)
+    {
+        using var form = new CinemaForm(app);
+        form.ShowDialog(owner);
     }
 }

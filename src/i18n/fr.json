@@ -614,5 +614,9 @@
   "实际连接：{0}": "Connexion active : {0}",
   "未连接；连接后显示实际协议。": "Déconnecté ; le protocole actif s’affiche après la connexion.",
   "接收端处理时间：{0} ms": "Traitement du récepteur : {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Les récepteurs AirPlay tiers ne peuvent pas encore rejoindre des groupes d’enceintes."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Les récepteurs AirPlay tiers ne peuvent pas encore rejoindre des groupes d’enceintes.",
+  "许可证": "Licence",
+  "切换到浅色": "Passer au mode clair",
+  "切换到深色": "Passer au mode sombre",
+  "多声道（5.1 / 7.1，实验性）": "Multicanal (5.1 / 7.1, expérimental)"
 }

@@ -75,11 +75,11 @@ public class LayoutWorkTests
         // The buttons were collapsed when 设置 was built (no update yet), and are shown last to first: WinForms put 查看说明
         // before 更新 when it sorted them after their windows (LayoutPanel.KeepChildOrder).
         var app = TestApp.Create(TestApp.Config());
-        using var host = new Host(new SettingsPage(app), 784);
+        using var host = new Host(new AboutPage(app), 784);
         var next = new Release(ReleaseVersion.Parse("9.0.0-beta.1")!, "v9.0.0-beta.1", "https://example.invalid", true, null);
         typeof(TrayApp).GetField("_update", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, next);
         typeof(TrayApp).GetField("_updateStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, "发现新版本 9.0.0-beta.1");
-        ((SettingsPage)host.Page).ShowUpdate();
+        ((AboutPage)host.Page).ShowUpdate();
         Application.DoEvents();
         var buttons = TestApp.Field<UpdateStatusRow>(host.Page, "_updateRow").Buttons.Controls.Cast<Control>().Where(c => !LayoutPanel.IsCollapsed(c)).ToList();
         Assert.Equal(["更新", "查看说明", "跳过此版本"], buttons.Select(b => b.Text));
@@ -87,9 +87,9 @@ public class LayoutWorkTests
     });
 
     [Fact]
-    public void A_speaker_info_read_lays_out_the_settings_page_once_each_time_it_shows() => Sta.Run(() =>
+    public void A_speaker_info_read_lays_out_the_speakers_page_once_each_time_it_shows() => Sta.Run(() =>
     {
-        using var host = new Host(new SettingsPage(TestApp.Create(TestApp.Config())), 784);
+        using var host = new Host(new SpeakersPage(TestApp.Create(TestApp.Config())), 784);
         var info = TestApp.Field<SpeakerInfoPanel>(host.Page, "_speakerInfo");
         var refresh = TestApp.Field<FluentButton>(info, "_refresh");
         int changes = 0;

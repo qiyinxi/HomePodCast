@@ -323,6 +323,10 @@ internal static class Glyph
     public const string Power = "";
     public const string Link = "";
     public const string Keyboard = "";
+    public const string Sun = "\uE706";
+    public const string Profiles = "\uE8A5";
+    public const string Channels = "\uE9E9";
+    public const string Screen = "\uE7F4";
     public const string Moon = "";
     public const string Sync = "";
     public const string Devices = "";

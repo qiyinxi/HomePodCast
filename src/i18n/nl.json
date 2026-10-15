@@ -614,5 +614,9 @@
   "实际连接：{0}": "Actieve verbinding: {0}",
   "未连接；连接后显示实际协议。": "Niet verbonden; het actieve protocol verschijnt na het verbinden.",
   "接收端处理时间：{0} ms": "Verwerkingstijd ontvanger: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-ontvangers van derden kunnen nog niet aan luidsprekergroepen deelnemen."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-ontvangers van derden kunnen nog niet aan luidsprekergroepen deelnemen.",
+  "许可证": "Licentie",
+  "切换到浅色": "Naar lichte modus",
+  "切换到深色": "Naar donkere modus",
+  "多声道（5.1 / 7.1，实验性）": "Meerkanaals (5.1 / 7.1, experimenteel)"
 }

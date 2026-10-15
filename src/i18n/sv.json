@@ -614,5 +614,9 @@
   "实际连接：{0}": "Aktiv anslutning: {0}",
   "未连接；连接后显示实际协议。": "Frånkopplad; aktivt protokoll visas efter anslutning.",
   "接收端处理时间：{0} ms": "Mottagarens behandlingstid: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-mottagare från tredje part kan ännu inte ingå i högtalargrupper."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-mottagare från tredje part kan ännu inte ingå i högtalargrupper.",
+  "许可证": "Licens",
+  "切换到浅色": "Växla till ljust läge",
+  "切换到深色": "Växla till mörkt läge",
+  "多声道（5.1 / 7.1，实验性）": "Flerkanal (5.1 / 7.1, experimentell)"
 }
