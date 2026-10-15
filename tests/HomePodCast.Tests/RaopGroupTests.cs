@@ -203,23 +203,60 @@ public class RaopGroupTests
         var member = new FakeMember("AirPlay", airplay, new ConcurrentQueue<string>());
         using var outputs = await RaopOutputSet.PrepareAsync([Output(receiver, required: true)], () => 10, default);
         var preparing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stop = new CancellationTokenSource();
+        int cancelled = 0;
         var setup = new MemberSetup("AirPlay", async ct =>
         {
             preparing.TrySetResult();
-            await release.Task.WaitAsync(ct);
+            try { await Task.Delay(Timeout.Infinite, ct); }
+            catch (OperationCanceledException) { Interlocked.Exchange(ref cancelled, 1); throw; }
             return member;
         });
-        var connecting = SpeakerGroup.ConnectAsync([setup], new AudioFifo(44100, 0, 1000), 10, default,
+        var connecting = SpeakerGroup.ConnectAsync([setup], new AudioFifo(44100, 0, 1000), 10, stop.Token,
             raopOutputs: outputs, groupDelayMs: 2020);
-        await preparing.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        receiver.CloseConnection(reset: false);
-        await receiver.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        outputs.SetVolume(10);
-        await outputs.Lost.WaitAsync(TimeSpan.FromSeconds(5));
-        release.TrySetResult();
-        await Assert.ThrowsAsync<RaopRefusedException>(() => connecting);
-        Assert.True(member.Disposed);
-        Assert.Equal(0, receiver.Audio.Available);
+        try
+        {
+            await preparing.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            receiver.CloseConnection(reset: false);
+            await receiver.Closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            outputs.SetVolume(10);
+            await outputs.Lost.WaitAsync(TimeSpan.FromSeconds(5));
+            await Assert.ThrowsAsync<RaopRefusedException>(() => connecting.WaitAsync(TimeSpan.FromSeconds(2)));
+            Assert.Equal(1, cancelled);
+            Assert.Equal(0, receiver.Audio.Available);
+        }
+        finally
+        {
+            stop.Cancel();
+            try { await connecting; } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task A_blocked_RAOP_teardown_cannot_keep_the_capture_producer_running()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var receiver = new RaopOutputSetTests.FakeGroupRaop { FlushGate = release.Task };
+        using var airplay = new FakeReceiver();
+        var member = new FakeMember("AirPlay", airplay, new ConcurrentQueue<string>());
+        using var outputs = await RaopOutputSet.PrepareAsync([Output(receiver)], () => 10, default);
+        using var group = await SpeakerGroup.ConnectAsync([member.Setup()], new AudioFifo(44100, 0, 1000), 10, default,
+            raopOutputs: outputs, groupDelayMs: 2020);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await Until(() => group.TimelineProducedPackets > 3, timeout.Token);
+        var stopping = Task.Run(group.Dispose);
+        try
+        {
+            await receiver.FlushEntered.Task.WaitAsync(timeout.Token);
+            Assert.False(group.TimelineRunning);
+            long sent = group.Sender!.PacketsSent;
+            await Task.Delay(50);
+            Assert.Equal(sent, group.Sender.PacketsSent);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await stopping.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 }

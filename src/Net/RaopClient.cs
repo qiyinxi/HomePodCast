@@ -364,6 +364,12 @@ public sealed class RaopClient : IDisposable
     internal static string FailureReason(Exception ex) =>
         ex is IOException && ex.Message == "connection closed by speaker" ? ClosedByReceiver : ex.Message;
 
+    internal void StopSending()
+    {
+        try { _stop.Cancel(); }
+        catch (ObjectDisposedException) { } // a concurrent Dispose already stopped every packet loop
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;

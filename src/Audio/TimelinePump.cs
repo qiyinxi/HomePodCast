@@ -16,6 +16,7 @@ internal sealed class TimelinePump(AudioFifo fifo, IAudioEffect? effects, int hi
     public long SilentPackets { get; private set; }
     public long SkippedPackets { get; private set; }
     public long ProducedPackets { get; private set; }
+    public bool IsRunning => _thread?.IsAlive == true;
 
     internal void Produce(long ticks)
     {

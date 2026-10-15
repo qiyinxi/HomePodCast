@@ -32,6 +32,28 @@ public class RaopOutputSetTests
     }
 
     [Fact]
+    public async Task A_published_required_failure_prevents_start_while_its_teardown_is_blocked()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var failed = new FakeGroupRaop { FlushGate = release.Task };
+        using var healthy = new FakeGroupRaop();
+        using var set = await RaopOutputSet.PrepareAsync([Output(failed, "required", true), Output(healthy, "healthy")],
+            () => 10, CancellationToken.None);
+        try
+        {
+            failed.VolumeStatus = 403;
+            set.SetVolume(10);
+            await set.Lost.WaitAsync(TimeSpan.FromSeconds(5));
+            await failed.FlushEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var error = await Assert.ThrowsAsync<GroupMemberException>(() => set.StartAsync(
+                History(MediaClock.Now - MediaClock.FromMs(3000)), 2000, 10, CancellationToken.None));
+            Assert.IsType<RaopRefusedException>(error.InnerException);
+            Assert.Equal(0, healthy.Audio.Available);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
     public async Task Preparation_is_silent_until_timeline_volume_and_epoch_are_bound()
     {
         using var left = new FakeGroupRaop();
@@ -430,6 +452,8 @@ public class RaopOutputSetTests
         public readonly ConcurrentQueue<byte[]> Sync = new();
         public TaskCompletionSource TornDown { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FlushEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task? FlushGate { get; init; }
         public int Port => ((IPEndPoint)_listen.LocalEndpoint).Port;
         public int AnnounceStatus { get; init; } = 200;
         public int VolumeStatus = 200;
@@ -516,6 +540,11 @@ public class RaopOutputSetTests
                         string volume = Encoding.ASCII.GetString(request.Body)["volume: ".Length..].Trim();
                         Volumes.Enqueue(double.Parse(volume, System.Globalization.CultureInfo.InvariantCulture));
                         status = Volatile.Read(ref VolumeStatus);
+                    }
+                    if (method == "FLUSH")
+                    {
+                        FlushEntered.TrySetResult();
+                        if (FlushGate != null) await FlushGate.WaitAsync(_stop.Token);
                     }
                     await stream.WriteAsync(HttpMessage.Format($"RTSP/1.0 {status} Test", headers, []), _stop.Token);
                     if (method == "TEARDOWN") { TornDown.TrySetResult(); return; }

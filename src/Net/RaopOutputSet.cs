@@ -49,9 +49,14 @@ internal sealed class RaopOutputSet : IDisposable
             Interlocked.CompareExchange(ref Failure, ex, null);
             Lost.TrySetResult(RaopClient.FailureReason(ex));
         }
-        public void Dispose()
+        public void Stop()
         {
             Gate.TrySetCanceled();
+            Client?.StopSending();
+        }
+        public void Dispose()
+        {
+            Stop();
             if (Client == null) return;
             Client.Lost -= OnLost;
             Client.Dispose();
@@ -220,6 +225,12 @@ internal sealed class RaopOutputSet : IDisposable
             ct.ThrowIfCancellationRequested();
             lock (_commands)
             {
+                if (_lost.Task.IsCompleted)
+                {
+                    string reason = LostReason ?? "RAOP output lost";
+                    Exception error = LostRequiresUserAction ? new RaopRefusedException(reason) : new AirPlayException(reason);
+                    throw new GroupMemberException(LostOutputName ?? "RAOP", error);
+                }
                 _stop.Token.ThrowIfCancellationRequested();
                 ObjectDisposedException.ThrowIf(_disposed != 0, this);
                 if (_timeline != null) throw new InvalidOperationException("RAOP outputs already started");
@@ -318,8 +329,12 @@ internal sealed class RaopOutputSet : IDisposable
                         slot.Terminal |= RequiresUserAction(current.Failure ?? current.Client.LostException, reason);
                         if (slot.Options.Required) SignalRequiredLoss(slot, reason);
                     }
+                    if (slot.Options.Required)
+                    {
+                        current.Stop();
+                        _stop.Cancel();
+                    }
                     current.Dispose();
-                    if (slot.Options.Required) _stop.Cancel();
                     NotifyActionRequired(slot, current.Failure ?? current.Client.LostException);
                     if (slot.Options.Required) return;
                 }
@@ -397,7 +412,6 @@ internal sealed class RaopOutputSet : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _stop.Cancel();
         Session[] sessions;
         Task[] workers;
         lock (_commands)
@@ -406,6 +420,9 @@ internal sealed class RaopOutputSet : IDisposable
             foreach (var slot in _slots) slot.Current = null;
             workers = _slots.Select(s => s.Worker ?? Task.CompletedTask).ToArray();
         }
+        // Stop all local packet loops before a remote FLUSH/TEARDOWN can hold up the first receiver.
+        foreach (var session in sessions) session.Stop();
+        _stop.Cancel();
         foreach (var session in sessions) session.Dispose();
         _ = Task.WhenAll(workers.Append(_prepareDone.Task)).ContinueWith(t =>
         {

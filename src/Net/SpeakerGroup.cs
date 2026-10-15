@@ -36,6 +36,7 @@ internal sealed class SpeakerGroup : IOutputSink
     private RaopOutputSet? _raopOutputs;
     private TimelinePump? _pump;
     private CancellationTokenSource? _outputStop;
+    private CancellationTokenSource? _connecting;
 
     private SpeakerGroup(IReadOnlyList<MemberSetup> setups, AudioFifo fifo, Func<double>? volumeCap)
     {
@@ -86,6 +87,7 @@ internal sealed class SpeakerGroup : IOutputSink
     public IReadOnlyList<RaopGroupOutputStatus> RaopOutputs => _raopOutputs?.Status ?? [];
     internal long TimelineProducedPackets => _pump?.ProducedPackets ?? 0;
     internal long TimelineSkippedPackets => _pump?.SkippedPackets ?? 0;
+    internal bool TimelineRunning => _pump?.IsRunning == true;
 
     public void SetVolume(double percent, bool mute = false) => SetVolumePercent(mute ? 0 : percent);
 
@@ -106,6 +108,9 @@ internal sealed class SpeakerGroup : IOutputSink
         var group = new SpeakerGroup(setups, fifo, volumeCap);
         group._localOutputs = localOutputs;
         group._raopOutputs = raopOutputs;
+        using var connecting = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        group._connecting = connecting;
+        var attemptToken = connecting.Token;
         try
         {
             if (coordinated && (source != null || groupDelayMs is null))
@@ -118,11 +123,11 @@ internal sealed class SpeakerGroup : IOutputSink
                 if (localOutputs != null) _ = group.WatchLocalOutputs(localOutputs, group._outputStop.Token);
                 if (raopOutputs != null) _ = group.WatchRaopOutputs(raopOutputs, group._outputStop.Token);
             }
-            await group.PrepareAllAsync(ct);
+            await group.PrepareAllAsync(attemptToken);
             var members = group._members.Select(m => m!).ToArray();
 
             // RECORD on every speaker first: nothing plays until all of them have accepted the stream.
-            await group.EachAsync((m, _) => m.Record(), ct);
+            await group.EachAsync((m, _) => m.Record(), attemptToken);
 
             // One timeline: same RTP base and T0 for all; per-session keys, SSRCs and sequence numbers.
             long? coordinatedT0 = null;
@@ -163,19 +168,19 @@ internal sealed class SpeakerGroup : IOutputSink
                 };
                 group._sender = sender;
                 sender.Start(t0 + (coordinated ? MediaClock.FromMs(TimelinePump.HeadroomMs) : 0));
-                await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), ct);
+                await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), attemptToken);
             }
 
             group.MasterVolume = VolumeLimit.Clamp(
                 volumePercent ?? (members.Length > 0 ? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0) : 20),
                 group.VolumeCapPercent);
             await group.EachAsync((m, i) => m.SetVolumePercent(
-                MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), ct);
+                MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), attemptToken);
 
             if (coordinated)
             {
-                if (localOutputs != null) await localOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, ct);
-                if (raopOutputs != null) await raopOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, ct);
+                if (localOutputs != null) await localOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, attemptToken);
+                if (raopOutputs != null) await raopOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, attemptToken);
                 group.ThrowIfLost();
             }
 
@@ -187,8 +192,10 @@ internal sealed class SpeakerGroup : IOutputSink
         catch
         {
             group.Dispose();
+            if (!ct.IsCancellationRequested) group.ThrowIfLost();
             throw;
         }
+        finally { Interlocked.Exchange(ref group._connecting, null); }
     }
 
     private async Task PrepareAllAsync(CancellationToken ct)
@@ -253,6 +260,7 @@ internal sealed class SpeakerGroup : IOutputSink
             Log.Warn($"group: {_lostForLog}; reconnecting all speakers");
             _lost.TrySetResult(L.F("{0}：{1}", _setups[index].Label, reason));
         }
+        CancelConnecting();
     }
 
     private void ThrowIfLost()
@@ -311,6 +319,14 @@ internal sealed class SpeakerGroup : IOutputSink
             Log.Warn($"group: {_lostForLog}; reconnecting required outputs");
             _lost.TrySetResult(L.F("{0}：{1}", name, reason));
         }
+        CancelConnecting();
+    }
+
+    private void CancelConnecting()
+    {
+        try { Volatile.Read(ref _connecting)?.Cancel(); }
+        catch (ObjectDisposedException) { } // the completed setup has already released its token
+        catch (AggregateException ex) { Log.Warn($"group setup cancellation: {ex.InnerException?.Message}"); }
     }
 
     /// <summary>Linked volume: each speaker gets the shared volume plus its own offset, never above the cap.</summary>
@@ -355,11 +371,13 @@ internal sealed class SpeakerGroup : IOutputSink
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        CancelConnecting();
         _outputStop?.Cancel();
+        // Stop capture consumption and packet production before any potentially slow remote teardown.
+        _pump?.Dispose();
+        _sender?.Dispose();
         _localOutputs?.Dispose();
         _raopOutputs?.Dispose();
-        _sender?.Dispose(); // stop the shared timeline first, then end every session
-        _pump?.Dispose();
         _outputStop?.Dispose();
         IGroupMember?[] members;
         lock (_members) members = _members.ToArray();
