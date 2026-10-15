@@ -56,7 +56,7 @@ public sealed partial class StreamController
                 ReceiverProtocolConnected?.Invoke(device.DeviceId, session.Protocol, session.ArrivalToRenderMs);
                 OwnSession.Began(key, UtcNow()); streamed = true; began = UtcNow(); attempt = 0;
                 Set(StreamState.Streaming, L.F("{0} · {1}", device.Name, ReceiverProtocols.Label(session.Protocol)));
-                using var network = new NetworkWatch(device.Address);
+                using var network = new NetworkWatch(device.Address).Start();
                 _net = network;
                 reason = await lost.Task.WaitAsync(ct);
             }

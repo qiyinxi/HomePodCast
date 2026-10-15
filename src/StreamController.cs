@@ -234,6 +234,7 @@ public sealed partial class StreamController : IDisposable
                 {
                     _net = net;
                     using var health = FeedHealth(net, () => client.Sender, () => NetworkProfile.ForSpeaker(address)); // 首页's network status
+                    net.Start(); // only now that FeedHealth listens: the connection's first spikes count too
                     using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
                         lostReason = await lost.Task.WaitAsync(ct);
                     LogStats();

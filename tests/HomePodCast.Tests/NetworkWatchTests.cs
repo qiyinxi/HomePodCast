@@ -14,7 +14,7 @@ public class NetworkWatchTests
     [Fact]
     public async Task Summarizes_round_trips_and_resets_after_each_summary()
     {
-        using var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Parse("127.0.0.2"));
+        using var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Parse("127.0.0.2")).Start();
         // CI runners can be slow to start the ping loops: wait (up to 5 s) until both targets have answered.
         Match first = Match.Empty;
         for (int i = 0; i < 50 && !first.Success; i++)
@@ -41,6 +41,7 @@ public class NetworkWatchTests
         var spikes = new ConcurrentQueue<long>();
         using var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Parse("192.0.2.1")); // TEST-NET-1: nobody answers
         watch.Spike += (target, rtt) => { if (target == PingTarget.Router) spikes.Enqueue(rtt); };
+        watch.Start();
         await Task.Delay(1500);
         Assert.False(watch.WatchesRouter);
         Assert.Empty(spikes);
@@ -95,6 +96,7 @@ public class NetworkWatchTests
                }))
         {
             watch.Spike += (_, rtt) => spikes.Enqueue(rtt);
+            watch.Start();
             await WaitFor(() => Volatile.Read(ref calls) >= 300);
             var summary = watch.TakeSummary();
             var m = Regex.Match(summary, @"^ping=2/2/2ms lost=0/(\d+) unsent=(\d+)$");
@@ -126,6 +128,7 @@ public class NetworkWatchTests
                 _ => new NetworkWatch.EchoResult(IPStatus.DestinationHostUnreachable, 0),
             }));
             watch.Spike += (_, rtt) => spikes.Enqueue(rtt);
+            watch.Start(); // the second ping is lost: its spike is in before the third ping is made
             await WaitFor(() => Volatile.Read(ref calls) >= 300 && !lines.IsEmpty);
             var m = Regex.Match(watch.TakeSummary(), @"^ping=2/2/2ms lost=(\d+)/(\d+)$");
             Assert.True(m.Success);
@@ -138,6 +141,26 @@ public class NetworkWatchTests
         Assert.Contains(-1L, spikes);
         Assert.DoesNotContain(spikes, rtt => rtt >= 0); // 2 ms answers are no spikes, and 700 ms is no round trip
         Assert.Contains(lines, l => l.EndsWith("lost (DestinationHostUnreachable)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Pings_nothing_before_Start_so_a_handler_gets_the_first_spike()
+    {
+        // 2026-10-15: the constructor started the probes, and with a fake that answers at once a probe could make all its
+        // pings before the test subscribed; CI found no spike at all (run 38710133779).
+        int calls = 0;
+        var spikes = new ConcurrentQueue<long>();
+        using var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Loopback, 0, () => new FakeEcho(() => Interlocked.Increment(ref calls) switch
+        {
+            2 => new NetworkWatch.EchoResult(IPStatus.TimedOut, 0), // the only spike: the first answer came before it
+            _ => new NetworkWatch.EchoResult(IPStatus.Success, 2),
+        }));
+        await Task.Delay(100); // a started probe would have pinged thousands of times by now
+        Assert.Equal(0, Volatile.Read(ref calls));
+        watch.Spike += (_, rtt) => spikes.Enqueue(rtt);
+        watch.Start();
+        await WaitFor(() => !spikes.IsEmpty);
+        Assert.Equal(new[] { -1L }, spikes);
     }
 
     private static async Task WaitFor(Func<bool> condition)
@@ -185,7 +208,7 @@ public class NetworkWatchSoakTests(Xunit.Abstractions.ITestOutputHelper output)
         int before = process.HandleCount, most = before;
         long pings = 0;
         var summary = new Regex(@"(?:ping|router)=\S+ lost=\d+/(\d+)");
-        using (var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Parse("127.0.0.2"), intervalMs, NetworkWatch.SystemEchoFactory))
+        using (var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Parse("127.0.0.2"), intervalMs, NetworkWatch.SystemEchoFactory).Start())
         {
             var sw = Stopwatch.StartNew();
             while (sw.Elapsed < TimeSpan.FromSeconds(4))
