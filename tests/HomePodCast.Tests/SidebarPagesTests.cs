@@ -40,7 +40,7 @@ public class SidebarPagesTests
         page.Inspect("other");
         var list = TestApp.Field<StackPanel>(page, "_list");
         Assert.All(list.Controls.OfType<NavItem>(), item => Assert.Equal(AccessibleRole.ListItem, item.AccessibilityObject.Role));
-        Assert.Single(list.Controls.OfType<NavItem>().Where(item => item.Selected));
+        Assert.Single(list.Controls.OfType<NavItem>(), item => item.Selected);
         Assert.Equal(TestApp.DeviceId, config.DeviceId);
         Assert.Equal("other", TestApp.Field<string>(page, "_selected"));
         page.PageHidden();
