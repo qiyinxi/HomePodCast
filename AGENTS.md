@@ -93,7 +93,7 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   folder. Don't edit, build, commit in or remove a worktree the other agent made. The main checkout stays on `dev`
   (hard rules above).
 - **Clean up after a merge** (the maintainer, 2026-10-15). As soon as your PR is merged or closed:
-  - delete its branch on GitHub: `git push origin --delete <branch>`;
+  - its branch on GitHub: GitHub deletes it on merge (repository setting since 2026-10-15); for a PR closed without merging, `git push origin --delete <branch>`;
   - remove the worktree: `git worktree remove <path>`;
   - delete the local branch: `git branch -D <branch>`, after checking `git merge-base --is-ancestor <branch> origin/dev`, because `-d` refuses while the main checkout's `dev` is behind.
   Only your own branches and worktrees.
