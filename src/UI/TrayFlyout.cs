@@ -336,13 +336,11 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     protected override void OnPaintBackground(PaintEventArgs e) =>
         e.Graphics.Clear(Frame > 0 ? Theme.P.PopupBorder : SurfaceColor);
 
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
-        PerformLayout();
-        Invalidate(true);
-    }
+    });
 
     private void OnThemeChanged()
     {

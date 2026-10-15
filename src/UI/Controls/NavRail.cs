@@ -170,7 +170,7 @@ internal sealed class NavItem : FluentControl
 
     public override Size GetPreferredSize(Size proposedSize)
     {
-        int text = TextRenderer.MeasureText(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width;
+        int text = TextMeasure.Size(Text, StyleFont(TextStyle.Body), Size.Empty, TextFlags.Measure).Width;
         return new Size(Dp(16 + 16 + 14) + text + Dp(16), Dp(38));
     }
 

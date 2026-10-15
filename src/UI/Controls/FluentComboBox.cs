@@ -78,7 +78,7 @@ internal sealed class FluentComboBox : FluentControl
         if (PreferredWidth > 0) return new Size(Dp(PreferredWidth), h);
         var texts = _placeholder.Length > 0 ? Items.Append(_placeholder) : Items;
         int text = !texts.Any() ? Dp(80)
-            : texts.Max(t => TextRenderer.MeasureText(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
+            : texts.Max(t => TextMeasure.Size(t, Theme.FontFor(TextStyle.Body, DeviceDpi, t), Size.Empty, TextFlags.Measure).Width);
         return new Size(Math.Max(text + Dp(12 + 38), Dp(MinWidth)), h);
     }
 

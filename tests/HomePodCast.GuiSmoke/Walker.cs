@@ -11,9 +11,10 @@ namespace HomePodCast.GuiSmoke;
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
 /// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
 /// or <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), in a UI
-/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width.
+/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
+/// <see cref="DpiChange"/> changes the display scale to 100 % and back while the app runs (as a move to another monitor).
 /// </summary>
-internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false)
+internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false)
 {
     public string Id => $"{Kind}-{Language}-{Scale}" + (Theme == "auto" ? "" : "-" + Theme);
 }
@@ -121,6 +122,7 @@ internal sealed partial class Walker
     {
         Start(BaseConfig());
         WalkEverything(connected: false);
+        if (_s.DpiChange) DpiRoundTrip();
         Quit();
         CheckLog(idle: true);
     }
@@ -289,6 +291,97 @@ internal sealed partial class Walker
                 Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
+        }
+    }
+
+    /// <summary>
+    /// The window moved to a monitor with another scale. 2026-10-15, 1.1.0-beta.5 between the maintainer's 150 % and 100 %
+    /// monitors: 「未响应」 for seconds, half repainted (navigation items and rows drawn twice). The runner has one screen, so
+    /// its scale goes to 100 % and back while the app runs, which sends the window the same WM_DPICHANGED. Each time: the
+    /// window answers within Windows' 5 s (after that it shows as not responding), its controls are at the new DPI, the
+    /// layout checks pass, and repainting the whole window changes nothing (no stale picture left from before).
+    /// </summary>
+    private void DpiRoundTrip()
+    {
+        Navigate("麦克风与音效"); // the page in the maintainer's screenshot
+        try
+        {
+            foreach (int scale in new[] { 100, _s.Scale })
+            {
+                string step = $"DPI {scale}%";
+                var (ok, detail) = Display.SetScale(scale);
+                if (!ok)
+                {
+                    _report.Warn(Where(step), $"the scale can't change on this runner: {detail}");
+                    return;
+                }
+                var watch = Stopwatch.StartNew();
+                var main = MainWindow();
+                uint want = (uint)(96 * scale / 100);
+                WaitUntil(() => Native.GetDpiForWindow(main) == want, $"the window at {want} dpi", 10_000, fail: false);
+                if (Native.GetDpiForWindow(main) != want)
+                {
+                    _report.Warn(Where(step), $"the window stayed at {Native.GetDpiForWindow(main)} dpi: Windows did not move it to the new scale");
+                    return;
+                }
+                // A message waits behind the DPI change's work on the UI thread.
+                bool answered = Native.SendMessageTimeout(main, 0 /* WM_NULL */, IntPtr.Zero, IntPtr.Zero, 0, 30_000, out _) != IntPtr.Zero;
+                long answer = watch.ElapsedMilliseconds;
+                Expect(answered, step, "the window did not answer within 30 s after the scale changed");
+                // Laid out at the new DPI: the navigation items are 38 px high at 96 dpi.
+                int itemHeight = (int)(38 * want / 96);
+                WaitUntil(() => Find(Uia.Snapshot(main), n => n.Type == "TabItem" && n.Name == T("设置")) is { } item &&
+                                Math.Abs(item.Rect.Height - itemHeight) <= 1, $"the navigation at {want} dpi ({itemHeight} px items)", 15_000);
+                long laidOut = watch.ElapsedMilliseconds;
+                Expect(answer < 5000, step, $"the window took {answer} ms to answer after the scale changed (Windows shows it as not responding after 5 s)");
+                _report.Note(Where(step), $"{want} dpi: the window answered after {answer} ms and was laid out after {laidOut} ms");
+                Thread.Sleep(800);
+                var tree = Uia.Snapshot(main);
+                CheckNavigation(tree);
+                Layout(tree, $"麦克风与音效 at {scale}%");
+                CheckRepainted(main, step);
+                Shoot(main, $"dpi-{scale}", $"麦克风与音效 after the scale changed to {scale}%");
+                Navigate("设置");
+                Layout(Uia.Snapshot(main), $"设置 at {scale}%");
+                Navigate("麦克风与音效");
+            }
+        }
+        finally
+        {
+            if (Display.Scale()?.Current != _s.Scale) Display.SetScale(_s.Scale); // the next scenarios run at this scale
+        }
+    }
+
+    /// <summary>
+    /// Nothing on the window is a leftover: repainted in full, it looks the same (a control drawn at its old place and not
+    /// painted over since would differ).
+    /// </summary>
+    private void CheckRepainted(IntPtr hwnd, string step)
+    {
+        using var before = Native.Capture(hwnd);
+        Native.RedrawWindow(hwnd, IntPtr.Zero, IntPtr.Zero, 0x1 | 0x4 | 0x80 | 0x100); // INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
+        Thread.Sleep(400);
+        using var after = Native.Capture(hwnd);
+        if (before.Size != after.Size)
+        {
+            _report.Fail(Where(step), $"the window changed size while it was repainted ({before.Size} → {after.Size})");
+            return;
+        }
+        int differ = 0, total = 0;
+        for (int y = 0; y < before.Height; y += 2)
+        for (int x = 0; x < before.Width; x += 2, total++)
+            if (before.GetPixel(x, y) != after.GetPixel(x, y)) differ++;
+        double share = 100.0 * differ / Math.Max(1, total);
+        if (share > 1)
+        {
+            string name = step.Replace("%", "").Replace(' ', '-').ToLowerInvariant();
+            before.Save(Path.Combine(_dir, $"stale-{name}-before.png"), ImageFormat.Png);
+            after.Save(Path.Combine(_dir, $"stale-{name}-after.png"), ImageFormat.Png);
+            _report.Fail(Where(step), $"{share:F1}% of the window changed when it was repainted: a stale picture was left after the scale change");
+        }
+        else
+        {
+            _report.Pass(Where(step), $"repainted in full, {share:F2}% of the window changed");
         }
     }
 
