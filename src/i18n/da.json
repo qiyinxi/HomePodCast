@@ -225,8 +225,6 @@
   "登录 Windows 后在托盘里启动。": "Starter i meddelelsesområdet, når du logger på Windows.",
   "启动时连接上次用的音箱。": "Opretter forbindelse til den senest brugte højttaler ved start.",
   "音量与快捷键": "Lydstyrke og genvejstaster",
-  "工具": "Værktøjer",
-  "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Stereopar, synkronisering i flere rum, kanalopdeling og lydstyrkejustering pr. højttaler.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Lyt efter klikket, og se efter blinket for at måle, hvor meget lyden er bagefter billedet. Opret forbindelse til højttaleren først.",
   "关于": "Om",
   "{0} 音量偏移": "Lydstyrkejustering for {0}",
@@ -505,7 +503,6 @@
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen brug af tastatur eller mus og ingen lyd i HomePod så længe.",
   "开始和结束时间相同，不会断开。": "Start og slut er ens, så forbindelsen afbrydes aldrig.",
   "夜间已自动断开，{0} 自动重新连接": "Afbrudt for natten; opretter forbindelse igen kl. {0}",
-  "本地 5.1 或 7.1 影音文件的每个声道送到一台 HomePod，可以用麦克风测量各音箱的延迟。": "Hver kanal i en lokal 5.1- eller 7.1-mediefil på sin egen HomePod, med højttalerforsinkelser målt med mikrofon.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Eksperimentelt: trådløs biograf er endnu ikke testet med flere rigtige HomePods. Kanaler, synkronisering og målinger kan være forkerte.",
   "把本地影音文件的每个声道送到一台 HomePod：5.1 和 7.1 的环绕声道、中置和低音声道各自独立播放；没有分配音箱的声道混入相邻的音箱，立体声和单声道文件只用前面的音箱。这里只播放音轨，不显示视频。": "Afspiller hver kanal i en lokal mediefil på sin egen HomePod: surround-, center- og LFE-kanalerne i 5.1 og 7.1 spiller hver for sig; en kanal uden højttaler mixes ind i de nærliggende, og stereo- og monofiler bruger kun højttalerne foran. Her afspilles kun lydsporet, der vises ingen video.",
   "音箱位置": "Højttalerplacering",
@@ -614,5 +611,12 @@
   "实际连接：{0}": "Aktiv forbindelse: {0}",
   "未连接；连接后显示实际协议。": "Afbrudt; den aktive protokol vises efter tilslutning.",
   "接收端处理时间：{0} ms": "Modtagerens behandlingstid: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-modtagere fra tredjeparter kan endnu ikke indgå i højttalergrupper."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-modtagere fra tredjeparter kan endnu ikke indgå i højttalergrupper.",
+  "许可证": "Licens",
+  "切换到浅色": "Skift til lyst tema",
+  "切换到深色": "Skift til mørkt tema",
+  "多声道（5.1 / 7.1，实验性）": "Flerkanal (5.1 / 7.1, eksperimentel)",
+  "多音箱": "Flere højttalere",
+  "多声道": "Flerkanal",
+  "同步观影窗口": "Synkroniseret video"
 }

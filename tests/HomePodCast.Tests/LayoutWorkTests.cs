@@ -75,11 +75,11 @@ public class LayoutWorkTests
         // The buttons were collapsed when 设置 was built (no update yet), and are shown last to first: WinForms put 查看说明
         // before 更新 when it sorted them after their windows (LayoutPanel.KeepChildOrder).
         var app = TestApp.Create(TestApp.Config());
-        using var host = new Host(new SettingsPage(app), 784);
+        using var host = new Host(new AboutPage(app), 784);
         var next = new Release(ReleaseVersion.Parse("9.0.0-beta.1")!, "v9.0.0-beta.1", "https://example.invalid", true, null);
         typeof(TrayApp).GetField("_update", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, next);
         typeof(TrayApp).GetField("_updateStatus", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, "发现新版本 9.0.0-beta.1");
-        ((SettingsPage)host.Page).ShowUpdate();
+        ((AboutPage)host.Page).ShowUpdate();
         Application.DoEvents();
         var buttons = TestApp.Field<UpdateStatusRow>(host.Page, "_updateRow").Buttons.Controls.Cast<Control>().Where(c => !LayoutPanel.IsCollapsed(c)).ToList();
         Assert.Equal(["更新", "查看说明", "跳过此版本"], buttons.Select(b => b.Text));
@@ -87,9 +87,9 @@ public class LayoutWorkTests
     });
 
     [Fact]
-    public void A_speaker_info_read_lays_out_the_settings_page_once_each_time_it_shows() => Sta.Run(() =>
+    public void A_speaker_info_read_lays_out_the_speakers_page_once_each_time_it_shows() => Sta.Run(() =>
     {
-        using var host = new Host(new SettingsPage(TestApp.Create(TestApp.Config())), 784);
+        using var host = new Host(new SpeakersPage(TestApp.Create(TestApp.Config())), 784);
         var info = TestApp.Field<SpeakerInfoPanel>(host.Page, "_speakerInfo");
         var refresh = TestApp.Field<FluentButton>(info, "_refresh");
         int changes = 0;
@@ -123,8 +123,9 @@ public class LayoutWorkTests
         List<(uint Pid, string Name)> playing = [(9001, "Game"), (9002, "Browser")];
         mixer.FindApps = _ => playing.Select(p => new AppAudio(p.Pid, false, p.Name, null) { ExeKey = p.Name.ToLowerInvariant() + ".exe" }).ToList();
         ShowHidden(window);
-        AppPage[] all = [AppPage.Home, AppPage.Mixer, AppPage.Effects, AppPage.Settings];
+        AppPage[] all = Enum.GetValues<AppPage>();
         foreach (var page in all) Go(window, page); // every page once: its windows and texts
+        Go(window, AppPage.Settings);
         Assert.Equal(2, MixerRows(mixer).Count);
 
         foreach (var (from, to) in new[] { (AppPage.Settings, AppPage.Home), (AppPage.Home, AppPage.Mixer), (AppPage.Mixer, AppPage.Effects),
@@ -141,6 +142,17 @@ public class LayoutWorkTests
             }
             Assert.Equal(handles, Handles(window)); // no window created (or destroyed) for a page shown before
             Assert.Equal(rows, MixerRows(mixer));
+        }
+
+        foreach (var page in all)
+        {
+            if (window.CurrentPage == page) continue;
+            int handles = Handles(window);
+            using var work = new Work();
+            Go(window, page);
+            work.AssertOnce($"new page → {page}", output);
+            Assert.Equal(1, work.Pages);
+            Assert.Equal(handles, Handles(window));
         }
 
         // Another app plays meanwhile: the rows are built again, once, when the page is shown.
@@ -164,8 +176,12 @@ public class LayoutWorkTests
             var app = TestApp.Create(TestApp.Config());
             using var window = new MainWindow(app);
             ShowHidden(window);
-            foreach (var page in new[] { AppPage.Home, AppPage.Mixer, AppPage.Effects, AppPage.Settings }) Go(window, page);
+            foreach (var page in Enum.GetValues<AppPage>()) Go(window, page);
+            Go(window, AppPage.Settings);
             int start = window.DeviceDpi, other = start == 96 ? 144 : 96; // 150 % ↔ 100 %, the maintainer's two monitors
+            foreach (var page in Enum.GetValues<AppPage>())
+            {
+            Go(window, page);
             foreach (int dpi in new[] { other, start })
             {
                 using (var work = new Work())
@@ -180,10 +196,11 @@ public class LayoutWorkTests
                 var settings = TestApp.Field<SettingsPage>(window, "_settings");
                 var night = TestApp.Field<ToggleSwitch>(settings, "_night");
                 Assert.Equal(dpi, night.DeviceDpi);
-                Assert.Equal(night.GetPreferredSize(Size.Empty), night.Size); // laid out at the new DPI
+                if (page == AppPage.Settings) Assert.Equal(night.GetPreferredSize(Size.Empty), night.Size); // laid out at the new DPI
                 var rail = TestApp.Field<NavRail>(window, "_rail");
                 Assert.All(rail.Items, item => Assert.Equal(Theme.Dp(38, dpi), item.Height));
-                AssertNoOverlap(settings.Content);
+                AssertNoOverlap(TestApp.Field<ScrollPage[]>(window, "_pages")[(int)page].Content);
+            }
             }
             window.Hide();
         }
@@ -191,6 +208,38 @@ public class LayoutWorkTests
         {
             perMonitor.SetValue(null, before);
         }
+    });
+
+    [Theory]
+    [InlineData(Theme.Auto)]
+    [InlineData(Theme.Light)]
+    [InlineData(Theme.Dark)]
+    public void Theme_action_updates_preferences_once_and_does_not_navigate(string mode) => Sta.Run(() =>
+    {
+        string previous = Theme.Mode;
+        try
+        {
+            Theme.Mode = mode;
+            var config = TestApp.Config(); config.Theme = mode;
+            using var window = new MainWindow(TestApp.Create(config));
+            ShowHidden(window);
+            Go(window, AppPage.Settings);
+            var expected = Theme.IsDark ? Theme.Light : Theme.Dark;
+            using (var work = new Work())
+            {
+                window.ToggleTheme();
+                Application.DoEvents();
+                work.AssertOnce("theme action", output);
+                Assert.Equal(1, work.Pages);
+            }
+            Assert.Equal(expected, config.Theme);
+            Assert.Equal(expected, Theme.Mode);
+            Assert.Equal(AppPage.Settings, window.CurrentPage);
+            var settings = TestApp.Field<SettingsPage>(window, "_settings");
+            Assert.Equal(expected == Theme.Light ? 1 : 2, TestApp.Field<FluentComboBox>(settings, "_theme").SelectedIndex);
+            Assert.False(TestApp.Field<ThemeTransition>(window, "_transition").Running); // synthetic transparent window
+        }
+        finally { Theme.Mode = previous; }
     });
 
     // ---------------------------------------------------------------- helpers

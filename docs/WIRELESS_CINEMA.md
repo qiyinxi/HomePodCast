@@ -7,7 +7,7 @@
 **Experimental, and never tested with real speakers.** The maintainer has one HomePod; everything below was checked
 only against simulated speakers and generated files. The label stays until it has been tried with several HomePods.
 
-Settings → Tools → Wireless cinema plays the **audio track** of a local media file with each channel on a HomePod of
+Multichannel plays the **audio track** of a local media file with each channel on a HomePod of
 its own: front left and right, center, the LFE channel, and side and rear surrounds. It shows no video and does not
 control a video player. Opening the window starts nothing.
 
@@ -87,7 +87,7 @@ What needs real HomePods is listed in `docs/device-test-checklist.zh-CN.md` (实
 **实验性功能，还没有在真实音箱上测过。** 维护者只有一台 HomePod，下面的内容只用模拟音箱和生成的文件验证过。在多台
 HomePod 上实测之前，这个标注不会去掉。
 
-设置 → 工具 →「无线影院」播放本地影音文件的**音轨**，每个声道送到一台 HomePod：前左、前右、中置、低音声道，以及侧环绕和
+「多声道」播放本地影音文件的**音轨**，每个声道送到一台 HomePod：前左、前右、中置、低音声道，以及侧环绕和
 后环绕。它不显示视频，也不控制视频播放器。打开窗口不会开始任何播放。
 
 ### 音箱和声道

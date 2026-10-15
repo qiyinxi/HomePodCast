@@ -63,7 +63,7 @@ Then test the beta on the real HomePod with `docs/device-test-checklist.zh-CN.md
 
 ### The GUI smoke test
 
-Every build (pushes, PRs, tags) runs the job `gui-smoke` after `build`: `tests/HomePodCast.GuiSmoke` starts the Release exe of that build (from its `-win-x64.zip`) on the runner's desktop with test configs and walks it through UI Automation: every page scrolled through, the tray flyout, 全局快捷键, 使用配置, 多音箱 and 设置 → 音箱信息; idle, waiting to retry a speaker nobody answers (首页 and the flyout must read 连接), and connected to the tests' fake HomePod on 127.0.0.1:7000; in Chinese, English and German at 100 % (also at the window's minimum width) and 150 % scale, and once in dark mode. It also opens the synchronized viewing window (from the build's `HomePodCast-video-window-*.zip`) from Settings, then on its own with generated 4K pictures through its GPU queue and swap chain, never the window picker. And it fakes a .NET update under the connected app on a private copy of the runner's .NET (a newer patch version appears, the one the app runs on loses its deps.json and System.Net.Http): after 检查更新, 首页 must show the restart notice, and 立即重启 must bring the app back by itself on the newer version, connected again. It fails on the app exiting, an `ERROR` in its log, a window that doesn't appear, controls clipped by or overlapping others, buttons without text, untranslated (Chinese) text in English or German, and its page checks; texts cut off with an ellipsis and controls without an accessible name are listed as warnings. Every screenshot, the UI Automation trees and each run's log are in the `gui-screenshots` artifact; the job summary lists what failed. The `release` job needs it, so a tag whose GUI smoke test fails publishes nothing.
+Every build (pushes, PRs, tags) runs the job `gui-smoke` after `build`: `tests/HomePodCast.GuiSmoke` starts the Release exe of that build (from its `-win-x64.zip`) on the runner's desktop with test configs and walks it through UI Automation: every page scrolled through, the tray flyout, 全局快捷键, 使用配置, 多音箱 and 音箱信息; idle, waiting to retry a speaker nobody answers (首页 and the flyout must read 连接), and connected to the tests' fake HomePod on 127.0.0.1:7000; in Chinese, English and German at 100 % (also at the window's minimum width) and 150 % scale, and once in dark mode. It also opens the synchronized viewing window (from the build's `HomePodCast-video-window-*.zip`) from Settings, then on its own with generated 4K pictures through its GPU queue and swap chain, never the window picker. And it fakes a .NET update under the connected app on a private copy of the runner's .NET (a newer patch version appears, the one the app runs on loses its deps.json and System.Net.Http): after 检查更新, 首页 must show the restart notice, and 立即重启 must bring the app back by itself on the newer version, connected again. It fails on the app exiting, an `ERROR` in its log, a window that doesn't appear, controls clipped by or overlapping others, buttons without text, untranslated (Chinese) text in English or German, and its page checks; texts cut off with an ellipsis and controls without an accessible name are listed as warnings. Every screenshot, the UI Automation trees and each run's log are in the `gui-screenshots` artifact; the job summary lists what failed. The `release` job needs it, so a tag whose GUI smoke test fails publishes nothing.
 
 It never runs on a developer's PC: it starts the real app, which would take the HomePod away from the copy in use there. It refuses to start outside GitHub Actions unless given `--allow-local` (only for a machine without a speaker); `HomePodCast.GuiSmoke --selftest` checks the texts it looks for without starting anything.
 
@@ -136,7 +136,7 @@ Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and
 
 1. builds an older MSI from the same source (version `0.0.1-e2e.1`, MSI 0.0.1.1; it never leaves the runner) and installs it silently;
 2. serves a fake release list in the GitHub API's shape (with the asset's `digest`) and the build's own MSI on `127.0.0.1` (`tools/ci/fake-release-feed.ps1`), so nothing goes to GitHub and the real releases are never touched;
-3. runs the installed old exe's `update-selftest --feed http://127.0.0.1:<port>/releases`: the code of 设置 → 软件更新 「更新」 (`src/Update/UpdateFlow.cs`, shared with the button) without UI: check, pick, download, SHA-256, installer helper, exit;
+3. runs the installed old exe's `update-selftest --feed http://127.0.0.1:<port>/releases`: the code of 关于 → 软件更新 「更新」 (`src/Update/UpdateFlow.cs`, shared with the button) without UI: check, pick, download, SHA-256, installer helper, exit;
 4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
 5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
 
@@ -159,7 +159,7 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 - English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
 - A beta: what changed since the previous beta, what to test, known problems.
 - A stable release: everything since the previous stable release, what was verified on the real HomePod, known problems.
-- Mention updates when they matter: the MSI updates itself from 设置 → 软件更新; the portable zip and the Store version don't.
+- Mention updates when they matter: the MSI updates itself from 关于 → 软件更新; the portable zip and the Store version don't.
 
 ```markdown
 ## Highlights
@@ -253,7 +253,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 ### 界面冒烟测试
 
-每次构建（推送、PR、标签）在 `build` 之后都会跑作业 `gui-smoke`：`tests/HomePodCast.GuiSmoke` 在运行器的桌面上用测试配置启动这次构建的 Release 版程序（来自它的 `-win-x64.zip`），通过 UI Automation 走一遍：每一页整页滚动，托盘面板，全局快捷键、使用配置、多音箱和 设置 → 音箱信息；没有音箱、等待重试一个没人应答的音箱地址（首页和托盘面板必须显示「连接」）、连着测试用的假 HomePod（127.0.0.1:7000）三种状态；中文、English、Deutsch，在 100 %（另加最小窗口宽度）和 150 % 缩放下，另有一次深色模式。它还会从设置打开同步观影窗口（来自这次构建的 `HomePodCast-video-window-*.zip`），再单独用生成的 4K 画面运行它，经过显卡队列和交换链显示，从不打开窗口选择器。它还在运行器上 .NET 的私有副本上模拟一次推流中的 .NET 更新（出现更新的补丁版本，程序用的版本没了 deps.json 和 System.Net.Http）：点「检查更新」后首页必须出现重启提示，点「立即重启」后程序必须自己在新版本上重新打开、重新连上。程序退出、日志里有 `ERROR`、窗口没出来、控件被裁掉或互相重叠、按钮没有文字、English 或 Deutsch 里有没翻译的中文，以及各页的检查没通过，都会让它失败；被省略号截断的文字、没有无障碍名称的控件作为警告列出。所有截图、UI Automation 树和每次运行的日志都在 `gui-screenshots` 工件里，作业摘要列出失败项。`release` 作业依赖它，所以界面冒烟测试失败的标签不会发布任何东西。
+每次构建（推送、PR、标签）在 `build` 之后都会跑作业 `gui-smoke`：`tests/HomePodCast.GuiSmoke` 在运行器的桌面上用测试配置启动这次构建的 Release 版程序（来自它的 `-win-x64.zip`），通过 UI Automation 走一遍：每一页整页滚动，托盘面板，全局快捷键、使用配置、多音箱和 音箱信息；没有音箱、等待重试一个没人应答的音箱地址（首页和托盘面板必须显示「连接」）、连着测试用的假 HomePod（127.0.0.1:7000）三种状态；中文、English、Deutsch，在 100 %（另加最小窗口宽度）和 150 % 缩放下，另有一次深色模式。它还会从设置打开同步观影窗口（来自这次构建的 `HomePodCast-video-window-*.zip`），再单独用生成的 4K 画面运行它，经过显卡队列和交换链显示，从不打开窗口选择器。它还在运行器上 .NET 的私有副本上模拟一次推流中的 .NET 更新（出现更新的补丁版本，程序用的版本没了 deps.json 和 System.Net.Http）：点「检查更新」后首页必须出现重启提示，点「立即重启」后程序必须自己在新版本上重新打开、重新连上。程序退出、日志里有 `ERROR`、窗口没出来、控件被裁掉或互相重叠、按钮没有文字、English 或 Deutsch 里有没翻译的中文，以及各页的检查没通过，都会让它失败；被省略号截断的文字、没有无障碍名称的控件作为警告列出。所有截图、UI Automation 树和每次运行的日志都在 `gui-screenshots` 工件里，作业摘要列出失败项。`release` 作业依赖它，所以界面冒烟测试失败的标签不会发布任何东西。
 
 它不会在开发者的电脑上跑：它启动的是真程序，会把那台电脑上正在用的 HomePod 抢走。不在 GitHub Actions 里时它拒绝启动，除非加 `--allow-local`（只用于没有音箱的机器）；`HomePodCast.GuiSmoke --selftest` 只检查它要找的界面文字，什么都不启动。
 
@@ -320,7 +320,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 1. 用同一份源码构建一个更旧的 MSI（版本 `0.0.1-e2e.1`，MSI 版本 0.0.1.1；它不会离开运行器），并静默安装；
 2. 在 `127.0.0.1` 上提供一个假的发布列表（和 GitHub API 的格式一样，带安装包的 `digest`）和这次构建自己的 MSI（`tools/ci/fake-release-feed.ps1`），所以不会访问 GitHub，也绝不会碰真实的发布；
-3. 运行已安装旧版的 `update-selftest --feed http://127.0.0.1:<端口>/releases`：就是 设置 → 软件更新 「更新」 的代码（`src/Update/UpdateFlow.cs`，和按钮共用），只是没有界面：检查、选版本、下载、SHA-256 校验、启动安装助手、退出；
+3. 运行已安装旧版的 `update-selftest --feed http://127.0.0.1:<端口>/releases`：就是 关于 → 软件更新 「更新」 的代码（`src/Update/UpdateFlow.cs`，和按钮共用），只是没有界面：检查、选版本、下载、SHA-256 校验、启动安装助手、退出；
 4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
 5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
 
@@ -343,7 +343,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 - 先英文，然后在 `## 简体中文` 标题下写同样内容的中文。说明文件里没有中文或以中文开头时，`release.ps1` 会警告。
 - 测试版：和上一个测试版相比改了什么、要测什么、已知问题。
 - 正式版：上一个正式版以来的全部变化、在真实 HomePod 上验证了什么、已知问题。
-- 需要时说明更新方式：MSI 安装版可以在 设置 → 软件更新 里自己更新；便携版 zip 和商店版不会。
+- 需要时说明更新方式：MSI 安装版可以在 关于 → 软件更新 里自己更新；便携版 zip 和商店版不会。
 
 模板见英文部分。
 

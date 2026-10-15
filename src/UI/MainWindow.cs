@@ -4,10 +4,10 @@ using HomePodCast.UI.Pages;
 
 namespace HomePodCast.UI;
 
-internal enum AppPage { Home, Mixer, Effects, Settings }
+internal enum AppPage { Home, Mixer, Effects, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
 
 /// <summary>
-/// The one window: a navigation rail (首页 / 混音器 / 麦克风与音效 / 设置) and the pages. Light or dark
+/// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
 /// with the system (or the "Theme" setting), dark title bar and Mica where Windows has them. Everything
 /// is laid out in code for the window's DPI. Closing only hides it; the tray flyout quits.
 /// </summary>
@@ -19,7 +19,12 @@ internal sealed class MainWindow : Form, ISurface
     private readonly MixerPage _mixer;
     private readonly EffectsPage _effects;
     private readonly SettingsPage _settings;
+    private readonly AboutPage _about;
+    private readonly ProfilesPage _profiles;
+    private readonly SpeakersPage _speakers;
+    private readonly CinemaPage _cinema;
     private readonly ScrollPage[] _pages;
+    private readonly ThemeTransition _transition = new();
     private int _current;
     private ScrollPage? _shown;
 
@@ -38,20 +43,33 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Home, L.T("首页"));
         _rail.Add(Glyph.Mixer, L.T("混音器"));
         _rail.Add(Glyph.Microphone, L.T("麦克风与音效"));
+        _rail.Add(Glyph.Speaker, L.T("音箱信息"));
+        _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
+        _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）"), label: L.T("多声道")); // experimental since 1.1; hardware untested
+        _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）"), label: L.T("同步观影窗口")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
+        _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
+        _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
+        _rail.Add(Glyph.Info, L.T("关于"), bottom: true);
+        _rail.ThemeRequested += ToggleTheme;
         _rail.Navigate += i => ShowPage((AppPage)i);
 
         _home = new HomePage(app);
         _mixer = new MixerPage(app);
         _effects = new EffectsPage(app.Config, app.Fx);
         _settings = new SettingsPage(app);
-        _pages = [_home, _mixer, _effects, _settings];
+        _about = new AboutPage(app);
+        _profiles = new ProfilesPage(app);
+        _speakers = new SpeakersPage(app);
+        _cinema = new CinemaPage(app);
+        _pages = [_home, _mixer, _effects, _speakers, new GroupPage(app), _cinema, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
             Controls.Add(page);
         }
         Controls.Add(_rail);
+        Controls.Add(_transition);
         _rail.TabIndex = 0;
         for (int i = 0; i < _pages.Length; i++) _pages[i].TabIndex = 1 + i;
 
@@ -93,6 +111,7 @@ internal sealed class MainWindow : Form, ISurface
     public void ShowPage(AppPage page)
     {
         using var layout = LayoutPanel.BatchLayout(this);
+        _transition.Stop();
         SelectPage(page);
         UpdateShownPage();
     }
@@ -119,12 +138,14 @@ internal sealed class MainWindow : Form, ISurface
 
     protected override void OnVisibleChanged(EventArgs e)
     {
+        if (!Visible) _transition?.Stop();
         base.OnVisibleChanged(e);
         UpdateShownPage();
     }
 
     protected override void OnResize(EventArgs e)
     {
+        _transition?.Stop();
         base.OnResize(e);
         UpdateShownPage();
     }
@@ -147,6 +168,17 @@ internal sealed class MainWindow : Form, ISurface
         Theme.StyleWindow(this);
     }
 
+    internal void ToggleTheme()
+    {
+        _transition.Run(this, () =>
+        {
+            _app.Config.Theme = Theme.IsDark ? Theme.Light : Theme.Dark;
+            _app.Config.Save();
+            Theme.Mode = _app.Config.Theme;
+            _settings.ShowTheme();
+        });
+    }
+
     private void OnThemeChanged()
     {
         if (IsDisposed) return;
@@ -157,6 +189,7 @@ internal sealed class MainWindow : Form, ISurface
 
     protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () =>
     {
+        _transition.Stop();
         base.OnDpiChanged(e);
         Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
         MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
@@ -180,13 +213,13 @@ internal sealed class MainWindow : Form, ISurface
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) Theme.Changed -= OnThemeChanged;
+        if (disposing) { Theme.Changed -= OnThemeChanged; _transition.Dispose(); }
         base.Dispose(disposing);
     }
 
     // ---------------------------------------------------------------- what TrayApp tells the window
 
-    public void SetDevices(List<AirPlayDevice> devices) => _home.SetDevices(devices);
+    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Cinema) _cinema.RefreshSpeakers(); }
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
@@ -211,7 +244,7 @@ internal sealed class MainWindow : Form, ISurface
     {
         _home.UpdateState();
         _mixer.UpdateState();
-        _settings.RefreshReceiverInfo();
+        _speakers.RefreshDevices();
     }
 
     /// <summary>An output device was added, removed, enabled, disabled, or the default changed.</summary>
@@ -237,7 +270,7 @@ internal sealed class MainWindow : Form, ISurface
     public void ShowUpdate()
     {
         _home.ShowUpdate();
-        _settings.ShowUpdate();
+        _about.ShowUpdate();
     }
 
     /// <summary>The .NET runtime this copy started on was found gone: 首页's restart notice.</summary>
@@ -250,11 +283,12 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.FlushPendingVolume();
         _effects.Flush();
         _settings.FlushPendingSettings();
+        _cinema.Flush();
     }
 
     public void FlushLatency() => _home.FlushLatency();
     public void CancelPendingLatency() => _home.CancelPendingLatency();
-    public void ShowProfiles() => _home.ShowProfiles();
+    public void ShowProfiles() { _home.ShowProfiles(); _profiles.Reload(); }
     public void ReloadConfiguration()
     {
         _home.ReloadConfiguration();
@@ -262,6 +296,8 @@ internal sealed class MainWindow : Form, ISurface
         _mixer.UpdateState();
         _effects.ReloadConfiguration();
         _settings.ReloadConfiguration();
+        _profiles.Reload();
+        _speakers.RefreshDevices();
         ShowSoundOptions();
     }
 }

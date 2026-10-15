@@ -24,7 +24,7 @@ public class CinemaFormTests
             new("Apple TV", "AA:00:00:00:00:03", IPAddress.Parse("192.168.50.13"), 7000, "AppleTV14,1", new Dictionary<string, string>()),
         ];
         public double? Volume => Config.Volume;
-        public double VolumeCap => 100;
+        public double VolumeCap => Config.VolumeCapPercent;
         public string StatusText => "正在连接…";
         public int LatencyMs => 200;
         public CinemaState State { get; set; } = CinemaState.Waiting;
@@ -86,6 +86,25 @@ public class CinemaFormTests
     private static string Status(Form form) => All<TextBlock>(form).Select(t => t.Text).FirstOrDefault(t =>
         t.StartsWith("影院播放失败", StringComparison.Ordinal) || t.StartsWith("无线影院已停止", StringComparison.Ordinal)
         || t.StartsWith("正在", StringComparison.Ordinal) || t.StartsWith("已暂停", StringComparison.Ordinal)) ?? "";
+
+    [Fact]
+    public void A_persistent_page_follows_later_cap_changes_and_flushes_its_pending_volume() => OnSta(() =>
+    {
+        var host = new FakeHost();
+        var wait = new ManualDebounce();
+        using var page = new CinemaPage(host, inputs: [], volumeWait: wait);
+        var volume = All<FluentSlider>(page).Single(slider => slider.AccessibleName == "音量");
+        Assert.Equal(100, volume.Ceiling);
+        host.Config.VolumeCapPercent = 25;
+        page.PageShown();
+        page.PageHidden();
+        Assert.Equal(25, volume.Ceiling);
+        Assert.Equal(25, volume.Value);
+        volume.UserSetValue(20);
+        page.Flush();
+        Assert.Equal([20.0], host.Applied);
+        Assert.False(wait.Enabled);
+    });
 
     [Fact]
     public void The_windows_volume_is_what_the_cinema_starts_with_and_it_is_saved() => OnSta(() =>

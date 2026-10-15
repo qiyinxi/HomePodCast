@@ -225,8 +225,6 @@
   "登录 Windows 后在托盘里启动。": "Inicia na área de notificação quando inicia sessão no Windows.",
   "启动时连接上次用的音箱。": "Liga-se à última coluna utilizada ao iniciar.",
   "音量与快捷键": "Volume e teclas de atalho",
-  "工具": "Ferramentas",
-  "立体声对、多房间同步、分声道和每台音箱的音量偏移。": "Pares estéreo, sincronização multissala, divisão de canais e ajuste de volume por coluna.",
   "听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。": "Ouça o clique e observe o círculo a piscar para medir o atraso do som em relação à imagem. Ligue-se primeiro à coluna.",
   "关于": "Acerca de",
   "{0} 音量偏移": "Ajuste de volume de {0}",
@@ -505,7 +503,6 @@
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Sem usar o teclado nem o rato e sem som no HomePod durante este tempo.",
   "开始和结束时间相同，不会断开。": "O início e o fim são iguais, por isso nunca desliga.",
   "夜间已自动断开，{0} 自动重新连接": "Desligado durante a noite; volta a ligar-se às {0}",
-  "本地 5.1 或 7.1 影音文件的每个声道送到一台 HomePod，可以用麦克风测量各音箱的延迟。": "Cada canal de um ficheiro multimédia local 5.1 ou 7.1 num HomePod próprio, com os atrasos das colunas medidos pelo microfone.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimental: o cinema sem fios ainda não foi testado com vários HomePods reais. Os canais, a sincronização e as medições podem estar errados.",
   "把本地影音文件的每个声道送到一台 HomePod：5.1 和 7.1 的环绕声道、中置和低音声道各自独立播放；没有分配音箱的声道混入相邻的音箱，立体声和单声道文件只用前面的音箱。这里只播放音轨，不显示视频。": "Reproduz cada canal de um ficheiro multimédia local num HomePod próprio: os canais surround, central e LFE de 5.1 e 7.1 tocam em separado; um canal sem coluna é misturado nas vizinhas, e os ficheiros estéreo e mono usam só as colunas frontais. Aqui só se reproduz a faixa de áudio, sem vídeo.",
   "音箱位置": "Posições das colunas",
@@ -614,5 +611,12 @@
   "实际连接：{0}": "Conexão ativa: {0}",
   "未连接；连接后显示实际协议。": "Desconectado; o protocolo ativo aparece após a conexão.",
   "接收端处理时间：{0} ms": "Processamento do receptor: {0} ms",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Receptores AirPlay de terceiros ainda não podem participar de grupos de alto-falantes."
+  "第三方 AirPlay 设备暂不支持多音箱分组。": "Receptores AirPlay de terceiros ainda não podem participar de grupos de alto-falantes.",
+  "许可证": "Licença",
+  "切换到浅色": "Mudar para o modo claro",
+  "切换到深色": "Mudar para o modo escuro",
+  "多声道（5.1 / 7.1，实验性）": "Multicanal (5.1 / 7.1, experimental)",
+  "多音箱": "Vários altifalantes",
+  "多声道": "Multicanal",
+  "同步观影窗口": "Vídeo sincronizado"
 }

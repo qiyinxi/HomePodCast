@@ -29,7 +29,7 @@ TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实
 
 第三方设备未报告处理时间时按 150 ms 估算，界面最低提供 200 ms。低于推荐值会提示可能断音。设备可能忽略请求的延迟；这些默认值只是经过软件测试的起点。
 
-设置 → 音箱信息可按设备指定连接方式。兼容模式用自己的延迟选择器替代 HomePod 场景按钮，不覆盖 HomePod 场景设置；设置中显示实际协议和设备报告的处理时间。首次连接兼容设备时会提示约两秒延迟。
+音箱信息可按设备指定连接方式。兼容模式用自己的延迟选择器替代 HomePod 场景按钮，不覆盖 HomePod 场景设置；音箱信息显示实际协议和设备报告的处理时间。首次连接兼容设备时会提示约两秒延迟。
 
 兼容模式适合听音乐，不适合打游戏。浏览器插件的画面延迟上限仍为 **2000 ms**，声音延迟更大时无法完全对齐；音画同步测试仍可校准实际偏移。第三方接收端不能加入多音箱分组。
 
@@ -58,7 +58,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - **无线影院**（每个声道一台 HomePod）：只用模拟音箱和生成的文件测试过
 - 实体声卡和耳机、其他 Windows 版本，以及电脑走有线或无线网络的差别
 
-如果你在别的设备上试用，欢迎开 issue 反馈：设备型号、软件版本、能稳定不断音的最低延迟设置，以及日志（`homepodcast.log`：「设置 → 工具 → 日志 → 打开日志文件夹」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
+如果你在别的设备上试用，欢迎开 issue 反馈：设备型号、软件版本、能稳定不断音的最低延迟设置，以及日志（`homepodcast.log`：「关于 → 日志 → 打开日志文件夹」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
 
 ## 功能
 
@@ -77,7 +77,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - 无线影院（实验性，尚未在真实设备上验证）：本地 5.1 或 7.1 文件的音轨，每个声道送到一台 HomePod，最多七台再加一台放低音声道；没有分配音箱的声道混入相邻的音箱，还可以用麦克风测量各音箱的延迟（测量时音量不超过 25%）。见[无线影院](docs/WIRELESS_CINEMA.md#简体中文)
 - Apple TV：第一次点「连接」时在电视上配对一次（输入电视显示的 4 位数字）；它的家庭影院扬声器是 HomePod 时由 HomePod 出声（实验性，尚未在真实 Apple TV 上验证）
 - 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
-- 设置里的音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
+- 音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
 - 浏览器插件（测试版）：把 YouTube、bilibili 的画面延后，和 HomePod 的声音对齐。「音乐」场景的 500 ms 是给听音乐用的，看视频用「影视」或「推荐」最流畅（画面延迟超过 300 ms 时插件弹窗会提示）
 - 同步观影窗口（实验性）：给没有音频延迟设置的播放器用。独立模块把你选的窗口（或整个屏幕）按 HomePod 的声音延迟延后显示，可以全屏、可以微调，画面全程在显卡上处理。它是可选的 `HomePodCast-video-window-<版本>.zip`，Microsoft Store 版没有。见[同步观影窗口](docs/VIDEO_WINDOW.md#简体中文)
 - 检查更新（默认不自动检查，见[更新](#更新)）；MSI 安装的版本校验 SHA-256 后一键更新
@@ -91,9 +91,9 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 2. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载 HomePodCast，有两种包，另有一个可选模块：
    - **安装包（推荐）`HomePodCast-<版本>-x64.msi`**：可以选择安装位置（默认 `C:\Program Files\HomePodCast`），自动添加开始菜单快捷方式和所需的防火墙规则。升级时直接运行新版 MSI；卸载在「设置 → 应用」里进行，如果开启过「开机自动启动」，请先在程序里关掉。
    - **便携版 `HomePodCast-<版本>-win-x64.zip`**：解压到任意位置，运行 `HomePodCast.exe`，第一次会请求添加防火墙规则。
-   - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「设置 → 工具」里选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
+   - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「同步观影窗口」页选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
 
-   防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「设置 → 工具 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
+   防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「关于 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
 3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
 
 界面语言跟随 Windows 显示语言（没有对应译文的语言显示英文）。想换成别的语言：在「设置」页选择「语言 / Language」，或者把 `%APPDATA%\HomePodCast\config.json` 里的 `"Language"` 设为语言代码（`"zh-CN"`，或 `src/i18n` 里的文件名，比如 `"en"`、`"de"`）或 `"auto"`。
@@ -149,7 +149,7 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 
 ## 更新
 
-HomePodCast 可以到本仓库的 GitHub Releases 查找新版本：「设置 → 软件更新 → 检查更新」。这是它唯一一个发往局域网以外的请求，而且只在你要求时才发：**自动检查默认关闭**。打开「自动检查更新」后，会在启动约 30 秒后和之后每 24 小时检查一次（开发版本从不自动检查）。请求只是一次 HTTPS GET（`api.github.com/repos/qiyinxi/HomePodCast/releases`），User-Agent 为 `HomePodCast/<版本>`：不需要账号，不发送任何电脑或音箱的信息。每次请求都会写进日志。
+HomePodCast 可以到本仓库的 GitHub Releases 查找新版本：「关于 → 软件更新 → 检查更新」。这是它唯一一个发往局域网以外的请求，而且只在你要求时才发：**自动检查默认关闭**。打开「自动检查更新」后，会在启动约 30 秒后和之后每 24 小时检查一次（开发版本从不自动检查）。请求只是一次 HTTPS GET（`api.github.com/repos/qiyinxi/HomePodCast/releases`），User-Agent 为 `HomePodCast/<版本>`：不需要账号，不发送任何电脑或音箱的信息。每次请求都会写进日志。
 
 - **更新渠道**：正式版只提示正式版本；测试版也提示测试版本，哪个新提示哪个。正在用的测试版比最新正式版还新时，会等到下一个正式版（不会降级）。
 - 自动检查发现新版本时，托盘会弹一次通知，首页会出现带「更新」「查看说明」「跳过此版本」的提示条；手动检查的结果显示在设置里。
@@ -172,7 +172,7 @@ HomePodCast 可以到本仓库的 GitHub Releases 查找新版本：「设置 �
 5. HomePod 的位置：放在「看得见」路由器的地方，不要放进柜子里。
 6. 把延迟加 10–15 ms：在「场景」里选「自定义」调整，或者首页出现提示时直接点「应用」。首页「推流状态」下面会显示最近 10 分钟的网络抖动次数；抖动真的吃掉余量时，提示会说明是哪一段 Wi‑Fi 的问题（电脑插网线时一定是 HomePod 那一段），并给出建议的延迟。程序不会自己改延迟。「断音」一格算的是这次连接里的断音：电脑这边实测的，加上吃掉余量的网络抖动（HomePod 很可能因此断了一下）。HomePod 从不报告晚到的包，所以后者是估计，数字前会加「≈」；鼠标停在这一格上能看到两部分各是多少。
 
-**怎么看日志**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「设置 → 工具 → 日志 → 打开日志文件夹」可以直接打开）：推流时每 100 ms ping 一次 HomePod 和路由器，往返超过 30 ms 或没有回应时记一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，没有回应是 `lost`）。每分钟的 `stats:` 行里有 `rtx=已重发/请求`、`rtxMiss=`（来不及重发的包）和 `ping=中位/p99/最大 lost=丢失/总数 router=…`。
+**怎么看日志**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「关于 → 日志 → 打开日志文件夹」可以直接打开）：推流时每 100 ms ping 一次 HomePod 和路由器，往返超过 30 ms 或没有回应时记一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，没有回应是 `lost`）。每分钟的 `stats:` 行里有 `rtx=已重发/请求`、`rtxMiss=`（来不及重发的包）和 `ping=中位/p99/最大 lost=丢失/总数 router=…`。
 
 - 只有音箱的 ping 突增、路由器正常：问题在路由器 → HomePod 这一段，见第 4、5 条。
 - 音箱和路由器同时突增：问题在电脑这一段，见第 1–3 条。电脑插网线时问题仍在 HomePod 那一段（只是路由器回自己的 ping 慢了），提示也会这样说。

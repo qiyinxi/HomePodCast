@@ -6,8 +6,7 @@ internal sealed partial class TrayApp
 {
     public void ShowProfiles(IWin32Window owner)
     {
-        using var dialog = new ProfilesForm(this);
-        dialog.ShowDialog(owner);
+        _form.ShowPage(AppPage.Profiles);
     }
 
     public void SaveUsageProfile(string? id, string name)

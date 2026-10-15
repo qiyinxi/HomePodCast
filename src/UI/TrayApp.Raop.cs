@@ -64,7 +64,9 @@ internal sealed partial class TrayApp
         settings.ProtocolOverride = protocol;
         Config.Save();
         _form.UpdateState(); RaiseStateChanged();
-        if (_wantConnected) Connect(ConnectTrigger.Reconnect);
+        // Speaker info can inspect a receiver other than the one currently playing. Only that receiver's next
+        // connection should use its new preference; editing it must not interrupt the current speaker.
+        if (_wantConnected && Config.DeviceId is { } active && RaopPassword.Key(active) == key) Connect(ConnectTrigger.Reconnect);
     }
 
     private bool CanShowRaopDialog(RaopInteraction request) => !_quitting && !_raopDialog
