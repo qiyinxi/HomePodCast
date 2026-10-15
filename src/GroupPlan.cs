@@ -52,7 +52,7 @@ public sealed record GroupPlan(
         if (StereoPairs.TryGetTsid(id, out var tsid))
             return new GroupPlan(GroupKind.StereoPair, cfg.DeviceName ?? tsid, tsid, [],
                 cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { PairLeaderOnly = cfg.GroupPairLeaderOnly, SpeakerSettings = settings,
-                    UseSpeakerPositions = cfg.GroupCapturePositions != null || !cfg.GroupSplitChannels };
+                    UseSpeakerPositions = cfg.GroupCaptureDeviceIds != null };
         var rows = cfg.GroupCaptureDeviceIds?.Select(deviceId => settings.GetValueOrDefault(Key(deviceId)))
             .Where(s => s != null).Cast<GroupSpeakerSettings>().DistinctBy(s => Key(s.DeviceId)).ToArray();
         if (rows is { Length: > 1 } && rows.Any(s => Key(s.DeviceId) == Key(id)))
@@ -64,7 +64,7 @@ public sealed record GroupPlan(
             return new GroupPlan(GroupKind.MultiRoom, $"{cfg.DeviceName ?? id} + {cfg.MultiRoomDeviceName ?? extra}", null,
                 [new GroupMemberRef(id, cfg.DeviceName ?? id, cfg.Host), new GroupMemberRef(extra, cfg.MultiRoomDeviceName ?? extra, cfg.MultiRoomHost)],
                 cfg.GroupSplitChannels, cfg.GroupSwapChannels, offsets) { SpeakerSettings = settings,
-                    UseSpeakerPositions = cfg.GroupCapturePositions != null || !cfg.GroupSplitChannels };
+                    UseSpeakerPositions = false };
         return null;
     }
 

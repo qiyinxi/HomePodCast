@@ -71,9 +71,7 @@ public static class GroupSettings
                 if (cfg.GroupSpeakers.FirstOrDefault(s => GroupPlan.Key(s.DeviceId) == GroupPlan.Key(legacy[i])) is { } row)
                     if (!(cfg.Cinema?.Speakers ?? []).Any(s => GroupPlan.Key(s.DeviceId) == GroupPlan.Key(row.DeviceId)))
                         row.Position = (i == 0) != cfg.GroupSwapChannels ? SpeakerPosition.Left : SpeakerPosition.Right;
-            cfg.GroupSplitChannels = cfg.GroupSwapChannels = false;
         }
-        else if (!cfg.GroupSplitChannels) cfg.GroupSwapChannels = false;
         cfg.GroupSpeakers = cfg.GroupSpeakers.Where(s => !string.IsNullOrWhiteSpace(s.DeviceId) && !StereoPairs.IsPairId(s.DeviceId))
             .DistinctBy(s => GroupPlan.Key(s.DeviceId)).Take(8).ToList();
         foreach (var row in cfg.GroupSpeakers)
