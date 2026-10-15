@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using HomePodCast.Net;
@@ -120,7 +122,109 @@ public class PtpTests
     }
 
     [Fact]
+    public async Task A_late_wake_up_still_finds_an_undisputed_clock_stable()
+    {
+        // 2026-10-15: CI run 38733438631 stalled the whole test process for 2.9 s while this wait slept between two
+        // polls. It woke past its 2 s budget and gave up, although no other clock had announced itself at all.
+        using var events = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var general = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var master = new PtpMaster(IPAddress.Loopback, (IPEndPoint)events.Client.LocalEndPoint!,
+            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123);
+        var stalled = new HeldContext();
+        var wait = stalled.Start(() => master.WaitForStableMasterAsync(CancellationToken.None));
+        await Task.Delay(2200);
+        stalled.RunUntil(wait);
+        await wait;
+    }
+
+    [Fact]
+    public async Task A_dispute_the_wait_did_not_poll_through_still_restarts_the_stable_time()
+    {
+        using var events = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var general = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var master = new PtpMaster(IPAddress.Loopback, (IPEndPoint)events.Client.LocalEndPoint!,
+            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123);
+        var peer = new IPEndPoint(IPAddress.Loopback, master.GeneralPort);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var stalled = new HeldContext();
+        long started = Stopwatch.GetTimestamp();
+        var wait = stalled.Start(() => master.WaitForStableMasterAsync(CancellationToken.None));
+        // A receiver waking up (nqptp, 2026-10-14) claims the clock and then withdraws, while the wait is not polling.
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 1), peer);
+        while (master.IsMaster) await Task.Delay(5, timeout.Token);
+        await Task.Delay(300, timeout.Token);
+        long withdrawn = Stopwatch.GetTimestamp();
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 1, priority: 200), peer);
+        while (!master.IsMaster) await Task.Delay(5, timeout.Token);
+        // Should this machine stall the steps above until the wait's 2 s budget is nearly gone, a withdrawal that late
+        // rightly fails the wait, and this test has nothing left to show.
+        if (Stopwatch.GetElapsedTime(started) > TimeSpan.FromMilliseconds(1500)) return;
+        stalled.RunUntil(wait);
+        await wait;
+        Assert.True(Stopwatch.GetElapsedTime(withdrawn) >= TimeSpan.FromMilliseconds(250));
+    }
+
+    [Fact]
+    public async Task A_better_clock_that_stays_still_fails_the_wait()
+    {
+        using var events = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var general = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        using var master = new PtpMaster(IPAddress.Loopback, (IPEndPoint)events.Client.LocalEndPoint!,
+            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var peer = new IPEndPoint(IPAddress.Loopback, master.GeneralPort);
+        // A better clock that keeps announcing itself, as a real one does, holds us off for longer than the 2 s budget.
+        using var gone = new CancellationTokenSource();
+        var announcing = Task.Run(async () =>
+        {
+            for (ushort sequence = 0; !gone.IsCancellationRequested; sequence++)
+            {
+                await general.SendAsync(PtpPackets.AnnounceMessage(456, sequence, priority: 1), peer);
+                await Task.Delay(200);
+            }
+        });
+        while (master.IsMaster) await Task.Delay(5, timeout.Token);
+        var error = await Assert.ThrowsAsync<IOException>(() => master.WaitForStableMasterAsync(CancellationToken.None));
+        Assert.Contains("stable master clock", error.Message);
+        gone.Cancel();
+        await announcing;
+    }
+
+    [Fact]
     public void Apple_sessions_cannot_start_the_PTP_prototype() =>
         Assert.Throws<ArgumentException>(() => new PtpMaster(IPAddress.Loopback, new IPEndPoint(IPAddress.Loopback, 319),
             new IPEndPoint(IPAddress.Loopback, 320), thirdPartySession: false));
+
+    /// <summary>
+    /// Holds every continuation posted to it until the test runs them: a process that stops scheduling awaiting code,
+    /// as the CI runner did on 2026-10-15, without having to slow a real machine down.
+    /// </summary>
+    private sealed class HeldContext : SynchronizationContext
+    {
+        private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> _posted = new();
+
+        public override void Post(SendOrPostCallback d, object? state) => _posted.Add((d, state));
+
+        /// <summary>Starts the work here, so that what it awaits comes back to this context.</summary>
+        public Task Start(Func<Task> work)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try { return work(); }
+            finally { SetSynchronizationContext(previous); }
+        }
+
+        /// <summary>Runs what was held, and what that posts in turn, on this thread until the task has finished.</summary>
+        public void RunUntil(Task task)
+        {
+            while (!task.IsCompleted)
+            {
+                Assert.True(_posted.TryTake(out var next, TimeSpan.FromSeconds(5)), "the wait posted nothing to run");
+                var previous = Current;
+                SetSynchronizationContext(this);
+                try { next.Callback(next.State); }
+                finally { SetSynchronizationContext(previous); }
+            }
+        }
+    }
 }
