@@ -52,6 +52,7 @@ internal static class TestApp
         Set(app, "<Pairings>k__BackingField",
             new PairingStore(Path.Combine(Path.GetTempPath(), $"hpc-test-{Guid.NewGuid():N}", PairingStore.FileName)));
         Set(app, "_fx", new MicEffects(config.Effects ??= new EffectsSettings()));
+        Set(app, "<Stems>k__BackingField", new LiveStemMixer(config.Stems)); // the mixer's stem panel reads it when built
         Set(app, "_updateStatus", "上次检查：2026-10-15 09:30");
         Set(app, "_ui", SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext());
         Set(app, "_soundActivity", new SoundActivity());
