@@ -2,6 +2,7 @@
 
 ## English
 
+- Microphone monitoring explains where your voice plays for HomePod, this PC or both, and starts off each run. Microphone and Mixer use consistent output labels; reverb controls use standard audio terms with tooltips. The output equalizer has its own navigation page and still applies to all HomePod audio, including during night mode and profile changes.
 - Focused navigation pages for speaker information, multi-speaker, multichannel, synchronized viewing, A/V sync tests and usage profiles. About now contains updates, logs, diagnostics and the license; Settings contains preferences. The bottom-left theme action switches light/dark with a short fade, and the sidebar has a distinct background.
 
 - Experimental third-party AirPlay 1 and AirPlay 2 support: combined discovery, manual address/port entry, per-device connection overrides and remembered working protocols. HomePod’s existing low-latency path and scenes retain their behavior.
@@ -13,6 +14,7 @@
 
 ## 简体中文
 
+- 麦克风监听会随 HomePod、本机、两者的选择说明人声从哪里播放，每次启动默认关闭；麦克风和混音器统一使用输出用词，混响参数采用专业名称并提供鼠标提示。输出均衡独立为导航页面，仍作用于全部 HomePod 音频，保留夜间模式和配置切换行为。
 - 导航新增音箱信息、多音箱、多声道、同步观影窗口、音画同步测试及使用配置页面；关于页集中软件更新、日志、诊断与许可证，设置页保留偏好。左下角可带淡化动效切换浅深色，侧栏使用有区分的背景。
 
 - 实验性第三方 AirPlay 1 / AirPlay 2 支持：合并发现、手动地址与端口、每台设备的连接覆盖设置及成功方式记忆。HomePod 原有低延迟路径和场景保持原行为。

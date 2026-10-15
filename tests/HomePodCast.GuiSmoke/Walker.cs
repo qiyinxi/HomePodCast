@@ -41,7 +41,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风与音效", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -158,6 +158,7 @@ internal sealed partial class Walker
             }
             if (page == "音箱信息") tree = CheckSpeakers(false, compatibility: true);
             if (page == "关于") tree = CheckAbout();
+            if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "设置") CheckSettings();
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
@@ -257,6 +258,7 @@ internal sealed partial class Walker
             if (page == "设置") CheckSettings();
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
+            if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "多声道（5.1 / 7.1，实验性）") CheckCinema(tree, page);
             CheckNavigation(tree);
             Layout(tree, page);
@@ -310,6 +312,7 @@ internal sealed partial class Walker
                 Navigate(page);
                 var tree = Uia.Snapshot(MainWindow());
                 CheckNavigation(tree, compact: true);
+                if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
                 Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
@@ -325,7 +328,7 @@ internal sealed partial class Walker
     /// </summary>
     private void DpiRoundTrip()
     {
-        Navigate("麦克风与音效"); // the page in the maintainer's screenshot
+        Navigate("麦克风"); // the page in the maintainer's screenshot
         try
         {
             foreach (int scale in new[] { 100, _s.Scale })
@@ -360,12 +363,12 @@ internal sealed partial class Walker
                 Thread.Sleep(800);
                 var tree = Uia.Snapshot(main);
                 CheckNavigation(tree);
-                Layout(tree, $"麦克风与音效 at {scale}%");
+                Layout(tree, $"麦克风 at {scale}%");
                 CheckRepainted(main, step);
-                Shoot(main, $"dpi-{scale}", $"麦克风与音效 after the scale changed to {scale}%");
+                Shoot(main, $"dpi-{scale}", $"麦克风 after the scale changed to {scale}%");
                 Navigate("设置");
                 Layout(Uia.Snapshot(main), $"设置 at {scale}%");
-                Navigate("麦克风与音效");
+                Navigate("麦克风");
             }
         }
         finally
@@ -408,6 +411,29 @@ internal sealed partial class Walker
     }
 
     // ---------------------------------------------------------------- page checks
+
+    private void CheckMicrophoneAndEqualizer(Node tree, string name)
+    {
+        var page = PagePane(tree, name);
+        if (name == "麦克风")
+        {
+            foreach (string text in new[] { "麦克风监听", "输入设备", "输出到", "本机输出设备", "麦克风监听已关闭。",
+                         "每次启动 HomePodCast 时麦克风默认关闭。", "衰减（Room Size）", "高频阻尼（Damping）",
+                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡" })
+                Expect(Has(page, T(text)), name, $"missing microphone control or explanation: {T(text)}");
+            Expect(!Has(page, T("HomePod 输出均衡")), name, "output EQ is still on the microphone page");
+            var route = Find(page, n => n.Name == T("输出到") && n.Type == "List");
+            Expect(route != null && Has(route, T("本机")) && Has(route, T("两者")), name, "output choices are missing");
+            var hint = _t.Pattern("你的声音会和电脑声音一起从 HomePod 播出，比实际晚约 {0} ms。");
+            Expect(page.Descendants().Any(n => n.Shown && hint.IsMatch(n.Name)), name, "HomePod destination explanation is missing");
+        }
+        else
+        {
+            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。" })
+                Expect(Has(page, T(text)), name, $"missing output EQ control or scope: {T(text)}");
+            Expect(!Has(page, T("麦克风均衡")), name, "microphone EQ is on the output page");
+        }
+    }
 
     private void CheckNavigation(Node tree, bool compact = false)
     {
@@ -872,7 +898,8 @@ internal sealed partial class Walker
     {
         "首页" => "home",
         "混音器" => "mixer",
-        "麦克风与音效" => "effects",
+        "麦克风" => "microphone",
+        "均衡" => "equalizer",
         "音箱信息" => "speakers",
         "多音箱（实验性）" => "groups",
         "多声道（5.1 / 7.1，实验性）" => "multichannel",
