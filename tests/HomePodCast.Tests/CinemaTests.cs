@@ -187,9 +187,9 @@ public class CinemaTests
     [Fact]
     public void Invalid_speaker_layouts_are_refused_with_a_message_in_the_ui_language()
     {
-        Assert.Equal("至少要给前左和前右各选一台音箱。",
+        Assert.Equal("至少选择完整立体声，或给左和右各选一台音箱。",
             Assert.Throws<CinemaException>(() => CinemaMatrix.Validate(Layout("FL C"))).Message);
-        Assert.Equal("至少要给前左和前右各选一台音箱。",
+        Assert.Equal("至少选择完整立体声，或给左和右各选一台音箱。",
             Assert.Throws<CinemaException>(() => CinemaMatrix.Validate(Layout("FL"))).Message);
         var duplicate = Layout(L5);
         duplicate[1].DeviceId = duplicate[0].DeviceId;

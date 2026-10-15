@@ -4,7 +4,7 @@ using HomePodCast.UI.Pages;
 
 namespace HomePodCast.UI;
 
-internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
+internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Viewing, Sync, Profiles, Settings, About }
 
 /// <summary>
 /// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
@@ -23,7 +23,7 @@ internal sealed class MainWindow : Form, ISurface
     private readonly AboutPage _about;
     private readonly ProfilesPage _profiles;
     private readonly SpeakersPage _speakers;
-    private readonly CinemaPage _cinema;
+    private readonly GroupPage _group;
     private readonly ScrollPage[] _pages;
     private readonly ThemeTransition _transition = new();
     private readonly System.Windows.Forms.Timer _dpiSettle = new() { Interval = DpiSettleMs };
@@ -53,7 +53,6 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Equalizer, L.T("均衡"));
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）"), label: L.T("多声道")); // experimental since 1.1; hardware untested
         _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）"), label: L.T("同步观影窗口")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
         _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
@@ -70,8 +69,8 @@ internal sealed class MainWindow : Form, ISurface
         _about = new AboutPage(app);
         _profiles = new ProfilesPage(app);
         _speakers = new SpeakersPage(app);
-        _cinema = new CinemaPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, new GroupPage(app), _cinema, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
+        _group = new GroupPage(app);
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
@@ -445,7 +444,7 @@ internal sealed class MainWindow : Form, ISurface
 
     // ---------------------------------------------------------------- what TrayApp tells the window
 
-    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Cinema) _cinema.RefreshSpeakers(); }
+    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Group) _group.RefreshSpeakers(); }
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
@@ -511,7 +510,7 @@ internal sealed class MainWindow : Form, ISurface
         _effects.Flush();
         _equalizer.Flush();
         _settings.FlushPendingSettings();
-        _cinema.Flush();
+        _group.Flush();
     }
 
     public void FlushLatency() => _home.FlushLatency();

@@ -14,9 +14,61 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaFormTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_file_opening_in_the_background_cannot_start_after_leaving_its_source(bool hidePage) => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            using var page = new CinemaPage(host, inputs: [], volumeWait: new ManualDebounce());
+            page.UseFile(wav);
+            var opened = new TaskCompletionSource<bool>();
+            page.WaitForFileOpened = _ => opened.Task;
+            var start = page.PlayAsync();
+            Assert.False(start.IsCompleted);
+            if (hidePage) page.PageHidden();
+            else All<FluentComboBox>(page).Single(c => c.AccessibleName == "音源").SelectedIndex = 0;
+            opened.SetResult(true);
+            Pump(start);
+            Assert.Empty(host.Started);
+        }
+        finally { File.Delete(wav); }
+    });
+
+    [Fact]
+    public void Playing_and_stopping_a_file_never_activates_a_saved_live_group() => OnSta(() =>
+    {
+        string wav = CinemaTests.TempWave(16, 6, CinemaTests.Rear51, 48000);
+        try
+        {
+            var host = new FakeHost();
+            host.Config.MultiRoomDeviceId = null;
+            using var form = Form(host);
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            form.UseFile(wav);
+            Pump(form.PlayAsync());
+            Assert.Single(host.Started);
+            Assert.Null(host.Config.GroupCaptureDeviceIds);
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            host.State = CinemaState.Ended;
+            form.RefreshStatus();
+            Assert.Null(GroupPlan.FromConfig(host.Config));
+            var restored = new AppConfig();
+            UsageProfiles.Apply(restored, UsageProfiles.Capture(host.Config));
+            Assert.Null(GroupPlan.FromConfig(restored));
+        }
+        finally { File.Delete(wav); }
+    });
+
     private sealed class FakeHost : ICinemaHost
     {
-        public AppConfig Config { get; } = new() { Volume = 60 };
+        public AppConfig Config { get; } = new() { Volume = 60, DeviceId = "AA:00:00:00:00:01", DeviceName = "客厅",
+            MultiRoomDeviceId = "AA:00:00:00:00:02", MultiRoomDeviceName = "书房", GroupSpeakers = [
+                new() { DeviceId = "AA:00:00:00:00:01", Name = "客厅", Position = SpeakerPosition.Left },
+                new() { DeviceId = "AA:00:00:00:00:02", Name = "书房", Position = SpeakerPosition.Right } ] };
         public IReadOnlyList<AirPlayDevice> Speakers { get; } =
         [
             new("客厅", "AA:00:00:00:00:01", IPAddress.Parse("192.168.50.11"), 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
@@ -62,13 +114,12 @@ public class CinemaFormTests
 
     private static CinemaForm Form(FakeHost host, ManualDebounce? wait = null) => new(host, inputs: [], volumeWait: wait ?? new ManualDebounce());
 
-    /// <summary>Front left 客厅, front right 书房 (the Apple TV is not offered).</summary>
+    /// <summary>The shared per-device position controls, never a second cinema layout.</summary>
     private static void ChooseFronts(Form form, bool right = true)
     {
-        var combos = All<FluentComboBox>(form).Where(c => c.AccessibleName is "前左" or "前右").ToList();
-        Assert.Equal(["（不使用）", "客厅", "书房"], combos[0].Items.Cast<string>());
-        combos.Single(c => c.AccessibleName == "前左").SelectedIndex = 1;
-        combos.Single(c => c.AccessibleName == "前右").SelectedIndex = right ? 2 : 0;
+        var combos = All<FluentComboBox>(form).Where(c => c.AccessibleName?.EndsWith(" 位置") == true).ToList();
+        combos.Single(c => c.AccessibleName == "客厅 位置").SelectedIndex = 1;
+        combos.Single(c => c.AccessibleName == "书房 位置").SelectedIndex = right ? 2 : 1;
     }
 
     private static void Pump(Task task)
@@ -155,10 +206,10 @@ public class CinemaFormTests
             var host = new FakeHost();
             using var form = Form(host);
 
-            ChooseFronts(form, right: false);
             form.UseFile(wav);
+            ChooseFronts(form, right: false);
             Pump(form.PlayAsync());
-            Assert.Equal("影院播放失败：至少要给前左和前右各选一台音箱。", Status(form));
+            Assert.Equal("影院播放失败：至少选择完整立体声，或给左和右各选一台音箱。", Status(form));
 
             ChooseFronts(form);
             form.UseFile(garbage);
