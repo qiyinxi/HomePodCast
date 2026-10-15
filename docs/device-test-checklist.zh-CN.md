@@ -238,7 +238,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 #### 多房间（等有第二台 AirPlay 音箱时再测）
 
-侧边栏 →「多音箱」→ 电脑实时声音 → 添加另一台支持分组的 AirPlay 2 音箱（第三方和 AirPlay 1 设备暂不支持），和当前音箱按同一时间线同步播放。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
+侧边栏 →「多音箱」→ 电脑实时声音 → 添加另一台 HomePod 或 AirPlay 1 音箱（第三方 AirPlay 2 分组暂不支持），和当前音箱按同一时间线播放。带 AirPlay 1 的组延迟至少为该设备的会话延迟，需手动校准后再判断同步程度。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs`、`src/Net/RaopOutputSet.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 
 1. - [ ] 选好第二台、确定后连接：两台都出声，首页是「已连接 · A + B（实验性）」；两台之间有没有回声 / 一前一后的感觉？
 2. - [ ] 音量：主滑块让两台一起变；给一台设「音量偏移」只改它
@@ -257,7 +257,19 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 6. - [ ] 三台以上：中置单独一台时对白只从它出来；有侧环绕或后环绕音箱时环绕声从对应的音箱出来；低音声道交给单独一台 HomePod 时它只放低频，不分配时低频混入前左前右（听感：会不会太轰或太弱）
 7. - [ ] 连续放 30 分钟：各台有没有慢慢不同步、断开、单台没声；放完自动停止，最后一段声音没有被截断
 
+#### DLNA 单台输出（1.2 新增，尚未实机验证）
+
+维护者在准备使用极米 Z6X 时自行测试，步骤见 `docs/dlna.md`。命令使用临时配置，先运行 `dlna --scan` 记录 UDN；所有有声测试不超过 25%。没有麦克风也能测试：后续分组支持用手动微调或手机录像校准。本节各项：改了 `src/Net/Dlna*.cs`、`src/DlnaCli.cs` 才需要重测。
+
+1. - [ ] 发现列表能找到 Z6X 的 DLNA 服务，和不支持的 FairPlay AirPlay 项分清；静音协议检查能够连接和停止
+2. - [ ] 指定采集端点，以不超过 25% 音量播放；记录协商格式、分块或大 Content-Length、第一次出声的等待时间。LPCM 不支持时尝试设备声明支持的 WAV，不能播放则保留日志
+3. - [ ] 连续播放 30 分钟，记录断音、设备主动停止或读取重连；音量变化和静音是否生效
+4. - [ ] 由手机接管后电脑退出本次发送，不抢回；随后退出命令不会停止手机的投屏
+
 ## 已自动化（不用手测）
+
+- **DlnaDiscoveryTests / DlnaControlTests / DlnaStreamServerTests / DlnaClientTests / DlnaCliTests**：回环假设备覆盖 SSDP、描述和 SOAP、格式协商、HTTP 字节序与流量限制、Private 网络策略、音量上限、忙碌与接管、取消和连接清理。
+- **dlna-compat-e2e**：固定版本 gmrender-resurrect 使用 GStreamer 文件输出，在没有外部网络出口的 Linux 命名空间内完成 SSDP → SOAP → LPCM 分块和 WAV 大 Content-Length，比较至少 4 秒双声道 PCM，报告软件渲染器预缓冲；不用真实音箱。
 
 - **airplay-compat-e2e / aac-fixture**：经典 shairport-sync 的未加密、RSA 与密码场景，以及 shairport-sync AirPlay 2 + nqptp 的实时和 1.0 / 1.5 / 2.0 秒缓冲场景；Windows Media Foundation 生成 AAC，独立解码作参考，对齐后逐样本比较至少 6 秒，检查无缺口与请求延迟 ±50 ms。
 - **ReceiverLatencySelectionTests / ThirdPartyTests / BufferedAudioTests / PtpTests**：每设备设置、HomePod 场景隔离、协议回退、接收端延迟下限、加密帧、配对、时钟选举和校准回调；**gui-smoke** 增加中英德兼容延迟与设置行的页面遍历。
