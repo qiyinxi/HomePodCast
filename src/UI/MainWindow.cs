@@ -399,6 +399,7 @@ internal sealed class MainWindow : Form, ISurface
         _dpiSettle.Stop();
         if (!_dpiLayoutPending || IsDisposed) return;
         using (LayoutPanel.BatchLayout(this)) { } // OnLayout, which repaints
+        if (_dpiLayoutPending) _dpiSettle.Start(); // the window's layout was held (a batch in progress): again later
     }
 
     protected override void WndProc(ref Message m)
