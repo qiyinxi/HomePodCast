@@ -10,7 +10,7 @@ namespace HomePodCast.Audio;
 
 /// <summary>A position in the room. Subwoofer: a HomePod that plays only the LFE channel (HomePods have no sub output).</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<CinemaRole>))]
-public enum CinemaRole { FrontLeft, FrontRight, Center, Subwoofer, RearLeft, RearRight, SideLeft, SideRight }
+public enum CinemaRole { FrontLeft, FrontRight, Center, Subwoofer, RearLeft, RearRight, SideLeft, SideRight, Stereo }
 
 public sealed class CinemaSpeaker
 {
