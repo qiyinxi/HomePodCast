@@ -58,7 +58,7 @@ Not tested on real hardware:
 - **Wireless cinema** (one HomePod per channel): tested only against simulated speakers and generated files
 - Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
 
-If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and the log (`homepodcast.log`: About → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`).
+If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and a diagnostic report (About → Diagnostic report → **Export diagnostics**: a ZIP with the redacted logs and the measurements; you can check its contents before attaching it). The raw log, `homepodcast.log`, is for your own troubleshooting: it names your speakers and holds IP addresses, so don't attach it to a public issue. About → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`.
 
 ## Features
 
