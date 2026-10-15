@@ -15,10 +15,10 @@ public class MixInTests
         for (int i = 0; i < pcm.Length; i++) pcm[i] = MathF.Sin(i * 0.01f) * 0.5f;
         var expected = (float[])pcm.Clone();
 
-        mix.Process(pcm, RtpSender.FramesPerPacket); // warm up
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int k = 0; k < 100; k++) mix.Process(pcm, RtpSender.FramesPerPacket);
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        long allocated = Signals.Allocated(() =>
+        {
+            for (int k = 0; k < 100; k++) mix.Process(pcm, RtpSender.FramesPerPacket);
+        });
 
         Assert.Equal(expected, pcm);
         Assert.Equal(0, allocated);
