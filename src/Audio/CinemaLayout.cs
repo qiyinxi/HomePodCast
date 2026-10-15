@@ -19,6 +19,7 @@ public sealed class CinemaSpeaker
     public string Name { get; set; } = "";
     public string? Host { get; set; }
     public int DelayMs { get; set; }
+    public int VolumeOffset { get; set; }
 }
 
 public sealed class CinemaSettings
@@ -125,6 +126,7 @@ internal sealed class CinemaMatrix
     private static readonly System.Globalization.CultureInfo Invariant = System.Globalization.CultureInfo.InvariantCulture;
 
     private readonly float[][] _rows;
+    private readonly float[] _stereoLeft, _stereoRight;
     private readonly IReadOnlyList<CinemaSpeaker> _speakers;
     private readonly uint[] _positions;
 
@@ -144,17 +146,26 @@ internal sealed class CinemaMatrix
         _speakers = speakers;
         _positions = CinemaChannels.Positions(Mask);
         _rows = speakers.Select(_ => new float[channels]).ToArray();
+        _stereoLeft = new float[channels]; _stereoRight = new float[channels];
 
-        var roles = speakers.Select((s, i) => (s.Role, i)).ToDictionary(x => x.Role, x => x.i);
+        var roles = speakers.Select((s, i) => (s.Role, i)).Where(x => x.Role != CinemaRole.Stereo).ToDictionary(x => x.Role, x => x.i);
         for (int c = 0; c < _positions.Length; c++)
+        {
             foreach (var (role, gain) in Route(_positions[c], Mask, roles.ContainsKey))
-                _rows[roles[role]][c] += gain;
+                if (roles.TryGetValue(role, out var target)) _rows[target][c] += gain;
+            foreach (var (role, gain) in Route(_positions[c], Mask, r => r is CinemaRole.FrontLeft or CinemaRole.FrontRight))
+                if (role == CinemaRole.FrontLeft) _stereoLeft[c] += gain;
+                else if (role == CinemaRole.FrontRight) _stereoRight[c] += gain;
+        }
 
         float busiest = _rows.Max(r => r.Sum(Math.Abs));
+        if (speakers.Any(s => s.Role == CinemaRole.Stereo))
+            busiest = Math.Max(busiest, Math.Max(_stereoLeft.Sum(Math.Abs), _stereoRight.Sum(Math.Abs)));
         Scale = busiest > 1 ? 1 / busiest : 1;
         if (Scale != 1)
             foreach (var row in _rows)
                 for (int c = 0; c < row.Length; c++) row[c] *= Scale;
+        for (int c = 0; c < channels; c++) { _stereoLeft[c] *= Scale; _stereoRight[c] *= Scale; }
     }
 
     /// <summary>Where one source channel plays (before the headroom scale), given the file's mask and the room's speakers.</summary>
@@ -206,11 +217,12 @@ internal sealed class CinemaMatrix
     /// <exception cref="CinemaException">Not a layout the cinema can play to.</exception>
     public static void Validate(IReadOnlyList<CinemaSpeaker> speakers)
     {
-        if (speakers.Count is < 2 or > 8 || !speakers.Any(s => s.Role == CinemaRole.FrontLeft) || !speakers.Any(s => s.Role == CinemaRole.FrontRight))
-            throw new CinemaException(L.T("至少要给前左和前右各选一台音箱。"), "layout: front left and front right are needed");
+        if (speakers.Count is < 1 or > 8 || (!speakers.Any(s => s.Role == CinemaRole.Stereo) &&
+            (!speakers.Any(s => s.Role == CinemaRole.FrontLeft) || !speakers.Any(s => s.Role == CinemaRole.FrontRight))))
+            throw new CinemaException(L.T("至少要给前左和前右各选一台音箱。"), "layout: a full-stereo output or front left and front right are needed");
         if (speakers.Any(s => string.IsNullOrWhiteSpace(s.DeviceId) || StereoPairs.IsPairId(s.DeviceId)))
             throw new CinemaException(L.T("立体声对不能用在无线影院里，请选单独的 HomePod。"), "layout: a stereo pair or an empty device id");
-        if (speakers.Select(s => s.Role).Distinct().Count() != speakers.Count ||
+        if (speakers.Where(s => s.Role != CinemaRole.Stereo).Select(s => s.Role).Distinct().Count() != speakers.Count(s => s.Role != CinemaRole.Stereo) ||
             speakers.Select(s => GroupPlan.Key(s.DeviceId)).Distinct().Count() != speakers.Count)
             throw new CinemaException(L.T("每个位置只能选一台音箱，一台音箱也只能放在一个位置。"), "layout: a role or a speaker is used twice");
         if (speakers.Any(s => s.DelayMs is < 0 or > 500))
@@ -226,6 +238,14 @@ internal sealed class CinemaMatrix
         float value = 0;
         for (int c = 0; c < row.Length; c++) value += frame[c] * row[c];
         return Math.Clamp(value, -1, 1); // a decoder may deliver a little over full scale
+    }
+
+    public (float Left, float Right) StereoSample(int speaker, ReadOnlySpan<float> frame)
+    {
+        if (_speakers[speaker].Role != CinemaRole.Stereo) { float mono = Sample(speaker, frame); return (mono, mono); }
+        float left = 0, right = 0;
+        for (int c = 0; c < Channels; c++) { left += frame[c] * _stereoLeft[c]; right += frame[c] * _stereoRight[c]; }
+        return (Math.Clamp(left, -1, 1), Math.Clamp(right, -1, 1));
     }
 
     /// <summary>For the log: what each speaker plays, e.g. "FrontLeft=FL+C-3dB+LFE-6dB, …, headroom -4.6 dB".</summary>
