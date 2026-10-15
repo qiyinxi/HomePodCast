@@ -58,7 +58,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - **無線影院**（每個聲道一台 HomePod）：只用模擬揚聲器和產生的檔案測試過
 - 實體音效卡和耳機、其他 Windows 版本，以及電腦走有線或無線網路的差別
 
-如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及記錄檔（`homepodcast.log`：「關於 → 記錄檔 → 開啟記錄檔資料夾」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
+如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及診斷報告（「關於 → 診斷報告 → 匯出診斷」：一個 ZIP，裡面是去識別化的記錄檔和統計數據，附上前可以先檢查內容）。原始記錄檔 `homepodcast.log` 是給你自己排查用的，裡面有揚聲器名稱和 IP 位址，不要附在公開的 issue 裡。「關於 → 記錄檔 → 開啟記錄檔資料夾」就能看到它；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`。
 
 ## 功能
 
