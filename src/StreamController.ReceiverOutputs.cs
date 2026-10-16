@@ -9,6 +9,7 @@ public sealed partial class StreamController
 {
     internal ReceiverGroupConnections.Connector? ConnectGroupReceiverOutput { get; set; }
     internal Func<string, CancellationToken, Task<AirPlayDevice>>? ResolveGroupReceiverDevice { get; set; }
+    internal Func<string, AirPlayDevice?>? ManualGroupReceiverDevice { get; set; }
     internal Func<TimeSpan, CancellationToken, Task>? RetryGroupReceiverOutput { get; set; }
     internal IReadOnlyList<ReceiverGroupOutputStatus> ReceiverGroupOutputs => _groupRunner?.Current?.ReceiverOutputs ?? [];
     public event Action<GroupReceiverInteraction>? GroupReceiverActionRequired;
@@ -27,6 +28,7 @@ public sealed partial class StreamController
         return new(member.DeviceId, initial.Name, async token =>
         {
             current = ResolveGroupReceiverDevice != null ? await ResolveGroupReceiverDevice(member.DeviceId, token)
+                : ManualGroupReceiverDevice?.Invoke(member.DeviceId) is { } manual ? manual
                 : ResolveGroupMembers != null && System.Net.IPAddress.IsLoopback(initial.Address) ? initial
                 : (await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), token))
                     .FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(member.DeviceId))
@@ -37,6 +39,7 @@ public sealed partial class StreamController
         {
             Required = required, TrimMs = plan.DelayTrimFor(member.DeviceId), VolumeOffset = plan.VolumeOffsetFor(member.DeviceId),
             Channels = plan.ChannelsFor(index, member.DeviceId),
+            Connected = (protocol, processing) => ReceiverProtocolConnected?.Invoke(member.DeviceId, protocol, processing),
             BeforeConnect = async (target, token) =>
             {
                 attempt = run.ReceiverAttempts.AddOrUpdate(GroupPlan.Key(member.DeviceId), 1, (_, count) => count + 1);

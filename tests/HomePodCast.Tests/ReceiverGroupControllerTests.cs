@@ -89,6 +89,29 @@ public class ReceiverGroupControllerTests
     }
 
     [Fact]
+    public async Task Manual_addresses_keep_their_explicit_port_and_publish_the_working_group_protocol()
+    {
+        var device = Receiver();
+        var explicitDevice = device with { Port = 54321 };
+        var transport = new Transport(1500, ReceiverProtocol.AirPlay2Buffered);
+        using var controller = Controller(device);
+        controller.ResolveGroupMembers = null;
+        controller.ManualGroupReceiverDevice = _ => explicitDevice;
+        int? connectedPort = null;
+        (string Id, ReceiverProtocol Protocol, int? Processing)? remembered = null;
+        controller.ConnectGroupReceiverOutput = (_, target, _, _, _, _) =>
+        {
+            connectedPort = target.Port;
+            return Task.FromResult<IPreparedReceiverSession>(transport);
+        };
+        controller.ReceiverProtocolConnected += (id, protocol, processing) => remembered = (id, protocol, processing);
+        controller.StartGroup(Plan(device), 120, 10);
+        await Until(() => controller.State == StreamState.Streaming);
+        Assert.Equal(54321, connectedPort);
+        Assert.Equal((device.DeviceId, ReceiverProtocol.AirPlay2Buffered, (int?)100), remembered);
+    }
+
+    [Fact]
     public async Task A_mute_during_HomePod_prepare_is_applied_before_the_receiver_audio_gate_opens()
     {
         var transport = new Transport();

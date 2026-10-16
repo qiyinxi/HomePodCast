@@ -12,6 +12,7 @@ internal sealed record ReceiverGroupOutputOptions(string Id, string Name,
     public ChannelMode Channels { get; init; }
     public Func<ReceiverGroupTarget, CancellationToken, Task>? BeforeConnect { get; init; }
     public Action<Exception>? ActionRequired { get; init; }
+    public Action<ReceiverProtocol, int?>? Connected { get; init; }
     internal void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
@@ -268,6 +269,9 @@ internal sealed class ReceiverOutputSet : IDisposable
             await Task.Run(() => session.Transport.Start(session, startAt, want.Muted ? 0 : want.Percent, Cap()), _stop.Token).ConfigureAwait(false);
             session.Started = true;
             await PublishStable(slot, session).ConfigureAwait(false);
+            if (session.Ready)
+                try { slot.Options.Connected?.Invoke(session.Transport.Protocol, session.Transport.ArrivalToRenderMs); }
+                catch (Exception callback) { Log.Warn(callback.Message); }
         }
         finally { session.Commands.Release(); }
     }
