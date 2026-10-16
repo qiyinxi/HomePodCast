@@ -76,10 +76,10 @@ public sealed partial class StreamController
         lock (_lifecycle)
         {
             Stop();
-            if (source != null && (plan.LocalOutputs.Count > 0 || plan.Members.Any(m => GroupUsesRaop(GroupDevice(m.DeviceId)))))
+            if (source != null && (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || plan.Members.Any(m => GroupUsesRaop(GroupDevice(m.DeviceId)))))
             {
                 source.Dispose();
-                Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
+                Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"));
                 return;
             }
             if (plan.Members.Any(m => GroupDevice(m.DeviceId) is { } device && !GroupUsesRaop(device) && UsesThirdPartyPath(device)))
@@ -142,12 +142,12 @@ public sealed partial class StreamController
                 run.Source.Dispose();
             throw new RaopRefusedException(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
         }
-        if (plan.LocalOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device)))
+        if (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device)))
         {
             if (run.Source != null)
             {
                 if (Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source) run.Source.Dispose();
-                throw new RaopRefusedException(L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
+                throw new RaopRefusedException(L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"));
             }
             return await ConnectLocalGroupAsync(plan, members, latencyMs, run, ct);
         }

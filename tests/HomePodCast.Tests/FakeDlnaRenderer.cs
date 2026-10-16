@@ -54,6 +54,7 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         catch (SocketException) when (_stop.IsCancellationRequested) { }
+        catch (InvalidOperationException) when (_stop.IsCancellationRequested) { }
     }
 
     private async Task HandleAsync(TcpClient client)

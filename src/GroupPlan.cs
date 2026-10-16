@@ -31,6 +31,7 @@ public sealed record GroupPlan(
 {
     /// <summary>Explicit local endpoints, empty for all existing selections. The full editor follows in P5.</summary>
     public IReadOnlyList<Audio.LocalOutputOptions> LocalOutputs { get; init; } = [];
+    public IReadOnlyList<DlnaOutputSettings> DlnaOutputs { get; init; } = [];
     public int? GroupDelayMs { get; init; }
     /// <summary>RAOP outputs are optional unless explicitly required; AirPlay 2 members always remain required.</summary>
     public IReadOnlyDictionary<string, bool> RequiredOutputs { get; init; } = new Dictionary<string, bool>();
@@ -45,6 +46,37 @@ public sealed record GroupPlan(
     private bool UseSpeakerPositions { get; init; } = true;
 
     public static GroupPlan? FromConfig(AppConfig cfg)
+    {
+        var dlna = DlnaGroupSettings.Selected(cfg);
+        var airplay = FromAirPlayConfig(cfg);
+        if (dlna.Count == 0) return airplay;
+        if (airplay == null)
+        {
+            var bank = GroupSettings.Copy(cfg.GroupSpeakers ?? []);
+            var selected = cfg.GroupCaptureDeviceIds;
+            var members = selected == null
+                ? cfg.DeviceId is { } id ? new[] { new GroupMemberRef(id, cfg.DeviceName ?? id, cfg.Host) } : []
+                : selected.DistinctBy(Key).Select(id => bank.FirstOrDefault(s => Key(s.DeviceId) == Key(id)) is { } row
+                    ? new GroupMemberRef(row.DeviceId, row.Name, Key(id) == Key(cfg.DeviceId ?? "") ? cfg.Host : row.Host)
+                    : new GroupMemberRef(id, Key(id) == Key(cfg.DeviceId ?? "") ? cfg.DeviceName ?? id : id,
+                        Key(id) == Key(cfg.DeviceId ?? "") ? cfg.Host : null)).ToArray();
+            var offsets = new Dictionary<string, int>(cfg.GroupVolumeOffsets ?? new());
+            if (selected != null) foreach (var row in bank) offsets[Key(row.DeviceId)] = row.VolumeOffset;
+            airplay = new(GroupKind.MultiRoom, "", null, members, false, false, offsets)
+            {
+                SpeakerSettings = bank.Select(s => new GroupSpeakerSettings { DeviceId = s.DeviceId, Name = s.Name, Host = s.Host,
+                    DelayMs = s.DelayMs, VolumeOffset = s.VolumeOffset,
+                    Position = cfg.GroupCapturePositions?.GetValueOrDefault(Key(s.DeviceId)) ?? SpeakerPosition.Stereo })
+                    .ToDictionary(s => Key(s.DeviceId)),
+            };
+        }
+        string name = string.Join(" + ", new[] { airplay.Name }.Where(n => n.Length > 0)
+            .Concat(airplay.Name.Length == 0 ? airplay.Members.Select(m => m.Name) : [])
+            .Concat(dlna.Select(d => d.Name)));
+        return airplay with { Name = name, DlnaOutputs = dlna };
+    }
+
+    private static GroupPlan? FromAirPlayConfig(AppConfig cfg)
     {
         if (cfg.DeviceId is not { } id) return null;
         var offsets = new Dictionary<string, int>(cfg.GroupVolumeOffsets ?? new());

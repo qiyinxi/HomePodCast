@@ -145,9 +145,11 @@ public sealed class OwnSession
     public static string KeyOf(string deviceId) => GroupPlan.Key(deviceId);
 
     /// <summary>The selection key of a group: the pair, or every member of a multi-room group.</summary>
-    public static string KeyOf(GroupPlan plan) => plan.Kind == GroupKind.StereoPair && plan.PairTsid != null
-        ? KeyOf(StereoPairs.PairId(plan.PairTsid))
-        : string.Join("+", plan.Members.Select(m => KeyOf(m.DeviceId)));
+    public static string KeyOf(GroupPlan plan) => string.Join("+",
+        (plan.Kind == GroupKind.StereoPair && plan.PairTsid != null
+            ? new[] { KeyOf(StereoPairs.PairId(plan.PairTsid)) } : plan.Members.Select(m => KeyOf(m.DeviceId)))
+        .Concat(plan.LocalOutputs.Select(o => "local:" + o.DeviceId.ToUpperInvariant()))
+        .Concat(plan.DlnaOutputs.Select(o => "dlna:" + DlnaGroupSettings.Key(o.Udn))));
 
     /// <summary>The key of what the config selects (null: nothing selected).</summary>
     public static string? KeyOf(AppConfig cfg) =>

@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using HomePodCast.Audio;
 
 namespace HomePodCast.Net;
 
@@ -15,9 +16,16 @@ internal sealed record DlnaStreamOptions(IPAddress LocalAddress, IPAddress Rende
     public DlnaHttpFraming Framing { get; init; } = DlnaHttpFraming.Chunked;
     // Compatibility with renderers that refuse chunking. This is a finite response, not an infinite WAV.
     public long LargeContentLength { get; init; } = 2_147_483_644;
+    public DlnaTransferPacing Pacing { get; init; } = DlnaTransferPacing.Sender;
+    public Func<DlnaAudioFormat, IDlnaAudioEncoder>? EncoderFactory { get; init; }
+    /// <summary>Runs immediately before each 352-frame source callback, including while codec output is priming.</summary>
+    public Func<long, CancellationToken, ValueTask>? BeforeReadAsync { get; init; }
+    public Action<DlnaWriteObservation>? ObserveWrite { get; init; }
+    /// <summary>A newly accepted GET starts a fresh transport epoch; HEAD never invokes this callback.</summary>
+    public Action<long>? OnStreamStarted { get; init; }
 }
 
-/// <summary>A session-scoped, sender-paced HTTP PCM endpoint for one explicitly selected renderer.</summary>
+/// <summary>A session-scoped HTTP audio endpoint for one explicitly selected renderer.</summary>
 internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
 {
     private const int MaxHeaderBytes = 8192;
@@ -33,9 +41,10 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
     private readonly object _lifecycle = new();
     private TcpListener? _listener;
     private Uri? _url;
+    private Exception? _failure;
     private int _disposed;
-    private int _activeGet;
-    private long _bytesSent, _framesSent, _framesSkipped, _writeTicks, _maxWriteTicks, _pendingWrite;
+    private int _activeGet, _policyClosed;
+    private long _bytesSent, _encodedBytesSent, _sourceFramesRead, _framesSent, _framesSkipped, _writeTicks, _maxWriteTicks, _pendingWrite;
 
     public DlnaStreamServer(DlnaStreamOptions options)
     {
@@ -48,17 +57,23 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
         ArgumentNullException.ThrowIfNull(options.IsPrivateNetwork);
         _ = DlnaAudioFormats.ContentType(options.Format);
         if (!Enum.IsDefined(options.Framing)) throw new ArgumentOutOfRangeException(nameof(options.Framing));
+        if (!Enum.IsDefined(options.Pacing)) throw new ArgumentOutOfRangeException(nameof(options.Pacing));
         if (options.Port is < 0 or > 65535) throw new ArgumentOutOfRangeException(nameof(options.Port));
-        if (options.LargeContentLength < 44 || options.LargeContentLength % 4 != 0
-            || options.LargeContentLength > DlnaAudioFormats.MaxWavDataLength + 44L)
+        bool compressed = options.Format is DlnaAudioFormat.Mp3 or DlnaAudioFormat.Aac;
+        if (compressed ? options.LargeContentLength < 1
+            : options.LargeContentLength < 44 || options.LargeContentLength % 4 != 0
+                || options.LargeContentLength > DlnaAudioFormats.MaxWavDataLength + 44L)
             throw new ArgumentOutOfRangeException(nameof(options.LargeContentLength));
         _options = options;
         _path = $"/stream/{Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16))}.{DlnaAudioFormats.Extension(options.Format)}";
     }
 
     public Uri Url => _url ?? throw new InvalidOperationException("Start the stream server before reading its URL.");
-    /// <summary>PCM payload only; excludes WAV, HTTP and chunk headers.</summary>
+    /// <summary>Media payload bytes; excludes WAV, HTTP and chunk headers.</summary>
     public long BytesSent => Interlocked.Read(ref _bytesSent);
+    public long EncodedBytesSent => Interlocked.Read(ref _encodedBytesSent);
+    public long SourceFramesRead => Interlocked.Read(ref _sourceFramesRead);
+    /// <summary>Completed media duration in PCM frames; compressed bytes cannot determine this value.</summary>
     public long FramesSent => Interlocked.Read(ref _framesSent);
     public long FramesSkipped => Interlocked.Read(ref _framesSkipped);
     public Task<long> FirstGetTicks => _firstGet.Task;
@@ -69,6 +84,8 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
     /// <summary>Monotonic start of an outstanding body write, or zero; measures transport backpressure only.</summary>
     public long PendingWriteStartedTicks => Interlocked.Read(ref _pendingWrite);
     public bool IsStopped => Volatile.Read(ref _disposed) != 0;
+    public bool IsPolicyClosed => Volatile.Read(ref _policyClosed) != 0;
+    public Exception? Failure => Volatile.Read(ref _failure);
     public bool IsStreaming => Volatile.Read(ref _activeGet) != 0;
 
     public void Start()
@@ -79,6 +96,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
             if (_listener != null) throw new InvalidOperationException("The stream server has already started.");
             if (!IsPrivate())
             {
+                Interlocked.Exchange(ref _policyClosed, 1);
                 Dispose();
                 throw new InvalidOperationException("DLNA streaming requires a private network.");
             }
@@ -120,7 +138,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(_stop.Token).ConfigureAwait(false))
-                if (!IsPrivate()) { Dispose(); return; }
+                if (!IsPrivate()) { CloseForPolicy(); return; }
         }
         catch (OperationCanceledException) { }
     }
@@ -139,7 +157,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
                     client.Dispose();
                     continue;
                 }
-                if (!IsPrivate()) { client.Dispose(); Dispose(); break; }
+                if (!IsPrivate()) { client.Dispose(); CloseForPolicy(); break; }
                 if (_clients.Count >= MaxConnections) { client.Dispose(); continue; }
                 _clients.TryAdd(client, 0);
                 // Dispose can race the insertion; never leave an accepted socket behind it.
@@ -165,7 +183,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
             if (error == 0 && !string.Equals(request.Host, Url.Authority, StringComparison.OrdinalIgnoreCase)) error = 400;
             if (error == 0 && request.Path != _path) error = 404;
             if (error == 0 && request.Method is not ("GET" or "HEAD")) error = 405;
-            if (error == 0 && !IsPrivate()) { Dispose(); return; }
+            if (error == 0 && !IsPrivate()) { CloseForPolicy(); return; }
             if (error == 0 && request.Method == "GET")
             {
                 ownsGet = Interlocked.CompareExchange(ref _activeGet, 1, 0) == 0;
@@ -176,16 +194,32 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
                 await WriteErrorAsync(stream, error, _stop.Token).ConfigureAwait(false);
                 return;
             }
-            if (ownsGet) _firstGet.TrySetResult(MediaClock.Now);
+            if (ownsGet)
+            {
+                long accepted = MediaClock.Now;
+                _firstGet.TrySetResult(accepted);
+                try { _options.OnStreamStarted?.Invoke(accepted); }
+                catch (Exception e) { Fail(e); throw; }
+            }
             await stream.WriteAsync(ResponseHeaders(), _stop.Token).ConfigureAwait(false);
-            if (ownsGet) await StreamPcmAsync(stream, _stop.Token).ConfigureAwait(false);
+            if (ownsGet)
+            {
+                Observe(MediaClock.Now, false);
+                if (_options.Format is DlnaAudioFormat.Mp3 or DlnaAudioFormat.Aac)
+                    await StreamEncodedAsync(stream, _stop.Token).ConfigureAwait(false);
+                else await StreamPcmAsync(stream, _stop.Token).ConfigureAwait(false);
+            }
         }
         catch (Exception e) when (e is IOException or SocketException or OperationCanceledException or ObjectDisposedException) { }
-        catch (Exception) { /* A failing source ends this GET; it must not fault an unobserved listener task. */ }
+        catch (Exception e) { Fail(e); }
         finally
         {
             client.Dispose();
-            if (ownsGet) Interlocked.Exchange(ref _activeGet, 0);
+            if (ownsGet)
+            {
+                Interlocked.Exchange(ref _activeGet, 0);
+                Observe(MediaClock.Now, false);
+            }
             _clients.TryRemove(client, out _);
         }
     }
@@ -196,7 +230,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
             : $"Content-Length: {_options.LargeContentLength.ToString(CultureInfo.InvariantCulture)}\r\n";
         return Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: {DlnaAudioFormats.ContentType(_options.Format)}\r\n"
             + "Connection: close\r\nCache-Control: no-store\r\nAccept-Ranges: none\r\ntransferMode.dlna.org: Streaming\r\n"
-            + $"contentFeatures.dlna.org: {DlnaAudioFormats.ContentFeatures}\r\n{framing}\r\n");
+            + $"contentFeatures.dlna.org: {DlnaAudioFormats.ContentFeaturesFor(_options.Pacing)}\r\n{framing}\r\n");
     }
 
     private async Task StreamPcmAsync(NetworkStream stream, CancellationToken ct)
@@ -207,14 +241,18 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
         if (wav) await WriteBodyAsync(stream, DlnaAudioFormats.WavHeader((uint)remaining), ct).ConfigureAwait(false);
         short[] pcm = new short[DlnaAudioFormats.FramesPerChunk * 2];
         byte[] bytes = new byte[pcm.Length * 2];
-        long epoch = MediaClock.Now, frame = 0;
+        long epoch = MediaClock.Now, frame = 0, lastBlocked = 0;
+        bool clockEligible = false;
         while (remaining > 0)
         {
             ct.ThrowIfCancellationRequested();
             long planned = epoch + (long)((Int128)frame * MediaClock.Frequency / DlnaAudioFormats.SampleRate);
-            await WaitUntilAsync(planned, ct).ConfigureAwait(false);
+            if (_options.Pacing == DlnaTransferPacing.Sender) await WaitUntilAsync(planned, ct).ConfigureAwait(false);
+            await BeforeReadAsync(planned, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
             Array.Clear(pcm);
-            _options.ReadAudio(planned, pcm);
+            ReadAudio(planned, pcm);
+            Interlocked.Add(ref _sourceFramesRead, DlnaAudioFormats.FramesPerChunk);
             ct.ThrowIfCancellationRequested();
             _firstPcm.TrySetResult(planned);
             int count = (int)Math.Min(bytes.Length, remaining);
@@ -223,14 +261,15 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
                 if (wav) BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(i * 2), pcm[i]);
                 else BinaryPrimitives.WriteInt16BigEndian(bytes.AsSpan(i * 2), pcm[i]);
             }
-            await WriteBodyAsync(stream, bytes.AsMemory(0, count), ct).ConfigureAwait(false);
+            long writeTicks = await WriteBodyAsync(stream, bytes.AsMemory(0, count), ct).ConfigureAwait(false);
             Interlocked.Add(ref _bytesSent, count);
             Interlocked.Add(ref _framesSent, count / DlnaAudioFormats.BytesPerFrame);
+            ObserveCompletion(writeTicks, ref lastBlocked, ref clockEligible);
             frame += DlnaAudioFormats.FramesPerChunk;
             remaining -= count;
             // A stalled HTTP receiver must not make the source replay stale deadlines in a catch-up burst.
             long elapsedFrames = (long)((Int128)(MediaClock.Now - epoch) * DlnaAudioFormats.SampleRate / MediaClock.Frequency);
-            if (elapsedFrames > frame + DlnaAudioFormats.FramesPerChunk)
+            if (_options.Pacing == DlnaTransferPacing.Sender && elapsedFrames > frame + DlnaAudioFormats.FramesPerChunk)
             {
                 long next = (elapsedFrames / DlnaAudioFormats.FramesPerChunk + 1) * DlnaAudioFormats.FramesPerChunk;
                 Interlocked.Add(ref _framesSkipped, next - frame);
@@ -239,6 +278,105 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
         }
         if (_options.Framing == DlnaHttpFraming.Chunked)
             await stream.WriteAsync("0\r\n\r\n"u8.ToArray(), ct).ConfigureAwait(false);
+    }
+
+    private async Task StreamEncodedAsync(NetworkStream stream, CancellationToken ct)
+    {
+        using var worker = new DlnaEncoderWorker(() => (_options.EncoderFactory ?? DlnaAudioEncoders.Create)(_options.Format));
+        int inputFrames = await EncoderCallAsync(worker.FramesPerInput, ct).ConfigureAwait(false);
+        var reblocker = new DlnaPcmReblocker(inputFrames);
+        short[] pcm = new short[DlnaAudioFormats.FramesPerChunk * 2];
+        long remaining = _options.Framing == DlnaHttpFraming.LargeContentLength ? _options.LargeContentLength : long.MaxValue;
+        long epoch = MediaClock.Now, frame = 0, lastBlocked = 0;
+        bool clockEligible = false;
+        while (remaining > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            long planned = epoch + (long)((Int128)frame * MediaClock.Frequency / DlnaAudioFormats.SampleRate);
+            if (_options.Pacing == DlnaTransferPacing.Sender) await WaitUntilAsync(planned, ct).ConfigureAwait(false);
+            await BeforeReadAsync(planned, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            Array.Clear(pcm);
+            ReadAudio(planned, pcm);
+            Interlocked.Add(ref _sourceFramesRead, DlnaAudioFormats.FramesPerChunk);
+            ct.ThrowIfCancellationRequested();
+            _firstPcm.TrySetResult(planned);
+            foreach (short[] block in reblocker.Append(pcm))
+            {
+                var packets = await EncoderCallAsync(worker.EncodeAsync(block, ct), ct).ConfigureAwait(false);
+                foreach (var packet in packets)
+                {
+                    // A zero-byte priming result is not HTTP's terminating zero-size chunk.
+                    if (packet.Data.Length == 0) continue;
+                    int count = (int)Math.Min(packet.Data.Length, remaining);
+                    long writeTicks = await WriteBodyAsync(stream, packet.Data.AsMemory(0, count), ct).ConfigureAwait(false);
+                    Interlocked.Add(ref _bytesSent, count);
+                    Interlocked.Add(ref _encodedBytesSent, count);
+                    // The finite compatibility boundary may cut the final packet; only complete media counts.
+                    if (count == packet.Data.Length) Interlocked.Add(ref _framesSent, packet.PcmFrames);
+                    ObserveCompletion(writeTicks, ref lastBlocked, ref clockEligible);
+                    remaining -= count;
+                    if (remaining == 0) break;
+                }
+                if (remaining == 0) break;
+            }
+            frame += DlnaAudioFormats.FramesPerChunk;
+            if (_options.Pacing == DlnaTransferPacing.Sender)
+            {
+                long elapsedFrames = (long)((Int128)(MediaClock.Now - epoch) * DlnaAudioFormats.SampleRate / MediaClock.Frequency);
+                if (elapsedFrames > frame + DlnaAudioFormats.FramesPerChunk)
+                {
+                    long next = (elapsedFrames / DlnaAudioFormats.FramesPerChunk + 1) * DlnaAudioFormats.FramesPerChunk;
+                    Interlocked.Add(ref _framesSkipped, next - frame);
+                    frame = next;
+                }
+            }
+        }
+    }
+
+    private async ValueTask BeforeReadAsync(long planned, CancellationToken ct)
+    {
+        try { if (_options.BeforeReadAsync != null) await _options.BeforeReadAsync(planned, ct).ConfigureAwait(false); }
+        catch (Exception e) when (!ct.IsCancellationRequested) { Fail(e); throw; }
+    }
+
+    private void ReadAudio(long planned, Span<short> pcm)
+    {
+        try { _options.ReadAudio(planned, pcm); }
+        catch (Exception e) when (!_stop.IsCancellationRequested) { Fail(e); throw; }
+    }
+
+    private async Task<T> EncoderCallAsync<T>(Task<T> pending, CancellationToken ct)
+    {
+        try { return await pending.WaitAsync(ct).ConfigureAwait(false); }
+        catch (Exception e) when (!ct.IsCancellationRequested) { Fail(e); throw; }
+    }
+
+    private void Fail(Exception error)
+    {
+        Interlocked.CompareExchange(ref _failure, error, null);
+        Dispose();
+    }
+
+    private void Observe(long completedTicks, bool eligible)
+    {
+        try { _options.ObserveWrite?.Invoke(new(completedTicks, FramesSent, eligible)); }
+        catch { /* Clock telemetry must not interrupt media delivery or socket cleanup. */ }
+    }
+
+    private void ObserveCompletion(long writeTicks, ref long lastBlocked, ref bool eligible)
+    {
+        long now = MediaClock.Now;
+        if (_options.Pacing == DlnaTransferPacing.Sender) { Observe(now, false); return; }
+        // Observe receiver pacing only after an actual socket stall. Fast writes between stalls are buffer refill,
+        // not an independent device clock; they must not repeatedly revoke a valid backpressure fit.
+        if (writeTicks >= MediaClock.FromMs(20))
+        {
+            lastBlocked = now;
+            eligible = true;
+            Observe(now, true);
+        }
+        else if (eligible && now - lastBlocked > MediaClock.FromMs(2000)) { eligible = false; Observe(now, false); }
     }
 
     private static async Task WaitUntilAsync(long deadline, CancellationToken ct)
@@ -251,7 +389,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
         }
     }
 
-    private async Task WriteBodyAsync(NetworkStream stream, ReadOnlyMemory<byte> bytes, CancellationToken ct)
+    private async Task<long> WriteBodyAsync(NetworkStream stream, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
         long start = MediaClock.Now;
         Interlocked.Exchange(ref _pendingWrite, start);
@@ -262,6 +400,7 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
             await stream.WriteAsync(bytes, ct).ConfigureAwait(false);
             if (_options.Framing == DlnaHttpFraming.Chunked)
                 await stream.WriteAsync("\r\n"u8.ToArray(), ct).ConfigureAwait(false);
+            return MediaClock.Now - start;
         }
         finally
         {
@@ -273,6 +412,8 @@ internal sealed class DlnaStreamServer : IDisposable, IAsyncDisposable
             Interlocked.Exchange(ref _pendingWrite, 0);
         }
     }
+
+    private void CloseForPolicy() { Interlocked.Exchange(ref _policyClosed, 1); Dispose(); }
 
     private readonly record struct Request(string Method, string Path, string Host, int Error = 0);
 

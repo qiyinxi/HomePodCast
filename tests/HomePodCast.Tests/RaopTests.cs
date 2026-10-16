@@ -312,7 +312,7 @@ public class RaopTests
         controller.StartGroup(plan, 120, 10, source: source);
         Assert.Equal(StreamState.Idle, controller.State);
         Assert.Null(controller.Capture);
-        Assert.Equal(L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"), controller.StatusText);
+        Assert.Equal(L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"), controller.StatusText);
         Assert.Equal(1, source.Disposals);
         controller.Stop();
         Assert.Equal(1, source.Disposals);

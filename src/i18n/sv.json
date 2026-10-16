@@ -628,5 +628,11 @@
   "找不到所选的输出设备。": "Den valda utdataenheten hittades inte.",
   "本机输出设备正被采集，请改用其他采集设备。": "Den lokala utdataenheten spelas in. Välj en annan inspelningsenhet.",
   "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Gruppfördröjningen är för kort för den här utgången. Öka gruppfördröjningen.",
-  "本地影音文件暂不支持 AirPlay 1 或本机输出分组。": "Uppspelning av lokala mediefiler stöder ännu inte grupper med AirPlay 1 eller lokala utgångar."
+  "本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。": "Uppspelning av lokala mediefiler stöder ännu inte grupper med AirPlay 1, lokala utgångar eller DLNA.",
+  "DLNA 设备正在被其他设备使用，请先停止该设备上的播放。": "DLNA-enheten används av en annan enhet. Stoppa uppspelningen där först.",
+  "DLNA 设备已被其他控制器接管。": "En annan styrenhet har tagit över DLNA-enheten.",
+  "这台 DLNA 设备不支持可用的音频格式。": "Den här DLNA-enheten stöder inget tillgängligt ljudformat.",
+  "DLNA 输出仅支持专用网络。": "DLNA-utmatning kräver ett privat nätverk.",
+  "DLNA 设备已停止播放。": "DLNA-enheten har stoppat uppspelningen.",
+  "DLNA 输出连接已断开。": "Anslutningen till DLNA-utgången bröts."
 }

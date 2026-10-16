@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using HomePodCast.Net;
+using HomePodCast.Audio;
 
 namespace HomePodCast.Tests;
 
@@ -220,6 +221,7 @@ public sealed class DlnaStreamServerTests
         Assert.Throws<InvalidOperationException>(() => denied.Url);
         Assert.True(denied.FirstGetTicks.IsCanceled);
         Assert.True(denied.FirstPcmTicks.IsCanceled);
+        Assert.True(denied.IsPolicyClosed);
         int allowed = 1, checks = 0;
         using var server = Create(policy: () => { Interlocked.Increment(ref checks); return Volatile.Read(ref allowed) != 0; });
         server.Start();
@@ -229,6 +231,7 @@ public sealed class DlnaStreamServerTests
         await server.FirstPcmTicks.WaitAsync(TimeSpan.FromSeconds(3));
         Volatile.Write(ref allowed, 0);
         await WaitUntil(() => server.IsStopped);
+        Assert.True(server.IsPolicyClosed);
         Assert.InRange(checks, 3, 8); // Connection checks plus paced policy monitoring, never every PCM chunk.
         using var refused = new TcpClient();
         await Assert.ThrowsAsync<SocketException>(() => refused.ConnectAsync(IPAddress.Loopback, server.Url.Port));
@@ -313,6 +316,194 @@ public sealed class DlnaStreamServerTests
         }
         Assert.All(nonzero, value => Assert.False(value));
         Assert.Equal(planned[0], await server.FirstPcmTicks);
+    }
+
+    [Theory]
+    [InlineData((int)DlnaAudioFormat.Mp3, "audio/mpeg", ".mp3", 1152)]
+    [InlineData((int)DlnaAudioFormat.Aac, "audio/aac", ".aac", 1024)]
+    public async Task CompressedResponsesUseCodecDurationAndFreshWorkerOnReconnect(int formatValue,
+        string mime, string extension, int inputFrames)
+    {
+        var format = (DlnaAudioFormat)formatValue;
+        int created = 0, disposed = 0, nextSample = 0;
+        var inputs = new ConcurrentQueue<short[]>();
+        var observations = new ConcurrentQueue<DlnaWriteObservation>();
+        var starts = new ConcurrentQueue<long>();
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, format,
+            (ticks, pcm) => { for (int i = 0; i < pcm.Length; i++) pcm[i] = (short)nextSample++; }, () => true)
+        {
+            Framing = DlnaHttpFraming.LargeContentLength, LargeContentLength = 8,
+            Pacing = DlnaTransferPacing.Receiver, ObserveWrite = observations.Enqueue,
+            OnStreamStarted = starts.Enqueue,
+            EncoderFactory = _ => { Interlocked.Increment(ref created); return new TestEncoder(inputFrames, inputs, () => Interlocked.Increment(ref disposed)); },
+        });
+        server.Start();
+        using var http = Http();
+        using (var head = await http.SendAsync(new HttpRequestMessage(HttpMethod.Head, server.Url)))
+        {
+            Assert.Equal(HttpStatusCode.OK, head.StatusCode);
+            Assert.Equal(mime, head.Content.Headers.ContentType!.MediaType);
+            Assert.Equal(DlnaAudioFormats.ReceiverPacedContentFeatures, Assert.Single(head.Headers.GetValues("contentFeatures.dlna.org")));
+            Assert.EndsWith(extension, server.Url.AbsolutePath);
+            Assert.Equal(0, created);
+            Assert.Equal(0, nextSample);
+            Assert.Empty(starts);
+        }
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            using var response = await http.GetAsync(server.Url);
+            Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, await response.Content.ReadAsByteArrayAsync());
+            Assert.Equal(8, response.Content.Headers.ContentLength);
+            await WaitUntil(() => !server.IsStreaming && Volatile.Read(ref disposed) == attempt);
+            Assert.Equal(attempt * 8, server.BytesSent);
+            Assert.Equal(attempt * 8, server.EncodedBytesSent);
+            Assert.Equal(attempt * inputFrames * 2, server.FramesSent);
+        }
+        Assert.Equal(2, created);
+        Assert.Equal(2, starts.Count);
+        Assert.True(starts.Last() > starts.First());
+        Assert.Equal(0, server.FramesSkipped);
+        Assert.All(inputs, input => Assert.Equal(inputFrames * 2, input.Length));
+        short[][] blocks = inputs.ToArray();
+        Assert.Equal(blocks[0][^1] + 1, blocks[1][0]);
+        Assert.Equal(blocks[2][^1] + 1, blocks[3][0]);
+        Assert.Equal((long)nextSample / 2, server.SourceFramesRead);
+        Assert.All(observations, observation => Assert.False(observation.BackpressureEligible));
+    }
+
+    [Fact]
+    public async Task CompressedPrimingNeverWritesTerminatingEmptyChunk()
+    {
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, DlnaAudioFormat.Aac, Pattern, () => true)
+        {
+            EncoderFactory = _ => new TestEncoder(1024, new(), () => { }),
+        });
+        server.Start();
+        using var socket = await Connect(server);
+        await Send(socket, Request(server));
+        Assert.Contains("200 OK", await Headers(socket.GetStream()));
+        Assert.Equal("3", await Line(socket.GetStream()));
+        var first = new byte[3];
+        await socket.GetStream().ReadExactlyAsync(first);
+        Assert.Equal(new byte[] { 1, 2, 3 }, first);
+        Assert.Equal("", await Line(socket.GetStream()));
+        Assert.Equal("5", await Line(socket.GetStream()));
+        socket.Client.LingerState = new LingerOption(true, 0);
+    }
+
+    [Fact]
+    public async Task PartialFiniteCompressedPacketCountsBytesButNotIncompleteMediaDuration()
+    {
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, DlnaAudioFormat.Aac, Pattern, () => true)
+        {
+            Framing = DlnaHttpFraming.LargeContentLength, LargeContentLength = 4,
+            Pacing = DlnaTransferPacing.Receiver, EncoderFactory = _ => new TestEncoder(1024, new(), () => { }),
+        });
+        server.Start();
+        using var http = Http();
+        using var response = await http.GetAsync(server.Url);
+        Assert.Equal(new byte[] { 1, 2, 3, 4 }, await response.Content.ReadAsByteArrayAsync());
+        await WaitUntil(() => !server.IsStreaming);
+        Assert.Equal(4, server.BytesSent);
+        Assert.Equal(4, server.EncodedBytesSent);
+        Assert.Equal(1024, server.FramesSent);
+        Assert.Equal(352 * 6, server.SourceFramesRead);
+    }
+
+    [Fact]
+    public async Task BeforeReadGateRunsBeforeSourceAndIsCancelledByShutdown()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, DlnaAudioFormat.Aac,
+            (ticks, pcm) => Interlocked.Increment(ref reads), () => true)
+        {
+            EncoderFactory = _ => new TestEncoder(1024, new(), () => { }),
+            BeforeReadAsync = async (ticks, ct) =>
+            {
+                entered.TrySetResult();
+                try { await Task.Delay(Timeout.Infinite, ct); }
+                finally { cancelled.TrySetResult(); }
+            },
+        });
+        server.Start();
+        using var http = Http();
+        using var response = await http.GetAsync(server.Url, HttpCompletionOption.ResponseHeadersRead);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        server.Dispose();
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(0, reads);
+        Assert.Equal(0, server.SourceFramesRead);
+    }
+
+    [Fact]
+    public async Task ShutdownClosesHttpWithoutWaitingForBlockedEncoder()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var disposed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, DlnaAudioFormat.Mp3, Pattern, () => true)
+        {
+            Pacing = DlnaTransferPacing.Receiver,
+            EncoderFactory = _ => new BlockedEncoder(entered, release, disposed),
+        });
+        server.Start();
+        using var socket = await Connect(server);
+        await Send(socket, Request(server));
+        Assert.Contains("200 OK", await Headers(socket.GetStream()));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(3)));
+        try
+        {
+            await Task.Run(server.Dispose).WaitAsync(TimeSpan.FromSeconds(1));
+            await WaitUntil(() => !server.IsStreaming);
+            await DrainUntilClosed(socket.GetStream());
+            Assert.False(disposed.Task.IsCompleted);
+        }
+        finally { release.Set(); await disposed.Task.WaitAsync(TimeSpan.FromSeconds(3)); }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CodecAndSourceFailuresCloseEndpointAndExposeOriginalCause(bool codec)
+    {
+        var expected = new InvalidDataException(codec ? "codec failed" : "source failed");
+        using var server = new DlnaStreamServer(new(IPAddress.Loopback, IPAddress.Loopback, DlnaAudioFormat.Aac,
+            (ticks, pcm) => { if (!codec) throw expected; }, () => true)
+        {
+            Pacing = DlnaTransferPacing.Receiver,
+            EncoderFactory = _ => codec ? throw expected : new TestEncoder(1024, new(), () => { }),
+        });
+        server.Start();
+        using var socket = await Connect(server);
+        await Send(socket, Request(server));
+        Assert.Contains("200 OK", await Headers(socket.GetStream()));
+        await WaitUntil(() => server.IsStopped && !server.IsStreaming);
+        Assert.Same(expected, server.Failure);
+        Assert.False(server.IsPolicyClosed);
+        await DrainUntilClosed(socket.GetStream());
+    }
+
+    private sealed class BlockedEncoder(ManualResetEventSlim entered, ManualResetEventSlim release, TaskCompletionSource disposed) : IDlnaAudioEncoder
+    {
+        public int FramesPerInput => 1152;
+        public IReadOnlyList<DlnaEncodedPacket> Encode(ReadOnlySpan<short> stereo) { entered.Set(); release.Wait(); return []; }
+        public IReadOnlyList<DlnaEncodedPacket> Drain() => [];
+        public void Dispose() => disposed.TrySetResult();
+    }
+
+    private sealed class TestEncoder(int frames, ConcurrentQueue<short[]> inputs, Action disposed) : IDlnaAudioEncoder
+    {
+        private int _calls;
+        public int FramesPerInput => frames;
+        public IReadOnlyList<DlnaEncodedPacket> Encode(ReadOnlySpan<short> stereo)
+        {
+            inputs.Enqueue(stereo.ToArray());
+            return ++_calls == 1 ? [new([], 0)] : [new([1, 2, 3], frames), new([4, 5, 6, 7, 8], frames)];
+        }
+        public IReadOnlyList<DlnaEncodedPacket> Drain() => [];
+        public void Dispose() => disposed();
     }
 
     [Fact]

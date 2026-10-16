@@ -628,5 +628,11 @@
   "找不到所选的输出设备。": "Valittua toistolaitetta ei löytynyt.",
   "本机输出设备正被采集，请改用其他采集设备。": "Paikallisen toistolaitteen ääntä tallennetaan. Valitse toinen kaappauslaite.",
   "分组延迟不足以播放这台输出设备，请提高分组延迟。": "Ryhmän viive on liian lyhyt tälle lähdölle. Kasvata ryhmän viivettä.",
-  "本地影音文件暂不支持 AirPlay 1 或本机输出分组。": "Paikallisten mediatiedostojen toisto ei vielä tue ryhmiä, joissa on AirPlay 1 -vastaanottimia tai paikallisia lähtöjä."
+  "本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。": "Paikallisten mediatiedostojen toisto ei vielä tue ryhmiä, joissa on AirPlay 1-, paikallisia tai DLNA-lähtöjä.",
+  "DLNA 设备正在被其他设备使用，请先停止该设备上的播放。": "Toinen laite käyttää DLNA-laitetta. Pysäytä toisto ensin sillä laitteella.",
+  "DLNA 设备已被其他控制器接管。": "Toinen ohjain on ottanut DLNA-laitteen käyttöönsä.",
+  "这台 DLNA 设备不支持可用的音频格式。": "Tämä DLNA-laite ei tue mitään käytettävissä olevaa äänimuotoa.",
+  "DLNA 输出仅支持专用网络。": "DLNA-lähtö edellyttää yksityistä verkkoa.",
+  "DLNA 设备已停止播放。": "DLNA-laite on pysäyttänyt toiston.",
+  "DLNA 输出连接已断开。": "Yhteys DLNA-lähtöön katkesi."
 }
