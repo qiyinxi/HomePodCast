@@ -94,11 +94,19 @@ public class DlnaDiscoveryTests
     [Fact]
     public async Task Browse_fetches_descriptions_on_explicit_loopback_and_deduplicates_UDN()
     {
-        await using var renderer = new FakeDlnaRenderer();
+        await using var renderer = new FakeDlnaRenderer { GateDescriptions = true };
         using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         var endpoint = (IPEndPoint)responder.Client.LocalEndPoint!;
-        var reply = Task.Run(async () =>
+        int aliveCount = 0;
+        var duplicateObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMinutes(1), guard.Token, IPAddress.Loopback, endpoint, progress =>
+        {
+            if (progress.Operation == DlnaDiscovery.BrowseOperation.AliveObserved && Interlocked.Increment(ref aliveCount) == 2)
+                duplicateObserved.TrySetResult();
+            return progress.Operation == DlnaDiscovery.BrowseOperation.DescriptionCompleted;
+        });
+        try
         {
             var search = await responder.ReceiveAsync(guard.Token);
             string request = Encoding.ASCII.GetString(search.Buffer);
@@ -108,31 +116,39 @@ public class DlnaDiscoveryTests
             byte[] advertisement = Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri));
             await responder.SendAsync(advertisement, search.RemoteEndPoint, guard.Token);
             await responder.SendAsync(advertisement, search.RemoteEndPoint, guard.Token);
-        });
-        var devices = await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback, endpoint);
-        await reply;
-        Assert.Equal("uuid:fake-renderer", Assert.Single(devices).Udn);
-        Assert.All(renderer.Requests, r => Assert.Equal("GET", r.Method));
+            var description = await renderer.NextDescriptionAsync(guard.Token);
+            await duplicateObserved.Task.WaitAsync(guard.Token);
+            description.Respond(renderer.Description);
+            await description.ResponseWritten.WaitAsync(guard.Token);
+            var devices = await browsing.WaitAsync(guard.Token);
+            Assert.Equal("uuid:fake-renderer", Assert.Single(devices).Udn);
+            Assert.Equal("GET", Assert.Single(renderer.Requests).Method);
+        }
+        finally { await CancelBrowseAsync(guard, browsing); }
     }
 
     [Fact]
     public async Task Browse_rejects_cross_peer_locations_and_invalid_descriptions()
     {
-        await using var renderer = new FakeDlnaRenderer();
+        await using var renderer = new FakeDlnaRenderer { GateDescriptions = true };
         renderer.DescriptionOverride = "<!DOCTYPE root [<!ENTITY x SYSTEM 'file:///test'>]><root>&x;</root>";
         using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var reply = Task.Run(async () =>
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMinutes(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!, progress => progress.Operation == DlnaDiscovery.BrowseOperation.DescriptionCompleted);
+        try
         {
             var search = await responder.ReceiveAsync(guard.Token);
             await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(new Uri("http://192.0.2.1/description.xml"))),
                 search.RemoteEndPoint, guard.Token);
             await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri)), search.RemoteEndPoint, guard.Token);
-        });
-        Assert.Empty(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
-            (IPEndPoint)responder.Client.LocalEndPoint!));
-        await reply;
-        Assert.Single(renderer.Requests);
+            var description = await renderer.NextDescriptionAsync(guard.Token);
+            description.Respond(renderer.Description);
+            await description.ResponseWritten.WaitAsync(guard.Token);
+            Assert.Empty(await browsing.WaitAsync(guard.Token));
+            Assert.Single(renderer.Requests);
+        }
+        finally { await CancelBrowseAsync(guard, browsing); }
     }
 
     [Fact]
@@ -153,42 +169,81 @@ public class DlnaDiscoveryTests
     [InlineData(false)]
     public async Task Withdrawal_during_description_fetch_does_not_resurrect_renderer(bool byeBye)
     {
-        await using var renderer = new FakeDlnaRenderer();
-        renderer.Delays["Description"] = TimeSpan.FromMilliseconds(100);
+        await using var renderer = new FakeDlnaRenderer { GateDescriptions = true };
         using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var reply = Task.Run(async () =>
+        var withdrawalProcessed = new TaskCompletionSource<DlnaDiscovery.BrowseProgress>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMinutes(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!, progress =>
+        {
+            if (progress.Operation == DlnaDiscovery.BrowseOperation.WithdrawalProcessed) withdrawalProcessed.TrySetResult(progress);
+            return progress.Operation == DlnaDiscovery.BrowseOperation.DescriptionCompleted;
+        });
+        try
         {
             var search = await responder.ReceiveAsync(guard.Token);
             await responder.SendAsync(Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri)), search.RemoteEndPoint, guard.Token);
-            while (renderer.Requests.IsEmpty) await Task.Delay(5, guard.Token);
+            var description = await renderer.NextDescriptionAsync(guard.Token);
+            Assert.False(description.ResponseWritten.IsCompleted);
             string withdrawal = byeBye ? ByeBye() : Advertisement(renderer.DescriptionUri).Replace("max-age=1800", "max-age=0");
             await responder.SendAsync(Encoding.ASCII.GetBytes(withdrawal), search.RemoteEndPoint, guard.Token);
-        });
-        Assert.Empty(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
-            (IPEndPoint)responder.Client.LocalEndPoint!));
-        await reply;
+            var removed = await withdrawalProcessed.Task.WaitAsync(guard.Token);
+            Assert.Equal(byeBye, removed.Advertisement.ByeBye);
+            Assert.Empty(removed.Devices);
+            description.Respond(renderer.Description);
+            await description.ResponseWritten.WaitAsync(guard.Token);
+            Assert.Empty(await browsing.WaitAsync(guard.Token));
+            Assert.Single(renderer.Requests);
+        }
+        finally { await CancelBrowseAsync(guard, browsing); }
     }
 
     [Fact]
     public async Task New_alive_after_byebye_can_complete_while_old_description_is_pending()
     {
-        await using var renderer = new FakeDlnaRenderer();
-        renderer.Delays["Description"] = TimeSpan.FromMilliseconds(100);
+        await using var renderer = new FakeDlnaRenderer { GateDescriptions = true };
         using var responder = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var reply = Task.Run(async () =>
+        var withdrawalProcessed = new TaskCompletionSource<DlnaDiscovery.BrowseProgress>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var newDescriptionCompleted = new TaskCompletionSource<DlnaDiscovery.BrowseProgress>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMinutes(1), guard.Token, IPAddress.Loopback,
+            (IPEndPoint)responder.Client.LocalEndPoint!, progress =>
+        {
+            if (progress.Operation == DlnaDiscovery.BrowseOperation.WithdrawalProcessed) withdrawalProcessed.TrySetResult(progress);
+            if (progress.Operation != DlnaDiscovery.BrowseOperation.DescriptionCompleted) return false;
+            if (progress.Revision > 0) { newDescriptionCompleted.TrySetResult(progress); return false; }
+            return true;
+        });
+        try
         {
             var search = await responder.ReceiveAsync(guard.Token);
             byte[] alive = Encoding.ASCII.GetBytes(Advertisement(renderer.DescriptionUri));
             await responder.SendAsync(alive, search.RemoteEndPoint, guard.Token);
-            while (renderer.Requests.IsEmpty) await Task.Delay(5, guard.Token);
+            var oldDescription = await renderer.NextDescriptionAsync(guard.Token);
             await responder.SendAsync(Encoding.ASCII.GetBytes(ByeBye()), search.RemoteEndPoint, guard.Token);
+            var removed = await withdrawalProcessed.Task.WaitAsync(guard.Token);
             await responder.SendAsync(alive, search.RemoteEndPoint, guard.Token);
-        });
-        Assert.Single(await DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(1), guard.Token, IPAddress.Loopback,
-            (IPEndPoint)responder.Client.LocalEndPoint!));
-        await reply;
+            // The new revision must open and finish its own request while the departed revision is held.
+            var newDescription = await renderer.NextDescriptionAsync(guard.Token);
+            newDescription.Respond(renderer.Description.Replace("Loopback &amp; renderer", "Replacement renderer"));
+            await newDescription.ResponseWritten.WaitAsync(guard.Token);
+            var replacement = await newDescriptionCompleted.Task.WaitAsync(guard.Token);
+            Assert.Equal(removed.Revision, replacement.Revision);
+            Assert.Equal("Replacement renderer", Assert.Single(replacement.Devices).Name);
+            Assert.False(oldDescription.ResponseWritten.IsCompleted);
+            oldDescription.Respond(renderer.Description.Replace("Loopback &amp; renderer", "Departed renderer"));
+            await oldDescription.ResponseWritten.WaitAsync(guard.Token);
+            Assert.Equal("Replacement renderer", Assert.Single(await browsing.WaitAsync(guard.Token)).Name);
+            Assert.Equal(2, renderer.Requests.Count);
+        }
+        finally { await CancelBrowseAsync(guard, browsing); }
+    }
+
+    private static async Task CancelBrowseAsync(CancellationTokenSource guard, Task<IReadOnlyList<DlnaDevice>> browsing)
+    {
+        guard.Cancel();
+        try { await browsing; }
+        catch (OperationCanceledException) when (guard.IsCancellationRequested) { }
     }
 
     [Theory]
