@@ -108,4 +108,46 @@ public class CoordinatedReceiverSessionTests
         Assert.Single(fake.Requests, r => r.StartsWith("RECORD"));
         Assert.Empty(fake.Errors);
     }
+
+    [Fact]
+    public async Task Two_negotiated_PTP_transports_share_a_clock_without_competing_for_ports()
+    {
+        using var tcp = new TcpListener(IPAddress.Loopback, 0); tcp.Start();
+        using var realtime = new FakeAirPlayReceiver(false) { ModelOverride = "Shairport Sync" };
+        using var buffered = new FakeAirPlayReceiver(false)
+        { ModelOverride = "Shairport Sync", BufferedDataPort = ((IPEndPoint)tcp.LocalEndpoint).Port };
+        using var guard = new CancellationTokenSource(Guard);
+        var accepted = tcp.AcceptTcpClientAsync(guard.Token).AsTask();
+        var encoder = new Encoder();
+        ReceiverGroupOutputOptions Output(FakeAirPlayReceiver receiver, string id, ReceiverProtocol protocol)
+        {
+            var device = Device(receiver) with { DeviceId = id };
+            var settings = ReceiverPreferences.Of(device) with { ProtocolOverride = protocol, CompatibilityLatencyMs = 1500 };
+            return new(id, id, _ => Task.FromResult(new ReceiverGroupTarget(device, settings)),
+                new ReceiverConnectOptions(250, 0, 25, null, null, new BombEffect()) { TimingPorts = receiver.TimingPorts });
+        }
+        using var outputs = await ReceiverOutputSet.PrepareAsync([
+            Output(realtime, "0011", ReceiverProtocol.AirPlay2Realtime), Output(buffered, "0022", ReceiverProtocol.AirPlay2Buffered),
+        ], () => 25, guard.Token, connect: (_, device, settings, options, clocks, ct) =>
+            ReceiverGroupConnections.PrepareAsync(device, settings, options, clocks, ct, encoder: () => encoder));
+        using var socket = await accepted;
+        var realtimePeer = Assert.IsType<Dictionary<string, object?>>(realtime.SessionSetup!["timingPeerInfo"]);
+        var bufferedPeer = Assert.IsType<Dictionary<string, object?>>(buffered.SessionSetup!["timingPeerInfo"]);
+        Assert.Equal(realtimePeer["ClockID"], bufferedPeer["ClockID"]);
+        Assert.DoesNotContain(realtime.Requests.Concat(buffered.Requests), r => r.StartsWith("RECORD"));
+        Assert.Equal(0, encoder.Calls);
+        long start = MediaClock.Now + MediaClock.FromMs(250);
+        var timeline = new TimelineBuffer(44100, 44100 * 8, start - MediaClock.FromMs(3000));
+        var samples = new float[44100 * 8 * 2];
+        for (int i = 0; i < samples.Length; i += 2) { samples[i] = .25f; samples[i + 1] = -.5f; }
+        timeline.WriteFrames(0, samples);
+        await outputs.StartAsync(timeline, 2000, 10, false, start, guard.Token);
+        byte[] size = new byte[2]; await socket.GetStream().ReadExactlyAsync(size, guard.Token);
+        byte[] packet = new byte[BinaryPrimitives.ReadUInt16BigEndian(size) - 2];
+        await socket.GetStream().ReadExactlyAsync(packet, guard.Token);
+        await Until(() => !realtime.Rtp.Audio.IsEmpty);
+        Assert.All(outputs.Status, output => { Assert.True(output.UsesPtp); Assert.Equal(OutputState.Streaming, output.State); });
+        Assert.Equal((short)8192, encoder.First![0]); Assert.Equal((short)-16384, encoder.First[1]);
+        Assert.Empty(realtime.Errors); Assert.Empty(buffered.Errors);
+    }
 }
