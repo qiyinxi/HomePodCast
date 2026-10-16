@@ -34,6 +34,7 @@
     <Compile Include="../../src/Net/AirPlayClient.cs" Link="Net/AirPlayClient.cs" />
     <Compile Include="../../src/Net/AirPlayClient.Buffered.cs" Link="Net/AirPlayClient.Buffered.cs" />
     <Compile Include="../../src/Net/AirPlayClient.Coordinated.cs" Link="Net/AirPlayClient.Coordinated.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.GroupVolume.cs" Link="Net/AirPlayClient.GroupVolume.cs" />
     <Compile Include="../../src/Net/BufferedSender.cs" Link="Net/BufferedSender.cs" />
     <Compile Include="../../src/Net/PtpRealtimeSender.cs" Link="Net/PtpRealtimeSender.cs" />
     <Compile Include="../../src/Net/PtpMaster.cs" Link="Net/PtpMaster.cs" />

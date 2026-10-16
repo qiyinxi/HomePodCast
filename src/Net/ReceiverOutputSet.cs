@@ -401,7 +401,9 @@ internal sealed class ReceiverOutputSet : IDisposable
     {
         lock (_commands)
         {
-            var slot = _slots.FirstOrDefault(s => GroupPlan.Key(s.Options.Id) == GroupPlan.Key(id));
+            // Only AirPlay ids occur here. Keep the protocol layer independent of the app's group config.
+            static string Key(string value) => value.Replace(":", "").Replace("-", "").Trim().ToUpperInvariant();
+            var slot = _slots.FirstOrDefault(s => Key(s.Options.Id) == Key(id));
             if (_disposed != 0 || _stop.IsCancellationRequested || slot == null || !slot.Terminal || slot.Options.Required) return false;
             slot.Terminal = slot.ActionNotified = false; slot.Retrying = true;
             // The old worker may still be finishing its finally. Never let it detach the new session.
