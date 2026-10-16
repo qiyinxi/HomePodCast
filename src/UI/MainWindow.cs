@@ -221,7 +221,8 @@ internal sealed class MainWindow : Form, ISurface
     private void PrepareSome()
     {
         if (_prepare.Interval != PrepareStepMs) _prepare.Interval = PrepareStepMs;
-        if (!Visible || WindowState == FormWindowState.Minimized)
+        // Also turned off while the timer still ran: the step that finished the last page leaves one more tick.
+        if (!PrepareAhead || !Visible || WindowState == FormWindowState.Minimized)
         {
             StopPreparing(); // UpdateShownPage starts it again
             return;
@@ -432,10 +433,31 @@ internal sealed class MainWindow : Form, ISurface
         if (!_dpiLayoutPending || IsDisposed) return;
         _dpiHold?.Dispose();
         _dpiHold = null;
-        using (LayoutPanel.BatchLayout(this)) { } // OnLayout, which repaints
+        // The rail's and the page's windows moved without drawing each one, then drawn once. 2026-10-16, on the maintainer's
+        // monitors: the layout after a move across took 130–550 ms with each window drawn as it moved, 100–330 ms without.
+        Control[] shown = [.. new Control[] { _rail, _pages[_current] }.Where(c => c.IsHandleCreated)];
+        foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 0, 0);
+        try
+        {
+            using (LayoutPanel.BatchLayout(this)) { } // OnLayout
+        }
+        finally
+        {
+            foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 1, 0);
+            if (IsHandleCreated) RedrawWindow(Handle, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
         if (_dpiLayoutPending) _dpiSettle.Start(); // the window's layout was held (a batch in progress): again later
         else if (Visible) StartPreparing(); // the hidden pages again, at this DPI
     }
+
+    private const int WM_SETREDRAW = 0x000B;
+    private const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004, RDW_ALLCHILDREN = 0x0080, RDW_FRAME = 0x0400;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, nint wParam, nint lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr region, uint flags);
 
     protected override void WndProc(ref Message m)
     {
