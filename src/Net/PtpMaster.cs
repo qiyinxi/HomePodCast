@@ -37,6 +37,19 @@ public sealed class PtpMaster : IDisposable
     public static ulong NowNanoseconds => EpochBase + (ulong)((UInt128)(ulong)(Stopwatch.GetTimestamp() - ClockBase)
         * 1_000_000_000 / (ulong)Stopwatch.Frequency);
 
+    /// <summary>Coordinated receivers project the same QPC instant as the existing NTP outputs.</summary>
+    internal static ulong NanosecondsAt(long qpcTicks) => NanosecondsFromNtp(MediaClock.NtpAt(qpcTicks));
+
+    internal static ulong NanosecondsFromNtp(ulong timestamp)
+    {
+        const ulong unixEpoch = 2_208_988_800;
+        ulong seconds = timestamp >> 32;
+        // NTP's low seconds wrap in 2036. The sender's current Unix era spans 1970..2106.
+        if (seconds < unixEpoch) seconds += 1UL << 32;
+        return checked((seconds - unixEpoch) * 1_000_000_000
+            + (ulong)((UInt128)(timestamp & uint.MaxValue) * 1_000_000_000 >> 32));
+    }
+
     /// <summary>Let the receiver's wake-up election finish before anchoring or consuming live audio.</summary>
     internal async Task WaitForStableMasterAsync(CancellationToken ct)
     {
