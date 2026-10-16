@@ -95,7 +95,7 @@ public class ReceiverDiscoveryTests
         using var responder = new UdpClient(AddressFamily.InterNetwork);
         responder.ExclusiveAddressUse = false;
         responder.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-        responder.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+        responder.Client.Bind(new IPEndPoint(IPAddress.Loopback, 0)); // never every address: see ProcessListensOnlyOnLoopback
         var group = new IPEndPoint(IPAddress.Parse("239.255.77.77"), ((IPEndPoint)responder.Client.LocalEndPoint!).Port);
         responder.JoinMulticastGroup(group.Address, IPAddress.Loopback);
         responder.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, IPAddress.Loopback.GetAddressBytes());
