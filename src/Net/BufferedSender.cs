@@ -9,6 +9,7 @@ namespace HomePodCast.Net;
 /// <summary>Independent, paced type 103 sender. Only its worker thread owns the Windows AAC transform.</summary>
 internal sealed class BufferedSender : IDisposable
 {
+    private static readonly long LateLimit = MediaClock.FromMs(250);
     private readonly TcpClient _tcp;
     private readonly AudioFifo _fifo;
     private readonly IAudioEffect? _effects;
@@ -75,6 +76,7 @@ internal sealed class BufferedSender : IDisposable
             long t0 = StartedAt = _startAt ?? MediaClock.Now, inputFrames = 0, outputFrames = 0;
             int quiet = 0;
             uint sequence = 0;
+            bool begun = false;
             while (!_stop.IsCancellationRequested)
             {
                 long deadline = t0 + (long)(inputFrames * (double)MediaClock.Frequency / BufferedAudio.SampleRate);
@@ -82,7 +84,19 @@ internal sealed class BufferedSender : IDisposable
                     if (_stop.Token.WaitHandle.WaitOne(Math.Max(1, (int)MediaClock.ToMs(deadline - MediaClock.Now)))) return;
                 // A master-only sender cannot follow a competing clock. Fail the session explicitly.
                 if (!_clock.IsMaster) throw new IOException("PTP master changed; reconnect is required");
-                if (MediaClock.ToMs(MediaClock.Now - deadline) > 250) throw new IOException("Buffered sender missed its audio deadline");
+                long late = MediaClock.Now - deadline;
+                if (late > LateLimit)
+                {
+                    if (begun) throw new IOException($"Buffered sender missed its audio deadline: block {inputFrames / 1024} {MediaClock.ToMs(late):F0} ms late");
+                    // Before the first block the encoder holds nothing, so a late Start joins the common timeline where
+                    // it is now, input and RTP time alike, which the rate anchor already maps to the epoch. As in
+                    // PtpRealtimeSender: the group's RTSP round trips or a busy machine can start a leg late.
+                    long skip = (long)(late * (double)BufferedAudio.SampleRate / 1024 / MediaClock.Frequency) * 1024;
+                    Log.Warn($"Buffered sender {MediaClock.ToMs(late):F0} ms late for block {inputFrames / 1024} before sending any, joins at block {(inputFrames + skip) / 1024}");
+                    inputFrames += skip; outputFrames += skip;
+                    continue;
+                }
+                begun = true;
                 if (_readAudio is { } read) read(deadline, audio);
                 else { _fifo.Read(audio); _effects?.Process(audio, 1024); }
                 float peak = 0;
