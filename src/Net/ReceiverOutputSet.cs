@@ -354,8 +354,11 @@ internal sealed class ReceiverOutputSet : IDisposable
                     var remote = current.Transport.LostException;
                     var error = ReceiverGroupFailures.RequiresUserAction(remote) ? remote!
                         : current.Failure ?? remote ?? new IOException(reason);
+                    // Publish the reason before detaching the transport: another leg can end the group while
+                    // local stop is still finishing, and its finally must still see this terminal refusal.
+                    RecordFailure(slot, error);
                     lock (_commands) if (ReferenceEquals(slot.Current, current)) slot.Current = null;
-                    current.Cleanup(); RecordFailure(slot, error);
+                    current.Cleanup();
                     if (slot.Options.Required)
                     {
                         lock (_commands)

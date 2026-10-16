@@ -25,14 +25,15 @@ public class ReceiverOutputSetTests
         public readonly ConcurrentQueue<double> Volumes = new();
         public readonly TaskCompletionSource StartEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource DisposeEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public Task? StartGate, DisposeGate;
+        public readonly TaskCompletionSource StopEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task? StartGate, DisposeGate, StopGate;
         public void Start(IReceiverAudioSource source, long startAt, double percent, double cap)
         {
             Source = source; StartAt = startAt; Interlocked.Increment(ref Starts); Volumes.Enqueue(Math.Min(percent, cap));
             StartEntered.TrySetResult(); StartGate?.GetAwaiter().GetResult();
         }
         public void SetVolume(double percent, double cap) => Volumes.Enqueue(Math.Min(percent, cap));
-        public void StopSending() => Interlocked.Increment(ref Stops);
+        public void StopSending() { Interlocked.Increment(ref Stops); StopEntered.TrySetResult(); StopGate?.GetAwaiter().GetResult(); }
         public void Dispose() { Interlocked.Increment(ref Disposals); DisposeEntered.TrySetResult(); DisposeGate?.GetAwaiter().GetResult(); }
         public void Lose(Exception error) { LostException = error; _lost.TrySetResult(error.Message); }
     }
@@ -171,6 +172,27 @@ public class ReceiverOutputSetTests
             await Until(() => required.Stops > 0 && healthy.Stops > 0);
             Assert.False(release.Task.IsCompleted);
             Assert.IsType<ReceiverGroupStoppedException>(set.LostException);
+        }
+        finally { release.TrySetResult(); }
+    }
+
+    [Fact]
+    public async Task Required_takeover_remains_visible_while_the_detached_transport_is_stopping()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var transport = new Transport { StopGate = release.Task };
+        using var set = await ReceiverOutputSet.PrepareAsync([Output("aabb", true)], () => 25, default,
+            connect: (_, _, _, _, _, _) => Task.FromResult<IPreparedReceiverSession>(transport));
+        long epoch = MediaClock.Now;
+        await set.StartAsync(History(epoch), 2000, 10, false, epoch, default);
+        try
+        {
+            transport.Lose(new ReceiverGroupStoppedException("taken over"));
+            await transport.StopEntered.Task.WaitAsync(Guard);
+            // GroupRunner can inspect this after another output completed Lost first. No remote wait is allowed.
+            var snapshot = await Task.Run(() => set.RequiredActionFailure).WaitAsync(Guard);
+            Assert.NotNull(snapshot);
+            Assert.IsType<ReceiverGroupStoppedException>(snapshot.Value.Error);
         }
         finally { release.TrySetResult(); }
     }
