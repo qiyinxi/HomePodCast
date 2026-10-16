@@ -33,9 +33,11 @@
     <Compile Include="../../src/Protocol/Curve25519.cs" Link="Protocol/Curve25519.cs" />
     <Compile Include="../../src/Net/AirPlayClient.cs" Link="Net/AirPlayClient.cs" />
     <Compile Include="../../src/Net/AirPlayClient.Buffered.cs" Link="Net/AirPlayClient.Buffered.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.Coordinated.cs" Link="Net/AirPlayClient.Coordinated.cs" />
     <Compile Include="../../src/Net/BufferedSender.cs" Link="Net/BufferedSender.cs" />
     <Compile Include="../../src/Net/PtpRealtimeSender.cs" Link="Net/PtpRealtimeSender.cs" />
     <Compile Include="../../src/Net/PtpMaster.cs" Link="Net/PtpMaster.cs" />
+    <Compile Include="../../src/Net/PtpClockPool.cs" Link="Net/PtpClockPool.cs" />
     <Compile Include="../../src/Net/PtpPackets.cs" Link="Net/PtpPackets.cs" />
     <Compile Include="../../src/Net/ReceiverSession.cs" Link="Net/ReceiverSession.cs" />
     <Compile Include="../../src/Net/ReceiverPreferences.cs" Link="Net/ReceiverPreferences.cs" />
@@ -48,6 +50,7 @@
     <Compile Include="../../src/Audio/IGroupPacketSource.cs" Link="Audio/IGroupPacketSource.cs" />
     <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
     <Compile Include="../../src/Audio/TimelineBuffer.cs" Link="Audio/TimelineBuffer.cs" />
+    <Compile Include="../../src/Audio/ReceiverTimelineSource.cs" Link="Audio/ReceiverTimelineSource.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
     <Compile Include="../../src/Audio/DlnaAudioEncoder.cs" Link="Audio/DlnaAudioEncoder.cs" />
     <Compile Include="../../src/Audio/DlnaMediaFoundationEncoder.cs" Link="Audio/DlnaMediaFoundationEncoder.cs" />

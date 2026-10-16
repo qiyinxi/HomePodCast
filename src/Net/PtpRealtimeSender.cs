@@ -25,6 +25,9 @@ internal sealed class PtpRealtimeSender : IDisposable
     private Task[] _tasks = [];
     private long _packets;
     private int _disposed;
+    private long? _startAt;
+    private ReceiverPcmReader? _readAudio;
+    private int _started;
     public uint RtpBase { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public long StartedAt { get; private set; }
@@ -42,7 +45,12 @@ internal sealed class PtpRealtimeSender : IDisposable
         _alac = alac; _fifo = fifo; _effects = effects; _clock = clock;
     }
 
-    public void Start() => _tasks = [Task.Run(Send), Task.Run(Resends)];
+    public void Start(long? startAt = null, ReceiverPcmReader? readAudio = null)
+    {
+        if (Interlocked.Exchange(ref _started, 1) != 0) throw new InvalidOperationException("Realtime sender already started");
+        _startAt = startAt; _readAudio = readAudio;
+        _tasks = [Task.Run(Send), Task.Run(Resends)];
+    }
 
     internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency)
     {
@@ -61,22 +69,32 @@ internal sealed class PtpRealtimeSender : IDisposable
         try
         {
             var audio = new float[704]; var pcm = new short[704];
-            long start = StartedAt = MediaClock.Now, n = 0, nextSync = start;
+            long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
             int quiet = 0;
             while (!_stop.IsCancellationRequested)
             {
                 long deadline = start + (long)(n * 352.0 * MediaClock.Frequency / 44100);
-                int wait = (int)MediaClock.ToMs(deadline - MediaClock.Now);
-                if (wait > 0) await Task.Delay(wait, _stop.Token);
+                if (_startAt != null)
+                {
+                    while (MediaClock.Now < deadline)
+                        await Task.Delay(Math.Max(1, (int)MediaClock.ToMs(deadline - MediaClock.Now)), _stop.Token);
+                }
+                else
+                {
+                    int wait = (int)MediaClock.ToMs(deadline - MediaClock.Now);
+                    if (wait > 0) await Task.Delay(wait, _stop.Token);
+                }
                 if (!_clock.IsMaster) throw new IOException("PTP master changed; reconnect is required");
                 if (MediaClock.ToMs(MediaClock.Now - deadline) > 60) throw new IOException("PTP realtime sender missed its deadline");
                 if (MediaClock.Now >= nextSync)
                 {
-                    uint now = unchecked(RtpBase + (uint)Math.Round((MediaClock.Now - start) * 44100.0 / MediaClock.Frequency));
-                    await _control.SendAsync(Sync(now, PtpMaster.NowNanoseconds, _clock.ClockId, _latency), _controlPeer, _stop.Token);
+                    long syncTicks = MediaClock.Now;
+                    uint now = unchecked(RtpBase + (uint)Math.Round((syncTicks - start) * 44100.0 / MediaClock.Frequency));
+                    await _control.SendAsync(Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId, _latency), _controlPeer, _stop.Token);
                     nextSync = MediaClock.Now + MediaClock.FromMs(125);
                 }
-                _fifo.Read(audio); _effects?.Process(audio, 352);
+                if (_readAudio is { } read) read(deadline, audio);
+                else { _fifo.Read(audio); _effects?.Process(audio, 352); }
                 float peak = 0;
                 for (int i = 0; i < pcm.Length; i++)
                 {

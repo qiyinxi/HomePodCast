@@ -13,12 +13,15 @@ namespace HomePodCast.Net;
 public sealed class PtpMaster : IDisposable
 {
     private readonly UdpClient _events, _general;
-    private readonly IPEndPoint _peerEvents, _peerGeneral;
+    private sealed record Peer(IPEndPoint Events, IPEndPoint General);
+    private readonly object _peersLock = new();
+    private Peer[] _peers = [];
+    private readonly bool _coordinatedClock;
     private readonly CancellationTokenSource _stop = new();
     private readonly byte[] _ownAnnounce;
     private readonly Task[] _tasks;
     private long _betterUntil; // when we are (or were) master again: a better clock's hold ends or it withdrew
-    private ulong _betterGrandmaster;
+    private readonly Dictionary<(Peer Source, ulong Identity), long> _betterClocks = [];
     private readonly object _election = new();
     private int _disposed;
 
@@ -30,6 +33,16 @@ public sealed class PtpMaster : IDisposable
     public long SyncMessagesSent { get; private set; }
     public long DelayRequestsAnswered { get; private set; }
     public event Action<Exception>? Failed;
+    internal int PeerCount => Volatile.Read(ref _peers).Length;
+    internal int CompetingClockCount { get { lock (_election) return _betterClocks.Values.Count(t => t > Stopwatch.GetTimestamp()); } }
+    internal ulong SessionNanoseconds => TimeAt(MediaClock.Now);
+    internal ulong TimeAt(long qpcTicks)
+    {
+        if (_coordinatedClock) return NanosecondsAt(qpcTicks);
+        long delta = qpcTicks - ClockBase;
+        ulong elapsed = (ulong)((UInt128)(ulong)Math.Abs(delta) * 1_000_000_000 / (ulong)Stopwatch.Frequency);
+        return delta >= 0 ? checked(EpochBase + elapsed) : checked(EpochBase - elapsed);
+    }
     private static readonly long ClockBase = Stopwatch.GetTimestamp();
     private static readonly ulong EpochBase = checked((ulong)(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()) * 1_000_000);
 
@@ -70,10 +83,15 @@ public sealed class PtpMaster : IDisposable
     /// <summary>Only an explicit third-party session may instantiate this; tests use loopback and private ports.</summary>
     public PtpMaster(IPAddress local, IPEndPoint peerEvents, IPEndPoint peerGeneral, bool thirdPartySession,
         int eventPort = 319, int generalPort = 320, ulong? clockId = null, byte domain = 0)
+        : this(local, peerEvents, peerGeneral, thirdPartySession, eventPort, generalPort, clockId, domain, false) { }
+
+    internal PtpMaster(IPAddress local, IPEndPoint peerEvents, IPEndPoint peerGeneral, bool thirdPartySession,
+        int eventPort, int generalPort, ulong? clockId, byte domain, bool coordinatedClock)
     {
         if (!thirdPartySession) throw new ArgumentException("PTP is restricted to third-party sessions", nameof(thirdPartySession));
         if (!peerEvents.Address.Equals(peerGeneral.Address)) throw new ArgumentException("PTP peer addresses must agree");
-        _peerEvents = peerEvents; _peerGeneral = peerGeneral;
+        _coordinatedClock = coordinatedClock;
+        AddPeer(peerEvents, peerGeneral);
         ClockId = clockId ?? BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
         Domain = domain;
         _ownAnnounce = PtpPackets.AnnounceMessage(ClockId, 0, Domain);
@@ -81,6 +99,39 @@ public sealed class PtpMaster : IDisposable
         try { _general = new UdpClient(new IPEndPoint(local, generalPort)); }
         catch { _events.Dispose(); _stop.Dispose(); throw; }
         _tasks = [Task.Run(SendLoop), Task.Run(() => ReceiveLoop(_events)), Task.Run(() => ReceiveLoop(_general))];
+    }
+
+    internal void AddPeer(IPEndPoint events, IPEndPoint general)
+    {
+        if (!events.Address.Equals(general.Address)) throw new ArgumentException("PTP peer addresses must agree");
+        var peer = new Peer(new(events.Address, events.Port), new(general.Address, general.Port));
+        lock (_peersLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            if (_peers.Contains(peer)) return;
+            Volatile.Write(ref _peers, [.. _peers, peer]);
+        }
+    }
+
+    internal void RemovePeer(IPEndPoint events, IPEndPoint general)
+    {
+        lock (_peersLock)
+        {
+            Volatile.Write(ref _peers, _peers.Where(p => !p.Events.Equals(events) || !p.General.Equals(general)).ToArray());
+            lock (_election)
+            {
+                foreach (var key in _betterClocks.Keys.Where(k => k.Source.Events.Equals(events) && k.Source.General.Equals(general)).ToArray())
+                    _betterClocks.Remove(key);
+                UpdateHold(Stopwatch.GetTimestamp());
+            }
+        }
+    }
+
+    private Peer? FindPeer(IPEndPoint endpoint)
+    {
+        var peers = Volatile.Read(ref _peers);
+        return peers.FirstOrDefault(p => p.Events.Equals(endpoint) || p.General.Equals(endpoint))
+            ?? peers.FirstOrDefault(p => p.Events.Address.Equals(endpoint.Address));
     }
 
     private async Task SendLoop()
@@ -93,13 +144,18 @@ public sealed class PtpMaster : IDisposable
             do
             {
                 if (!IsMaster) continue;
-                if (ticks++ % 8 == 0)
-                    await _general.SendAsync(PtpPackets.AnnounceMessage(ClockId, sequence, Domain), _peerGeneral, _stop.Token);
-                var sync = PtpPackets.SyncMessage(ClockId, sequence, Domain);
-                ulong sent = NowNanoseconds; // software timestamp immediately before transmission
-                await _events.SendAsync(sync, _peerEvents, _stop.Token);
-                await _general.SendAsync(PtpPackets.FollowUpMessage(ClockId, sequence++, sent, Domain), _peerGeneral, _stop.Token);
-                SyncMessagesSent++;
+                bool announce = ticks++ % 8 == 0;
+                foreach (var peer in Volatile.Read(ref _peers))
+                {
+                    if (announce)
+                        await _general.SendAsync(PtpPackets.AnnounceMessage(ClockId, sequence, Domain), peer.General, _stop.Token);
+                    var sync = PtpPackets.SyncMessage(ClockId, sequence, Domain);
+                    ulong sent = SessionNanoseconds;
+                    await _events.SendAsync(sync, peer.Events, _stop.Token);
+                    await _general.SendAsync(PtpPackets.FollowUpMessage(ClockId, sequence, sent, Domain), peer.General, _stop.Token);
+                    SyncMessagesSent++;
+                }
+                sequence++;
             } while (await timer.WaitForNextTickAsync(_stop.Token));
         }
         catch (Exception) when (_stop.IsCancellationRequested) { }
@@ -113,38 +169,43 @@ public sealed class PtpMaster : IDisposable
             while (!_stop.IsCancellationRequested)
             {
                 var datagram = await socket.ReceiveAsync(_stop.Token);
-                ulong received = NowNanoseconds;
-                if (!datagram.RemoteEndPoint.Address.Equals(_peerEvents.Address) || !PtpPackets.Valid(datagram.Buffer, Domain)) continue;
+                ulong received = SessionNanoseconds;
+                var peer = FindPeer(datagram.RemoteEndPoint);
+                if (peer == null || !PtpPackets.Valid(datagram.Buffer, Domain)) continue;
                 byte type = (byte)(datagram.Buffer[0] & 15);
                 if (type == PtpPackets.Announce)
                 {
                     ulong identity = BinaryPrimitives.ReadUInt64BigEndian(datagram.Buffer.AsSpan(53));
                     lock (_election)
                     {
+                        if (!Volatile.Read(ref _peers).Contains(peer)) continue;
+                        long now = Stopwatch.GetTimestamp();
+                        var candidate = (peer, identity);
                         if (PtpPackets.CompareGrandmasters(datagram.Buffer, _ownAnnounce) < 0)
-                        {
-                            _betterGrandmaster = identity;
-                            Interlocked.Exchange(ref _betterUntil, Stopwatch.GetTimestamp() + Stopwatch.Frequency * 3);
-                        }
+                            _betterClocks[candidate] = now + Stopwatch.Frequency * 3;
                         // 2026-10-14: nqptp 1.2.4 wakes a master with a better announce, then a worse
                         // one 150 ms later. That same clock withdrawing its candidacy ends the hold now,
                         // which is when the wait for a stable master starts counting again.
-                        else if (identity == _betterGrandmaster)
-                        {
-                            long now = Stopwatch.GetTimestamp();
-                            if (now < Interlocked.Read(ref _betterUntil)) Interlocked.Exchange(ref _betterUntil, now);
-                        }
+                        else _betterClocks.Remove(candidate);
+                        UpdateHold(now);
                     }
                 }
                 else if (type == PtpPackets.DelayRequest && IsMaster)
                 {
-                    await _general.SendAsync(PtpPackets.DelayResponseMessage(ClockId, datagram.Buffer, received, Domain), _peerGeneral, _stop.Token);
+                    await _general.SendAsync(PtpPackets.DelayResponseMessage(ClockId, datagram.Buffer, received, Domain), peer.General, _stop.Token);
                     DelayRequestsAnswered++;
                 }
             }
         }
         catch (Exception) when (_stop.IsCancellationRequested) { }
         catch (Exception ex) { Failed?.Invoke(ex); _stop.Cancel(); }
+    }
+
+    private void UpdateHold(long now)
+    {
+        foreach (var key in _betterClocks.Where(p => p.Value <= now).Select(p => p.Key).ToArray()) _betterClocks.Remove(key);
+        long until = _betterClocks.Count > 0 ? _betterClocks.Values.Max() : Math.Min(Interlocked.Read(ref _betterUntil), now);
+        Interlocked.Exchange(ref _betterUntil, until);
     }
 
     public void Dispose()
