@@ -85,6 +85,61 @@ public class AvCalibrationTests
     }
 
     [Fact]
+    public void Auxiliary_only_groups_have_calibration_identity_and_every_output_timing_choice_invalidates_it()
+    {
+        var original = new AppConfig { GroupCaptureDeviceIds = [],
+            GroupLocalOutputs = [new("end-point", "Bluetooth") { ExtraLatencyMs = 180 }],
+            GroupCaptureLocalDeviceIds = ["end-point"],
+            GroupDlnaOutputs = [new("uuid:renderer", "Projector")], GroupCaptureDlnaUdns = ["uuid:renderer"] };
+        var context = AvCalibrationContext.For(original, "capture", false)!.Value;
+        Assert.True(context.IsValid);
+        Assert.True(AvCalibrations.Apply(original, context, 180, 156));
+        Action<AppConfig>[] changes = [
+            c => c.GroupDelayMs = 3000,
+            c => c.GroupLocalOutputs[0] = c.GroupLocalOutputs[0] with { ExtraLatencyMs = 181 },
+            c => c.GroupLocalOutputs[0] = c.GroupLocalOutputs[0] with { TrimMs = -5 },
+            c => c.GroupLocalOutputs[0] = c.GroupLocalOutputs[0] with { Channels = Net.ChannelMode.LeftOnly },
+            c => c.GroupLocalOutputs[0] = c.GroupLocalOutputs[0] with { DeviceId = "endpoint" },
+            c => c.GroupRequiredOutputs["local:end-point"] = true,
+            c => c.GroupDlnaOutputs[0] = c.GroupDlnaOutputs[0] with { EstimatedLatencyMs = 2001 },
+            c => c.GroupDlnaOutputs[0] = c.GroupDlnaOutputs[0] with { TrimMs = 1 },
+            c => c.GroupDlnaOutputs[0] = c.GroupDlnaOutputs[0] with { PreferredFormat = "mp3" },
+            c => c.GroupCaptureDlnaUdns = [],
+        ];
+        foreach (var change in changes)
+        {
+            var changed = JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(original))!;
+            change(changed);
+            var next = AvCalibrationContext.For(changed, "capture", false);
+            Assert.NotEqual(context.Key, next?.Key);
+            Assert.Null(AvCalibrations.Get(changed, next));
+        }
+        original.GroupCaptureLocalDeviceIds = []; original.GroupCaptureDlnaUdns = [];
+        Assert.Null(AvCalibrationContext.For(original, "capture", false));
+        Assert.Equal(2000, AvCalibrations.MaxMeasuredMs);
+    }
+
+    [Fact]
+    public void AirPlay_group_channel_trim_required_and_pair_choices_invalidate_calibration()
+    {
+        var c = new AppConfig { DeviceId = "AABB", MultiRoomDeviceId = "CCDD", GroupCaptureDeviceIds = ["AABB", "CCDD"],
+            GroupSpeakers = [new() { DeviceId = "AABB", Name = "One" }, new() { DeviceId = "CCDD", Name = "Two" }] };
+        string before = AvCalibrationContext.For(c, "capture", false)!.Value.Key;
+        c.GroupCaptureDelayTrims["AABB"] = -50;
+        string trimmed = AvCalibrationContext.For(c, "capture", false)!.Value.Key;
+        Assert.NotEqual(before, trimmed);
+        c.GroupRequiredOutputs["AABB"] = false;
+        string optional = AvCalibrationContext.For(c, "capture", false)!.Value.Key;
+        Assert.NotEqual(trimmed, optional);
+        c.GroupCapturePositions = new() { ["AABB"] = SpeakerPosition.Left };
+        Assert.NotEqual(optional, AvCalibrationContext.For(c, "capture", false)!.Value.Key);
+        c.DeviceId = Net.StereoPairs.PairId("pair-id");
+        string pair = AvCalibrationContext.For(c, "capture", false)!.Value.Key;
+        c.GroupPairLeaderOnly = true;
+        Assert.NotEqual(pair, AvCalibrationContext.For(c, "capture", false)!.Value.Key);
+    }
+
+    [Fact]
     public void Reset_removes_only_the_requested_path_and_restores_the_estimate()
     {
         var cfg = new AppConfig();

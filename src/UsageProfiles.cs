@@ -43,6 +43,11 @@ public sealed class UsageSettings
     public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
     public List<DlnaOutputSettings>? GroupDlnaOutputs { get; set; }
     public List<string>? GroupCaptureDlnaUdns { get; set; }
+    public List<LocalOutputOptions>? GroupLocalOutputs { get; set; }
+    public List<string>? GroupCaptureLocalDeviceIds { get; set; }
+    public Dictionary<string, int> GroupCaptureDelayTrims { get; set; } = [];
+    public Dictionary<string, bool> GroupRequiredOutputs { get; set; } = [];
+    public int? GroupDelayMs { get; set; }
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
 
@@ -72,6 +77,10 @@ public static class UsageProfiles
         GroupCapturePositions = c.GroupCapturePositions == null ? null : new(c.GroupCapturePositions),
         GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs),
         GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns == null ? null : new(c.GroupCaptureDlnaUdns),
+        GroupLocalOutputs = LocalGroupSettings.Copy(c.GroupLocalOutputs),
+        GroupCaptureLocalDeviceIds = c.GroupCaptureLocalDeviceIds == null ? null : new(c.GroupCaptureLocalDeviceIds),
+        GroupCaptureDelayTrims = new(c.GroupCaptureDelayTrims ?? []), GroupRequiredOutputs = new(c.GroupRequiredOutputs ?? []),
+        GroupDelayMs = c.GroupDelayMs,
         MultiRoomDeviceId = c.MultiRoomDeviceId, MultiRoomDeviceName = c.MultiRoomDeviceName, MultiRoomHost = c.MultiRoomHost,
     };
 
@@ -82,7 +91,7 @@ public static class UsageProfiles
         var s = Clone(saved);
         Normalize(s);
         // A profile saved before any speaker was chosen says nothing about speakers: the selection and its group layout stay.
-        if (s.DeviceId != null || s.GroupCaptureDlnaUdns is { Count: > 0 })
+        if (s.DeviceId != null || s.GroupCaptureDeviceIds != null || s.GroupCaptureDlnaUdns != null || s.GroupCaptureLocalDeviceIds != null)
         {
             bool changedSpeaker = !SameDevice(c.DeviceId, s.DeviceId);
             // Resolved from the config as it is now, before anything is overwritten.
@@ -95,6 +104,10 @@ public static class UsageProfiles
             c.GroupCapturePositions = s.GroupCapturePositions;
             if (s.GroupDlnaOutputs != null) c.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
             c.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns;
+            if (s.GroupLocalOutputs != null) c.GroupLocalOutputs = LocalGroupSettings.Copy(s.GroupLocalOutputs);
+            c.GroupCaptureLocalDeviceIds = s.GroupCaptureLocalDeviceIds;
+            c.GroupCaptureDelayTrims = s.GroupCaptureDelayTrims; c.GroupRequiredOutputs = s.GroupRequiredOutputs;
+            c.GroupDelayMs = s.GroupDelayMs;
             c.MultiRoomDeviceId = s.MultiRoomDeviceId; c.MultiRoomDeviceName = s.MultiRoomDeviceName; c.MultiRoomHost = extraHost;
             if (c.GroupSpeakers != null)
                 foreach (var row in c.GroupSpeakers) row.Host = FreshHost(row.DeviceId, c, scan ?? []);
@@ -162,6 +175,7 @@ public static class UsageProfiles
 
     public static void Normalize(AppConfig c)
     {
+        OutputGroups.Normalize(c);
         c.GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs);
         if (c.GroupCaptureDlnaUdns != null)
             c.GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))
@@ -181,6 +195,13 @@ public static class UsageProfiles
 
     public static void Normalize(UsageSettings s)
     {
+        if (s.GroupLocalOutputs != null) s.GroupLocalOutputs = LocalGroupSettings.Copy(s.GroupLocalOutputs);
+        s.GroupCaptureLocalDeviceIds = OutputGroups.Selection(s.GroupCaptureLocalDeviceIds, LocalGroupSettings.Key);
+        s.GroupCaptureDelayTrims = (s.GroupCaptureDelayTrims ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Key))
+            .GroupBy(p => GroupPlan.Key(p.Key)).ToDictionary(g => g.Key, g => Math.Clamp(g.Last().Value, -5000, 5000));
+        s.GroupRequiredOutputs = (s.GroupRequiredOutputs ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Key))
+            .GroupBy(p => OutputGroups.RequiredKey(p.Key)).ToDictionary(g => g.Key, g => g.Last().Value);
+        s.GroupDelayMs = s.GroupDelayMs is { } delay ? Math.Clamp(delay, 100, 30000) : null;
         if (s.GroupDlnaOutputs != null) s.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
         if (s.GroupCaptureDlnaUdns != null)
             s.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))

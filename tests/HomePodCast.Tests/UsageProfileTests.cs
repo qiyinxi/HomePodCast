@@ -198,6 +198,8 @@ public class UsageProfileTests
         [nameof(AppConfig.MeasuredAvOffsetMs)] = "calibration",
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
+        [nameof(AppConfig.SavedOutputGroups)] = "named output presets are shared by every usage profile",
+        [nameof(AppConfig.SelectedOutputGroupId)] = "which named output group was selected last",
         [nameof(AppConfig.Cinema)] = "physical surround layout and room-specific acoustic alignment; file playback is session-only",
         [nameof(AppConfig.LastUsageProfileId)] = "which profile was applied last",
         [nameof(AppConfig.ArrivalToRenderMs)] = "measured by the speaker at every connection",
@@ -298,5 +300,45 @@ public class UsageProfileTests
             Assert.True(loaded.NightMode);
         }
         finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
+    public void Profiles_copy_local_selections_and_live_group_settings_without_aliasing()
+    {
+        var source = new AppConfig { GroupCaptureDeviceIds = [],
+            GroupLocalOutputs = [new("endpoint", "Bluetooth") { IsBluetooth = true, ExtraLatencyMs = 193, TrimMs = -17 }],
+            GroupCaptureLocalDeviceIds = ["endpoint"], GroupCaptureDelayTrims = new() { ["AABB"] = -28 },
+            GroupRequiredOutputs = new() { ["local:endpoint"] = true }, GroupDelayMs = 2100 };
+        var saved = UsageProfiles.Capture(source);
+        source.GroupLocalOutputs.Clear(); source.GroupCaptureLocalDeviceIds.Clear(); source.GroupCaptureDelayTrims.Clear();
+        var target = new AppConfig { DeviceId = "remembered" };
+        UsageProfiles.Apply(target, saved);
+        Assert.Null(target.DeviceId);
+        Assert.Equal(193, Assert.Single(target.GroupLocalOutputs).ExtraLatencyMs);
+        Assert.True(target.GroupLocalOutputs[0].IsBluetooth);
+        Assert.True(GroupPlan.FromConfig(target)!.LocalOutputs[0].Required);
+        Assert.Equal(2100, GroupPlan.FromConfig(target)!.GroupDelayMs);
+        target.GroupCaptureLocalDeviceIds!.Clear(); target.GroupCaptureDelayTrims.Clear(); target.GroupRequiredOutputs.Clear();
+        Assert.Single(saved.GroupCaptureLocalDeviceIds!);
+        Assert.Equal(-28, saved.GroupCaptureDelayTrims["AABB"]);
+        Assert.Single(saved.GroupRequiredOutputs);
+    }
+
+    [Fact]
+    public void Applying_an_old_profile_deselects_new_outputs_without_losing_their_preference_banks()
+    {
+        var old = JsonSerializer.Deserialize<UsageSettings>("""{"DeviceId":"AABB"}""")!;
+        var target = new AppConfig { DeviceId = "CCDD", GroupLocalOutputs = [new("endpoint", "USB") { ExtraLatencyMs = 27 }],
+            GroupCaptureLocalDeviceIds = ["endpoint"], GroupDlnaOutputs = [new("uuid:renderer", "Projector")],
+            GroupCaptureDlnaUdns = ["uuid:renderer"], GroupDelayMs = 5000,
+            GroupCaptureDelayTrims = new() { ["AABB"] = 34 } };
+        UsageProfiles.Apply(target, old);
+        Assert.Null(target.GroupCaptureLocalDeviceIds);
+        Assert.Null(target.GroupCaptureDlnaUdns);
+        Assert.Equal(27, Assert.Single(target.GroupLocalOutputs).ExtraLatencyMs);
+        Assert.Single(target.GroupDlnaOutputs);
+        Assert.Null(target.GroupDelayMs);
+        Assert.Empty(target.GroupCaptureDelayTrims);
+        Assert.Null(GroupPlan.FromConfig(target));
     }
 }

@@ -80,6 +80,24 @@ public sealed class AppConfig
     /// <summary>Explicit live-capture DLNA selection, independent of the file layout and AirPlay's primary speaker.</summary>
     public List<string>? GroupCaptureDlnaUdns { get; set; }
 
+    /// <summary>Windows endpoint preference bank. Remembering an endpoint never selects it.</summary>
+    public List<Audio.LocalOutputOptions> GroupLocalOutputs { get; set; } = [];
+
+    /// <summary>Explicit live Windows endpoints; null and empty both select none.</summary>
+    public List<string>? GroupCaptureLocalDeviceIds { get; set; }
+
+    /// <summary>Live AirPlay delay trims, separate from the file player's 0–500 ms speaker delays.</summary>
+    public Dictionary<string, int> GroupCaptureDelayTrims { get; set; } = [];
+
+    /// <summary>Explicit required/optional choices. Missing flags use each output protocol's default.</summary>
+    public Dictionary<string, bool> GroupRequiredOutputs { get; set; } = [];
+
+    /// <summary>Null chooses the automatic group delay; manual values are 100–30000 ms.</summary>
+    public int? GroupDelayMs { get; set; }
+
+    public List<OutputGroupPreset> SavedOutputGroups { get; set; } = [];
+    public string? SelectedOutputGroupId { get; set; }
+
     /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
@@ -255,6 +273,7 @@ public sealed class AppConfig
                 cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
                 AvCalibrations.Normalize(cfg);
                 GroupSettings.Normalize(cfg);
+                OutputGroups.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }
