@@ -506,9 +506,11 @@ internal sealed class DlnaOutputSet : IDisposable
                     Task<string> loss = await Task.WhenAny(current.Lost.Task, current.Client.Lost).WaitAsync(_stop.Token).ConfigureAwait(false);
                     string reason = await loss.ConfigureAwait(false);
                     Exception error = current.Failure ?? current.Client.LostException ?? new IOException(reason);
+                    // A concurrent AirPlay loss can inspect the required error while cleanup is still waiting.
+                    // Keep its typed terminal reason visible before removing the last live session reference.
+                    RecordFailure(slot, error);
                     lock (_commands) if (ReferenceEquals(slot.Current, current)) slot.Current = null;
                     current.Cleanup();
-                    RecordFailure(slot, error);
                     if (slot.Options.Required)
                     {
                         lock (_commands)

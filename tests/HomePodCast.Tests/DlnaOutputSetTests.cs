@@ -33,6 +33,44 @@ public class DlnaOutputSetTests
             options with { PollInterval = TimeSpan.FromMilliseconds(20), PullTimeout = Guard }, ct);
 
     [Fact]
+    public async Task Required_takeover_remains_visible_while_detached_client_cleanup_is_blocked()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        renderer.OnPlayAsync = pull.StartAsync;
+        DlnaClient? client = null;
+        using var set = await DlnaOutputSet.PrepareAsync([Output(renderer, required: true)], () => 25, default,
+            connect: async (_, target, options, ct) => client = await DlnaClient.ConnectAsync(target.Device,
+                options with { PollInterval = TimeSpan.FromSeconds(30) }, ct));
+        Assert.NotNull(set.Status.Single().Format);
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Hold the client's normal disposal mutex, not the set's commands lock: failure inspection must
+        // remain available while an unrelated cleanup owner delays the detached client's DisposeAsync.
+        var holding = Task.Factory.StartNew(() =>
+        {
+            lock (TestApp.Field<object>(client!, "_lifecycle"))
+            { entered.TrySetResult(); release.Wait(); }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        try
+        {
+            await entered.Task.WaitAsync(Guard);
+            renderer.CurrentUri = "http://192.0.2.10/phone";
+            await Assert.ThrowsAsync<DlnaTakenOverException>(() => client!.SetVolumeAsync(10, false));
+            await Until(() => set.Status.Single().Format == null); // the old live session has been detached
+            var failure = await Task.Run(() => set.RequiredActionFailure).WaitAsync(Guard);
+            Assert.NotNull(failure);
+            Assert.Equal("uuid:one", failure.Value.Name);
+            Assert.IsType<DlnaTakenOverException>(failure.Value.Error);
+            Assert.Same(client!.LostException, failure.Value.Error);
+            Assert.False(set.Lost.IsCompleted); // cleanup is still held, so the final group-loss publication waits
+        }
+        finally { release.Set(); await holding.WaitAsync(Guard); }
+        await set.Lost.WaitAsync(Guard);
+        Assert.True(set.LostRequiresUserAction);
+    }
+
+    [Fact]
     public async Task A_live_mute_changed_during_SOAP_publication_wins_before_the_audio_gate_opens()
     {
         await using var renderer = new FakeDlnaRenderer();
