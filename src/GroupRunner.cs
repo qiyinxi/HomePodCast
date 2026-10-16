@@ -76,7 +76,9 @@ internal sealed class GroupRunner(
                     || Find<RaopBusyException>(ex) != null || Find<RaopRefusedException>(ex) != null
                     || Find<DlnaBusyException>(ex) != null || Find<DlnaTakenOverException>(ex) != null
                     || Find<DlnaPolicyException>(ex) != null || Find<DlnaUnsupportedException>(ex) != null
-                    || Find<DlnaStoppedException>(ex) != null;
+                    || Find<DlnaStoppedException>(ex) != null || Find<ReceiverGroupStoppedException>(ex) != null
+                    || Find<ReceiverGroupUnsupportedException>(ex) != null || Find<ReceiverGroupDelayUnavailableException>(ex) != null
+                    || Find<PairingRequiredException>(ex) != null;
             }
             finally
             {

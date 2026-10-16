@@ -3,9 +3,13 @@ using HomePodCast.Net;
 namespace HomePodCast.Audio;
 
 internal delegate bool ReceiverPcmReader(long sendTicks, Span<float> stereo);
+internal interface IReceiverAudioSource : IGroupPacketSource
+{
+    bool Read(long sendTicks, Span<float> stereo);
+}
 
 /// <summary>Third-party 352/1024-frame transports read processed history on their own presentation clock.</summary>
-internal sealed class ReceiverTimelineSource : IGroupPacketSource
+internal sealed class ReceiverTimelineSource : IReceiverAudioSource
 {
     private readonly TimelineBuffer _timeline;
     private readonly long _latencyTicks, _delayFrames;

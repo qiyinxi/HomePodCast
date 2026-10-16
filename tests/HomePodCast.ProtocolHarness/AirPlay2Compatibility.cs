@@ -32,11 +32,17 @@ internal static class AirPlay2Compatibility
         Console.WriteLine("Windows AAC-LC fixture generated without opening an audio device");
     }
 
-    private sealed class ReplayEncoder(string path) : IAacEncoder
+    private sealed class ReplayEncoder(string path, bool validateSource = false) : IAacEncoder
     {
         private readonly BinaryReader _file = new(File.OpenRead(path));
+        private long _frame;
         public IReadOnlyList<byte[]> Encode(ReadOnlySpan<short> stereo)
         {
+            if (validateSource)
+                for (int frame = 0; frame < stereo.Length / 2; frame++, _frame++)
+                    for (int channel = 0; channel < 2; channel++)
+                        if (stereo[frame * 2 + channel] != RaopCompatibility.Signal(_frame, channel))
+                            throw new Exception($"Group AAC input differs from shared history at frame {_frame}, channel {channel}");
             var result = new List<byte[]>();
             int count = _file.ReadUInt16();
             for (int i = 0; i < count; i++) result.Add(_file.ReadBytes(_file.ReadUInt16()));
@@ -55,7 +61,7 @@ internal static class AirPlay2Compatibility
         }
     }
 
-    public static async Task Run(string host, int port, int latency, string directory, string pcmPath, bool realtime)
+    public static async Task Run(string host, int port, int latency, string directory, string pcmPath, bool realtime, bool coordinated = false)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         byte[] reference;
@@ -90,23 +96,67 @@ internal static class AirPlay2Compatibility
         });
         var device = new AirPlayDevice("CI AirPlay 2", "CI", IPAddress.Parse(host), port, "Shairport Sync",
             new Dictionary<string, string> { ["features"] = "0x0,0x300" });
-        using var client = await AirPlayClient.ConnectBufferedAsync(device, new StreamOptions(latency, 10)
-            { VolumeCapPercent = 10, RequestLog = Console.WriteLine, Effects = new SignalEffect() },
-            new AudioFifo(44100, 0, 999), timeout.Token, () => new ReplayEncoder(Path.Combine(directory, "blocks.bin")), realtime: realtime);
-        await Task.Delay(11000, timeout.Token);
-        long began = realtime ? client.PtpRealtime!.StartedAt : client.Buffered!.StartedAt;
-        long packets = realtime ? client.PtpRealtime!.PacketsSent : client.Buffered!.PacketsSent;
-        client.Dispose(); collecting.Cancel();
+        AirPlayClient? client = null;
+        ReceiverOutputSet? outputs = null;
+        long began = 0, packets = 0;
+        string? lost = null;
+        int expectedLatency = latency;
+        try
+        {
+            if (coordinated)
+            {
+                var settings = ReceiverPreferences.Of(device) with
+                {
+                    ProtocolOverride = realtime ? ReceiverProtocol.AirPlay2Realtime : ReceiverProtocol.AirPlay2Buffered,
+                    RealtimeLatencyMs = latency, CompatibilityLatencyMs = latency,
+                };
+                var options = new ReceiverConnectOptions(latency, 0, 10, null, null, new SignalEffect(), Console.WriteLine);
+                outputs = await ReceiverOutputSet.PrepareAsync([new(device.DeviceId, device.Name,
+                    _ => Task.FromResult(new ReceiverGroupTarget(device, settings)), options)], () => 10, timeout.Token,
+                    connect: (protocol, target, preferences, connection, clocks, ct) => ReceiverGroupConnections.PrepareAsync(target,
+                        preferences! with { ProtocolOverride = protocol }, connection, clocks, ct,
+                        encoder: () => new ReplayEncoder(Path.Combine(directory, "blocks.bin"), validateSource: true)));
+                // Precomputed processed history isolates transport alignment from runner scheduling and audio devices.
+                // The buffered replay additionally checks every source sample before returning the real Windows AAC.
+                began = MediaClock.Now + MediaClock.FromMs(500);
+                var timeline = new TimelineBuffer(44100, 44100 * 14, began);
+                var source = new float[44100 * 14 * 2];
+                for (int frame = 0; frame < source.Length / 2; frame++)
+                    for (int channel = 0; channel < 2; channel++)
+                        source[frame * 2 + channel] = RaopCompatibility.Signal(frame, channel) / 32767f;
+                timeline.WriteFrames(0, source);
+                const int headroomMs = 20;
+                expectedLatency = outputs.MinimumDelayMs + headroomMs;
+                await outputs.StartAsync(timeline, expectedLatency, 10, false, began + MediaClock.FromMs(headroomMs), timeout.Token);
+            }
+            else
+                client = await AirPlayClient.ConnectBufferedAsync(device, new StreamOptions(latency, 10)
+                    { VolumeCapPercent = 10, RequestLog = Console.WriteLine, Effects = new SignalEffect() },
+                    new AudioFifo(44100, 0, 999), timeout.Token, () => new ReplayEncoder(Path.Combine(directory, "blocks.bin")), realtime: realtime);
+            await Task.Delay(11000, timeout.Token);
+            if (outputs != null)
+            {
+                packets = outputs.Status.Single().PacketsSent;
+                lost = outputs.Status.Single().Error ?? outputs.LostException?.Message;
+            }
+            else
+            {
+                began = realtime ? client!.PtpRealtime!.StartedAt : client!.Buffered!.StartedAt;
+                packets = realtime ? client.PtpRealtime!.PacketsSent : client.Buffered!.PacketsSent;
+                lost = client.LostReason;
+            }
+        }
+        finally { outputs?.Dispose(); client?.Dispose(); collecting.Cancel(); }
         try { await reader; } catch (OperationCanceledException) { }
-        Console.WriteLine($"AirPlay 2 diagnostics: realtime={realtime}, packets={packets}, decoded={received.Count}, marker={offset}, lost={client.LostReason}");
-        if (client.LostReason != null) throw new Exception(client.LostReason);
+        Console.WriteLine($"AirPlay 2 diagnostics: coordinated={coordinated}, realtime={realtime}, packets={packets}, decoded={received.Count}, marker={offset}, lost={lost}");
+        if (lost != null) throw new Exception(lost);
         if (offset < 0 || offset % 4 != 0)
         {
             Diagnose(reference, received.ToArray());
             throw new Exception("AirPlay 2 PCM marker missing or unaligned");
         }
         double actual = MediaClock.ToMs(arrived - began) - markerFrame * 1000.0 / 44100;
-        if (Math.Abs(actual - latency) > 50) throw new Exception($"AirPlay 2 latency {actual:F1} ms, expected {latency} ±50 ms");
+        if (Math.Abs(actual - expectedLatency) > 50) throw new Exception($"AirPlay 2 latency {actual:F1} ms, expected {expectedLatency} ±50 ms");
         int bytes = Math.Min(6 * 44100 * 4, received.Count - offset);
         if (bytes < 4 * 44100 * 4) throw new Exception("AirPlay 2 decoded fewer than four seconds");
         if (!received.ToArray().AsSpan(offset, bytes).SequenceEqual(reference.AsSpan(markerFrame * 4, bytes)))

@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Anbefalet minimum {0} ms; standard {1} ms",
   "低于推荐最低延迟，可能断音": "Under det anbefalede minimum; lyden kan falde ud.",
   "连接协议": "Forbindelsesprotokol",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-modtagere fra tredjeparter kan endnu ikke indgå i højttalergrupper.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Lokale filgrupper kræver HomePods.",
   "许可证": "Licens",
   "切换到浅色": "Skift til lyst tema",
   "切换到深色": "Skift til mørkt tema",
@@ -614,7 +614,7 @@
   "移除": "Fjern",
   "移除 {0}": "Fjern {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Realtidsoptagelse nedmikses først til stereo, så kun Fuld stereo, Venstre eller Højre kan vælges. For 5.1-/7.1-filer kan du tildele center-, subwoofer- og surroundplaceringer; ikke-tildelte kanaler mikses ind i de nærmeste højttalere.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Separate kanaler kræver individuelle HomePods. AirPlay 1-modtagere kan indgå i grupper til streaming i realtid og afspille nogenlunde synkront efter kalibrering. Lokale filer understøtter kun HomePods; AirPlay 2-modtagere fra tredjeparter kan endnu ikke indgå i grupper.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Diskrete kanaler og lokale filgrupper kræver HomePods. AirPlay 2 fra tredjeparter og AirPlay 1 kan indgå i livegrupper med kalibrering. Tredjepartsgrupper er ikke testet på hardware.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Forsinkelsen er den ekstra tid, denne højttaler venter i millisekunder; en højere værdi giver senere afspilning. Lydstyrkejusteringen lægges til den fælles lydstyrke.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Denne modtager kan kun afspille fuld stereo; diskrete kanaler kræver en HomePod, som ikke indgår i et stereopar.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Anvend indstillingerne med Computerlyd i realtid valgt for at opdatere højttalerne til streaming i realtid. Filafspilning ændrer ikke højttalergruppen til streaming i realtid.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Denne DLNA-enhed understøtter ikke et tilgængeligt lydformat.",
   "DLNA 输出仅支持专用网络。": "DLNA-output kræver et privat netværk.",
   "DLNA 设备已停止播放。": "DLNA-enheden har stoppet afspilningen.",
-  "DLNA 输出连接已断开。": "Forbindelsen til DLNA-udgangen blev afbrudt."
+  "DLNA 输出连接已断开。": "Forbindelsen til DLNA-udgangen blev afbrudt.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Dette output kræver en længere gruppeforsinkelse. Tilslut gruppen igen."
 }

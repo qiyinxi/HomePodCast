@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Recommended minimum {0} ms; default {1} ms",
   "低于推荐最低延迟，可能断音": "Below the recommended minimum; audio may drop out.",
   "连接协议": "Connection protocol",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Third-party AirPlay receivers cannot join multi-speaker groups yet.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Local file groups do not yet support third-party AirPlay devices. Use HomePods.",
   "许可证": "License",
   "切换到浅色": "Switch to light mode",
   "切换到深色": "Switch to dark mode",
@@ -614,7 +614,7 @@
   "移除": "Remove",
   "移除 {0}": "Remove {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Live capture is mixed down to stereo first, so only Full stereo, Left or Right can be selected. For 5.1 / 7.1 files, you can assign center, subwoofer and surround positions; unassigned channels are mixed into neighboring speakers.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Discrete channels require individual HomePods. AirPlay 1 receivers can join live groups, with approximate sync after calibration. Local files support only HomePods; third-party AirPlay 2 receivers cannot join groups yet.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Discrete channels and local file groups require HomePods. Third-party AirPlay 2 and AirPlay 1 can join live groups with calibration. Third-party groups have not been tested on hardware.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Delay is the extra time this speaker waits in milliseconds; a higher value plays later. The volume offset is added to the shared volume.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "This receiver can only play full stereo; discrete channels require a HomePod that is not part of a stereo pair.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Apply settings with Live computer audio selected to update the speakers for live streaming. File playback does not change the live streaming speaker group.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "This DLNA device does not support an available audio format.",
   "DLNA 输出仅支持专用网络。": "DLNA output requires a private network.",
   "DLNA 设备已停止播放。": "The DLNA device has stopped playback.",
-  "DLNA 输出连接已断开。": "The DLNA output connection was lost."
+  "DLNA 输出连接已断开。": "The DLNA output connection was lost.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "This output needs a longer group delay. Reconnect the group."
 }

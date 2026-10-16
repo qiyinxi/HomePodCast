@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Mínimo recomendado: {0} ms; predeterminado: {1} ms",
   "低于推荐最低延迟，可能断音": "Por debajo del mínimo recomendado; puede haber cortes de audio.",
   "连接协议": "Protocolo de conexión",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Los receptores AirPlay de terceros aún no pueden unirse a grupos de altavoces.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Los grupos de archivos locales requieren HomePods.",
   "许可证": "Licencia",
   "切换到浅色": "Cambiar al modo claro",
   "切换到深色": "Cambiar al modo oscuro",
@@ -614,7 +614,7 @@
   "移除": "Quitar",
   "移除 {0}": "Quitar {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "La captura en directo se mezcla primero en estéreo, por lo que solo se puede elegir Estéreo completo, Izquierda o Derecha. En los archivos 5.1 / 7.1 se pueden asignar las posiciones central, subwoofer y envolventes; los canales sin asignar se mezclan en los altavoces cercanos.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Los canales independientes requieren HomePod individuales. Los receptores AirPlay 1 pueden unirse a grupos en directo, con una sincronización aproximada tras la calibración. Los archivos locales solo admiten HomePod; los receptores AirPlay 2 de terceros aún no pueden unirse a grupos.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Los canales discretos y los grupos de archivos locales requieren HomePods. AirPlay 2 de terceros y AirPlay 1 pueden unirse a grupos en directo con calibración. Los grupos de terceros no se han probado con hardware.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "El retardo es el tiempo adicional que espera este altavoz en milisegundos; un valor mayor retrasa la reproducción. El desfase de volumen se suma al volumen común.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Este receptor solo puede reproducir estéreo completo; los canales discretos requieren un HomePod que no forme parte de un par estéreo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Aplica los ajustes con Audio del ordenador en directo seleccionado para actualizar los altavoces de la transmisión en directo. La reproducción de archivos no cambia el grupo de altavoces de la transmisión en directo.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Este dispositivo DLNA no admite ningún formato de audio disponible.",
   "DLNA 输出仅支持专用网络。": "La salida DLNA requiere una red privada.",
   "DLNA 设备已停止播放。": "El dispositivo DLNA ha detenido la reproducción.",
-  "DLNA 输出连接已断开。": "Se ha perdido la conexión con la salida DLNA."
+  "DLNA 输出连接已断开。": "Se ha perdido la conexión con la salida DLNA.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Esta salida necesita un retardo de grupo mayor. Vuelve a conectar el grupo."
 }

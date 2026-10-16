@@ -63,6 +63,7 @@ public sealed partial class StreamController
         public Audio.IGroupPacketSource? Source { get; } = source;
         public long Generation { get; } = generation;
         public System.Collections.Concurrent.ConcurrentDictionary<string, int> RaopAttempts { get; } = new();
+        public System.Collections.Concurrent.ConcurrentDictionary<string, int> ReceiverAttempts { get; } = new();
         public volatile bool Streamed;
         public volatile bool EndedBySpeaker;
     }
@@ -82,10 +83,10 @@ public sealed partial class StreamController
                 Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"));
                 return;
             }
-            if (plan.Members.Any(m => GroupDevice(m.DeviceId) is { } device && !GroupUsesRaop(device) && UsesThirdPartyPath(device)))
+            if (source != null && plan.Members.Any(m => GroupUsesReceiver(GroupDevice(m.DeviceId))))
             {
                 source?.Dispose();
-                Set(StreamState.Idle, L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+                Set(StreamState.Idle, L.T("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。"));
                 return;
             }
             var cts = new CancellationTokenSource();
@@ -136,13 +137,13 @@ public sealed partial class StreamController
         ct.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
             Volatile.Write(ref _groupSelection, new(run.Generation, members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
-        if (members.Any(m => m.Device is { } d && !GroupUsesRaop(d) && UsesThirdPartyPath(d)))
+        if (run.Source != null && members.Any(m => GroupUsesReceiver(m.Device)))
         {
             if (run.Source != null && Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source)
                 run.Source.Dispose();
-            throw new RaopRefusedException(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+            throw new RaopRefusedException(L.T("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。"));
         }
-        if (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device)))
+        if (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device) || GroupUsesReceiver(m.Device)))
         {
             if (run.Source != null)
             {
@@ -215,6 +216,7 @@ public sealed partial class StreamController
                                 ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
                         address = device.Address;
                     }
+                    else if (GroupUsesReceiver(device)) address = device!.Address;
                     else address = await ResolveAsync(m.DeviceId, m.Host, ct);
                 }
                 catch (AirPlayException ex)

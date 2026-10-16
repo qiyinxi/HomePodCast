@@ -6,7 +6,7 @@ namespace HomePodCast.Net;
 public sealed partial class AirPlayClient
 {
     private int _coordinatedStarted;
-    internal void StartCoordinatedNtp(StreamOptions options, ReceiverTimelineSource source, long startAt)
+    internal void StartCoordinatedNtp(StreamOptions options, IGroupPacketSource source, long startAt)
     {
         if (StreamTarget == null || _sender != null) throw new InvalidOperationException("No prepared realtime stream");
         if (Interlocked.Exchange(ref _coordinatedStarted, 1) != 0) throw new InvalidOperationException("Coordinated stream already started");
@@ -22,6 +22,9 @@ public sealed partial class AirPlayClient
     }
 
     internal void StartCoordinatedPtp(StreamOptions options, ReceiverTimelineSource source, long startAt, bool realtime)
+        => StartCoordinatedPtp(options, source.Read, startAt, realtime);
+
+    internal void StartCoordinatedPtp(StreamOptions options, ReceiverPcmReader source, long startAt, bool realtime)
     {
         if (_ptp == null || realtime && PtpRealtime == null || !realtime && _buffered == null)
             throw new InvalidOperationException("No prepared PTP stream");
@@ -31,7 +34,7 @@ public sealed partial class AirPlayClient
         if (realtime)
         {
             Flush(PtpRealtime!.FirstSeq, PtpRealtime.RtpBase);
-            PtpRealtime.Start(startAt, source.Read);
+            PtpRealtime.Start(startAt, source);
         }
         else
         {
@@ -42,8 +45,15 @@ public sealed partial class AirPlayClient
             ulong presentation = PtpMaster.NanosecondsAt(checked(startAt
                 + (long)((Int128)LatencyFrames * MediaClock.Frequency / BufferedAudio.SampleRate)));
             Expect(_rtsp.RtspPlist("SETRATEANCHORTIME", BufferedAudio.Anchor(_ptp.ClockId, presentation, _buffered.RtpBase)), "SETRATEANCHORTIME");
-            _buffered.Start(startAt, source.Read);
+            _buffered.Start(startAt, source);
         }
         StartFeedback();
+    }
+
+    internal void StopCoordinatedSending()
+    {
+        _sender?.Dispose();
+        PtpRealtime?.StopSending();
+        _buffered?.StopSending();
     }
 }

@@ -52,18 +52,6 @@ public class ReceiverLatencySelectionTests
     }
 
     [Fact]
-    public void ThirdPartyGroupsAreRejectedBeforeCaptureOrConnection()
-    {
-        var device = Device("ThirdParty", true);
-        using var controller = new StreamController { ReceiverLookup = _ => device };
-        var plan = new GroupPlan(GroupKind.MultiRoom, "test", null,
-            [new("third", "Third party", "127.0.0.1"), new("home", "HomePod", "127.0.0.1")], false, false, new Dictionary<string, int>());
-        controller.StartGroup(plan, 120, 10);
-        Assert.Equal(StreamState.Idle, controller.State); Assert.Null(controller.Capture);
-        Assert.Equal(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"), controller.StatusText);
-    }
-
-    [Fact]
     public void RealtimeChoicesRespectReceiverFloorAndAppleTvDefault()
     {
         Assert.Equal(200, ReceiverLatencySelection.Create(Device("AppleTV14,1", true), null)!.Value);

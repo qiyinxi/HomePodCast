@@ -40,6 +40,9 @@
     <Compile Include="../../src/Net/PtpClockPool.cs" Link="Net/PtpClockPool.cs" />
     <Compile Include="../../src/Net/PtpPackets.cs" Link="Net/PtpPackets.cs" />
     <Compile Include="../../src/Net/ReceiverSession.cs" Link="Net/ReceiverSession.cs" />
+    <Compile Include="../../src/Net/ReceiverGroupConnections.cs" Link="Net/ReceiverGroupConnections.cs" />
+    <Compile Include="../../src/Net/ReceiverOutputSet.cs" Link="Net/ReceiverOutputSet.cs" />
+    <Compile Include="../../src/Net/GroupMemberException.cs" Link="Net/GroupMemberException.cs" />
     <Compile Include="../../src/Net/ReceiverPreferences.cs" Link="Net/ReceiverPreferences.cs" />
     <Compile Include="../../src/Net/ReceiverProtocols.cs" Link="Net/ReceiverProtocols.cs" />
     <Compile Include="../../src/Net/StatusFlags.cs" Link="Net/StatusFlags.cs" />

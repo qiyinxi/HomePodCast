@@ -28,6 +28,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private long? _startAt;
     private ReceiverPcmReader? _readAudio;
     private int _started;
+    private int _stopping;
     public uint RtpBase { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public long StartedAt { get; private set; }
@@ -151,8 +152,14 @@ internal sealed class PtpRealtimeSender : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _stop.Cancel(); _audio.Dispose();
+        StopSending();
         try { Task.WaitAll(_tasks, TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
         _cipher.Dispose(); _stop.Dispose();
+    }
+
+    internal void StopSending()
+    {
+        if (Interlocked.Exchange(ref _stopping, 1) != 0) return;
+        _stop.Cancel(); _audio.Dispose();
     }
 }

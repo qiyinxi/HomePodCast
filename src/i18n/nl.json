@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Aanbevolen minimum {0} ms; standaard {1} ms",
   "低于推荐最低延迟，可能断音": "Onder het aanbevolen minimum; geluid kan wegvallen.",
   "连接协议": "Verbindingsprotocol",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-ontvangers van derden kunnen nog niet aan luidsprekergroepen deelnemen.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Groepen voor lokale bestanden vereisen HomePods.",
   "许可证": "Licentie",
   "切换到浅色": "Naar lichte modus",
   "切换到深色": "Naar donkere modus",
@@ -614,7 +614,7 @@
   "移除": "Verwijderen",
   "移除 {0}": "{0} verwijderen",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Live-opname wordt eerst naar stereo gemixt, dus alleen Volledige stereo, Links of Rechts is beschikbaar. Voor 5.1-/7.1-bestanden kun je de midden-, subwoofer- en surroundposities toewijzen; niet-toegewezen kanalen worden in naburige luidsprekers gemixt.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Afzonderlijke kanalen vereisen losse HomePods. AirPlay 1-ontvangers kunnen deelnemen aan livegroepen en spelen na kalibratie ongeveer synchroon. Lokale bestanden ondersteunen alleen HomePods; AirPlay 2-ontvangers van derden kunnen nog niet aan groepen worden toegevoegd.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Discrete kanalen en groepen voor lokale bestanden vereisen HomePods. AirPlay 2 van derden en AirPlay 1 kunnen na kalibratie deelnemen aan livegroepen. Groepen van derden zijn niet getest op hardware.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "De vertraging is de extra wachttijd van deze luidspreker in milliseconden; een hogere waarde betekent later afspelen. Het volumeverschil wordt bij het gezamenlijke volume opgeteld.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Deze ontvanger kan alleen volledige stereo afspelen; discrete kanalen vereisen een HomePod die niet bij een stereopaar hoort.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Pas de instellingen toe met Live computeraudio geselecteerd om de luidsprekers voor de livestream bij te werken. Het afspelen van bestanden wijzigt de luidsprekergroep voor de livestream niet.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Dit DLNA-apparaat ondersteunt geen beschikbaar audioformaat.",
   "DLNA 输出仅支持专用网络。": "DLNA-uitvoer vereist een privénetwerk.",
   "DLNA 设备已停止播放。": "Het DLNA-apparaat heeft het afspelen gestopt.",
-  "DLNA 输出连接已断开。": "De verbinding met de DLNA-uitgang is verbroken."
+  "DLNA 输出连接已断开。": "De verbinding met de DLNA-uitgang is verbroken.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Deze uitvoer vereist een langere groepsvertraging. Verbind de groep opnieuw."
 }

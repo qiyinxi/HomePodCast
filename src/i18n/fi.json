@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Suositeltu vähimmäisviive {0} ms; oletus {1} ms",
   "低于推荐最低延迟，可能断音": "Suositeltua vähimmäisviivettä pienempi; ääni voi katkeilla.",
   "连接协议": "Yhteysprotokolla",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Kolmannen osapuolen AirPlay-vastaanottimia ei vielä voi lisätä kaiutinryhmiin.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Paikallisten tiedostojen ryhmät vaativat HomePodit.",
   "许可证": "Lisenssi",
   "切换到浅色": "Vaihda vaaleaan tilaan",
   "切换到深色": "Vaihda tummaan tilaan",
@@ -614,7 +614,7 @@
   "移除": "Poista",
   "移除 {0}": "Poista {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Reaaliaikainen kaappaus miksataan ensin stereoksi, joten valittavissa ovat vain Täysi stereo, Vasen ja Oikea. 5.1-/7.1-tiedostoille voi määrittää keski-, subwoofer- ja tilakaiutinpaikat; määrittämättömät kanavat miksataan viereisiin kaiuttimiin.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Erilliset kanavat vaativat yksittäisiä HomePod-kaiuttimia. AirPlay 1 -vastaanottimet voivat liittyä reaaliaikaisen suoratoiston ryhmiin; kalibroinnin jälkeen toisto on suunnilleen synkronissa. Paikalliset tiedostot tukevat vain HomePod-kaiuttimia; muiden valmistajien AirPlay 2 -vastaanottimia ei vielä voi liittää ryhmiin.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Erilliset kanavat ja paikallisten tiedostojen ryhmät vaativat HomePodit. Kolmannen osapuolen AirPlay 2 ja AirPlay 1 voivat liittyä reaaliaikaisiin ryhmiin kalibroinnin jälkeen. Kolmannen osapuolen ryhmiä ei ole testattu laitteilla.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Viive on tämän kaiuttimen ylimääräinen odotusaika millisekunteina; suurempi arvo myöhentää toistoa. Äänenvoimakkuuden korjaus lisätään yhteiseen äänenvoimakkuuteen.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Tämä vastaanotin voi toistaa vain täyttä stereoääntä; erilliset kanavat vaativat HomePodin, joka ei kuulu stereopariin.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Päivitä reaaliaikaisen suoratoiston kaiuttimet ottamalla asetukset käyttöön, kun Tietokoneen ääni reaaliajassa on valittuna. Tiedoston toisto ei muuta reaaliaikaisen suoratoiston kaiutinryhmää.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Tämä DLNA-laite ei tue mitään käytettävissä olevaa äänimuotoa.",
   "DLNA 输出仅支持专用网络。": "DLNA-lähtö edellyttää yksityistä verkkoa.",
   "DLNA 设备已停止播放。": "DLNA-laite on pysäyttänyt toiston.",
-  "DLNA 输出连接已断开。": "Yhteys DLNA-lähtöön katkesi."
+  "DLNA 输出连接已断开。": "Yhteys DLNA-lähtöön katkesi.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Tämä lähtö tarvitsee pidemmän ryhmäviiveen. Yhdistä ryhmä uudelleen."
 }

@@ -25,6 +25,7 @@ internal sealed class BufferedSender : IDisposable
     private long? _startAt;
     private ReceiverPcmReader? _readAudio;
     private int _started;
+    private int _stopping;
     public uint RtpBase { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
     public long StartedAt { get; private set; }
     public long PacketsSent => Interlocked.Read(ref _packets);
@@ -108,7 +109,13 @@ internal sealed class BufferedSender : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _stop.Cancel(); _tcp.Dispose(); _start.Set();
+        StopSending();
         if (_worker.Join(3000)) { _start.Dispose(); _stop.Dispose(); }
+    }
+
+    internal void StopSending()
+    {
+        if (Interlocked.Exchange(ref _stopping, 1) != 0) return;
+        _stop.Cancel(); _tcp.Dispose(); _start.Set();
     }
 }
