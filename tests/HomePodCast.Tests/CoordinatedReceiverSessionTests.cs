@@ -57,6 +57,30 @@ public class CoordinatedReceiverSessionTests
         Assert.Empty(fake.Errors);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_cancelled_prepared_transport_cannot_start_after_local_stop(bool ptp)
+    {
+        using var fake = new FakeAirPlayReceiver(false) { ModelOverride = "ThirdParty" };
+        using var guard = new CancellationTokenSource(Guard);
+        using var clocks = new PtpClockPool();
+        var options = new StreamOptions(250, 10) { PairingOverRtsp = true };
+        using var client = ptp
+            ? await AirPlayClient.ConnectBufferedAsync(Device(fake), options, new AudioFifo(44100, 0, 0), guard.Token,
+                timingPorts: fake.TimingPorts, realtime: true, prepareOnly: true, clocks: clocks)
+            : await AirPlayClient.PrepareAsync(IPAddress.Loopback, fake.Port, options, ChannelMode.Stereo, guard.Token);
+        client.StopCoordinatedSending();
+        long start = MediaClock.Now + MediaClock.FromMs(250);
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            if (ptp) client.StartCoordinatedPtp(options, History(start, 250), start, true);
+            else client.StartCoordinatedNtp(options, History(start, 250), start);
+        });
+        Assert.DoesNotContain(fake.Requests, r => r.StartsWith("RECORD"));
+        Assert.Empty(fake.Rtp.Audio);
+    }
+
     [Fact]
     public async Task Prepared_buffered_session_does_not_record_or_encode_until_coordinated_start()
     {
