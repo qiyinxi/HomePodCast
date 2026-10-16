@@ -5,7 +5,7 @@ label="${1:?case label required}"
 pipe_buffer=0.02
 # 2026-10-14: AAC's 1024-frame player wake can take 32 ms. A 40 ms pipe buffer
 # prevents receiver-scheduler drops; the sender's requested-delay check stays at +/-50 ms.
-if [[ "$label" == buffered-* ]]; then pipe_buffer=0.04; fi
+if [[ "$label" == buffered-* || "$label" == group-buffered-* ]]; then pipe_buffer=0.04; fi
 mkdir -p /run/dbus
 dbus-daemon --system --fork
 avahi-daemon --daemonize --no-drop-root

@@ -37,7 +37,8 @@ if (args is ["--aac-fixture", var directory])
 }
 if (args is ["--airplay2", var apHost, var apPort, var apLatency, var fixtureDirectory, var receivedPcm, var mode])
 {
-    await HomePodCast.ProtocolHarness.AirPlay2Compatibility.Run(apHost, int.Parse(apPort), int.Parse(apLatency), fixtureDirectory, receivedPcm, mode == "realtime");
+    await HomePodCast.ProtocolHarness.AirPlay2Compatibility.Run(apHost, int.Parse(apPort), int.Parse(apLatency), fixtureDirectory, receivedPcm,
+        mode is "realtime" or "group-realtime", coordinated: mode.StartsWith("group-"));
     return;
 }
 if (args is ["--raop", var host, var portArg, var etArg, var latencyArg, var password, var pcm])

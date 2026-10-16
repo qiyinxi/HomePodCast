@@ -81,7 +81,7 @@ public class GroupFormTests
     [Theory]
     [InlineData(ReceiverProtocol.Auto, true)]
     [InlineData(ReceiverProtocol.Raop, true)]
-    [InlineData(ReceiverProtocol.AirPlay2Realtime, false)]
+    [InlineData(ReceiverProtocol.AirPlay2Realtime, true)]
     public void RAOP_can_join_live_groups_but_file_playback_stays_HomePod_only(ReceiverProtocol protocol, bool liveAllowed) => OnSta(() =>
     {
         var raop = Device("兼容音箱", "AA:04", "AirPort10,115") with { HasAirPlay = false, RaopPort = 5000 };
@@ -172,9 +172,9 @@ public class GroupFormTests
         Assert.Equal(9, Position(panel, A.Name).Items.Count);
         Assert.Equal("后左", Position(panel, A.Name).SelectedText); // source switching preserves the saved surround position
         Assert.Equal(["完整立体声"], Position(panel, Other.Name).Items);
-        Assert.Equal("第三方 AirPlay 设备暂不支持多音箱分组。", panel.BlockReason);
+        Assert.Equal("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。", panel.BlockReason);
         Assert.Contains(All<TextBlock>(panel), t => t.Text == panel.BlockReason);
-        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("AirPlay 1 可加入实时分组，校准后基本同步"));
+        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("第三方 AirPlay 2 和 AirPlay 1 可加入实时分组"));
         panel.SetSource(false);
         Assert.Equal(["完整立体声", "左", "右"], Position(panel, A.Name).Items);
         Assert.All(panel.SelectedLayout(), s => Assert.Equal(Audio.CinemaRole.Stereo, s.Role));

@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Empfohlenes Minimum {0} ms; Standard {1} ms",
   "低于推荐最低延迟，可能断音": "Unter dem empfohlenen Minimum; der Ton kann aussetzen.",
   "连接协议": "Verbindungsprotokoll",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "AirPlay-Empfänger von Drittanbietern können noch nicht in Lautsprechergruppen verwendet werden.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Lokale Dateigruppen erfordern HomePods.",
   "许可证": "Lizenz",
   "切换到浅色": "Zum hellen Design wechseln",
   "切换到深色": "Zum dunklen Design wechseln",
@@ -614,7 +614,7 @@
   "移除": "Entfernen",
   "移除 {0}": "{0} entfernen",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "Die Live-Aufnahme wird zuerst auf Stereo heruntergemischt; daher sind nur Volles Stereo, Links oder Rechts wählbar. Bei 5.1-/7.1-Dateien lassen sich Center-, Subwoofer- und Surround-Positionen zuweisen; nicht zugewiesene Kanäle werden in benachbarte Lautsprecher gemischt.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Getrennte Kanäle erfordern einzelne HomePods. AirPlay-1-Empfänger können Live-Gruppen beitreten und spielen nach der Kalibrierung annähernd synchron. Lokale Dateien unterstützen nur HomePods; AirPlay-2-Empfänger von Drittanbietern können Gruppen noch nicht beitreten.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Diskrete Kanäle und lokale Dateigruppen erfordern HomePods. AirPlay 2 von Drittanbietern und AirPlay 1 können nach Kalibrierung Live-Gruppen beitreten. Drittanbietergruppen sind nicht mit Hardware getestet.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "Die Verzögerung ist die zusätzliche Wartezeit dieses Lautsprechers in Millisekunden; ein höherer Wert bedeutet spätere Wiedergabe. Der Lautstärkeversatz wird zur gemeinsamen Lautstärke addiert.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Dieser Empfänger kann nur volles Stereo wiedergeben; diskrete Kanäle erfordern einen HomePod, der keinem Stereopaar angehört.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Wenden Sie die Einstellungen mit ausgewähltem Live-Audio vom Computer an, um die Lautsprecher für den Live-Stream zu aktualisieren. Die Dateiwiedergabe ändert die Lautsprechergruppe für den Live-Stream nicht.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Dieses DLNA-Gerät unterstützt kein verfügbares Audioformat.",
   "DLNA 输出仅支持专用网络。": "Die DLNA-Ausgabe erfordert ein privates Netzwerk.",
   "DLNA 设备已停止播放。": "Das DLNA-Gerät hat die Wiedergabe beendet.",
-  "DLNA 输出连接已断开。": "Die Verbindung zum DLNA-Ausgang wurde getrennt."
+  "DLNA 输出连接已断开。": "Die Verbindung zum DLNA-Ausgang wurde getrennt.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Diese Ausgabe benötigt eine längere Gruppenverzögerung. Verbinden Sie die Gruppe erneut."
 }

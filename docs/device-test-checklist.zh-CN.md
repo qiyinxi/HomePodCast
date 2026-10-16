@@ -238,12 +238,13 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 #### 多房间（等有第二台 AirPlay 音箱时再测）
 
-侧边栏 →「多音箱」→ 电脑实时声音 → 添加另一台 HomePod 或 AirPlay 1 音箱（第三方 AirPlay 2 分组暂不支持），和当前音箱按同一时间线播放。带 AirPlay 1 的组延迟至少为该设备的会话延迟，需手动校准后再判断同步程度。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs`、`src/Net/RaopOutputSet.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
+侧边栏 →「多音箱」→ 电脑实时声音 → 添加另一台 HomePod、第三方 AirPlay 2 或 AirPlay 1 音箱，和当前音箱按同一时间线播放。第三方分组仍为实验性、尚未实机验证，真实延迟可能需要手动或手机录像校准；缓冲模式与 AirPlay 1 会提高整组延迟。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs`、`src/Net/ReceiverOutputSet.cs`、`src/Net/RaopOutputSet.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 
 1. - [ ] 选好第二台、确定后连接：两台都出声，首页是「已连接 · A + B（实验性）」；两台之间有没有回声 / 一前一后的感觉？
 2. - [ ] 音量：主滑块让两台一起变；给一台设「音量偏移」只改它
 3. - [ ] 把两台的位置分别设为左、右并应用：第一台只出左声道、第二台只出右声道；把两台位置对调后声音也对调
 4. - [ ] 连续放 30 分钟：两台有没有慢慢不同步、断开、单台没声；推流时用 iPhone 抢其中一台：电脑端怎么反应、会不会来回抢（记下来）
+5. - [ ] 有第三方 AirPlay 2 设备后：分别选择低延迟和缓冲方式，与 HomePod 一起播放；用手机录像或手动微调记录两台实际偏移。必需输出被接管后整组等待操作；可选输出独立恢复，缓冲延迟变大时等待重新连接，不抢回其他设备的会话。软件中的时钟、历史帧、取消和音量限制已由 ReceiverGroupControllerTests／ReceiverOutputSetTests／ReceiverTimelineSourceTests 覆盖；真实设备是否遵守时间戳仍需验证
 
 #### 无线影院（1.1 新增，等有两台以上 HomePod 时再测）
 

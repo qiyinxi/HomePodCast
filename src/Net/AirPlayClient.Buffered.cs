@@ -7,14 +7,14 @@ namespace HomePodCast.Net;
 
 public sealed partial class AirPlayClient
 {
-    private PtpMaster? _ptp;
+    private PtpClockLease? _ptp;
     private BufferedSender? _buffered;
     internal BufferedSender? Buffered => _buffered;
     internal PtpRealtimeSender? PtpRealtime { get; private set; }
 
     internal static async Task<AirPlayClient> ConnectBufferedAsync(AirPlayDevice device, StreamOptions options,
         AudioFifo fifo, CancellationToken ct, Func<IAacEncoder>? encoder = null,
-        PtpPorts? timingPorts = null, bool realtime = false, bool prepareOnly = false)
+        PtpPorts? timingPorts = null, bool realtime = false, bool prepareOnly = false, PtpClockPool? clocks = null)
     {
         if (device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv)
             throw new InvalidOperationException("Apple devices keep their original realtime NTP path");
@@ -25,14 +25,14 @@ public sealed partial class AirPlayClient
         var client = new AirPlayClient(rtsp);
         try
         {
-            await client.SetupBufferedAsync(options, fifo, encoder, timingPorts ?? PtpPorts.Standard, realtime, prepareOnly, ct);
+            await client.SetupBufferedAsync(options, fifo, encoder, timingPorts ?? PtpPorts.Standard, realtime, prepareOnly, ct, clocks);
             return client;
         }
         catch { client.Dispose(); throw; }
     }
 
     private async Task SetupBufferedAsync(StreamOptions options, AudioFifo fifo, Func<IAacEncoder>? encoder,
-        PtpPorts ports, bool realtime, bool prepareOnly, CancellationToken ct)
+        PtpPorts ports, bool realtime, bool prepareOnly, CancellationToken ct, PtpClockPool? clocks)
     {
         VolumeCapPercent = options.VolumeCapPercent;
         if (options.RequestLog != null)
@@ -45,9 +45,13 @@ public sealed partial class AirPlayClient
         var shared = Pair(options);
         _rtsp.EnableEncryption(HapKeys.Derive(shared, "Control-Salt", "Control-Write-Encryption-Key"),
             HapKeys.Derive(shared, "Control-Salt", "Control-Read-Encryption-Key"));
-        _ptp = new PtpMaster(_rtsp.LocalIp, new(_rtsp.RemoteIp, ports.PeerEvent), new(_rtsp.RemoteIp, ports.PeerGeneral), true, ports.LocalEvent, ports.LocalGeneral);
+        _ptp = clocks?.Acquire(_rtsp.LocalIp, _rtsp.RemoteIp, ports)
+            ?? PtpClockLease.Own(new PtpMaster(_rtsp.LocalIp, new(_rtsp.RemoteIp, ports.PeerEvent),
+                new(_rtsp.RemoteIp, ports.PeerGeneral), true, ports.LocalEvent, ports.LocalGeneral));
         _ptp.Failed += ex => SignalLost(ex.Message);
-        var session = Expect(_rtsp.RtspPlist("SETUP", PtpSessionBody(Guid.NewGuid().ToString(), _rtsp.LocalIp, _ptp.ClockId)), "SETUP PTP session");
+        var sessionBody = PtpSessionBody(Guid.NewGuid().ToString(), _rtsp.LocalIp, _ptp.ClockId);
+        if (options.SessionSetupExtras != null) foreach (var item in options.SessionSetupExtras) sessionBody[item.Key] = item.Value;
+        var session = Expect(_rtsp.RtspPlist("SETUP", sessionBody), "SETUP PTP session");
         int events = Convert.ToInt32(BPlist.ReadDict(session.Body).GetValueOrDefault("eventPort") ?? 0L);
         if (events > 0)
         {
@@ -77,17 +81,17 @@ public sealed partial class AirPlayClient
         if (realtime)
         {
             PtpRealtime = new(_rtsp.LocalIp, _rtsp.RemoteIp, port, Convert.ToInt32(stream["controlPort"]),
-                _control, key, _rtsp.SessionId, LatencyFrames, alac, fifo, options.Effects, _ptp);
+                _control, key, _rtsp.SessionId, LatencyFrames, alac, fifo, options.Effects, _ptp.Clock);
             PtpRealtime.Failed += ex => SignalLost(ex.Message);
             if (stream.GetValueOrDefault("arrivalToRenderLatencyMs") is long a2r) ArrivalToRenderMs = (int)a2r;
         }
         else
         {
         _buffered = await BufferedSender.ConnectAsync(_rtsp.RemoteIp, port, key, _rtsp.SessionId, fifo,
-            options.Effects, _ptp, encoder, ct);
+            options.Effects, _ptp.Clock, encoder, ct);
         _buffered.Failed += ex => SignalLost(ex.Message);
         }
-        if (!realtime)
+        if (!realtime && !prepareOnly)
         {
             Record();
             SetVolumeDb(options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20);
@@ -103,9 +107,10 @@ public sealed partial class AirPlayClient
         // This delay is startup only; live audio thereafter uses the selected 1/1.5/2 second offset.
         await Task.Delay(1000, ct);
         await _ptp.WaitForStableMasterAsync(ct);
+        if (prepareOnly) return;
         if (realtime)
         {
-            if (!prepareOnly) StartPreparedPtpRealtime(options);
+            StartPreparedPtpRealtime(options);
             return;
         }
         ulong time = PtpMaster.NowNanoseconds;

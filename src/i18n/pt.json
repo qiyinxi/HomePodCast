@@ -583,7 +583,7 @@
   "建议最低 {0} ms；默认 {1} ms": "Mínimo recomendado {0} ms; padrão {1} ms",
   "低于推荐最低延迟，可能断音": "Abaixo do mínimo recomendado; o áudio pode sofrer cortes.",
   "连接协议": "Protocolo de conexão",
-  "第三方 AirPlay 设备暂不支持多音箱分组。": "Receptores AirPlay de terceiros ainda não podem participar de grupos de alto-falantes.",
+  "本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。": "Os grupos de ficheiros locais requerem HomePods.",
   "许可证": "Licença",
   "切换到浅色": "Mudar para o modo claro",
   "切换到深色": "Mudar para o modo escuro",
@@ -614,7 +614,7 @@
   "移除": "Remover",
   "移除 {0}": "Remover {0}",
   "实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。": "A captura em direto é primeiro misturada em estéreo, pelo que só pode escolher Estéreo completo, Esquerda ou Direita. Nos ficheiros 5.1 / 7.1, pode atribuir as posições central, subwoofer e surround; os canais não atribuídos são misturados nas colunas vizinhas.",
-  "离散声道只支持单独的 HomePod。AirPlay 1 可加入实时分组，校准后基本同步；本地文件仅支持 HomePod，第三方 AirPlay 2 暂不能加入分组。": "Os canais separados requerem HomePods individuais. Os recetores AirPlay 1 podem juntar-se a grupos em direto, com sincronização aproximada após a calibração. Os ficheiros locais só suportam HomePods; os recetores AirPlay 2 de terceiros ainda não podem juntar-se a grupos.",
+  "离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。": "Os canais discretos e os grupos de ficheiros locais requerem HomePods. AirPlay 2 de terceiros e AirPlay 1 podem integrar grupos em direto com calibração. Os grupos de terceiros não foram testados em hardware.",
   "延迟是这台音箱额外等待的毫秒数，数值越大播放越晚；音量偏移加在共用音量上。": "O atraso é o tempo adicional que esta coluna espera em milissegundos; um valor maior atrasa a reprodução. O ajuste de volume é somado ao volume comum.",
   "此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。": "Este recetor só pode reproduzir estéreo completo; os canais discretos exigem um HomePod que não faça parte de um par estéreo.",
   "在电脑实时声音下应用设置，才会更新实时推送的音箱；播放文件不会改变实时推送的音箱组。": "Aplique as definições com Áudio do computador em direto selecionado para atualizar as colunas da transmissão em direto. A reprodução de ficheiros não altera o grupo de colunas da transmissão em direto.",
@@ -634,5 +634,6 @@
   "这台 DLNA 设备不支持可用的音频格式。": "Este dispositivo DLNA não suporta nenhum formato de áudio disponível.",
   "DLNA 输出仅支持专用网络。": "A saída DLNA requer uma rede privada.",
   "DLNA 设备已停止播放。": "O dispositivo DLNA parou a reprodução.",
-  "DLNA 输出连接已断开。": "A ligação à saída DLNA foi interrompida."
+  "DLNA 输出连接已断开。": "A ligação à saída DLNA foi interrompida.",
+  "这台输出需要更大的整组延迟，请重新连接分组。": "Esta saída precisa de um atraso de grupo maior. Volte a ligar o grupo."
 }
