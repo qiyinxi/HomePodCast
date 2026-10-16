@@ -80,6 +80,14 @@ internal sealed class GroupRunner(
             }
             finally
             {
+                // A terminal required leg wins over a simultaneous transient/AP2 event even when that event
+                // completed Lost first. Check the transports before teardown clears their live sessions.
+                if (Current?.RequiredActionFailure is { } terminal)
+                {
+                    stopIdle = true;
+                    lostReason = terminal.Error.Message;
+                    lostText = Describe(new GroupMemberException(terminal.Name, terminal.Error));
+                }
                 if (streamed) StreamEnded?.Invoke(lostReason, ct.IsCancellationRequested);
                 TearDown();
             }

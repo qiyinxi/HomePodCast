@@ -38,6 +38,21 @@ public class DlnaDiscoveryTests
     }
 
     [Fact]
+    public async Task Multicast_notification_listener_stays_on_the_explicit_loopback_interface()
+    {
+        int port;
+        using (var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
+            port = ((IPEndPoint)probe.Client.LocalEndPoint!).Port;
+        var endpoint = new IPEndPoint(IPAddress.Parse("239.255.77.79"), port);
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMilliseconds(400), localAddress: IPAddress.Loopback, endpoint: endpoint);
+        await Task.Delay(30);
+        var listeners = LoopbackOnlyTests.Listening().Where(e => e.Port == port).ToArray();
+        await browsing;
+        Assert.NotEmpty(listeners);
+        Assert.All(listeners, e => Assert.True(IPAddress.IsLoopback(e.Address)));
+    }
+
+    [Fact]
     public void Description_uses_same_peer_URLBase_and_allows_missing_volume()
     {
         var device = Parse(Description(Service("AVTransport", "transport") + Service("ConnectionManager", "connection"),

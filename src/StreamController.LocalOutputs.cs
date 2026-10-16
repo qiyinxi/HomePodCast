@@ -46,15 +46,15 @@ public sealed partial class StreamController
         try
         {
             if (plan.LocalOutputs.Count > 0)
-                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, () => VolumeCapPercent, ct, OpenLocalOutput);
+                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, CurrentGroupCap, ct, OpenLocalOutput);
             if (raop.Length > 0)
             {
                 var outputs = raop.Select(m => RaopGroupOptions(plan, m.Member, m.Index, run)).ToArray();
-                raops = await RaopOutputSet.PrepareAsync(outputs, () => VolumeCapPercent, ct, ConnectGroupRaopOutput, RetryGroupRaopOutput);
+                raops = await RaopOutputSet.PrepareAsync(outputs, CurrentGroupCap, ct, ConnectGroupRaopOutput, RetryGroupRaopOutput);
             }
             if (plan.DlnaOutputs.Count > 0)
                 dlnas = await DlnaOutputSet.PrepareAsync(plan.DlnaOutputs.Select(DlnaGroupOptions).ToArray(),
-                    () => VolumeCapPercent, ct, ConnectGroupDlnaOutput, RetryGroupDlnaOutput);
+                    CurrentGroupCap, ct, ConnectGroupDlnaOutput, RetryGroupDlnaOutput, liveVolume: CurrentGroupVolume);
             int minimum = airplay.Length == 0 ? 0 : Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
             EffectiveLatencyMs = CoordinatedDelay(minimum, locals, raops, dlnas, plan.GroupDelayMs);
             // A long group delay belongs in the history, not in an arbitrarily large receiver jitter buffer.
@@ -74,7 +74,8 @@ public sealed partial class StreamController
             try
             {
                 group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, Effects,
-                    () => VolumeCapPercent, localOutputs: locals, groupDelayMs: EffectiveLatencyMs, raopOutputs: raops, dlnaOutputs: dlnas);
+                    CurrentGroupCap, localOutputs: locals, groupDelayMs: EffectiveLatencyMs, raopOutputs: raops, dlnaOutputs: dlnas,
+                    liveVolume: plan.DlnaOutputs.Count > 0 ? CurrentGroupVolume : null);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested && dlnas?.Lost.IsCompleted == true)
             {

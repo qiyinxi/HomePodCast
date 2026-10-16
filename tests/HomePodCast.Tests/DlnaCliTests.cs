@@ -2,6 +2,12 @@ namespace HomePodCast.Tests;
 
 public class DlnaCliTests
 {
+    [Theory]
+    [InlineData("mp3", "Mp3")]
+    [InlineData("AAC", "Aac")]
+    public void Explicit_compressed_format_is_accepted_without_starting_an_encoder(string text, string expected) =>
+        Assert.Equal(expected, DlnaCli.Parse(["dlna", "--udn", "uuid:test", "--silent", "--format", text]).Format.ToString());
+
     [Fact]
     public void Playback_requires_an_explicit_source_and_device()
     {

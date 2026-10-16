@@ -394,6 +394,33 @@ public class DlnaClientTests
     }
 
     private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_stalled_HTTP_pull_is_lost_even_if_transport_still_reports_PLAYING(bool activeButStalled)
+    {
+        await using var fake = new FakeDlnaRenderer();
+        var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        int reads = 0;
+        try
+        {
+            await using var client = await DlnaClient.ConnectAsync(fake.Device, Options() with
+            {
+                PollInterval = TimeSpan.FromMilliseconds(20), PullTimeout = TimeSpan.FromMilliseconds(200),
+                BeforeReadAsync = (_, ct) => activeButStalled && Interlocked.Increment(ref reads) > 1
+                    ? new ValueTask(Task.Delay(Timeout.Infinite, ct)) : ValueTask.CompletedTask,
+            });
+            if (!activeButStalled) await pull.DisposeAsync();
+            await client.Lost.WaitAsync(Guard);
+            Assert.Equal("PLAYING", fake.TransportState);
+            Assert.IsType<IOException>(client.LostException);
+            Assert.False(DlnaFailures.RequiresUserAction(client.LostException));
+            Assert.True(client.StreamServer.IsStopped);
+        }
+        finally { await pull.DisposeAsync(); }
+    }
+
     private static DlnaClientOptions Options() => new(IPAddress.Loopback, (_, samples) => samples.Fill(10000), () => true)
     {
         PollInterval = TimeSpan.FromSeconds(30), PullTimeout = Guard,

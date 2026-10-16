@@ -41,6 +41,12 @@ internal sealed record DlnaGroupOutputStatus(string Id, string Name, OutputState
     public bool HasClockEstimate { get; init; }
     public double ClockConfidence { get; init; }
     public DlnaFailureKind FailureKind { get; init; }
+    public long PcmFramesSent { get; init; }
+    public long PayloadBytesSent { get; init; }
+    public long SourceFramesRead { get; init; }
+    public double MaxWriteMs { get; init; }
+    public double PendingWriteMs { get; init; }
+    public DlnaTransferPacing Pacing { get; init; }
 }
 
 /// <summary>Independent HTTP-pull outputs over the group's already processed history.</summary>
@@ -56,6 +62,7 @@ internal sealed class DlnaOutputSet : IDisposable
         public DlnaTimelineReader? Reader;
         public Exception? Failure;
         public long AnchorTicks;
+        public long LastReadTicks;
         public bool Ready;
         public void Fail(Exception error)
         {
@@ -97,6 +104,7 @@ internal sealed class DlnaOutputSet : IDisposable
     private readonly Func<DlnaGroupOutputOptions, DlnaConnectionTarget, DlnaClientOptions, CancellationToken, Task<DlnaClient>> _connect;
     private readonly Func<TimeSpan, CancellationToken, Task> _retry;
     private readonly Func<long> _epoch;
+    private readonly Func<(double? Percent, bool Muted)>? _liveVolume;
     private readonly TaskCompletionSource<string> _lost = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _prepareDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private GroupMemberException? _prepareFailure;
@@ -108,7 +116,7 @@ internal sealed class DlnaOutputSet : IDisposable
 
     private DlnaOutputSet(IReadOnlyList<DlnaGroupOutputOptions> options, Func<double> cap, CancellationToken ct,
         Func<DlnaGroupOutputOptions, DlnaConnectionTarget, DlnaClientOptions, CancellationToken, Task<DlnaClient>>? connect,
-        Func<TimeSpan, CancellationToken, Task>? retry, Func<long>? epoch)
+        Func<TimeSpan, CancellationToken, Task>? retry, Func<long>? epoch, Func<(double? Percent, bool Muted)>? liveVolume)
     {
         _slots = options.Select(o => new Slot(o)).ToArray();
         _cap = cap;
@@ -116,6 +124,7 @@ internal sealed class DlnaOutputSet : IDisposable
         _connect = connect ?? ((_, target, transport, token) => DlnaClient.ConnectAsync(target.Device, transport, token));
         _retry = retry ?? Task.Delay;
         _epoch = epoch ?? (() => MediaClock.Now);
+        _liveVolume = liveVolume;
         _cancel = ct.Register(() => _ = Task.Run(Dispose));
     }
 
@@ -126,6 +135,22 @@ internal sealed class DlnaOutputSet : IDisposable
     public string? LostOutputName { get; private set; }
     public bool LostRequiresUserAction { get; private set; }
     public Exception? LostException { get; private set; }
+    internal (string Name, Exception Error)? RequiredActionFailure
+    {
+        get
+        {
+            lock (_commands)
+            {
+                if (LostRequiresUserAction && LostException is { } lost) return (LostOutputName ?? "DLNA", lost);
+                foreach (var slot in _slots.Where(s => s.Options.Required))
+                {
+                    var failure = slot.Failure ?? slot.Current?.Failure ?? slot.Current?.Client.LostException;
+                    if (failure != null && DlnaFailures.RequiresUserAction(failure)) return (slot.Options.Name, failure);
+                }
+                return null;
+            }
+        }
+    }
     public bool AllTerminal { get { lock (_commands) return _slots.All(s => s.Current == null && s.Terminal); } }
     public double MasterVolume { get { lock (_commands) return _volume; } }
 
@@ -138,6 +163,10 @@ internal sealed class DlnaOutputSet : IDisposable
                 {
                     var session = s.Current;
                     lock (session?.Audio ?? new object())
+                    {
+                        session?.Clock.Expire(_epoch());
+                        var server = session?.Client.StreamServer;
+                        long pending = server?.PendingWriteStartedTicks ?? 0;
                         return new DlnaGroupOutputStatus(s.Options.Id, s.Options.Name,
                             _disposed != 0 ? OutputState.Stopped : session == null || session.Lost.Task.IsCompleted
                                 || session.Client.Lost.IsCompleted ? OutputState.Lost
@@ -148,7 +177,12 @@ internal sealed class DlnaOutputSet : IDisposable
                             DriftPpm = session?.Clock.DriftPpm ?? 0, HasClockEstimate = session?.Clock.HasEstimate ?? false,
                             ClockConfidence = session?.Clock.Confidence ?? 0,
                             FailureKind = DlnaFailures.Kind(s.Failure ?? session?.Client.LostException),
+                            PcmFramesSent = server?.FramesSent ?? 0, PayloadBytesSent = server?.BytesSent ?? 0,
+                            SourceFramesRead = server?.SourceFramesRead ?? 0, MaxWriteMs = MediaClock.ToMs(server?.MaxWriteTicks ?? 0),
+                            PendingWriteMs = pending == 0 ? 0 : Math.Max(0, MediaClock.ToMs(_epoch() - pending)),
+                            Pacing = s.Options.Pacing,
                         };
+                    }
                 }).ToArray();
         }
     }
@@ -156,7 +190,8 @@ internal sealed class DlnaOutputSet : IDisposable
     public static async Task<DlnaOutputSet> PrepareAsync(IReadOnlyList<DlnaGroupOutputOptions> options, Func<double> cap,
         CancellationToken ct,
         Func<DlnaGroupOutputOptions, DlnaConnectionTarget, DlnaClientOptions, CancellationToken, Task<DlnaClient>>? connect = null,
-        Func<TimeSpan, CancellationToken, Task>? retry = null, Func<long>? epoch = null)
+        Func<TimeSpan, CancellationToken, Task>? retry = null, Func<long>? epoch = null,
+        Func<(double? Percent, bool Muted)>? liveVolume = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(cap);
@@ -168,7 +203,7 @@ internal sealed class DlnaOutputSet : IDisposable
             if (!ids.Add(option.Id)) throw new ArgumentException("Duplicate DLNA output", nameof(options));
         }
         ct.ThrowIfCancellationRequested();
-        var set = new DlnaOutputSet(options, cap, ct, connect, retry, epoch);
+        var set = new DlnaOutputSet(options, cap, ct, connect, retry, epoch, liveVolume);
         try
         {
             await Task.WhenAll(set._slots.Select(set.PrepareOne)).ConfigureAwait(false);
@@ -219,6 +254,7 @@ internal sealed class DlnaOutputSet : IDisposable
                 PreferredFormat = slot.Options.PreferredFormat, Framing = slot.Options.Framing, Pacing = slot.Options.Pacing,
                 VolumePercent = 0, VolumeCapPercent = 100, Muted = true, TakeOver = takeOver,
                 LiveVolumePercent = () => EffectiveVolume(slot), LiveVolumeCapPercent = Cap, LiveMuted = () => LiveMuted(session),
+                LiveRemoteMuted = () => LogicalMuted(),
                 BeforeReadAsync = (ticks, ct) => BeforeReadAsync(slot, session, ticks, ct),
                 ObserveWrite = observation => Observe(session, observation),
                 OnStreamStarted = _ => StreamStarted(session),
@@ -291,8 +327,7 @@ internal sealed class DlnaOutputSet : IDisposable
         lock (session.Audio)
         {
             session.Reader = new DlnaTimelineReader(_timeline!, _delayMs, slot.Options.TrimMs, slot.Options.EstimatedLatencyMs, slot.Options.Channels);
-            session.AnchorTicks = _epoch();
-            session.Clock.Reset();
+            ResetAnchor(session, _epoch());
             session.Ready = false;
         }
     }
@@ -303,11 +338,18 @@ internal sealed class DlnaOutputSet : IDisposable
     {
         lock (_commands)
         {
-            double cap = Cap(), master = Math.Min(_volume, cap);
+            double cap = Cap(), master = Math.Min(Desired().Percent, cap);
             return master <= 0 ? 0 : Math.Clamp(master + slot.Options.VolumeOffset, 0, cap);
         }
     }
-    private bool LiveMuted(Session session) { lock (_commands) return _muted || _disposed != 0 || !Volatile.Read(ref session.Ready); }
+    private (double Percent, bool Muted) Desired()
+    {
+        if (_liveVolume == null) return (_volume, _muted);
+        try { var latest = _liveVolume(); return (Normalize(latest.Percent ?? _volume), latest.Muted); }
+        catch { return (0, true); }
+    }
+    private bool LogicalMuted() { lock (_commands) return Desired().Muted || _disposed != 0 || _timeline == null; }
+    private bool LiveMuted(Session session) => LogicalMuted() || !Volatile.Read(ref session.Ready);
 
     private async Task PublishLatestAsync(Slot slot, Session session)
     {
@@ -322,14 +364,18 @@ internal sealed class DlnaOutputSet : IDisposable
                 lock (_commands)
                 {
                     if (_disposed != 0 || !ReferenceEquals(slot.Current, session)) return;
-                    volume = EffectiveVolume(slot); muted = _muted || _timeline == null; version = _version;
+                    volume = EffectiveVolume(slot); muted = LogicalMuted(); version = _version;
                 }
                 await session.Client.SetVolumeAsync(volume, muted, _stop.Token).ConfigureAwait(false);
                 lock (_commands)
                 {
                     if (_disposed != 0 || !ReferenceEquals(slot.Current, session)) return;
-                    if (version != _version) continue;
-                    Volatile.Write(ref session.Ready, _timeline != null);
+                    if (version != _version || volume != EffectiveVolume(slot) || muted != LogicalMuted()) continue;
+                    if (_timeline != null && !Volatile.Read(ref session.Ready))
+                    {
+                        lock (session.Audio) ResetAnchor(session, _epoch());
+                        Volatile.Write(ref session.Ready, true);
+                    }
                     return;
                 }
             }
@@ -361,6 +407,8 @@ internal sealed class DlnaOutputSet : IDisposable
     {
         lock (session.Audio)
         {
+            long now = _epoch();
+            EnsureFreshReader(session, now);
             if (!Volatile.Read(ref session.Ready) || session.Reader == null) { pcm.Clear(); return; }
             // Prefetch before Start has its own sender epoch. Start/rejoin anchors the first real sample afresh.
             long anchor = double.IsNaN(session.Reader.Position) ? session.AnchorTicks : ticks;
@@ -373,6 +421,7 @@ internal sealed class DlnaOutputSet : IDisposable
             if (_timeline!.EndFrame < position + pcm.Length / 2 * session.Clock.SourceFramesPerOutputFrame + 64)
             { pcm.Clear(); return; }
             session.Reader.Read(anchor, session.Clock.SourceFramesPerOutputFrame, pcm);
+            session.LastReadTicks = now;
         }
     }
 
@@ -384,6 +433,7 @@ internal sealed class DlnaOutputSet : IDisposable
             double end;
             lock (session.Audio)
             {
+                EnsureFreshReader(session, _epoch());
                 timeline = Volatile.Read(ref _timeline);
                 if (session.Reader == null || !Volatile.Read(ref session.Ready))
                 {
@@ -422,11 +472,25 @@ internal sealed class DlnaOutputSet : IDisposable
     private void StreamStarted(Session session)
     {
         lock (session.Audio)
-        {
-            session.Reader?.Reset();
-            session.Clock.Reset();
-            session.AnchorTicks = _epoch();
-        }
+            ResetAnchor(session, _epoch());
+    }
+
+    private static void ResetAnchor(Session session, long now)
+    {
+        session.Reader?.Reset();
+        session.Clock.Reset();
+        session.AnchorTicks = session.LastReadTicks = now;
+    }
+
+    private void EnsureFreshReader(Session session, long now)
+    {
+        session.Clock.Expire(now);
+        var timeline = Volatile.Read(ref _timeline);
+        double position = session.Reader?.Position ?? double.NaN;
+        if (timeline != null && (!double.IsNaN(position) && timeline.EndFrame != long.MinValue
+                && position < timeline.EndFrame - timeline.CapacityFrames + 64
+            || session.LastReadTicks != 0 && now - session.LastReadTicks > MediaClock.FromMs(2000)))
+            ResetAnchor(session, now);
     }
 
     private async Task RunSlot(Slot slot)

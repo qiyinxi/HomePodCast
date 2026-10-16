@@ -91,6 +91,7 @@ internal sealed class SpeakerGroup : IOutputSink
     public IReadOnlyList<LocalOutputStatus> LocalOutputs => _localOutputs?.Status ?? [];
     public IReadOnlyList<RaopGroupOutputStatus> RaopOutputs => _raopOutputs?.Status ?? [];
     public IReadOnlyList<DlnaGroupOutputStatus> DlnaOutputs => _dlnaOutputs?.Status ?? [];
+    internal (string Name, Exception Error)? RequiredActionFailure => _dlnaOutputs?.RequiredActionFailure ?? _raopOutputs?.RequiredActionFailure;
     internal long TimelineProducedPackets => _pump?.ProducedPackets ?? 0;
     internal long TimelineSkippedPackets => _pump?.SkippedPackets ?? 0;
     internal bool TimelineRunning => _pump?.IsRunning == true;
@@ -106,7 +107,8 @@ internal sealed class SpeakerGroup : IOutputSink
     public static async Task<SpeakerGroup> ConnectAsync(IReadOnlyList<MemberSetup> setups, AudioFifo fifo,
         double? volumePercent, CancellationToken ct, IAudioEffect? effects = null, Func<double>? volumeCap = null,
         IGroupPacketSource? source = null, LocalOutputSet? localOutputs = null, int? groupDelayMs = null,
-        RaopOutputSet? raopOutputs = null, DlnaOutputSet? dlnaOutputs = null)
+        RaopOutputSet? raopOutputs = null, DlnaOutputSet? dlnaOutputs = null,
+        Func<(double? Percent, bool Muted)>? liveVolume = null)
     {
         bool coordinated = localOutputs != null || raopOutputs != null || dlnaOutputs != null;
         if (setups.Count == 0 && !coordinated) throw new ArgumentException("empty group", nameof(setups));
@@ -125,7 +127,10 @@ internal sealed class SpeakerGroup : IOutputSink
             if (setups.Count == 0 && localOutputs == null && group.AllAuxiliaryOutputsTerminal())
             {
                 if (dlnaOutputs != null)
-                    throw new DlnaBusyException(string.Join("; ", dlnaOutputs.Status.Select(s => $"{s.Name}: {s.Error}")));
+                {
+                    var first = dlnaOutputs.Status[0];
+                    throw new GroupMemberException(first.Name, TerminalDlnaError(first));
+                }
                 throw new RaopRefusedException(string.Join("; ", raopOutputs!.Status.Select(s => $"{s.Name}: {s.Error}")));
             }
             if (coordinated)
@@ -184,11 +189,16 @@ internal sealed class SpeakerGroup : IOutputSink
                 await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), attemptToken);
             }
 
-            group.MasterVolume = VolumeLimit.Clamp(
-                volumePercent ?? (members.Length > 0 ? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0) : 20),
-                group.VolumeCapPercent);
+            double CurrentMaster()
+            {
+                var live = liveVolume?.Invoke();
+                return VolumeLimit.Clamp(live?.Muted == true ? 0 : live?.Percent ?? volumePercent
+                    ?? (members.Length > 0 ? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0) : 20), group.VolumeCapPercent);
+            }
+            group.MasterVolume = CurrentMaster();
             await group.EachAsync((m, i) => m.SetVolumePercent(
-                MemberVolume(group.MasterVolume, setups[i].VolumeOffset, group.VolumeCapPercent)), attemptToken);
+                MemberVolume(CurrentMaster(), setups[i].VolumeOffset, group.VolumeCapPercent)), attemptToken);
+            group.MasterVolume = CurrentMaster();
 
             if (coordinated)
             {
@@ -280,6 +290,10 @@ internal sealed class SpeakerGroup : IOutputSink
 
     private void ThrowIfLost()
     {
+        if (_dlnaOutputs?.RequiredActionFailure is { } dlna) throw new GroupMemberException(dlna.Name, dlna.Error);
+        if (_raopOutputs?.RequiredActionFailure is { } raop)
+            throw new RaopRefusedException(L.F("{0}：{1}", raop.Name, raop.Error.Message))
+                { LogMessage = $"{Log.Name(raop.Name)}: {raop.Error.Message}" };
         if (!_lost.Task.IsCompleted) return;
         if (_dlnaFailure != null) throw new GroupMemberException(_dlnaOutputs?.LostOutputName ?? Name, _dlnaFailure);
         if (LostRequiresUserAction || LostReason == RaopClient.ClosedByReceiver)
@@ -310,6 +324,15 @@ internal sealed class SpeakerGroup : IOutputSink
     private bool AllAuxiliaryOutputsTerminal() => (_raopOutputs != null || _dlnaOutputs != null)
         && (_raopOutputs == null || _raopOutputs.Status.All(s => s.NeedsUserAction))
         && (_dlnaOutputs == null || _dlnaOutputs.AllTerminal);
+
+    private static Exception TerminalDlnaError(DlnaGroupOutputStatus status) => status.FailureKind switch
+    {
+        DlnaFailureKind.Policy => new DlnaPolicyException(status.Error ?? "DLNA network unavailable"),
+        DlnaFailureKind.Unsupported => new DlnaUnsupportedException(status.Error ?? "DLNA format unavailable"),
+        DlnaFailureKind.TakenOver => new DlnaTakenOverException(status.Error ?? "DLNA taken over"),
+        DlnaFailureKind.Stopped => new DlnaStoppedException(status.Error ?? "DLNA stopped"),
+        _ => new DlnaBusyException(status.Error ?? "DLNA requires user action"),
+    };
 
     private async Task WatchAuxiliaryAvailability(CancellationToken ct)
     {
@@ -397,7 +420,8 @@ internal sealed class SpeakerGroup : IOutputSink
         if (_dlnaOutputs is { } dlna)
             Log.Info("group DLNA stats: " + string.Join(" | ", dlna.Status.Select(s =>
                 $"{Log.Name(s.Name)}: {s.State} {s.Format} estimatedLatency={s.EstimatedLatencyMs}ms "
-                + $"drift={(s.HasClockEstimate ? s.DriftPpm.ToString("F0") : "unknown")}ppm confidence={s.ClockConfidence:F2}")));
+                + $"drift={(s.HasClockEstimate ? s.DriftPpm.ToString("F0") : "unknown")}ppm confidence={s.ClockConfidence:F2} "
+                + $"frames={s.PcmFramesSent} bytes={s.PayloadBytesSent} maxWrite={s.MaxWriteMs:F1}ms pendingWrite={s.PendingWriteMs:F1}ms")));
         var raop = _raopOutputs?.Status ?? [];
         if (raop.Count > 0)
             Log.Info("group RAOP stats: " + string.Join(" | ", raop.Select(output =>

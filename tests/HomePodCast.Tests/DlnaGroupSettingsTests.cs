@@ -8,6 +8,18 @@ public class DlnaGroupSettingsTests
     private static DlnaOutputSettings Output(string udn = "uuid:renderer") => new(udn, "Renderer");
 
     [Fact]
+    public void Explicit_DLNA_only_selection_also_excludes_a_remembered_stereo_pair()
+    {
+        var config = new AppConfig { DeviceId = StereoPairs.PairId("remembered"), GroupCaptureDeviceIds = [],
+            GroupDlnaOutputs = [Output()], GroupCaptureDlnaUdns = ["uuid:renderer"] };
+        var plan = Assert.IsType<GroupPlan>(GroupPlan.FromConfig(config));
+        Assert.Equal(GroupKind.MultiRoom, plan.Kind);
+        Assert.Null(plan.PairTsid);
+        Assert.Empty(plan.Members);
+        Assert.Equal("dlna:UUID:RENDERER", OwnSession.KeyOf(plan));
+    }
+
+    [Fact]
     public void Preference_bank_does_not_activate_a_group_or_change_plain_single_path()
     {
         var config = new AppConfig { DeviceId = "AABBCCDDEEFF", DeviceName = "HomePod", GroupDlnaOutputs = [Output()] };

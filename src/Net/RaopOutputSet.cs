@@ -112,6 +112,27 @@ internal sealed class RaopOutputSet : IDisposable
     public string? LostReason { get; private set; }
     public string? LostOutputName { get; private set; }
     public bool LostRequiresUserAction { get; private set; }
+    internal (string Name, Exception Error)? RequiredActionFailure
+    {
+        get
+        {
+            lock (_commands)
+            {
+                if (LostRequiresUserAction && LostReason != null)
+                    return (LostOutputName ?? "RAOP", new RaopRefusedException(LostReason));
+                foreach (var slot in _slots.Where(s => s.Options.Required))
+                {
+                    var failure = slot.Current?.Failure ?? slot.Current?.Client.LostException;
+                    string? reason = slot.Current?.Client.LostReason ?? slot.Error;
+                    if (failure != null && RequiresUserAction(failure, reason ?? failure.Message))
+                        return (slot.Options.Name, reason == RaopClient.ClosedByReceiver
+                            ? new RaopRefusedException(reason) : RequiredFailure(failure));
+                    if (slot.Terminal) return (slot.Options.Name, new RaopRefusedException(reason ?? "RAOP requires user action"));
+                }
+                return null;
+            }
+        }
+    }
     public double MasterVolume { get { lock (_commands) return _volume; } }
 
     public IReadOnlyList<RaopGroupOutputStatus> Status

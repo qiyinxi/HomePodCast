@@ -12,6 +12,12 @@ public sealed partial class StreamController
     internal Func<TimeSpan, CancellationToken, Task>? RetryGroupDlnaOutput { get; set; }
     internal IReadOnlyList<DlnaGroupOutputStatus> DlnaGroupOutputs => _groupRunner?.Current?.DlnaOutputs ?? [];
 
+    private double CurrentGroupCap() => Math.Min(VolumeCapPercent, MeasurementCapPercent ?? 100);
+    private (double? Percent, bool Muted) CurrentGroupVolume()
+    {
+        lock (_volumeLock) return (Volume is { } value ? SentVolume(value) : null, Muted);
+    }
+
     private DlnaGroupOutputOptions DlnaGroupOptions(DlnaOutputSettings settings) => new(settings.Udn, settings.Name,
         ct => (ResolveGroupDlnaOutput ?? ResolveDlnaOutputAsync)(settings.Udn, ct))
     {

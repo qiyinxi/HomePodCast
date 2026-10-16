@@ -33,6 +33,16 @@ internal sealed class DlnaReadClock
         _driftPpm = Confidence = 0;
     }
 
+    /// <summary>
+    /// Revoke stale evidence even when no write completes. A time earlier than the last eligible observation
+    /// invalidates that observation too: callers must use the same monotonic epoch for observation and expiry.
+    /// </summary>
+    public void Expire(long nowTicks)
+    {
+        if (_hasObservation && (nowTicks < _lastTicks
+            || (Int128)nowTicks - _lastTicks > (Int128)MediaClock.Frequency * 2)) Reset();
+    }
+
     /// <param name="completedFrames">Cumulative completed PCM frames in this HTTP connection.</param>
     /// <param name="completionTicks">Completion time on MediaClock.</param>
     /// <param name="receiverReadProxy">True only when sustained receiver backpressure, rather than sender pacing, controls writes.</param>

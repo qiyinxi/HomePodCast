@@ -75,6 +75,38 @@ public class DlnaReadClockTests
     }
 
     [Fact]
+    public void No_further_completed_write_expires_the_estimate_after_two_seconds()
+    {
+        var clock = new DlnaReadClock();
+        Feed(clock, 0, 60);
+        Assert.True(clock.HasEstimate);
+        clock.Expire(Ticks(62));
+        Assert.True(clock.HasEstimate);
+        clock.Expire(Ticks(63));
+        Assert.False(clock.HasEstimate);
+        Assert.Equal(0, clock.Confidence);
+        Assert.Equal(0, clock.DriftPpm);
+        Assert.Equal(1, clock.SourceFramesPerOutputFrame);
+        Feed(clock, 64, 90);
+        Assert.False(clock.HasEstimate); // Expiry discarded the old window, not just its displayed confidence.
+    }
+
+    [Fact]
+    public void Expiry_before_the_last_observation_revokes_future_dated_evidence()
+    {
+        var clock = new DlnaReadClock();
+        Feed(clock, 0, 60);
+        Assert.True(clock.HasEstimate);
+        clock.Expire(Ticks(60) - 1);
+        Assert.False(clock.HasEstimate);
+        Assert.Equal(0, clock.Confidence);
+        Assert.Equal(1, clock.SourceFramesPerOutputFrame);
+        clock.Observe(0, long.MinValue, true);
+        clock.Expire(long.MaxValue); // A changed epoch must not overflow the elapsed-time comparison.
+        Assert.False(clock.HasEstimate);
+    }
+
+    [Fact]
     public void Observation_and_regression_do_not_allocate_per_completed_write()
     {
         var clock = new DlnaReadClock();

@@ -33,6 +33,103 @@ public class DlnaOutputSetTests
             options with { PollInterval = TimeSpan.FromMilliseconds(20), PullTimeout = Guard }, ct);
 
     [Fact]
+    public async Task A_live_mute_changed_during_SOAP_publication_wins_before_the_audio_gate_opens()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        renderer.OnPlayAsync = pull.StartAsync;
+        bool muted = false;
+        DlnaClientOptions? transport = null;
+        using var set = await DlnaOutputSet.PrepareAsync([Output(renderer)], () => 25, default,
+            connect: async (o, target, options, ct) => { transport = options; return await Connect(o, target, options, ct); },
+            liveVolume: () => (20, Volatile.Read(ref muted)));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int blocked = 0;
+        renderer.AfterActionAsync = async (action, ct) =>
+        {
+            if (action == "SetVolume" && Interlocked.Exchange(ref blocked, 1) == 0)
+            { entered.TrySetResult(); await release.Task.WaitAsync(ct); }
+        };
+        var starting = set.StartAsync(History(MediaClock.Now), set.MinimumDelayMs, 80, false, default);
+        await entered.Task.WaitAsync(Guard);
+        Volatile.Write(ref muted, true);
+        release.TrySetResult();
+        await starting.WaitAsync(Guard);
+        Assert.True(renderer.Muted);
+        Assert.True(transport!.LiveMuted!());
+        Assert.True(transport.LiveRemoteMuted!());
+    }
+
+    [Fact]
+    public async Task Slow_initial_volume_publication_reanchors_after_the_old_history_has_wrapped()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        renderer.OnPlayAsync = pull.StartAsync;
+        long epoch = MediaClock.Now;
+        DlnaClientOptions? transport = null;
+        using var set = await DlnaOutputSet.PrepareAsync([Output(renderer)], () => 25, default,
+            connect: async (_, target, options, ct) =>
+            {
+                transport = options;
+                return await DlnaClient.ConnectAsync(target.Device, options with
+                {
+                    ReadAudio = (_, pcm) => pcm.Clear(), BeforeReadAsync = null, ObserveWrite = null,
+                    OnStreamStarted = null, Pacing = DlnaTransferPacing.Sender,
+                }, ct);
+            }, epoch: () => Volatile.Read(ref epoch));
+        var timeline = History(epoch);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int blocked = 0;
+        renderer.AfterActionAsync = async (action, ct) =>
+        {
+            if (action == "SetVolume" && Interlocked.Exchange(ref blocked, 1) == 0)
+            { entered.TrySetResult(); await release.Task.WaitAsync(ct); }
+        };
+        var starting = set.StartAsync(timeline, set.MinimumDelayMs, 20, false, default);
+        await entered.Task.WaitAsync(Guard);
+        Interlocked.Add(ref epoch, MediaClock.FromMs(10000));
+        timeline.WriteFrames(timeline.EndFrame, Enumerable.Repeat(0.5f, 44100 * 12 * 2).ToArray());
+        release.TrySetResult();
+        await starting.WaitAsync(Guard);
+        short[] samples = new short[704];
+        transport!.ReadAudio(epoch, samples);
+        Assert.All(samples, sample => Assert.Equal((short)16384, sample));
+    }
+
+    [Fact]
+    public async Task A_long_same_GET_pause_does_not_keep_reading_overwritten_silence()
+    {
+        await using var renderer = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        renderer.OnPlayAsync = pull.StartAsync;
+        long epoch = MediaClock.Now;
+        DlnaClientOptions? transport = null;
+        using var set = await DlnaOutputSet.PrepareAsync([Output(renderer)], () => 25, default,
+            connect: async (_, target, options, ct) =>
+            {
+                transport = options;
+                return await DlnaClient.ConnectAsync(target.Device, options with
+                {
+                    ReadAudio = (_, pcm) => pcm.Clear(), BeforeReadAsync = null, ObserveWrite = null,
+                    OnStreamStarted = null, Pacing = DlnaTransferPacing.Sender,
+                }, ct);
+            }, epoch: () => Volatile.Read(ref epoch));
+        var timeline = History(epoch);
+        await set.StartAsync(timeline, set.MinimumDelayMs, 20, false, default);
+        short[] samples = new short[704];
+        transport!.ReadAudio(epoch, samples);
+        Assert.Equal((short)8192, samples[0]);
+        Interlocked.Add(ref epoch, MediaClock.FromMs(10000));
+        timeline.WriteFrames(timeline.EndFrame, Enumerable.Repeat(0.5f, 44100 * 12 * 2).ToArray());
+        await transport.BeforeReadAsync!(epoch, default);
+        transport.ReadAudio(epoch, samples);
+        Assert.All(samples, sample => Assert.Equal((short)16384, sample));
+    }
+
+    [Fact]
     public async Task Prepare_serves_silence_muted_then_binds_independent_channels_and_current_volume()
     {
         await using var left = new FakeDlnaRenderer();

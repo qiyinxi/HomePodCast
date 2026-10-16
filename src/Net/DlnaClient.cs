@@ -23,6 +23,7 @@ internal sealed record DlnaClientOptions(IPAddress LocalAddress, DlnaPcmReader R
     public Func<double>? LiveVolumePercent { get; init; }
     public Func<double>? LiveVolumeCapPercent { get; init; }
     public Func<bool>? LiveMuted { get; init; }
+    public Func<bool>? LiveRemoteMuted { get; init; }
 }
 
 /// <summary>Owns one explicitly selected renderer, without changing capture, saved settings or firewall rules.</summary>
@@ -45,6 +46,7 @@ internal sealed class DlnaClient : IAsyncDisposable
     private bool _remoteVolume = true, _remoteMute = true, _assigned;
     private string _previousUri = "";
     private DlnaStreamServer? _server;
+    private long _lastPayloadFrames, _lastPayloadProgressTicks;
 
     private DlnaClient(DlnaDevice device, DlnaClientOptions options, CancellationToken ct)
     {
@@ -103,7 +105,7 @@ internal sealed class DlnaClient : IAsyncDisposable
         Format = SelectFormat(await _control.GetProtocolInfoAsync(ct).ConfigureAwait(false), _options.PreferredFormat);
         // During explicit takeover, never unmute the previous content: an unsupported volume action
         // only attenuates our PCM and cannot cap somebody else's currently playing media.
-        await SetVolumeAsync(_options.VolumePercent, true, ct).ConfigureAwait(false);
+        await SetVolumeCoreAsync(_options.VolumePercent, true, ct, honorLive: false).ConfigureAwait(false);
         _server = new DlnaStreamServer(new(_options.LocalAddress, _rendererAddress, Format, ReadAudio, _options.IsPrivateNetwork)
         {
             Framing = _options.Framing,
@@ -117,14 +119,19 @@ internal sealed class DlnaClient : IAsyncDisposable
         await RequireOwnershipAsync(ct).ConfigureAwait(false);
         _assigned = true;
         await _control.SetAvTransportUriAsync(StreamUri, Metadata(StreamUri, Format, _options.Pacing), ct).ConfigureAwait(false);
-        await SetVolumeAsync(_options.VolumePercent, _options.Muted, ct).ConfigureAwait(false);
+        await SetVolumeCoreAsync(_options.VolumePercent, _options.Muted, ct, honorLive: false).ConfigureAwait(false);
         await _control.PlayAsync(ct).ConfigureAwait(false);
         await StreamServer.FirstGetTicks.WaitAsync(_options.PullTimeout, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
+        _lastPayloadFrames = StreamServer.FramesSent;
+        _lastPayloadProgressTicks = MediaClock.Now;
         _monitor = MonitorAsync();
     }
 
-    public async Task SetVolumeAsync(double percent, bool muted, CancellationToken ct = default)
+    public Task SetVolumeAsync(double percent, bool muted, CancellationToken ct = default) =>
+        SetVolumeCoreAsync(percent, muted, ct, honorLive: true);
+
+    private async Task SetVolumeCoreAsync(double percent, bool muted, CancellationToken ct, bool honorLive)
     {
         ValidateVolume(percent, _options.VolumeCapPercent);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _stop.Token);
@@ -132,7 +139,10 @@ internal sealed class DlnaClient : IAsyncDisposable
         try
         {
             Silence();
-            double capped = Math.Min(percent, CurrentCap());
+            double desired = percent;
+            if (honorLive && _options.LiveVolumePercent is { } live)
+                try { desired = Normalize(live()); } catch { desired = 0; }
+            double capped = Math.Min(desired, CurrentCap());
             if (_remoteVolume)
                 try
                 {
@@ -144,13 +154,13 @@ internal sealed class DlnaClient : IAsyncDisposable
                 try
                 {
                     await RequireOwnershipAsync(linked.Token).ConfigureAwait(false);
-                    await _control.SetMuteAsync(muted, linked.Token).ConfigureAwait(false);
+                    await _control.SetMuteAsync(CurrentRemoteMute(muted, honorLive), linked.Token).ConfigureAwait(false);
                 }
                 catch (DlnaActionException ex) when (ex.IsUnsupportedAction) { _remoteMute = false; }
             await RequireOwnershipAsync(linked.Token).ConfigureAwait(false);
             // Remote and digital volume are alternatives. Digital mute remains available even when
             // the renderer omits RenderingControl; authentication/network errors never trigger fallback.
-            Volatile.Write(ref _audioState, new(muted ? 0 : _remoteVolume ? 1 : capped / 100, capped));
+            Volatile.Write(ref _audioState, new(CurrentRemoteMute(muted, honorLive) ? 0 : _remoteVolume ? 1 : capped / 100, capped));
         }
         finally { _commands.Release(); }
     }
@@ -211,6 +221,17 @@ internal sealed class DlnaClient : IAsyncDisposable
                 if (uri != StreamUri.AbsoluteUri) { Lose(new DlnaTakenOverException()); return; }
                 string state = await _control.GetTransportInfoAsync(_stop.Token).ConfigureAwait(false);
                 if (state is not ("PLAYING" or "TRANSITIONING")) { Lose(new DlnaStoppedException($"DLNA renderer stopped ({state}).")); return; }
+                long now = MediaClock.Now, frames = StreamServer.FramesSent;
+                if (frames != _lastPayloadFrames)
+                {
+                    _lastPayloadFrames = frames;
+                    _lastPayloadProgressTicks = now;
+                }
+                else if (now - _lastPayloadProgressTicks >= MediaClock.FromMs(_options.PullTimeout.TotalMilliseconds))
+                {
+                    Lose(new IOException(StreamServer.IsStreaming ? "DLNA HTTP audio pull stalled." : "DLNA renderer stopped requesting audio."));
+                    return;
+                }
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -285,6 +306,11 @@ internal sealed class DlnaClient : IAsyncDisposable
 
     private static double Normalize(double percent) => double.IsFinite(percent) ? Math.Clamp(percent, 0, 100) : 0;
     private void Silence() => Volatile.Write(ref _audioState, new(0, Volatile.Read(ref _audioState).Volume));
+    private bool CurrentRemoteMute(bool requested, bool honorLive)
+    {
+        if (!honorLive || _options.LiveRemoteMuted == null) return requested;
+        try { return _options.LiveRemoteMuted(); } catch { return true; }
+    }
     private Exception? StreamFailure() => _server?.IsPolicyClosed == true ? new DlnaPolicyException()
         : _server?.Failure is NotSupportedException unsupported ? new DlnaUnsupportedException(unsupported.Message)
         : _server?.Failure;

@@ -48,7 +48,7 @@ public sealed record GroupPlan(
     public static GroupPlan? FromConfig(AppConfig cfg)
     {
         var dlna = DlnaGroupSettings.Selected(cfg);
-        var airplay = FromAirPlayConfig(cfg);
+        var airplay = dlna.Count > 0 && cfg.GroupCaptureDeviceIds is { Count: 0 } ? null : FromAirPlayConfig(cfg);
         if (dlna.Count == 0) return airplay;
         if (airplay == null)
         {
