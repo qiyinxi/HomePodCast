@@ -50,7 +50,9 @@ public static class Mdns
             multicast = new UdpClient(AddressFamily.InterNetwork);
             multicast.ExclusiveAddressUse = false;
             multicast.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            multicast.Client.Bind(new IPEndPoint(IPAddress.Any, group.Port));
+            // Only loopback (the tests): bound to loopback too. Bound to every address, the listener made Windows ask for a
+            // firewall rule for each new test build's path: 2026-10-16, 30 rules, one per worktree, and a prompt left open at night.
+            multicast.Client.Bind(new IPEndPoint(interfaces.All(IPAddress.IsLoopback) ? IPAddress.Loopback : IPAddress.Any, group.Port));
             multicast.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
             foreach (var ip in interfaces)
                 try { multicast.JoinMulticastGroup(group.Address, ip); } catch (SocketException) { }
