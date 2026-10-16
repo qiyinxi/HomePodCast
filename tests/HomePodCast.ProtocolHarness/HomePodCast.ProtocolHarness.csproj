@@ -24,6 +24,7 @@
     <Compile Include="../../src/Net/DlnaControl.cs" Link="Net/DlnaControl.cs" />
     <Compile Include="../../src/Net/DlnaStreamServer.cs" Link="Net/DlnaStreamServer.cs" />
     <Compile Include="../../src/Net/DlnaClient.cs" Link="Net/DlnaClient.cs" />
+    <Compile Include="../../src/Net/DlnaFailures.cs" Link="Net/DlnaFailures.cs" />
     <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
     <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
     <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
@@ -48,6 +49,8 @@
     <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
     <Compile Include="../../src/Audio/TimelineBuffer.cs" Link="Audio/TimelineBuffer.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
+    <Compile Include="../../src/Audio/DlnaAudioEncoder.cs" Link="Audio/DlnaAudioEncoder.cs" />
+    <Compile Include="../../src/Audio/DlnaMediaFoundationEncoder.cs" Link="Audio/DlnaMediaFoundationEncoder.cs" />
     <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
     <Compile Include="../../src/Protocol/BufferedAudio.cs" Link="Protocol/BufferedAudio.cs" />
     <Compile Include="../../src/Protocol/Srp.cs" Link="Protocol/Srp.cs" />

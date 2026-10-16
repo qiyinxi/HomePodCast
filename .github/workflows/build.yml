@@ -417,10 +417,18 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Encode synthetic AAC with Windows Media Foundation
         run: dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --aac-fixture test-results/aac-fixture
+      - name: Encode DLNA AAC ADTS and MP3 with production codecs
+        run: dotnet run --project tests/HomePodCast.ProtocolHarness -c Release -- --dlna-codec-fixture test-results/dlna-codec-fixture
       - uses: actions/upload-artifact@v7
         with:
           name: aac-fixture
           path: test-results/aac-fixture
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dlna-codec-fixture
+          path: test-results/dlna-codec-fixture
+          if-no-files-found: error
 
   airplay-compat-e2e:
     needs: aac-fixture
@@ -460,6 +468,7 @@ jobs:
   # The production SSDP/SOAP/HTTP sender against pinned, unmodified gmrender-resurrect.
   # Its only sink is a PCM file. Both peers live in namespaces with no host/LAN uplink.
   dlna-compat-e2e:
+    needs: aac-fixture
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -467,6 +476,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v7
+        with:
+          name: dlna-codec-fixture
+          path: test-results/dlna-codec-fixture
       - name: DLNA compatibility renderer test
         run: |
           mkdir -p test-results/dlna-compat

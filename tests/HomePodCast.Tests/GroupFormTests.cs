@@ -94,7 +94,7 @@ public class GroupFormTests
         panel.SetFound([A, raop]);
         Assert.Equal(liveAllowed, panel.BlockReason == null);
         panel.SetSource(false, fileSource: true);
-        Assert.Equal("本地影音文件暂不支持 AirPlay 1 或本机输出分组。", panel.BlockReason);
+        Assert.Equal("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。", panel.BlockReason);
         panel.SetSource(false);
         Assert.Equal(liveAllowed, panel.BlockReason == null);
     });

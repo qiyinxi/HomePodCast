@@ -16,6 +16,8 @@ internal sealed class TimelineBuffer
     public int SampleRate { get; }
     public int CapacityFrames => _frames.Length;
     public long OriginTicks { get; }
+    /// <summary>Exclusive producer position; pull transports wait here rather than permanently sending future silence.</summary>
+    public long EndFrame { get { lock (_lock) return _endFrame; } }
 
     public TimelineBuffer(int sampleRate, int capacityFrames, long originTicks)
     {

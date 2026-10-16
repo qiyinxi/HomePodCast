@@ -74,6 +74,12 @@ public sealed class AppConfig
     /// <summary>Positions last applied to live capture; file edits never change the next automatic connection's channels.</summary>
     public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
 
+    /// <summary>DLNA preference bank. Saving a device here does not select or connect it.</summary>
+    public List<DlnaOutputSettings> GroupDlnaOutputs { get; set; } = [];
+
+    /// <summary>Explicit live-capture DLNA selection, independent of the file layout and AirPlay's primary speaker.</summary>
+    public List<string>? GroupCaptureDlnaUdns { get; set; }
+
     /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }

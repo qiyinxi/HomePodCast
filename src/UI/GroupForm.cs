@@ -150,7 +150,7 @@ internal sealed class GroupPanel : StackPanel
         return device?.Kind switch
         {
             ReceiverKind.AppleTv when _fileSource => L.T("本地文件分组播放暂不支持 Apple TV 的配对连接；请使用 HomePod。"),
-            ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1 when _fileSource => L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"),
+            ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1 when _fileSource => L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"),
             ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1 => L.T("第三方 AirPlay 设备暂不支持多音箱分组。"),
             ReceiverKind.ThirdPartyAirPlay2 or ReceiverKind.Unknown => L.T("第三方 AirPlay 设备暂不支持多音箱分组。"),
             _ => null,

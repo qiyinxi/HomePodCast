@@ -53,7 +53,8 @@ internal static class DlnaDiscovery
                 }
                 catch (SocketException) { }
             }
-            var receivers = sockets.Select(socket => ReceiveAsync(socket)).ToList();
+            var searchSockets = sockets.ToArray();
+            var receivers = searchSockets.Select(socket => ReceiveAsync(socket)).ToList();
             // NOTIFY uses port 1900 rather than the search's ephemeral response port. A best-effort listener
             // exists only during the browse; another UPnP program owning this port must not break discovery.
             if (IsMulticast(endpoint.Address) && sockets.Count > 0)
@@ -63,7 +64,7 @@ internal static class DlnaDiscovery
                 {
                     notify = new UdpClient(AddressFamily.InterNetwork) { ExclusiveAddressUse = false };
                     notify.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                    notify.Client.Bind(new IPEndPoint(IPAddress.Any, endpoint.Port));
+                    notify.Client.Bind(new IPEndPoint(interfaces.All(IPAddress.IsLoopback) ? IPAddress.Loopback : IPAddress.Any, endpoint.Port));
                     foreach (var address in clients.Keys) notify.JoinMulticastGroup(endpoint.Address, address);
                     sockets.Add(notify);
                     receivers.Add(ReceiveAsync(notify));
@@ -72,7 +73,7 @@ internal static class DlnaDiscovery
             }
             byte[] search = Encoding.ASCII.GetBytes($"M-SEARCH * HTTP/1.1\r\nHOST: {endpoint.Address}:{endpoint.Port}\r\n"
                 + $"MAN: \"ssdp:discover\"\r\nMX: 1\r\nST: {SearchTarget}\r\n\r\n");
-            foreach (var socket in sockets.Where(s => !((IPEndPoint)s.Client.LocalEndPoint!).Address.Equals(IPAddress.Any)))
+            foreach (var socket in searchSockets)
             {
                 try { await socket.SendAsync(search, endpoint, deadline.Token).ConfigureAwait(false); }
                 catch (SocketException) { }

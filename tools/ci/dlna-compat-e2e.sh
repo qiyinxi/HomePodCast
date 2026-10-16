@@ -5,6 +5,7 @@ set -euo pipefail
 [[ "$(uname -s)" == Linux ]] || { echo 'This test requires a Linux CI runner' >&2; exit 1; }
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 results="$root/test-results/dlna-compat"
+fixtures="$root/test-results/dlna-codec-fixture"
 scratch="$(mktemp -d "${RUNNER_TEMP:?}/dlna-compat.XXXXXX")"
 sender_ns=dlna-send
 renderer_ns=dlna-render
@@ -46,7 +47,7 @@ trap cleanup EXIT
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config \
   libglib2.0-dev libupnp-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good gstreamer1.0-tools iproute2
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools iproute2 ffmpeg
 # Build the unmodified upstream renderer, pinned to v0.3.1. Nothing is installed from its build.
 git clone --branch v0.3.1 --depth 1 https://github.com/hzeller/gmrender-resurrect.git "$scratch/gmrender-resurrect"
 cd "$scratch/gmrender-resurrect"
@@ -57,7 +58,7 @@ ln -s "$scratch/gmrender-resurrect/data" "$scratch/share/gmediarender"
 ./configure --datadir="$scratch/share"
 make -j2
 ./src/gmediarender --version > "$results/renderer-version.txt"
-for element in playbin souphttpsrc unalignedaudioparse wavparse audioconvert filesink fakesink; do
+for element in playbin souphttpsrc unalignedaudioparse wavparse aacparse mpegaudioparse avdec_aac avdec_mp3float audioconvert filesink fakesink; do
   gst-inspect-1.0 "$element" >> "$results/gstreamer-elements.txt"
 done
 # Fail before starting the renderer if its file-only output pipeline cannot be built.
@@ -69,6 +70,17 @@ cd "$root"
 dotnet build tests/HomePodCast.ProtocolHarness -c Release
 dotnet tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll --self-test
 dotnet_path="$(command -v dotnet)"
+
+# These media packets came from the production Windows MFTs, including their real priming/output batches.
+# FFmpeg is an independent decode reference. The renderer's lossy output is never compared sample-exactly
+# to the original PCM. No encoder or upstream renderer source is substituted on Linux.
+ffmpeg -version > "$results/ffmpeg-version.txt"
+for format in aac mp3; do
+  [[ -s "$fixtures/$format/manifest.json" && -s "$fixtures/$format/source.pcm" && -s "$fixtures/$format/signal.$format" ]]
+  ffmpeg -nostdin -v error -y -f "$format" -i "$fixtures/$format/signal.$format" \
+    -map 0:a:0 -acodec pcm_s16le -ar 44100 -ac 2 -f s16le "$fixtures/$format/reference.pcm"
+done
+cp -a "$fixtures" "$results/codec-fixtures"
 
 # Two veth peers, no bridge, default gateway, forwarding or host-facing interface. SSDP, SOAP
 # and the renderer's HTTP pull cannot reach a real LAN device even if discovery has a bug.
@@ -94,9 +106,15 @@ sudo ip -n "$sender_ns" address show > "$results/sender-network.txt"
 sudo ip -n "$sender_ns" route show >> "$results/sender-network.txt"
 sudo ip -n "$renderer_ns" address show > "$results/renderer-network.txt"
 sudo ip -n "$renderer_ns" route show >> "$results/renderer-network.txt"
+for namespace in "$sender_ns" "$renderer_ns"; do
+  [[ -z "$(sudo ip -n "$namespace" route show default)" ]]
+  [[ "$(sudo ip -n "$namespace" -o -4 address show scope global | wc -l)" -eq 1 ]]
+done
 
 run_case() {
   local format="$1" framing="$2" label="$1-$2" pcm
+  local fixture_args=()
+  if [[ "$format" == aac || "$format" == mp3 ]]; then fixture_args=("$fixtures/$format"); fi
   pcm="$results/$label.pcm"
   : > "$pcm"
   sudo ip netns exec "$renderer_ns" env GST_DEBUG=2 \
@@ -124,7 +142,7 @@ run_case() {
   if ! sudo ip netns exec "$sender_ns" env GITHUB_ACTIONS=true HOMEPODCAST_DLNA_CI_ISOLATED=1 \
     GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-}" \
     "$dotnet_path" "$root/tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll" \
-    --dlna 'HomePodCast CI DLNA' 10.77.0.1 10.77.0.2 "$format" "$framing" "$pcm" \
+    --dlna 'HomePodCast CI DLNA' 10.77.0.1 10.77.0.2 "$format" "$framing" "$pcm" "${fixture_args[@]}" \
     2>&1 | tee "$results/$label-sender.log"; then
     tail -n 120 "$results/$label-renderer.log"
     return 1
@@ -136,3 +154,25 @@ run_case() {
 # wildcard. No MIME override, decoder replacement or wavparse length workaround is used.
 run_case l16 chunked
 run_case wav length
+run_case aac chunked
+run_case aac length
+run_case mp3 chunked
+run_case mp3 length
+
+python3 - "$results" <<'PY'
+import glob, json, os, statistics, sys
+paths = sorted(glob.glob(os.path.join(sys.argv[1], '*.result.json')))
+if len(paths) != 4:
+    raise SystemExit('Expected all four AAC/MP3 framing result records')
+records = [json.load(open(path, encoding='utf-8')) for path in paths]
+median = statistics.median(record['softwarePrebufferMedianMs'] for record in records)
+text = (f'DLNA compressed software renderer: all four codec/framing cases passed; '
+        f'median filesink prebuffer across cases = {median:.1f} ms. '
+        'This measures the isolated software receiver and scheduling, not speaker or acoustic latency.')
+print(text)
+with open(os.path.join(sys.argv[1], 'compressed-summary.txt'), 'w', encoding='utf-8') as output:
+    output.write(text + '\n')
+if os.environ.get('GITHUB_STEP_SUMMARY'):
+    with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as output:
+        output.write(text + '\n\n')
+PY

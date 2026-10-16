@@ -22,16 +22,23 @@ internal static class DlnaCompatibility
     }
 
     internal static async Task Run(string name, string localAddress, string rendererAddress,
-        string formatText, string framingText, string pcmPath)
+        string formatText, string framingText, string pcmPath, string? fixtureDirectory = null)
     {
         RequireIsolatedRunner(localAddress, rendererAddress);
         var local = IPAddress.Parse(localAddress);
         var peer = IPAddress.Parse(rendererAddress);
         var format = formatText switch { "l16" => DlnaAudioFormat.L16, "wav" => DlnaAudioFormat.Wav,
-            _ => throw new ArgumentException("Expected l16 or wav.") };
+            "mp3" => DlnaAudioFormat.Mp3, "aac" => DlnaAudioFormat.Aac,
+            _ => throw new ArgumentException("Expected l16, wav, mp3 or aac.") };
         var framing = framingText switch { "chunked" => DlnaHttpFraming.Chunked,
             "length" => DlnaHttpFraming.LargeContentLength,
             _ => throw new ArgumentException("Expected chunked or length.") };
+        if (format is DlnaAudioFormat.Mp3 or DlnaAudioFormat.Aac)
+        {
+            await DlnaCompressedCompatibility.Run(name, local, peer, format, framing, pcmPath,
+                fixtureDirectory ?? throw new ArgumentException("A Windows codec fixture directory is required."));
+            return;
+        }
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(35));
         DlnaDevice? device = null;
         for (int attempt = 0; attempt < 5 && device is null; attempt++)

@@ -454,6 +454,8 @@ public class RaopOutputSetTests
         public TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource FlushEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? FlushGate { get; init; }
+        public Task? VolumeGate;
+        public TaskCompletionSource VolumeEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Port => ((IPEndPoint)_listen.LocalEndpoint).Port;
         public int AnnounceStatus { get; init; } = 200;
         public int VolumeStatus = 200;
@@ -540,6 +542,8 @@ public class RaopOutputSetTests
                         string volume = Encoding.ASCII.GetString(request.Body)["volume: ".Length..].Trim();
                         Volumes.Enqueue(double.Parse(volume, System.Globalization.CultureInfo.InvariantCulture));
                         status = Volatile.Read(ref VolumeStatus);
+                        if (Volatile.Read(ref VolumeGate) is { } volumeGate)
+                        { VolumeEntered.TrySetResult(); await volumeGate.WaitAsync(_stop.Token); }
                     }
                     if (method == "FLUSH")
                     {

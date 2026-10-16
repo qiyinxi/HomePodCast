@@ -41,6 +41,8 @@ public sealed class UsageSettings
     public List<GroupSpeakerSettings>? GroupSpeakers { get; set; }
     public List<string>? GroupCaptureDeviceIds { get; set; }
     public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
+    public List<DlnaOutputSettings>? GroupDlnaOutputs { get; set; }
+    public List<string>? GroupCaptureDlnaUdns { get; set; }
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
 
@@ -68,6 +70,8 @@ public static class UsageProfiles
         GroupSpeakers = c.GroupSpeakers == null ? null : GroupSettings.Copy(c.GroupSpeakers),
         GroupCaptureDeviceIds = c.GroupCaptureDeviceIds == null ? null : new(c.GroupCaptureDeviceIds),
         GroupCapturePositions = c.GroupCapturePositions == null ? null : new(c.GroupCapturePositions),
+        GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs),
+        GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns == null ? null : new(c.GroupCaptureDlnaUdns),
         MultiRoomDeviceId = c.MultiRoomDeviceId, MultiRoomDeviceName = c.MultiRoomDeviceName, MultiRoomHost = c.MultiRoomHost,
     };
 
@@ -78,7 +82,7 @@ public static class UsageProfiles
         var s = Clone(saved);
         Normalize(s);
         // A profile saved before any speaker was chosen says nothing about speakers: the selection and its group layout stay.
-        if (s.DeviceId != null)
+        if (s.DeviceId != null || s.GroupCaptureDlnaUdns is { Count: > 0 })
         {
             bool changedSpeaker = !SameDevice(c.DeviceId, s.DeviceId);
             // Resolved from the config as it is now, before anything is overwritten.
@@ -89,6 +93,8 @@ public static class UsageProfiles
             c.GroupSpeakers = s.GroupSpeakers;
             c.GroupCaptureDeviceIds = s.GroupCaptureDeviceIds;
             c.GroupCapturePositions = s.GroupCapturePositions;
+            if (s.GroupDlnaOutputs != null) c.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
+            c.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns;
             c.MultiRoomDeviceId = s.MultiRoomDeviceId; c.MultiRoomDeviceName = s.MultiRoomDeviceName; c.MultiRoomHost = extraHost;
             if (c.GroupSpeakers != null)
                 foreach (var row in c.GroupSpeakers) row.Host = FreshHost(row.DeviceId, c, scan ?? []);
@@ -156,6 +162,10 @@ public static class UsageProfiles
 
     public static void Normalize(AppConfig c)
     {
+        c.GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs);
+        if (c.GroupCaptureDlnaUdns != null)
+            c.GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))
+                .DistinctBy(DlnaGroupSettings.Key).Take(8).ToList();
         c.UsageProfiles ??= [];
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         c.UsageProfiles = c.UsageProfiles.Where(p => p != null && p.Settings != null &&
@@ -171,6 +181,10 @@ public static class UsageProfiles
 
     public static void Normalize(UsageSettings s)
     {
+        if (s.GroupDlnaOutputs != null) s.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
+        if (s.GroupCaptureDlnaUdns != null)
+            s.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))
+                .DistinctBy(DlnaGroupSettings.Key).Take(8).ToList();
         if (!Enum.IsDefined(s.Scene)) s.Scene = Scene.Custom;
         // The slider's own range only: a hand-tuned value below 100 ms stays. The speaker's floor (its processing time plus
         // the margin) is applied when connecting, as for a value set on 首页.

@@ -10,7 +10,7 @@ namespace HomePodCast;
 internal static class DlnaCli
 {
     public const string Usage = "  dlna --scan | --udn UDN (--silent | --capture ENDPOINT_ID) [--seconds N] [--volume PCT] [--cap PCT]\n"
-        + "       [--format l16|wav] [--large-length] [--take-over] [--verbose]   (experimental)"; // experimental since 1.2
+        + "       [--format l16|wav|mp3|aac] [--large-length] [--take-over] [--verbose]   (experimental)"; // experimental since 1.2
 
     internal sealed record Options(bool Scan, string? Udn, string? CaptureId, bool Silent, int Seconds,
         double Volume, double Cap, DlnaAudioFormat? Format, DlnaHttpFraming Framing, bool TakeOver);
@@ -41,7 +41,8 @@ internal static class DlnaCli
         DlnaAudioFormat? format = Opt("--format")?.ToLowerInvariant() switch
         {
             null => null, "l16" => DlnaAudioFormat.L16, "wav" => DlnaAudioFormat.Wav,
-            _ => throw new ArgumentException("--format must be l16 or wav."),
+            "mp3" => DlnaAudioFormat.Mp3, "aac" => DlnaAudioFormat.Aac,
+            _ => throw new ArgumentException("--format must be l16, wav, mp3 or aac."),
         };
         return new(scan, udn, capture, silent, seconds, volume, cap, format,
             args.Contains("--large-length") ? DlnaHttpFraming.LargeContentLength : DlnaHttpFraming.Chunked, args.Contains("--take-over"));

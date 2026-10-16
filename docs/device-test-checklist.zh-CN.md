@@ -266,10 +266,20 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 3. - [ ] 连续播放 30 分钟，记录断音、设备主动停止或读取重连；音量变化和静音是否生效
 4. - [ ] 由手机接管后电脑退出本次发送，不抢回；随后退出命令不会停止手机的投屏
 
+#### DLNA 多输出协调（1.2 新增，尚未实机验证）
+
+当前入口为 API／UDN 配置，统一设备选择界面后续接入，见 `docs/dlna.md`。先把音量上限设为不超过 25%。本节各项：改了 `src/Net/DlnaOutputSet.cs`、`src/Audio/DlnaReadClock.cs`、`src/Audio/DlnaTimelineReader.cs` 或协调输出的控制器／时间线才需要重测。
+
+1. - [ ] HomePod + Z6X：输入估计的设备延迟，用正负微调或手机录像对齐；记录所需整组延迟，只按不同房间的大致同步判断
+2. - [ ] HomePod + 普通 SBC 蓝牙音箱（电脑内置蓝牙）+ Z6X：记录三路偏移、30 分钟／一小时后的变化；时钟估计不可用时如实记录，不把 HTTP 时间当成实际声音延迟
+3. - [ ] 可选 Z6X 断开／恢复时 HomePod 继续；手机接管或停止 DLNA 后不自动抢回；设为必需后，接管会停止整组
+4. - [ ] LPCM／WAV 不可用时，试设备声明支持的 MP3／AAC，记录启动等待和编码造成的额外偏移；连接中静音／降低音量不会恢复旧音量
+
 ## 已自动化（不用手测）
 
 - **DlnaDiscoveryTests / DlnaControlTests / DlnaStreamServerTests / DlnaClientTests / DlnaCliTests**：回环假设备覆盖 SSDP、描述和 SOAP、格式协商、HTTP 字节序与流量限制、Private 网络策略、音量上限、忙碌与接管、取消和连接清理。
-- **dlna-compat-e2e**：固定版本 gmrender-resurrect 使用 GStreamer 文件输出，在没有外部网络出口的 Linux 命名空间内完成 SSDP → SOAP → LPCM 分块和 WAV 大 Content-Length，比较至少 4 秒双声道 PCM，报告软件渲染器预缓冲；不用真实音箱。
+- **DlnaReadClockTests / DlnaTimelineReaderTests / DlnaOutputSetTests / DlnaGroupControllerTests / DlnaGroupSettingsTests / DlnaEncoderTests**：四组正负漂移的一小时仿真、突发／停顿／时钟置信度失效、实际 PCM 标记、整数帧连续性和无分配读取；UDN 独立解析、可选恢复／必需失败、接管优先级、连接中音量／静音、历史覆盖恢复、编解码线程与分块边界。
+- **dlna-compat-e2e / aac-fixture**：固定版本 gmrender-resurrect 使用 GStreamer 文件输出，在没有外部网络出口的 Linux 命名空间内完成 SSDP → SOAP → LPCM 分块和 WAV 大 Content-Length，比较至少 4 秒双声道 PCM；Windows 生成 MP3／AAC，Linux 独立解码并比较两种 HTTP 传输方式的设备输出，报告软件时序和编码延迟；不用真实音箱。
 
 - **airplay-compat-e2e / aac-fixture**：经典 shairport-sync 的未加密、RSA 与密码场景，以及 shairport-sync AirPlay 2 + nqptp 的实时和 1.0 / 1.5 / 2.0 秒缓冲场景；Windows Media Foundation 生成 AAC，独立解码作参考，对齐后逐样本比较至少 6 秒，检查无缺口与请求延迟 ±50 ms。
 - **ReceiverLatencySelectionTests / ThirdPartyTests / BufferedAudioTests / PtpTests**：每设备设置、HomePod 场景隔离、协议回退、接收端延迟下限、加密帧、配对、时钟选举和校准回调；**gui-smoke** 增加中英德兼容延迟与设置行的页面遍历。
