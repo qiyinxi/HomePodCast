@@ -1,3 +1,4 @@
+using HomePodCast.Audio;
 using HomePodCast.Net;
 
 namespace HomePodCast;
@@ -30,12 +31,19 @@ public sealed partial class StreamController
             rows.AddRange(plan.DlnaOutputs.Select(o => new GroupOutputStatus("dlna:" + o.Udn, o.Name, OutputKind.Dlna,
                 state, null, o.Required, false, false, o.EstimatedLatencyMs)));
             for (int i = 0; i < rows.Count; i++)
-                if (_groupOutputFailures.TryGetValue(GroupPlan.Key(rows[i].Id), out var error))
+                if (rows[i].Kind is OutputKind.AirPlay2 or OutputKind.Raop
+                    && _groupOutputFailures.TryGetValue(GroupPlan.Key(rows[i].Id), out var error))
                     rows[i] = rows[i] with { State = OutputState.Lost, Error = error.Message,
                         NeedsUserAction = ReceiverGroupFailures.RequiresUserAction(error), Retrying = State == StreamState.Retrying };
             void Put(GroupOutputStatus row)
             {
-                int index = rows.FindIndex(r => GroupPlan.Key(r.Id) == GroupPlan.Key(row.Id));
+                string Key(GroupOutputStatus output) => output.Kind switch
+                {
+                    OutputKind.Local => "local:" + LocalGroupSettings.Key(output.Id),
+                    OutputKind.Dlna => "dlna:" + DlnaGroupSettings.Key(output.Id),
+                    _ => "airplay:" + GroupPlan.Key(output.Id),
+                };
+                int index = rows.FindIndex(r => Key(r) == Key(row));
                 if (index < 0) rows.Add(row); else rows[index] = row;
             }
             foreach (var s in group?.ReceiverOutputs ?? Volatile.Read(ref _preparingReceiverOutputs)?.Status ?? [])

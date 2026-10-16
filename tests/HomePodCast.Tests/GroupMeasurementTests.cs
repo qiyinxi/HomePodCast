@@ -27,7 +27,7 @@ public class GroupMeasurementTests
             OpenLocalOutput = _ => new FakeLocalRenderDevice(),
         };
         var plan = new GroupPlan(GroupKind.MultiRoom, "local", null, [], false, false, new Dictionary<string, int>())
-            { LocalOutputs = [new("local", "local")] };
+            { LocalOutputs = [new("local:a-b", "first"), new("local:ab", "second")] };
         async Task Connected()
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -37,6 +37,11 @@ public class GroupMeasurementTests
         await Connected();
         var original = controller.AudioSessionIdentity;
         Assert.NotNull(original);
+        var statuses = controller.GroupOutputStatuses;
+        Assert.Equal(2, statuses.Select(s => s.Id).Distinct().Count());
+        Assert.All(statuses, s => Assert.Equal(OutputState.Streaming, s.State));
+        Assert.Equal("first", Assert.Single(statuses, s => s.Id == "local:a-b").Name);
+        Assert.Equal("second", Assert.Single(statuses, s => s.Id == "local:ab").Name);
         controller.Stop();
         Assert.Null(controller.AudioSessionIdentity);
         controller.StartGroup(plan, 150, 60);
