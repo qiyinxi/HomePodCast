@@ -116,21 +116,21 @@ internal sealed class RaopOutputSet : IDisposable
     {
         get
         {
-            lock (_commands)
+            // Retry decisions must not wait behind a remote volume/teardown under the command lock.
+            if (LostRequiresUserAction && LostReason != null)
+                return (LostOutputName ?? "RAOP", new RaopRefusedException(LostReason));
+            foreach (var slot in _slots)
             {
-                if (LostRequiresUserAction && LostReason != null)
-                    return (LostOutputName ?? "RAOP", new RaopRefusedException(LostReason));
-                foreach (var slot in _slots.Where(s => s.Options.Required))
-                {
-                    var failure = slot.Current?.Failure ?? slot.Current?.Client.LostException;
-                    string? reason = slot.Current?.Client.LostReason ?? slot.Error;
-                    if (failure != null && RequiresUserAction(failure, reason ?? failure.Message))
-                        return (slot.Options.Name, reason == RaopClient.ClosedByReceiver
-                            ? new RaopRefusedException(reason) : RequiredFailure(failure));
-                    if (slot.Terminal) return (slot.Options.Name, new RaopRefusedException(reason ?? "RAOP requires user action"));
-                }
-                return null;
+                if (!slot.Options.Required) continue;
+                var current = Volatile.Read(ref slot.Current);
+                var failure = current == null ? null : Volatile.Read(ref current.Failure) ?? current.Client.LostException;
+                string? reason = current?.Client.LostReason ?? Volatile.Read(ref slot.Error);
+                if (failure != null && RequiresUserAction(failure, reason ?? failure.Message))
+                    return (slot.Options.Name, reason == RaopClient.ClosedByReceiver
+                        ? new RaopRefusedException(reason) : RequiredFailure(failure));
+                if (Volatile.Read(ref slot.Terminal)) return (slot.Options.Name, new RaopRefusedException(reason ?? "RAOP requires user action"));
             }
+            return null;
         }
     }
     public double MasterVolume { get { lock (_commands) return _volume; } }

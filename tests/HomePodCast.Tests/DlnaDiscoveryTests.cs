@@ -44,10 +44,14 @@ public class DlnaDiscoveryTests
         using (var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
             port = ((IPEndPoint)probe.Client.LocalEndPoint!).Port;
         var endpoint = new IPEndPoint(IPAddress.Parse("239.255.77.79"), port);
-        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromMilliseconds(400), localAddress: IPAddress.Loopback, endpoint: endpoint);
-        await Task.Delay(30);
-        var listeners = LoopbackOnlyTests.Listening().Where(e => e.Port == port).ToArray();
-        await browsing;
+        using var cancel = new CancellationTokenSource();
+        // Socket setup completes before the browser's first asynchronous send/receive. Keep it open until
+        // the snapshot is taken instead of racing a short wall-clock browse on a busy runner.
+        var browsing = DlnaDiscovery.BrowseAsync(TimeSpan.FromSeconds(30), cancel.Token, IPAddress.Loopback, endpoint);
+        IPEndPoint[] listeners;
+        try { listeners = LoopbackOnlyTests.Listening().Where(e => e.Port == port).ToArray(); }
+        finally { cancel.Cancel(); }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => browsing);
         Assert.NotEmpty(listeners);
         Assert.All(listeners, e => Assert.True(IPAddress.IsLoopback(e.Address)));
     }

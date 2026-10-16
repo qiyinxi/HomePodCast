@@ -83,6 +83,29 @@ public class DlnaGroupControllerTests
     }
 
     [Fact]
+    public async Task Required_failure_inspection_does_not_wait_for_a_remote_RAOP_volume_reply()
+    {
+        using var receiver = new RaopOutputSetTests.FakeGroupRaop();
+        using var outputs = await RaopOutputSet.PrepareAsync([new("aabb", "RAOP", IPAddress.Loopback, receiver.Port,
+            new RaopOptions { ReadAudio = pcm => pcm.Clear() }) { Required = true }], () => 25, default);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        receiver.VolumeGate = release.Task;
+        var publishing = Task.Run(() => outputs.SetVolume(10));
+        try
+        {
+            await receiver.VolumeEntered.Task.WaitAsync(Guard);
+            var inspecting = Task.Run(() => outputs.RequiredActionFailure);
+            Assert.Null(await inspecting.WaitAsync(Guard));
+            Assert.False(publishing.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await publishing.WaitAsync(Guard);
+        }
+    }
+
+    [Fact]
     public async Task A_mute_set_during_AirPlay_prepare_never_opens_DLNA_PCM_or_restores_the_old_master()
     {
         await using var renderer = new FakeDlnaRenderer();

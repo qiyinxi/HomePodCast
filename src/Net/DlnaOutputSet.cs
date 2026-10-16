@@ -139,16 +139,16 @@ internal sealed class DlnaOutputSet : IDisposable
     {
         get
         {
-            lock (_commands)
+            if (LostRequiresUserAction && LostException is { } lost) return (LostOutputName ?? "DLNA", lost);
+            foreach (var slot in _slots)
             {
-                if (LostRequiresUserAction && LostException is { } lost) return (LostOutputName ?? "DLNA", lost);
-                foreach (var slot in _slots.Where(s => s.Options.Required))
-                {
-                    var failure = slot.Failure ?? slot.Current?.Failure ?? slot.Current?.Client.LostException;
-                    if (failure != null && DlnaFailures.RequiresUserAction(failure)) return (slot.Options.Name, failure);
-                }
-                return null;
+                if (!slot.Options.Required) continue;
+                var current = Volatile.Read(ref slot.Current);
+                var failure = Volatile.Read(ref slot.Failure)
+                    ?? (current == null ? null : Volatile.Read(ref current.Failure) ?? current.Client.LostException);
+                if (failure != null && DlnaFailures.RequiresUserAction(failure)) return (slot.Options.Name, failure);
             }
+            return null;
         }
     }
     public bool AllTerminal { get { lock (_commands) return _slots.All(s => s.Current == null && s.Terminal); } }
