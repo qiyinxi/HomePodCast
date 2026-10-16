@@ -13,6 +13,10 @@ internal sealed record ReceiverGroupOutputOptions(string Id, string Name,
     public Func<ReceiverGroupTarget, CancellationToken, Task>? BeforeConnect { get; init; }
     public Action<Exception>? ActionRequired { get; init; }
     public Action<ReceiverProtocol, int?>? Connected { get; init; }
+    /// <summary>Apple independent outputs keep their original prepare path, before third-party protocol trials.</summary>
+    public Func<ReceiverGroupTarget, CancellationToken, Task<IPreparedReceiverSession>>? PrepareApple { get; init; }
+    public int InitialLatencyMs { get; init; } = 2000;
+    public Func<string?>? Password { get; init; }
     internal void Validate()
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Id);
@@ -133,7 +137,7 @@ internal sealed class ReceiverOutputSet : IDisposable
     {
         get { lock (_commands) { var slot = _slots.FirstOrDefault(s => s.Terminal && s.Failure != null); return slot == null ? null : (slot.Options.Name, slot.Failure!); } }
     }
-    public int MinimumDelayMs => _slots.Max(s => (s.Current?.Transport.LatencyMs ?? 2000) + Math.Max(0, -s.Options.TrimMs));
+    public int MinimumDelayMs => _slots.Max(s => (s.Current?.Transport.LatencyMs ?? s.Options.InitialLatencyMs) + Math.Max(0, -s.Options.TrimMs));
     public int HistoryMs(int delay) => checked(delay + _slots.Max(s => Math.Max(0, s.Options.TrimMs)) + 2000);
     internal (string Name, Exception Error)? RequiredActionFailure
     {
@@ -214,8 +218,11 @@ internal sealed class ReceiverOutputSet : IDisposable
             var target = await slot.Options.Resolve(_stop.Token).ConfigureAwait(false);
             if (slot.Options.BeforeConnect != null) await slot.Options.BeforeConnect(target, _stop.Token).ConfigureAwait(false);
             session = new(() => Desired(slot));
-            session.Transport = await ReceiverGroupConnections.PrepareAsync(target.Device, target.Settings,
-                slot.Options.Connection with { VolumePercent = 0, VolumeCapPercent = Cap() }, _clocks, _stop.Token, _connect).ConfigureAwait(false);
+            session.Transport = slot.Options.PrepareApple != null && target.Device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv or ReceiverKind.Unknown
+                ? await slot.Options.PrepareApple(target, _stop.Token).ConfigureAwait(false)
+                : await ReceiverGroupConnections.PrepareAsync(target.Device, target.Settings,
+                    slot.Options.Connection with { VolumePercent = 0, VolumeCapPercent = Cap(),
+                        Password = slot.Options.Password?.Invoke() ?? slot.Options.Connection.Password }, _clocks, _stop.Token, _connect).ConfigureAwait(false);
             lock (_commands)
             {
                 _stop.Token.ThrowIfCancellationRequested(); ObjectDisposedException.ThrowIf(_disposed != 0, this);
@@ -389,6 +396,19 @@ internal sealed class ReceiverOutputSet : IDisposable
             notify = slot.Terminal && !slot.ActionNotified; slot.ActionNotified |= notify;
         }
         if (notify) try { slot.Options.ActionRequired?.Invoke(error); } catch (Exception callback) { Log.Warn(callback.Message); }
+    }
+    public bool RetryOutput(string id)
+    {
+        lock (_commands)
+        {
+            var slot = _slots.FirstOrDefault(s => GroupPlan.Key(s.Options.Id) == GroupPlan.Key(id));
+            if (_disposed != 0 || _stop.IsCancellationRequested || slot == null || !slot.Terminal || slot.Options.Required) return false;
+            slot.Terminal = slot.ActionNotified = false; slot.Retrying = true;
+            // The old worker may still be finishing its finally. Never let it detach the new session.
+            var previous = slot.Worker ?? Task.CompletedTask;
+            slot.Worker = Task.Run(async () => { try { await previous.ConfigureAwait(false); } catch { } await RunSlot(slot).ConfigureAwait(false); });
+            return true;
+        }
     }
     private void StopAll() { foreach (var slot in _slots) Volatile.Read(ref slot.Current)?.Stop(); }
     public void Dispose()

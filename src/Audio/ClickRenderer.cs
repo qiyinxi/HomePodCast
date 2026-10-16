@@ -14,6 +14,9 @@ public sealed class ClickRenderer : IDisposable
     private readonly Thread _thread;
     private readonly string? _endpointId;
     private volatile bool _stop;
+    private int _started;
+    private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal Task Stopped => _stopped.Task;
 
     /// <summary>Raised from the render thread with the QPC time at which a click starts playing.</summary>
     public event Action<long>? ClickScheduled;
@@ -28,12 +31,22 @@ public sealed class ClickRenderer : IDisposable
         _thread = new Thread(Run) { IsBackground = true, Name = "Click renderer", Priority = ThreadPriority.Highest };
     }
 
-    public void Start() => _thread.Start();
+    public void Start()
+    {
+        if (Interlocked.CompareExchange(ref _started, 1, 0) != 0) return;
+        try { _thread.Start(); }
+        catch { _stopped.TrySetResult(); throw; }
+    }
+    internal void Stop()
+    {
+        _stop = true;
+        if (Interlocked.CompareExchange(ref _started, 2, 0) == 0) _stopped.TrySetResult();
+    }
 
     private unsafe void Run()
     {
         using var mmcss = Native.EnterMmcss("Pro Audio");
-        var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
+        IMMDeviceEnumerator? enumerator = null;
         IMMDevice? device = null;
         IAudioClient? client = null;
         IAudioRenderClient? render = null;
@@ -41,6 +54,7 @@ public sealed class ClickRenderer : IDisposable
         using var ready = new AutoResetEvent(false);
         try
         {
+            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom();
             device = AudioEndpoints.Open(enumerator, EDataFlow.Render, _endpointId)
                 ?? throw new InvalidOperationException("The selected sync-test output device is unavailable.");
             CoreAudio.Check(device.Activate(ref CoreAudio.IidAudioClient, CoreAudio.ClsCtxAll, IntPtr.Zero, out var obj), "activate");
@@ -63,6 +77,7 @@ public sealed class ClickRenderer : IDisposable
             while (!_stop)
             {
                 ready.WaitOne(50);
+                if (_stop) break;
                 CoreAudio.Check(client.GetCurrentPadding(out uint padding), "padding");
                 uint frames = bufferFrames - padding;
                 if (frames == 0) continue;
@@ -105,11 +120,15 @@ public sealed class ClickRenderer : IDisposable
         }
         finally
         {
-            if (mix != IntPtr.Zero) Marshal.FreeCoTaskMem(mix);
-            if (render != null) Marshal.ReleaseComObject(render);
-            if (client != null) Marshal.ReleaseComObject(client);
-            if (device != null) Marshal.ReleaseComObject(device);
-            Marshal.ReleaseComObject(enumerator);
+            try
+            {
+                if (mix != IntPtr.Zero) Marshal.FreeCoTaskMem(mix);
+                if (render != null) Marshal.ReleaseComObject(render);
+                if (client != null) Marshal.ReleaseComObject(client);
+                if (device != null) Marshal.ReleaseComObject(device);
+                if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+            }
+            finally { _stopped.TrySetResult(); }
         }
     }
 
@@ -133,7 +152,7 @@ public sealed class ClickRenderer : IDisposable
 
     public void Dispose()
     {
-        _stop = true;
+        Stop();
         if (_thread.IsAlive) _thread.Join(1000);
     }
 }

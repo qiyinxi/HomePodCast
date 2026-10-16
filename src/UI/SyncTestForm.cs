@@ -69,6 +69,10 @@ internal sealed class SyncTestForm : FluentDialog
     private readonly Thread _flasher;
     private volatile bool _closing;
     private volatile int _offsetMs;
+    private readonly bool _measurementOnly;
+    private long _lastClickTicks;
+    internal long LastClickTicks => Interlocked.Read(ref _lastClickTicks);
+    internal Task StopPlaybackAsync() { StopTest(); return _clicks.Stopped; }
 
     public int OffsetMs => _offsetMs;
     public SyncTestAction RequestedAction { get; private set; }
@@ -85,10 +89,11 @@ internal sealed class SyncTestForm : FluentDialog
         Math.Clamp((Math.Clamp(predictedMs, 0, AvCalibrations.MaxMeasuredMs) + 299) / 100 * 100, 600, AvCalibrations.MaxMeasuredMs);
 
     public SyncTestForm(int initialOffsetMs, string captureEndpointId, bool hasCalibration = false,
-        Func<bool>? isPathCurrent = null) : base(L.T("音画同步测试"))
+        Func<bool>? isPathCurrent = null, bool measurementOnly = false) : base(L.T("音画同步测试"))
     {
+        _measurementOnly = measurementOnly;
         _clicks = new ClickRenderer(captureEndpointId);
-        int maximum = SliderMaximum(initialOffsetMs), start = Math.Clamp(initialOffsetMs, 0, maximum);
+        int maximum = measurementOnly ? 30000 : SliderMaximum(initialOffsetMs), start = Math.Clamp(initialOffsetMs, 0, maximum);
         _gate = new SyncMeasurementGate(isPathCurrent ?? (() => true), startClamped: start != initialOffsetMs);
         ContentWidth = 600;
         StartPosition = FormStartPosition.CenterScreen;
@@ -105,6 +110,7 @@ internal sealed class SyncTestForm : FluentDialog
             AccessibleName = L.T("音画同步测试"),
         };
         _apply = new FluentButton(L.T("应用本次校准"), ButtonKind.Primary) { MinWidth = 110, Enabled = false };
+        _apply.Visible = !measurementOnly;
         _done = new FluentButton(L.T("完成")) { MinWidth = 72, Enabled = false };
         var reset = new FluentButton(L.T("恢复默认补偿")) { Enabled = hasCalibration };
         _apply.Click += (_, _) =>
@@ -140,6 +146,7 @@ internal sealed class SyncTestForm : FluentDialog
 
         _clicks.ClickScheduled += when =>
         {
+            Interlocked.Exchange(ref _lastClickTicks, when);
             _gate.ClickPlayed();
             ClickScheduled?.Invoke(when);
             if (_closing) return;
@@ -154,8 +161,10 @@ internal sealed class SyncTestForm : FluentDialog
 
     private void RefreshPathStatus()
     {
-        _apply.Enabled = _done.Enabled = CanUseMeasurement;
+        _apply.Enabled = !_measurementOnly && CanUseMeasurement;
+        _done.Enabled = _measurementOnly || CanUseMeasurement;
         _status.Text = _gate.Status;
+        if (_measurementOnly && _gate.PathChanged) StopTest();
     }
 
     private void UpdateValue()
@@ -167,6 +176,7 @@ internal sealed class SyncTestForm : FluentDialog
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        if (_closing) return;
         _pathWatch.Start();
         _flasher.Start();
         _clicks.Start();
@@ -218,6 +228,7 @@ internal sealed class SyncTestForm : FluentDialog
         _pathWatch.Stop();
         _due.CompleteAdding();
         var clicks = _clicks;
+        clicks.Stop();
         _ = Task.Run(clicks.Dispose);
     }
 

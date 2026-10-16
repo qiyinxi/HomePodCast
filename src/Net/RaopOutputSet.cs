@@ -47,6 +47,7 @@ internal sealed class RaopOutputSet : IDisposable
         public void Fail(Exception ex)
         {
             Interlocked.CompareExchange(ref Failure, ex, null);
+            Stop(); // no later test click may reach a receiver that refused the volume ceiling
             Lost.TrySetResult(RaopClient.FailureReason(ex));
         }
         public void Stop()

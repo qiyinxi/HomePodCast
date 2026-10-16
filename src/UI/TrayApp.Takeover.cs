@@ -81,7 +81,7 @@ internal sealed partial class TrayApp
     /// </summary>
     private async void ConnectManual(IWin32Window? owner)
     {
-        if (Config.DeviceId == null)
+        if (!HasOutputSelection)
         {
             ShowMain();
             return;
@@ -91,7 +91,9 @@ internal sealed partial class TrayApp
         try
         {
             bool ours = Controller.OwnSession.IsRecent(OwnSession.KeyOf(Config), DateTime.UtcNow);
-            var targets = SelectedSpeakers().Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address, s.Port)).ToList();
+            var plan = GroupPlan.FromConfig(Config);
+            var targets = SelectedSpeakers().Where(s => CheckGroupMemberBeforeManualConnect(plan, s.DeviceId))
+                .Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address, s.Port)).ToList();
             var reading = await Controller.BusyReader!.ReadAsync(targets, CancellationToken.None);
             if (_quitting) return;
             var mode = Config.HomeTheaterTakeover;

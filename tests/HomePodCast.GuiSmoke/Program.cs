@@ -5,7 +5,7 @@ namespace HomePodCast.GuiSmoke;
 /// <summary>
 /// GUI smoke test of a built HomePodCast.exe (CI job gui-smoke, .github/workflows/build.yml):
 /// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--video-window &lt;module folder&gt;] [--only id,id…] [--allow-local]</c>.
-/// Runs the scenarios below one after the other, at 100 % and (when the runner offers it) 150 % display scale; writes
+/// Runs the scenarios below one after the other, at 100 % and 150 % display scale; writes
 /// the screenshots, the UI Automation trees and each run's log into the folder, with index.html and report.md; exits 1
 /// when any check failed.
 /// It starts the real app, so it refuses to run outside GitHub Actions unless given --allow-local: on a PC with a
@@ -17,7 +17,7 @@ internal static class Program
     /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
     /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
     /// HomePod, which also walk everything while connected; a .NET update under the connected app, and 立即重启; once, the scale goes
-    /// 150 % → 100 % → 150 % while the app runs.
+    /// 150 % → 100 % → 150 % while the app runs. The group-output editor has a focused 150 % run in every language.
     /// </summary>
     private static readonly Scenario[] Matrix =
     [
@@ -35,6 +35,7 @@ internal static class Program
         new("compatibility", "zh-CN", 100, Narrow: true),
         new("compatibility", "en", 100),
         new("compatibility", "de", 150),
+        .. L.Languages.Select(language => new Scenario("group-outputs", language, 150, RequiredScale: true)),
     ];
 
     private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
@@ -94,8 +95,13 @@ internal static class Program
             var (scaled, why) = Display.SetScale(group.Key);
             if (!scaled)
             {
-                report.Warn("runner", $"{group.Key}% scale not available on this runner: {why}");
-                foreach (var s in group) report.Scenarios.Add((s.Id, $"skipped: {group.Key}% scale not available ({why})"));
+                foreach (var s in group)
+                {
+                    string detail = $"{group.Key}% scale not available on this runner: {why}";
+                    if (s.RequiredScale) report.Fail(s.Id, detail);
+                    else report.Warn(s.Id, detail);
+                    report.Scenarios.Add((s.Id, s.RequiredScale ? $"**failed: required display scale unavailable** ({why})" : $"skipped: {detail}"));
+                }
                 continue;
             }
             report.Note("runner", why);
@@ -114,6 +120,8 @@ internal static class Program
                     walker.Kill();
                     thread.Join(TimeSpan.FromSeconds(60));
                 }
+                if (scenario.Kind == "group-outputs" && !report.Shots.Any(shot => shot.Scenario == scenario.Id))
+                    report.Fail(scenario.Id, "the required group-output scenario produced no screenshot");
                 int failed = report.Failures.Count - failuresBefore;
                 report.Scenarios.Add((scenario.Id, (failed == 0 ? "passed" : $"**{failed} failure(s)**") + $" ({watch.Elapsed.TotalSeconds:F0} s)"));
             }
@@ -169,7 +177,11 @@ internal static class Program
             Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
             if (!ok) failures++;
         }
-        foreach (var lang in new[] { "zh-CN", "en", "de" })
+        var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
+        Check(groupScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()),
+            "group-output scenarios cover every supported language exactly once");
+        Check(groupScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every group-output scenario requires 150 % scale");
+        foreach (var lang in L.Languages)
         {
             var t = new Texts(lang);
             string notFound = t.T("找不到音箱：请确认它已通电、和电脑在同一网络");
@@ -185,7 +197,7 @@ internal static class Program
                          "同步观影窗口（实验性）", "选择窗口…", "停止采集", "全屏 / F11", "已跟随本机音频状态", "自动扣除显示延迟",
                          "画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB", "选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。",
                          "关于", "许可证", "切换到浅色", "切换到深色", "音画同步测试", "当前版本 {0}", "检查更新", "更新", "查看说明", "跳过此版本", "立即重启" })
-                Check(lang == "zh-CN" || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
+                Check(t.Cjk || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
         }
         var scale = Display.Scale();
         Console.WriteLine($"display {Display.Resolution().Width}x{Display.Resolution().Height}, scale {scale?.Current}% " +

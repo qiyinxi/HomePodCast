@@ -5,18 +5,19 @@ using HomePodCast.UI.Controls;
 namespace HomePodCast.UI;
 
 /// <summary>One row per output, shared by live capture and local-file playback.</summary>
-internal sealed class GroupPanel : StackPanel
+internal sealed partial class GroupPanel : StackPanel
 {
     private readonly AppConfig _config;
-    private readonly string? _tsid;
+    private string? _tsid;
     private readonly StackPanel _members = Ui.Stack(10);
-    private readonly FluentComboBox _add = new() { MinWidth = 200, AccessibleName = L.T("添加音箱") };
-    private readonly FluentButton _addButton = new(L.T("添加音箱"));
+    private readonly FluentComboBox _add = new() { MinWidth = 200, AccessibleName = L.T("选择输出") };
+    private readonly FluentButton _addButton = new(L.T("添加输出"));
     private readonly ToggleSwitch _leaderOnly = new(L.T("只连接主音箱（实验）")); // experimental since 1.1; hardware untested
     private readonly TextBlock _state = Ui.Note();
     private readonly TextBlock _singleNote = Ui.Note();
     private readonly TextBlock _fileMemberNote = Ui.Note();
     private readonly List<GroupSpeakerSettings> _speakers;
+    private readonly HashSet<string> _fileOnlyImports = [];
     private readonly Dictionary<string, SpeakerPosition> _capturePositions;
     private readonly List<Row> _rows = [];
     private List<AirPlayDevice> _found = [], _choices = [];
@@ -24,14 +25,19 @@ internal sealed class GroupPanel : StackPanel
     private bool _multichannel, _fileSource, _active, _refreshing;
     private uint _fileMask;
     private sealed record Row(GroupSpeakerSettings Speaker, FluentComboBox Position, SpeakerPosition[] Positions, FluentSlider Delay, FluentSlider Volume,
-        bool RetainedPosition, bool Silent);
+        bool RetainedPosition, bool Silent, ToggleSwitch? Required);
 
-    internal GroupPanel(AppConfig config)
+    internal GroupPanel(AppConfig config, Func<IReadOnlyList<AudioEndpoint>>? localOutputs = null,
+        Func<CancellationToken, Task<IReadOnlyList<DlnaDevice>>>? dlnaOutputs = null)
     {
         _config = config;
+        if (localOutputs != null) ListLocalOutputs = localOutputs;
+        if (dlnaOutputs != null) BrowseDlnaOutputs = dlnaOutputs;
         _tsid = StereoPairs.TryGetTsid(config.DeviceId, out var tsid) ? tsid : null;
         GroupSettings.Normalize(config);
         _speakers = GroupSettings.Copy(config.GroupSpeakers!);
+        if (config.GroupCaptureDeviceIds is { } selected && _tsid == null)
+            _speakers.RemoveAll(s => !selected.Any(id => GroupPlan.Key(id) == GroupPlan.Key(s.DeviceId)));
         if (config.GroupCaptureDeviceIds == null)
             foreach (var speaker in _speakers)
                 speaker.VolumeOffset = config.GroupVolumeOffsets?.GetValueOrDefault(GroupPlan.Key(speaker.DeviceId)) ?? 0;
@@ -44,17 +50,16 @@ internal sealed class GroupPanel : StackPanel
             TextStyle.BodyStrong, TextRole.Caution, wrap: true)); // experimental since 1.1; hardware untested
         Controls.Add(Ui.Note(L.T("实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。")));
         Controls.Add(Ui.Note(L.T("离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。"))); // experimental since 1.2; hardware untested
+        InitializeOutputs();
+        Controls.Add(_timingControls);
+        Controls.Add(_alignmentTier);
         Controls.Add(_members);
+        Controls.Add(_auxiliaryMembers);
         Controls.Add(_fileMemberNote);
-        Controls.Add(Ui.Row(8, _add, _add, _addButton));
-        _addButton.Click += (_, _) =>
-        {
-            if (_active || _add.SelectedIndex < 0 || _add.SelectedIndex >= _choices.Count || _speakers.Count >= 8) return;
-            ReadRows();
-            var d = _choices[_add.SelectedIndex];
-            _speakers.Add(new() { DeviceId = d.DeviceId, Name = d.Name, Host = d.Address.ToString() });
-            ShowMembers();
-        };
+        var addRow = Ui.Row(8, null, _outputType, _add, _addButton, _refreshOutputs, _clearOutputs); addRow.Wrap = true;
+        Controls.Add(addRow);
+        Controls.Add(_outputHint);
+        _addButton.Click += (_, _) => AddChosenOutput();
         if (_tsid != null)
         {
             _leaderOnly.Checked = config.GroupPairLeaderOnly;
@@ -90,6 +95,9 @@ internal sealed class GroupPanel : StackPanel
             GroupSettings.Normalize(_config, found);
             foreach (var (key, position) in _config.GroupCapturePositions ?? []) _capturePositions.TryAdd(key, position);
             var pairMembers = StereoPairs.Members(found, _tsid);
+            if (_leaderOnly.Checked && (StereoPairs.Leader(pairMembers) ?? pairMembers.FirstOrDefault()) is { } leader
+                && _speakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(leader.DeviceId)))
+                _speakers.Add(new() { DeviceId = leader.DeviceId, Name = leader.Name, Host = leader.Address.ToString() });
             if (_config.GroupCaptureDeviceIds == null && pairMembers.Count == 2 && GroupPlan.FromConfig(_config) is { } legacy)
                 foreach (var (member, index) in pairMembers.Select((m, i) => (m, i)))
                     _capturePositions[GroupPlan.Key(member.DeviceId)] = PositionFor(legacy.ChannelsFor(index, member.DeviceId));
@@ -104,24 +112,37 @@ internal sealed class GroupPanel : StackPanel
     {
         fileSource |= multichannel;
         if (_multichannel == multichannel && _fileSource == fileSource && _fileMask == mask) return;
-        ReadRows(); _multichannel = multichannel; _fileSource = fileSource; _fileMask = mask; ShowMembers();
+        ReadRows();
+        if (fileSource && !_fileSource)
+            foreach (var saved in GroupSettings.Copy(_config.GroupSpeakers ?? []))
+                if (_speakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(saved.DeviceId)))
+                {
+                    _speakers.Add(saved);
+                    _fileOnlyImports.Add(GroupPlan.Key(saved.DeviceId));
+                }
+        if (!fileSource && _fileSource)
+        {
+            _speakers.RemoveAll(s => _fileOnlyImports.Contains(GroupPlan.Key(s.DeviceId)));
+            _fileOnlyImports.Clear();
+        }
+        _multichannel = multichannel; _fileSource = fileSource; _fileMask = mask; ShowMembers();
     }
 
     internal void SetPlaybackActive(bool active)
     {
         _active = active;
         foreach (Control control in _members.Controls) control.Enabled = !active;
-        bool singleCapture = !_fileSource && _speakers.Count <= 1;
+        bool singleCapture = !_fileSource && _speakers.Count == 1 && LiveOutputCount == 1;
         foreach (var row in _rows)
         {
             row.Position.Enabled = !active && !singleCapture && !row.RetainedPosition && !(_tsid != null && _leaderOnly.Checked);
             row.Delay.Enabled = row.Volume.Enabled = !active && !singleCapture && !row.Silent;
+            if (row.Required != null) row.Required.Enabled = !active && !singleCapture && _tsid == null;
         }
         _singleNote.Text = singleCapture ? L.T("实时只推送到一台音箱时使用原来的低延迟模式；位置、额外延迟和音量偏移只在多输出组中生效。") : "";
         _fileMemberNote.Text = _fileSource && _speakers.Any(s => IsLiveMember(s.DeviceId))
             ? L.T("实时组仍在使用的音箱，请在电脑实时声音下移除并应用。") : "";
-        _add.Enabled = !active && _tsid == null && _choices.Count > 0;
-        _addButton.Enabled = _add.Enabled && _speakers.Count < 8;
+        UpdateOutputControls();
         if (_tsid != null) _leaderOnly.Enabled = !active;
     }
 
@@ -163,6 +184,10 @@ internal sealed class GroupPanel : StackPanel
     {
         get
         {
+            if (!_fileSource && LiveOutputCount == 0) return L.T("请至少选择一个输出。");
+            if (!_fileSource && _config.CaptureDeviceId is { } captured && _localBank.Any(o =>
+                _localSelection.Contains(LocalGroupSettings.Key(o.DeviceId)) && CaptureEndpoint.Same(captured, o.DeviceId)))
+                return L.T(LocalOutputSink.CapturedOutputText);
             if (_tsid != null)
             {
                 int count = StereoPairs.Members(_found, _tsid).Count;
@@ -179,8 +204,12 @@ internal sealed class GroupPanel : StackPanel
         if (_refreshing) return;
         foreach (var row in _rows)
         {
-            row.Speaker.DelayMs = row.Delay.Value; row.Speaker.VolumeOffset = row.Volume.Value;
+            if (_fileSource) row.Speaker.DelayMs = row.Delay.Value;
+            else _captureTrims[GroupPlan.Key(row.Speaker.DeviceId)] = row.Delay.Value;
+            row.Speaker.VolumeOffset = row.Volume.Value;
+            if (row.Required != null) _requiredOutputs[GroupPlan.Key(row.Speaker.DeviceId)] = row.Required.Checked;
         }
+        foreach (var read in _readAuxiliaryRows) read();
     }
 
     private void ShowMembers()
@@ -190,6 +219,7 @@ internal sealed class GroupPanel : StackPanel
         using var layout = LayoutPanel.BatchRelayout(this);
         foreach (Control old in _members.Controls.Cast<Control>().ToArray()) old.Dispose();
         _rows.Clear();
+        _statusRows.Clear();
         foreach (var speaker in _speakers)
         {
             var device = _found.FirstOrDefault(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(speaker.DeviceId));
@@ -208,18 +238,20 @@ internal sealed class GroupPanel : StackPanel
                 if (_fileSource) speaker.Position = positions[position.SelectedIndex];
                 else _capturePositions[GroupPlan.Key(speaker.DeviceId)] = positions[position.SelectedIndex];
             };
-            var delay = Ui.Slider(0, 500, 1, 10);
-            delay.PreferredLength = 120; delay.Value = speaker.DelayMs; delay.AccessibleName = L.F("{0} 延迟（毫秒）", speaker.Name);
+            var delay = Ui.Slider(_fileSource ? 0 : -5000, _fileSource ? 500 : 5000, 1, 10);
+            delay.PreferredLength = 120; delay.FillOrigin = 0;
+            delay.Value = _fileSource ? speaker.DelayMs : _captureTrims.GetValueOrDefault(GroupPlan.Key(speaker.DeviceId), speaker.DelayMs);
+            delay.AccessibleName = L.F("{0} 延迟（毫秒）", speaker.Name);
             var delayValue = new TextBlock(delay.Value.ToString());
             delay.ValueChanged += (_, _) => delayValue.Text = delay.Value.ToString();
-            var volume = Ui.Slider(-30, 30, 1, 5);
+            var volume = Ui.Slider(-100, 100, 1, 5);
             volume.PreferredLength = 120; volume.FillOrigin = 0; volume.Value = speaker.VolumeOffset;
             volume.AccessibleName = L.F("{0} 音量偏移", speaker.Name);
             var volumeValue = new TextBlock(volume.Value.ToString("+0;-0;0"));
             volume.ValueChanged += (_, _) => volumeValue.Text = volume.Value.ToString("+0;-0;0");
             var remove = new FluentButton(L.T("移除")) { AccessibleName = L.F("移除 {0}", speaker.Name) };
             bool liveReference = _fileSource && IsLiveMember(speaker.DeviceId);
-            remove.Enabled = _tsid == null && !liveReference && GroupPlan.Key(speaker.DeviceId) != GroupPlan.Key(_config.DeviceId ?? "");
+            remove.Enabled = _tsid == null && !liveReference && (!_fileSource || GroupPlan.Key(speaker.DeviceId) != GroupPlan.Key(_config.DeviceId ?? ""));
             remove.Click += (_, _) =>
             {
                 if (_active || _fileSource && IsLiveMember(speaker.DeviceId)) return;
@@ -232,19 +264,25 @@ internal sealed class GroupPanel : StackPanel
             var fields = Ui.Row(8, null, positionField, delayField, volumeField, remove);
             fields.Wrap = true;
             var entry = Ui.Stack(4, title, fields);
+            ToggleSwitch? required = null;
+            if (!_fileSource)
+            {
+                required = RequiredControl(GroupPlan.Key(speaker.DeviceId), speaker.Name, AirPlayRequiredByDefault(speaker.DeviceId));
+                if (_tsid != null) required.Checked = true;
+                AddDetails(entry, speaker.Name, required);
+            }
+            entry.Controls.Add(StatusRow(OutputKind.AirPlay2, speaker.DeviceId, speaker.Name, device != null));
             if (silent) entry.Controls.Add(Ui.Note(L.T("此音源没有这个声道，此音箱保持静音。切换回多声道文件会恢复原位置。")));
             if ((DiscreteBlockReason(speaker) ?? ReceiverBlockReason(speaker)) is { } blocked) entry.Controls.Add(Ui.Note(blocked));
             if (_multichannel && !DiscreteAllowed(speaker)) entry.Controls.Add(Ui.Note(L.T("此接收端只能播放完整立体声；离散声道需要未组成立体声对的 HomePod。")));
             _members.Controls.Add(entry);
-            _rows.Add(new(speaker, position, positions, delay, volume, retainedPosition, silent));
+            _rows.Add(new(speaker, position, positions, delay, volume, retainedPosition, silent, required));
         }
-        _choices = StereoPairs.Merge(_found).Where(d => !StereoPairs.IsPairId(d.DeviceId) &&
-            _speakers.All(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(d.DeviceId))).ToList();
-        _add.Items.Clear(); foreach (var d in _choices) _add.Items.Add(d.Name);
-        _add.SelectedIndex = _choices.Count > 0 ? 0 : -1;
+        ShowAuxiliaryOutputs();
+        RefreshOutputChoices();
         _state.Text = _tsid != null && _leaderOnly.Checked ? LeaderOnlyState()
             : _tsid != null && StereoPairs.Members(_found, _tsid).Count != 2 ? L.F("没有同时找到这对音箱的两只（找到 {0} 只）。两只都在线才能连接。", StereoPairs.Members(_found, _tsid).Count)
-            : _speakers.Count == 0 ? L.T("请先在主界面选择音箱。") : "";
+            : LiveOutputCount == 0 ? L.T("请至少选择一个输出。") : "";
         _refreshing = false;
         SetPlaybackActive(_active);
     }
@@ -282,18 +320,15 @@ internal sealed class GroupPanel : StackPanel
     internal void Apply(bool activateCapture = true)
     {
         ReadRows();
-        _config.GroupSpeakers = GroupSettings.Copy(_speakers);
-        _config.GroupVolumeOffsets = _speakers.Where(s => s.VolumeOffset != 0).ToDictionary(s => GroupPlan.Key(s.DeviceId), s => s.VolumeOffset);
-        if (!activateCapture) return;
-        _config.GroupSplitChannels = _config.GroupSwapChannels = false;
-        _config.GroupCaptureDeviceIds = _speakers.Select(s => s.DeviceId).ToList();
-        _config.GroupCapturePositions = new(_capturePositions);
-        if (_tsid != null) _config.GroupPairLeaderOnly = _leaderOnly.Checked;
-        else
+        if (!activateCapture)
         {
-            var extra = _speakers.FirstOrDefault(s => GroupPlan.Key(s.DeviceId) != GroupPlan.Key(_config.DeviceId ?? ""));
-            _config.MultiRoomDeviceId = extra?.DeviceId; _config.MultiRoomDeviceName = extra?.Name; _config.MultiRoomHost = extra?.Host;
+            _config.GroupSpeakers = GroupSettings.Copy(_speakers);
+            _config.GroupVolumeOffsets = _speakers.Where(s => s.VolumeOffset != 0).ToDictionary(s => GroupPlan.Key(s.DeviceId), s => s.VolumeOffset);
+            return;
         }
+        string before = PlayLayout(_config);
+        OutputGroups.Apply(_config, CaptureSettings());
+        if (before != PlayLayout(_config)) _config.SelectedOutputGroupId = null;
     }
 
     private static SpeakerPosition PositionFor(ChannelMode mode) => mode switch
@@ -305,6 +340,8 @@ internal sealed class GroupPanel : StackPanel
     {
         cfg.DeviceId, cfg.MultiRoomDeviceId, cfg.GroupPairLeaderOnly, cfg.GroupSplitChannels, cfg.GroupSwapChannels,
         cfg.GroupVolumeOffsets, cfg.GroupSpeakers, cfg.GroupCaptureDeviceIds, cfg.GroupCapturePositions,
+        cfg.GroupLocalOutputs, cfg.GroupCaptureLocalDeviceIds, cfg.GroupDlnaOutputs, cfg.GroupCaptureDlnaUdns,
+        cfg.GroupCaptureDelayTrims, cfg.GroupRequiredOutputs, cfg.GroupDelayMs,
     });
 
     internal static string PlayLayout(AppConfig cfg)
@@ -313,7 +350,8 @@ internal sealed class GroupPanel : StackPanel
         var members = plan.Members.Select((m, i) => $"{GroupPlan.Key(m.DeviceId)}:{plan.ChannelsFor(i, m.DeviceId)}:{plan.DelayTrimFor(m.DeviceId)}:{plan.VolumeOffsetFor(m.DeviceId)}");
         string pairSettings = plan.Kind != GroupKind.StereoPair ? "" : string.Join(",", plan.SpeakerSettings.OrderBy(kv => kv.Key)
             .Select(kv => $"{kv.Key}:{kv.Value.Position}:{kv.Value.DelayMs}:{plan.VolumeOffsetFor(kv.Key)}"));
-        return $"{plan.Kind}|{plan.PairTsid}|{plan.PairLeaderOnly}|{plan.SplitChannels}|{plan.SwapChannels}|{string.Join(",", members)}|{pairSettings}";
+        return $"{plan.Kind}|{plan.PairTsid}|{plan.PairLeaderOnly}|{plan.SplitChannels}|{plan.SwapChannels}|{string.Join(",", members)}|{pairSettings}|" +
+            System.Text.Json.JsonSerializer.Serialize(new { plan.LocalOutputs, plan.DlnaOutputs, plan.GroupDelayMs, plan.RequiredOutputs });
     }
 }
 

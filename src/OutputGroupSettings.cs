@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HomePodCast.Audio;
 using HomePodCast.Net;
 
@@ -127,7 +128,6 @@ public static class OutputGroups
             current.Host = UsageProfiles.FreshHost(saved.DeviceId, c, []);
             current.VolumeOffset = saved.VolumeOffset;
         }
-        bool changed = c.DeviceId == null || s.DeviceId == null || GroupPlan.Key(c.DeviceId) != GroupPlan.Key(s.DeviceId);
         c.DeviceId = s.DeviceId; c.DeviceName = s.DeviceName; c.Host = host;
         c.GroupSplitChannels = s.GroupSplitChannels; c.GroupSwapChannels = s.GroupSwapChannels;
         c.GroupPairLeaderOnly = s.GroupPairLeaderOnly; c.GroupVolumeOffsets = s.GroupVolumeOffsets;
@@ -139,7 +139,6 @@ public static class OutputGroups
         c.GroupCaptureDelayTrims = s.GroupCaptureDelayTrims; c.GroupRequiredOutputs = s.GroupRequiredOutputs;
         c.GroupDelayMs = s.GroupDelayMs;
         c.MultiRoomDeviceId = s.MultiRoomDeviceId; c.MultiRoomDeviceName = s.MultiRoomDeviceName; c.MultiRoomHost = extraHost;
-        if (changed) c.Volume = null;
     }
 
     /// <summary>Save or replace a detached preset; this does not apply or select it.</summary>
@@ -152,7 +151,15 @@ public static class OutputGroups
             Name = name.Trim()[..Math.Min(name.Trim().Length, MaxNameLength)], Settings = snapshot };
         c.SavedOutputGroups ??= [];
         int index = c.SavedOutputGroups.FindIndex(p => string.Equals(p.Id, preset.Id, StringComparison.OrdinalIgnoreCase));
-        if (index >= 0) c.SavedOutputGroups[index] = preset;
+        if (index >= 0)
+        {
+            c.SavedOutputGroups[index] = preset;
+            // Saving stays inert. A changed active preset must become selectable again on Home, even
+            // when it is the only preset and selecting the same combo index would raise no event.
+            if (string.Equals(c.SelectedOutputGroupId, preset.Id, StringComparison.OrdinalIgnoreCase)
+                && JsonSerializer.Serialize(Capture(c)) != JsonSerializer.Serialize(snapshot))
+                c.SelectedOutputGroupId = null;
+        }
         else
         {
             if (c.SavedOutputGroups.Count >= MaxGroups) throw new InvalidOperationException("Too many output groups");
