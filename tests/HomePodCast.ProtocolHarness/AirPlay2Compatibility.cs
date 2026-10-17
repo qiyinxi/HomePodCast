@@ -63,7 +63,7 @@ internal static class AirPlay2Compatibility
 
     public static async Task Run(string host, int port, int latency, string directory, string pcmPath, bool realtime, bool coordinated = false)
     {
-        using var diagnostics = new CompatibilityDiagnostics();
+        using var diagnostics = new CompatibilityDiagnostics(traceJit: coordinated);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         byte[] reference;
         if (realtime)

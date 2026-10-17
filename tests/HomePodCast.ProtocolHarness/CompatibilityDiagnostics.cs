@@ -15,8 +15,13 @@ internal sealed class CompatibilityDiagnostics : IDisposable
     private long _lastAudioRead, _maxAudioRead;
     private int _audioReads;
     private int _received;
+    private readonly CompatibilityJitEvents? _jit;
 
-    public CompatibilityDiagnostics() => Log.WarningObserved += Warning;
+    public CompatibilityDiagnostics(bool traceJit = false)
+    {
+        if (traceJit) _jit = new();
+        Log.WarningObserved += Warning;
+    }
 
     public void ObserveRead(int received, long completed, long processed)
     {
@@ -95,7 +100,8 @@ internal sealed class CompatibilityDiagnostics : IDisposable
             $"lastAudioReadAgeMs={(lastAudio == 0 ? 0 : MediaClock.ToMs(now - lastAudio)):F1}, cpuMs={process.TotalProcessorTime.TotalMilliseconds:F1}{margin}");
         if (OperatingSystem.IsLinux() && File.Exists("/sys/fs/cgroup/cpu.stat"))
             Console.WriteLine("Compatibility cgroup CPU: " + File.ReadAllText("/sys/fs/cgroup/cpu.stat").Replace('\n', ';'));
+        if (stage is "session-lost" or "completed") _jit?.Report();
     }
 
-    public void Dispose() => Log.WarningObserved -= Warning;
+    public void Dispose() { Log.WarningObserved -= Warning; _jit?.Dispose(); }
 }
