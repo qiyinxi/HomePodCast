@@ -120,9 +120,10 @@ internal static class AirPlay2Compatibility
                 var options = new ReceiverConnectOptions(latency, 0, 10, null, null, new SignalEffect(), Console.WriteLine);
                 outputs = await ReceiverOutputSet.PrepareAsync([new(device.DeviceId, device.Name,
                     _ => Task.FromResult(new ReceiverGroupTarget(device, settings)), options)], () => 10, timeout.Token,
-                    connect: (protocol, target, preferences, connection, clocks, ct) => ReceiverGroupConnections.PrepareAsync(target,
-                        preferences! with { ProtocolOverride = protocol }, connection, clocks, ct,
-                        encoder: () => new ReplayEncoder(Path.Combine(directory, "blocks.bin"), validateSource: true)));
+                    connect: async (protocol, target, preferences, connection, clocks, ct) => diagnostics.Observe(
+                        await ReceiverGroupConnections.PrepareAsync(target,
+                            preferences! with { ProtocolOverride = protocol }, connection, clocks, ct,
+                            encoder: () => new ReplayEncoder(Path.Combine(directory, "blocks.bin"), validateSource: true))));
                 // Precomputed processed history isolates transport alignment from runner scheduling and audio devices.
                 // The buffered replay additionally checks every source sample before returning the real Windows AAC.
                 long firstFrame = timeline.FrameAt(MediaClock.Now + MediaClock.FromMs(500));

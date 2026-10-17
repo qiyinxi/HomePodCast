@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using HomePodCast.Audio;
 using HomePodCast.Net;
 
 namespace HomePodCast.ProtocolHarness;
@@ -10,6 +12,8 @@ internal sealed class CompatibilityDiagnostics : IDisposable
     private readonly TimeSpan _paused = GC.GetTotalPauseDuration();
     private readonly int[] _collections = [GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)];
     private long _lastRead, _maxReadGap, _maxProcessing;
+    private long _lastAudioRead, _maxAudioRead;
+    private int _audioReads;
     private int _received;
 
     public CompatibilityDiagnostics() => Log.WarningObserved += Warning;
@@ -34,6 +38,45 @@ internal sealed class CompatibilityDiagnostics : IDisposable
         if (message.StartsWith("session lost: ", StringComparison.Ordinal)) Report("session-lost");
     }
 
+    public IPreparedReceiverSession Observe(IPreparedReceiverSession session) => new ObservedSession(session, this);
+
+    private sealed class ObservedSession(IPreparedReceiverSession inner, CompatibilityDiagnostics diagnostics) : IPreparedReceiverSession
+    {
+        public ReceiverProtocol Protocol => inner.Protocol;
+        public bool UsesPtp => inner.UsesPtp;
+        public int LatencyMs => inner.LatencyMs;
+        public int? ArrivalToRenderMs => inner.ArrivalToRenderMs;
+        public IReadOnlyDictionary<string, object?> Info => inner.Info;
+        public Task<string> Lost => inner.Lost;
+        public Exception? LostException => inner.LostException;
+        public long PacketsSent => inner.PacketsSent;
+        public void Start(IReceiverAudioSource source, long startAt, double percent, double cap)
+            => inner.Start(new ObservedSource(source, diagnostics), startAt, percent, cap);
+        public void SetVolume(double percent, double cap) => inner.SetVolume(percent, cap);
+        public void StopSending() => inner.StopSending();
+        public void Dispose() => inner.Dispose();
+    }
+
+    private sealed class ObservedSource(IReceiverAudioSource inner, CompatibilityDiagnostics diagnostics) : IReceiverAudioSource
+    {
+        public bool Read(long sendTicks, Span<float> stereo)
+        {
+            long before = MediaClock.Now;
+            try { return inner.Read(sendTicks, stereo); }
+            finally
+            {
+                long now = MediaClock.Now;
+                Maximum(ref diagnostics._maxAudioRead, now - before);
+                Interlocked.Exchange(ref diagnostics._lastAudioRead, now);
+                Interlocked.Increment(ref diagnostics._audioReads);
+            }
+        }
+        public bool ReadPacket(long ticks) => inner.ReadPacket(ticks);
+        public void ReadTarget(int index, Span<float> stereo) => inner.ReadTarget(index, stereo);
+        public void SkipPackets(int packets) => inner.SkipPackets(packets);
+        public void Dispose() => inner.Dispose();
+    }
+
     public void Report(string stage, long? epoch = null)
     {
         // Take the counters before formatting allocates. Reports occur before startup or after failure/cleanup.
@@ -41,11 +84,17 @@ internal sealed class CompatibilityDiagnostics : IDisposable
         double paused = (GC.GetTotalPauseDuration() - _paused).TotalMilliseconds;
         int gen0 = GC.CollectionCount(0) - _collections[0], gen1 = GC.CollectionCount(1) - _collections[1],
             gen2 = GC.CollectionCount(2) - _collections[2];
+        long lastAudio = Interlocked.Read(ref _lastAudioRead);
+        using var process = Process.GetCurrentProcess();
         string margin = epoch is { } start ? $", startMarginMs={MediaClock.ToMs(start - now):F1}" : "";
         Console.WriteLine($"Compatibility runtime: stage={stage}, elapsedMs={MediaClock.ToMs(now - _began):F1}, " +
             $"allocatedBytes={allocated}, gc={gen0}/{gen1}/{gen2}, gcPauseMs={paused:F1}, " +
             $"receivedBytes={Volatile.Read(ref _received)}, maxReadGapMs={MediaClock.ToMs(Interlocked.Read(ref _maxReadGap)):F1}, " +
-            $"maxCollectorMs={MediaClock.ToMs(Interlocked.Read(ref _maxProcessing)):F1}{margin}");
+            $"maxCollectorMs={MediaClock.ToMs(Interlocked.Read(ref _maxProcessing)):F1}, " +
+            $"audioReads={Volatile.Read(ref _audioReads)}, maxAudioReadMs={MediaClock.ToMs(Interlocked.Read(ref _maxAudioRead)):F1}, " +
+            $"lastAudioReadAgeMs={(lastAudio == 0 ? 0 : MediaClock.ToMs(now - lastAudio)):F1}, cpuMs={process.TotalProcessorTime.TotalMilliseconds:F1}{margin}");
+        if (OperatingSystem.IsLinux() && File.Exists("/sys/fs/cgroup/cpu.stat"))
+            Console.WriteLine("Compatibility cgroup CPU: " + File.ReadAllText("/sys/fs/cgroup/cpu.stat").Replace('\n', ';'));
     }
 
     public void Dispose() => Log.WarningObserved -= Warning;
