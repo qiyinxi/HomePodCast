@@ -316,7 +316,7 @@ internal sealed partial class GroupPanel
     private static Control SliderField(string label, FluentSlider slider)
     {
         var value = new TextBlock(slider.Value.ToString()); slider.ValueChanged += (_, _) => value.Text = slider.Value.ToString();
-        return Ui.Stack(2, new TextBlock(label, TextStyle.Caption, TextRole.Secondary), Ui.Row(4, null, slider, value));
+        return Ui.Stack(2, new TextBlock(label, TextStyle.Caption, TextRole.Secondary, wrap: true), Ui.Row(4, null, slider, value));
     }
     private static FluentComboBox ChannelControl(string name, ChannelMode selected)
     {
