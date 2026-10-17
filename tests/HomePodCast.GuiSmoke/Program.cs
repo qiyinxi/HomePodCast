@@ -4,10 +4,10 @@ namespace HomePodCast.GuiSmoke;
 
 /// <summary>
 /// GUI smoke test of a built HomePodCast.exe (CI job gui-smoke, .github/workflows/build.yml):
-/// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--video-window &lt;module folder&gt;] [--only id,id…] [--allow-local]</c>.
+/// <c>HomePodCast.GuiSmoke --app &lt;HomePodCast.exe&gt; --out &lt;folder&gt; [--video-window &lt;module folder&gt;] [--only id,id…] [--shard index/count] [--allow-local]</c>.
 /// Runs the scenarios below one after the other, at 100 % and 150 % display scale; writes
 /// the screenshots, the UI Automation trees and each run's log into the folder, with index.html and report.md; exits 1
-/// when any check failed.
+/// when any check failed. The zero-based shard partitions the filtered scenario list by index modulo count.
 /// It starts the real app, so it refuses to run outside GitHub Actions unless given --allow-local: on a PC with a
 /// HomePod, any copy that connects takes the speaker away from the HomePodCast already running there.
 /// </summary>
@@ -42,15 +42,24 @@ internal static class Program
 
     public static int Main(string[] args)
     {
-        Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2); // UI Automation and screenshots in real pixels
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
         if (Opt("--fit-dumps") is { } dumps) return FitDumps(dumps);
 
+        (int Index, int Count)? shard = null;
+        if (args.Contains("--shard"))
+        {
+            if (!TryParseShard(Opt("--shard"), out var parsed))
+            {
+                Console.Error.WriteLine("--shard requires index/count, with count > 0 and 0 <= index < count (for example 0/5).");
+                return 2;
+            }
+            shard = parsed;
+        }
         var exe = Opt("--app") is { } app ? Path.GetFullPath(app) : null;
         if (exe == null || !File.Exists(exe))
         {
-            Console.Error.WriteLine("usage: HomePodCast.GuiSmoke --app <HomePodCast.exe> --out <folder> [--only id,id] [--allow-local]");
+            Console.Error.WriteLine("usage: HomePodCast.GuiSmoke --app <HomePodCast.exe> --out <folder> [--only id,id] [--shard index/count] [--allow-local]");
             return 2;
         }
         bool ci = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
@@ -60,13 +69,15 @@ internal static class Program
                                     "running on this PC. It is meant for the CI runner; pass --allow-local only on a machine without a speaker.");
             return 2;
         }
+        Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2); // UI Automation and screenshots in real pixels
         Walker.Profile = ci ? null : "gui-smoke";
         var outDir = Path.GetFullPath(Opt("--out") ?? "gui-screenshots");
         Directory.CreateDirectory(outDir);
         var only = Opt("--only")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var scenarios = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal))).ToList();
+        var scenarios = SelectScenarios(only, shard);
 
         var report = new Report();
+        if (shard is { } part) report.Note("runner", $"scenario shard {part.Index}/{part.Count} after --only filtering");
         // The synchronized viewing window (experimental since 1.1), from the build's module zip, extracted.
         if (Opt("--video-window") is { } module)
         {
@@ -141,6 +152,24 @@ internal static class Program
         return report.Failures.Count == 0 ? 0 : 1;
     }
 
+    private static bool TryParseShard(string? value, out (int Index, int Count) shard)
+    {
+        shard = default;
+        var parts = value?.Split('/');
+        if (parts is not { Length: 2 } ||
+            !int.TryParse(parts[0], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int index) ||
+            !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int count) ||
+            count <= 0 || index < 0 || index >= count) return false;
+        shard = (index, count);
+        return true;
+    }
+
+    private static List<Scenario> SelectScenarios(string[]? only, (int Index, int Count)? shard = null)
+    {
+        var filtered = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal)));
+        return filtered.Where((_, index) => shard == null || index % shard.Value.Count == shard.Value.Index).ToList();
+    }
+
     /// <summary>
     /// <c>--fit-dumps &lt;folder&gt;</c>: the cut-off check on the UI trees of a downloaded gui-screenshots artifact
     /// (tree-*.txt; the scale and language from the scenario folder's name), for working on that check without the app.
@@ -181,6 +210,16 @@ internal static class Program
         Check(groupScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()),
             "group-output scenarios cover every supported language exactly once");
         Check(groupScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every group-output scenario requires 150 % scale");
+        var groupPartitions = Enumerable.Range(0, 5).Select(index => SelectScenarios(["group-outputs"], (index, 5))).ToArray();
+        Check(groupPartitions.All(part => part.Count > 0 && part.All(s => s.Kind == "group-outputs")),
+            "every group-output shard contains only group-output scenarios");
+        Check(groupPartitions.SelectMany(part => part).Select(s => s.Id).Order().SequenceEqual(groupScenarios.Select(s => s.Id).Order()),
+            "five group-output shards cover every required scenario exactly once");
+        Check(groupPartitions.All(part => part.Count <= (groupScenarios.Length + 4) / 5), "group-output shards are evenly distributed");
+        Check(TryParseShard("0/5", out var firstShard) && firstShard == (0, 5) &&
+              TryParseShard("4/5", out var lastShard) && lastShard == (4, 5), "zero-based shard bounds are accepted");
+        foreach (var invalid in new string?[] { null, "", "0", "0/", "/5", "0/0", "-1/5", "5/5", "0/-1", "one/5", "0/5/1", "0/2147483648" })
+            Check(!TryParseShard(invalid, out _), $"invalid shard '{invalid ?? "<missing>"}' is refused");
         foreach (var lang in L.Languages)
         {
             var t = new Texts(lang);

@@ -288,7 +288,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - **GroupOutputEditorTests / OutputGroupSettingsTests / GroupPlanTests**：注入本机和 DLNA 发现、假主机与调用记录，检查打开／换源／等待时发现、采集、播放、校准精确为零；按完整端点 ID 和 UDN 添加、离线偏好库不激活、必需／可选、声道／音量／±5000 毫秒微调、自动／手动下限、实时／文件草稿隔离、命名分组存取、无麦克风手机帧差和手动助手只有明确测试才调用发声入口。这些配置／界面项不再列为实机重复验证。
 - **OptionalAppleGroupTests / AppleGroupMemberSessionTests / RaopOutputSetTests / LocalOutputGroupTests / DlnaGroupControllerTests**：可选 Apple／RAOP／本机／DLNA 独立恢复、必需失败、忙碌／认证／接管等待明确操作、不抢回其他发送端，以及健康成员不被重启；仍需上方实机项验证设备实际反应。
-- **gui-smoke 的 group-outputs 场景**：全部 15 种界面语言、必须为 150% 缩放；离线保存的 AirPlay、本机、明确标记的蓝牙和有效 UDN 的 DLNA 行、未选择的偏好库、保存值与类型、展开设置、添加／移除草稿、空选择类型、自动／手动延迟、实时／文件切换、无声手动助手。每次滚动截图都检查布局；离页再打开仍未连接，API 的 streaming=false、保存偏好不变、没有新增采集／影院／测量／推流失败日志。发现是否精确为零由注入单元测试证明，不靠日志缺失推断。
+- **gui-output-groups 的 group-outputs 场景**：五份独立运行完整覆盖全部 15 种界面语言、必须为 150% 缩放，自检保证每种语言恰好一次；离线保存的 AirPlay、本机、明确标记的蓝牙和有效 UDN 的 DLNA 行、未选择的偏好库、保存值与类型、展开设置、添加／移除草稿、空选择类型、自动／手动延迟、实时／文件切换、无声手动助手。每次滚动截图都检查布局，实时／文件和校准截图覆盖每种语言，额外相同过渡截图只跑一次；离页再打开仍未连接，API 的 streaming=false、保存偏好不变、没有新增采集／影院／测量／推流失败日志。发现是否精确为零由注入单元测试证明，不靠日志缺失推断。
 
 - **DlnaDiscoveryTests / DlnaControlTests / DlnaStreamServerTests / DlnaClientTests / DlnaCliTests**：回环假设备覆盖 SSDP、描述和 SOAP、格式协商、HTTP 字节序与流量限制、Private 网络策略、音量上限、忙碌与接管、取消和连接清理。
 - **DlnaReadClockTests / DlnaTimelineReaderTests / DlnaOutputSetTests / DlnaGroupControllerTests / DlnaGroupSettingsTests / DlnaEncoderTests**：四组正负漂移的一小时仿真、突发／停顿／时钟置信度失效、实际 PCM 标记、整数帧连续性和无分配读取；UDN 独立解析、可选恢复／必需失败、接管优先级、连接中音量／静音、历史覆盖恢复、编解码线程与分块边界。
