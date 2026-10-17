@@ -81,8 +81,10 @@ internal sealed partial class Walker
             var info = Native.VerticalScroll(pane);
             trace.Add($"step {step}: viewport {page.Rect}, target {target?.Describe() ?? "missing"}, scroll {info?.nPos}/{info?.nMax}, page {info?.nPage}");
             if (info is not { } si || si.nPos + si.nPage > si.nMax) break;
+            // Leave room at both edges: a real line command can round past an exact top-alignment target.
             int next = target != null && target.Rect.Height <= page.Rect.Height
-                ? Math.Clamp(si.nPos + target.Rect.Top - page.Rect.Top, si.nMin, si.nMax - si.nPage + 1)
+                ? Math.Clamp(si.nPos + target.Rect.Top - page.Rect.Top - (page.Rect.Height - target.Rect.Height) / 2,
+                    si.nMin, si.nMax - si.nPage + 1)
                 : Math.Min(si.nMax - si.nPage + 1, si.nPos + Math.Max(1, si.nPage / 2));
             if (next <= si.nPos) break;
             if (!ScrollViewportForward(pane, next - si.nPos)) break;

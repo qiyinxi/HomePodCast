@@ -30,8 +30,12 @@ public class SpeakerRoomTests
         Assert.Equal(-100, SpeakerRoomLayout.Angle(SpeakerPosition.SideLeft, true));
         Assert.Equal(145, SpeakerRoomLayout.Angle(SpeakerPosition.RearRight, true));
         Assert.Equal(9, SpeakerRoomLayout.Positions(CinemaChannels.Surround71, []).Length);
+        Assert.Contains(SpeakerPosition.Center,
+            SpeakerRoomLayout.Positions(CinemaChannels.FL | CinemaChannels.FR | CinemaChannels.FC, []));
         var sub = SpeakerRoomLayout.Location(SpeakerPosition.Subwoofer, true, new Size(280, 360));
-        Assert.True(sub.X < 280 * .15 && sub.Y < 360 * .15); // front corner, never an invented listener-distance estimate
+        // The label widened: its edge, rather than its center, stays in the front corner.
+        Assert.InRange(sub.X - SpeakerRoomLayout.ButtonWidth(280, 96) / 2f, 0, 8);
+        Assert.True(sub.Y < 360 * .15); // never an invented listener-distance estimate
     }
 
     [Fact]
@@ -47,8 +51,8 @@ public class SpeakerRoomTests
         Assert.Equal("未分配：混入完整立体声", SpeakerRoomLayout.EmptyText(SpeakerPosition.Center, Rear51, [Output(SpeakerPosition.Stereo)]));
         Assert.Equal("未分配：没有可播放的音箱", SpeakerRoomLayout.EmptyText(SpeakerPosition.Center, Rear51, []));
         Assert.Equal("此音源没有这个声道", SpeakerRoomLayout.EmptyText(SpeakerPosition.SideLeft, Rear51, fronts));
-        Assert.Equal("→ FL/FR", SpeakerRoomLayout.Annotation(SpeakerPosition.Center, Rear51, fronts));
-        Assert.Equal("→ L + R", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51, [Output(SpeakerPosition.Stereo)]));
+        Assert.Equal("→FL/FR", SpeakerRoomLayout.Annotation(SpeakerPosition.Center, Rear51, fronts));
+        Assert.Equal("→L+R", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51, [Output(SpeakerPosition.Stereo)]));
         Assert.Equal("0 ms", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51, fronts));
         Assert.Equal("-137/24 ms", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51,
             [Output(SpeakerPosition.Left) with { DelayMs = -137 }, Output(SpeakerPosition.Left, "B") with { DelayMs = 24 }]));
@@ -74,6 +78,27 @@ public class SpeakerRoomTests
     private static FluentComboBox Device(Control panel) => All<FluentComboBox>(panel).Single(c => c.AccessibleName == "所选位置音箱");
     private static FluentComboBox Position(Control panel, string name) => All<FluentComboBox>(panel).Single(c => c.AccessibleName == name + " 位置");
     private static void Choose(FluentComboBox combo, string text) => combo.SelectedIndex = combo.Items.IndexOf(text);
+
+    [Fact]
+    public void Mono_and_three_channel_files_keep_the_existing_center_visible_without_reassigning_it() => Sta.Run(() =>
+    {
+        var config = Config();
+        config.GroupSpeakers![2].Position = SpeakerPosition.Center;
+        using var panel = new GroupPanel(config);
+        panel.SetFound(Found(config));
+        panel.SetSource(false, fileSource: true, mask: CinemaChannels.FC);
+        var room = All<SpeakerRoom>(panel).Single();
+        Assert.Contains(room.Controls.Cast<Control>(), c => c.AccessibleName!.StartsWith("中置：书房"));
+        Assert.False(Position(panel, "书房").Enabled); // retaining a role must not enable assigning unsupported roles
+        room.SelectPosition(SpeakerPosition.Center);
+        Assert.Equal(SpeakerPosition.Center, room.SelectedPosition);
+        panel.SetSource(true, fileSource: true, mask: CinemaChannels.FL | CinemaChannels.FR | CinemaChannels.FC);
+        Assert.Contains(room.Controls.Cast<Control>(), c => c.AccessibleName!.StartsWith("中置：书房"));
+        Assert.Equal("中置", Position(panel, "书房").SelectedText);
+        using var centerOnly = new SpeakerRoom();
+        centerOnly.Update(CinemaChannels.FC, [], null);
+        Assert.Equal(SpeakerPosition.Center, centerOnly.SelectedPosition);
+    });
 
     [Theory]
     [InlineData(400)]

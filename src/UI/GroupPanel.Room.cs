@@ -85,7 +85,7 @@ internal sealed partial class GroupPanel
         _roomBindings = _rows.Select(row => new RoomBinding(row.Speaker.DeviceId, row.Speaker.Name, row.Position,
             row.Positions, row.Delay, row.Volume)).ToList();
         if (!_fileSource) _roomBindings.AddRange(_auxRoomBindings);
-        uint mask = _multichannel ? _fileMask == 0 ? CinemaChannels.Surround71 : _fileMask : CinemaChannels.FL | CinemaChannels.FR;
+        uint mask = RoomSourceMask;
         _room.Update(mask, _roomBindings.Select(b => b.Snapshot).ToArray(), _measuringDeviceId);
         ShowRoomSelection();
     }
@@ -99,7 +99,7 @@ internal sealed partial class GroupPanel
             var assigned = _roomBindings.Where(b => b.Current == position).ToArray();
             if (!assigned.Any(b => b.Id == _roomSelectedId)) _roomSelectedId = assigned.FirstOrDefault()?.Id;
             _roomTitle.Text = SpeakerRoomLayout.Name(position);
-            uint mask = _multichannel ? _fileMask == 0 ? CinemaChannels.Surround71 : _fileMask : CinemaChannels.FL | CinemaChannels.FR;
+            uint mask = RoomSourceMask;
             _roomDescription.Text = assigned.Length == 0 ? SpeakerRoomLayout.EmptyText(position, mask, _roomBindings.Select(b => b.Snapshot).ToArray())
                 : string.Join(" / ", assigned.Select(b => L.F("{0}，延迟 {1} 毫秒", b.Name, b.Delay.Value)));
             _roomChoices = _roomBindings.Where(b => b.Current == position || b.Position.Enabled && b.Positions.Contains(position)).ToList();
@@ -125,4 +125,9 @@ internal sealed partial class GroupPanel
         if (_measuringDeviceId == deviceId) return;
         _measuringDeviceId = deviceId; RefreshRoom();
     }
+
+    // Mono files may already have a retained center output. The diagram uses the file's real mask even when
+    // the editor deliberately limits assigning new discrete roles; it never changes those existing restrictions.
+    private uint RoomSourceMask => _fileSource && _fileMask != 0 ? _fileMask
+        : _multichannel ? CinemaChannels.Surround71 : CinemaChannels.FL | CinemaChannels.FR;
 }
