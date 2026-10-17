@@ -56,10 +56,12 @@ internal sealed partial class GroupPanel
         _roomDelay.PreferredLength = _roomVolume.PreferredLength = 160;
         _roomDelay.Scroll += (_, _) => EditSelectedRoomOutput(delay: true);
         _roomVolume.Scroll += (_, _) => EditSelectedRoomOutput(delay: false);
-        var fields = Ui.Row(12, null,
-            Ui.Stack(2, Ui.Note(L.T("延迟")), Ui.Row(4, null, _roomDelay, _roomDelayValue)),
-            Ui.Stack(2, Ui.Note(L.T("音量偏移")), Ui.Row(4, null, _roomVolume, _roomVolumeValue)));
-        fields.Wrap = true;
+        // Each slider fills its measured column. Natural-width nested stacks otherwise feed their last narrow
+        // size back into RowPanel (2026-10-17: the 150% CI view reduced these rails to 31 and 29 logical pixels).
+        var fields = new Columns(
+            Ui.Stack(2, Ui.Note(L.T("延迟")), Ui.Row(4, _roomDelay, _roomDelay, _roomDelayValue)),
+            Ui.Stack(2, Ui.Note(L.T("音量偏移")), Ui.Row(4, _roomVolume, _roomVolume, _roomVolumeValue)))
+            { MinColumnWidth = 180, Gap = 12 };
         var detail = Ui.Stack(6, _roomTitle, _roomDescription, _roomDevice, fields);
         var columns = new Columns(_room, detail) { MinColumnWidth = 280, LeftShare = .52, Gap = 16 };
         Controls.Add(Ui.Card(columns));

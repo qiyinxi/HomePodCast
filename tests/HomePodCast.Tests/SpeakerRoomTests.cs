@@ -47,6 +47,11 @@ public class SpeakerRoomTests
         Assert.Equal("未分配：混入完整立体声", SpeakerRoomLayout.EmptyText(SpeakerPosition.Center, Rear51, [Output(SpeakerPosition.Stereo)]));
         Assert.Equal("未分配：没有可播放的音箱", SpeakerRoomLayout.EmptyText(SpeakerPosition.Center, Rear51, []));
         Assert.Equal("此音源没有这个声道", SpeakerRoomLayout.EmptyText(SpeakerPosition.SideLeft, Rear51, fronts));
+        Assert.Equal("→ FL/FR", SpeakerRoomLayout.Annotation(SpeakerPosition.Center, Rear51, fronts));
+        Assert.Equal("→ L + R", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51, [Output(SpeakerPosition.Stereo)]));
+        Assert.Equal("0 ms", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51, fronts));
+        Assert.Equal("-137/24 ms", SpeakerRoomLayout.Annotation(SpeakerPosition.Left, Rear51,
+            [Output(SpeakerPosition.Left) with { DelayMs = -137 }, Output(SpeakerPosition.Left, "B") with { DelayMs = 24 }]));
     }
 
     private static AppConfig Config() => new()
@@ -69,6 +74,24 @@ public class SpeakerRoomTests
     private static FluentComboBox Device(Control panel) => All<FluentComboBox>(panel).Single(c => c.AccessibleName == "所选位置音箱");
     private static FluentComboBox Position(Control panel, string name) => All<FluentComboBox>(panel).Single(c => c.AccessibleName == name + " 位置");
     private static void Choose(FluentComboBox combo, string text) => combo.SelectedIndex = combo.Items.IndexOf(text);
+
+    [Theory]
+    [InlineData(400)]
+    [InlineData(760)]
+    public void Selected_position_sliders_remain_usable_in_narrow_and_wide_panels(int width) => Sta.Run(() =>
+    {
+        var config = Config();
+        using var host = new Panel { Size = new Size(width, 2400) };
+        using var panel = new GroupPanel(config);
+        host.Controls.Add(panel);
+        panel.SetFound(Found(config));
+        LayoutPanel.Place(panel, 0, 0, width, panel.GetPreferredSize(new Size(width, 0)).Height);
+        foreach (var slider in All<FluentSlider>(panel).Where(s => s.AccessibleName is "所选位置延迟（毫秒）" or "所选位置音量偏移"))
+        {
+            Assert.True(slider.Width >= 140 * slider.DeviceDpi / 96, $"{slider.AccessibleName}: {slider.Width}px");
+            Assert.True(slider.Parent!.ClientRectangle.Contains(slider.Bounds));
+        }
+    });
 
     [Fact]
     public void Diagram_edits_share_the_existing_draft_controls_and_keep_all_full_stereo_outputs() => Sta.Run(() =>

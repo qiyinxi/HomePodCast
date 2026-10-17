@@ -52,14 +52,16 @@ internal static class SpeakerRoomLayout
 
     internal static PointF Location(SpeakerPosition position, bool bothSurroundPairs, Size size, int dpi = 96)
     {
-        if (position == SpeakerPosition.Stereo) return new(size.Width * .5f, size.Height * .92f);
-        if (position == SpeakerPosition.Subwoofer) return new(Math.Max(ButtonWidth(size.Width, dpi) / 2f + Theme.Dp(4, dpi), size.Width * .09f), Theme.Dp(30, dpi));
+        if (position == SpeakerPosition.Stereo) return new(size.Width * .5f, size.Height * .90f);
+        if (position == SpeakerPosition.Subwoofer) return new(Math.Max(ButtonWidth(size.Width, dpi) / 2f + Theme.Dp(4, dpi), size.Width * .09f), Theme.Dp(36, dpi));
         double angle = Angle(position, bothSurroundPairs) * Math.PI / 180;
         float radius = Math.Min(size.Width / 2f - ButtonWidth(size.Width, dpi) / 2f - Theme.Dp(12, dpi), size.Height * .34f);
         // The same pixel radius on both axes keeps the displayed angles true at every aspect ratio. Front L/R sit
         // on a smaller circle so their labels cannot collide with C; radius never means distance or delay.
-        if (position is SpeakerPosition.Left or SpeakerPosition.Right) radius *= .65f;
         var center = Listener(size);
+        if (position is SpeakerPosition.Left or SpeakerPosition.Right)
+            radius = Math.Max(Theme.Dp(72, dpi), Math.Max(ButtonWidth(size.Width, dpi) + Theme.Dp(8, dpi), radius * .5f));
+        if (position == SpeakerPosition.Center) radius = center.Y - Theme.Dp(36, dpi);
         return new(center.X + (float)(radius * Math.Sin(angle)), center.Y - (float)(radius * Math.Cos(angle)));
     }
 
@@ -80,13 +82,30 @@ internal static class SpeakerRoomLayout
     {
         uint channel = Channel(position);
         if (channel == 0 || (mask & channel) == 0) return L.T("此音源没有这个声道");
+        var destinations = Destinations(position, mask, outputs).Select(Name).ToList();
+        return destinations.Count == 0 ? L.T("未分配：没有可播放的音箱")
+            : L.F("未分配：混入{0}", string.Join(" / ", destinations));
+    }
+
+    private static SpeakerPosition[] Destinations(SpeakerPosition position, uint mask, IReadOnlyList<RoomOutput> outputs)
+    {
+        uint channel = Channel(position);
+        if (channel == 0 || (mask & channel) == 0) return [];
         var destinations = CinemaMatrix.Route(channel, mask,
             role => outputs.Any(o => o.Position != SpeakerPosition.Stereo && GroupSettings.ToCinema(o.Position) == role))
             .Where(route => outputs.Any(o => GroupSettings.ToCinema(o.Position) == route.Role))
-            .Select(route => Name(GroupSettings.FromCinema(route.Role))).ToList();
-        if (outputs.Any(o => o.Position == SpeakerPosition.Stereo)) destinations.Add(Name(SpeakerPosition.Stereo));
-        return destinations.Count == 0 ? L.T("未分配：没有可播放的音箱")
-            : L.F("未分配：混入{0}", string.Join(" / ", destinations.Distinct()));
+            .Select(route => GroupSettings.FromCinema(route.Role)).ToList();
+        if (outputs.Any(o => o.Position == SpeakerPosition.Stereo)) destinations.Add(SpeakerPosition.Stereo);
+        return destinations.Distinct().ToArray();
+    }
+
+    /// <summary>Compact text stays visible on every glyph; its accessible name and selected detail retain full names.</summary>
+    internal static string Annotation(SpeakerPosition position, uint mask, IReadOnlyList<RoomOutput> outputs)
+    {
+        var assigned = outputs.Where(o => o.Position == position).ToArray();
+        if (assigned.Length > 0) return string.Join("/", assigned.Select(o => o.DelayMs).Distinct()) + " ms";
+        var destinations = Destinations(position, mask, outputs);
+        return destinations.Length == 0 ? "—" : "→ " + string.Join("/", destinations.Select(Short));
     }
 }
 
@@ -147,7 +166,7 @@ internal sealed class SpeakerRoom : LayoutPanel
 
     protected override int Arrange(int width, bool apply)
     {
-        int height = Dp(360), bw = SpeakerRoomLayout.ButtonWidth(width, DeviceDpi), bh = Dp(44);
+        int height = Dp(380), bw = SpeakerRoomLayout.ButtonWidth(width, DeviceDpi), bh = Dp(64);
         if (apply)
             foreach (var button in _buttons)
             {
@@ -181,7 +200,7 @@ internal sealed class SpeakerRoom : LayoutPanel
     {
         private readonly SpeakerRoom _room;
         internal SpeakerPosition Position { get; }
-        private string _caption = "", _names = "";
+        private string _caption = "", _names = "", _annotation = "";
         private bool _assigned, _measuring;
         internal PositionButton(SpeakerRoom room, SpeakerPosition position)
         {
@@ -196,6 +215,7 @@ internal sealed class SpeakerRoom : LayoutPanel
             _measuring = assigned.Any(o => o.Id == _room._measuring);
             _caption = SpeakerRoomLayout.Short(Position);
             _names = _assigned ? string.Join(" / ", assigned.Select(o => o.Name)) : L.T("未分配");
+            _annotation = SpeakerRoomLayout.Annotation(Position, _room._mask, _room._outputs);
             AccessibleName = _assigned ? L.F("{0}：{1}", SpeakerRoomLayout.Name(Position),
                 string.Join(" / ", assigned.Select(o => L.F("{0}，延迟 {1} 毫秒", o.Name, o.DelayMs))))
                 : L.F("{0}：{1}", SpeakerRoomLayout.Name(Position), SpeakerRoomLayout.EmptyText(Position, _room._mask, _room._outputs));
@@ -228,6 +248,8 @@ internal sealed class SpeakerRoom : LayoutPanel
             TextRenderer.DrawText(g, _caption, StyleFont(TextStyle.BodyStrong), new Rectangle(Dp(16), Dp(2), Width - Dp(19), Dp(20)), P.Text,
                 TextFlags.Line | TextFormatFlags.HorizontalCenter);
             TextRenderer.DrawText(g, _names, StyleFont(TextStyle.Caption), new Rectangle(Dp(3), Dp(23), Width - Dp(6), Dp(18)), P.TextSecondary,
+                TextFlags.Line | TextFormatFlags.HorizontalCenter);
+            TextRenderer.DrawText(g, _annotation, StyleFont(TextStyle.Caption), new Rectangle(Dp(3), Dp(43), Width - Dp(6), Dp(18)), P.TextSecondary,
                 TextFlags.Line | TextFormatFlags.HorizontalCenter);
             if (FocusVisible) DrawFocusRing(g, bounds, Dp(6));
         }

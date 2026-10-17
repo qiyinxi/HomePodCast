@@ -15,8 +15,13 @@ internal sealed partial class Walker
         Uia.Invoke(left);
         WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd) == GroupAirPlayName,
             "front-left room selection", 5000);
-        ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
+        var selectedDelay = ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
+        Expect(selectedDelay.Rect.Width >= 140 * _s.Scale / 100, "speaker room / slider width",
+            $"selected delay rail is only {selectedDelay.Rect.Width}px at {_s.Scale}%");
         CheckGroupValue(Uia.Snapshot(MainWindow()), T("所选位置延迟（毫秒）"), "-137", "room selected delay");
+        var selectedVolume = ReachRoomNode(n => n.Name == T("所选位置音量偏移") && n.Type == "Slider");
+        Expect(selectedVolume.Rect.Width >= 140 * _s.Scale / 100, "speaker room / slider width",
+            $"selected volume rail is only {selectedVolume.Rect.Width}px at {_s.Scale}%");
 
         // The custom position button receives actual keyboard messages; selecting a position opens no audio path.
         left = ReachRoomNode(n => n.Hwnd == left.Hwnd);
@@ -65,23 +70,26 @@ internal sealed partial class Walker
     {
         var pane = PagePane(Uia.Snapshot(MainWindow()), GroupPageName).Hwnd;
         Scroll(pane, Native.SB_TOP);
+        var trace = new List<string>();
         for (int step = 0; step < 32; step++)
         {
             var tree = Uia.Snapshot(MainWindow());
             var page = Find(tree, n => n.Hwnd == pane) ?? throw new StepFailed("speaker room: page window vanished");
             var node = Find(page, n => n.Shown && n.HasSize && match(n) && page.Rect.Contains(n.Rect));
             if (node != null) return node;
-            var info = Native.VerticalScroll(pane);
-            if (info is not { } si || si.nPos + si.nPage > si.nMax) break;
             var target = Find(page, n => n.Shown && n.HasSize && match(n));
+            var info = Native.VerticalScroll(pane);
+            trace.Add($"step {step}: viewport {page.Rect}, target {target?.Describe() ?? "missing"}, scroll {info?.nPos}/{info?.nMax}, page {info?.nPage}");
+            if (info is not { } si || si.nPos + si.nPage > si.nMax) break;
             int next = target != null && target.Rect.Height <= page.Rect.Height
                 ? Math.Clamp(si.nPos + target.Rect.Top - page.Rect.Top, si.nMin, si.nMax - si.nPage + 1)
                 : Math.Min(si.nMax - si.nPage + 1, si.nPos + Math.Max(1, si.nPage / 2));
             if (next <= si.nPos) break;
-            Scroll(pane, (next << 16) | 4 /* SB_THUMBPOSITION */);
+            if (!ScrollViewportForward(pane, next - si.nPos)) break;
         }
         Dump(Uia.Snapshot(MainWindow()), "speaker-room-unreachable");
-        throw new StepFailed("speaker room: expected control never fit inside the visible page viewport");
+        Shoot(MainWindow(), "speaker-room-unreachable", "room target and actual scroll viewport at failure");
+        throw new StepFailed("speaker room: expected control never fit inside the visible page viewport: " + string.Join("; ", trace));
     }
 
     private void OpenRoomFile(string path)

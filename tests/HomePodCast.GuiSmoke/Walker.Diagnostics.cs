@@ -28,11 +28,7 @@ internal sealed partial class Walker
                 var info = Native.VerticalScroll(pane);
                 if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } position || position.nPos + position.nPage > position.nMax) break;
                 // Overlap viewports so a section or button split at one edge can be fully visible on the next pass.
-                int next = Math.Min(position.nMax - (int)position.nPage + 1,
-                    position.nPos + Math.Max(1, (int)position.nPage / 2));
-                if (next <= position.nPos) break;
-                Scroll(pane, 4 /* SB_THUMBPOSITION */ | next << 16);
-                if (Native.VerticalScroll(pane) is { } after && after.nPos == position.nPos) break;
+                if (!ScrollViewportForward(pane, Math.Max(1, position.nPage / 2))) break;
             }
         }
         finally { Scroll(pane, Native.SB_TOP); }
