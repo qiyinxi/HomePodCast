@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} uitgangen · {1}",
   "大致同步": "Grove synchronisatie",
   "校准后同步": "Gesynchroniseerd na kalibratie",
-  "AirPlay 时间线同步": "AirPlay-tijdlijnsynchronisatie"
+  "AirPlay 时间线同步": "AirPlay-tijdlijnsynchronisatie",
+  "前左": "Linksvoor",
+  "前右": "Rechtsvoor",
+  "此音源没有这个声道": "Deze bron heeft dit kanaal niet",
+  "未分配：没有可播放的音箱": "Niet toegewezen: geen geschikte uitvoer",
+  "未分配：混入{0}": "Niet toegewezen: gemengd naar {0}",
+  "音箱布局图": "Luidsprekeropstelling",
+  "聆听位置": "Luisterpositie",
+  "未分配": "Niet toegewezen",
+  "{0}，延迟 {1} 毫秒": "{0}, vertraging {1} ms",
+  "{0}：正在测量": "{0}: wordt gemeten",
+  "所选位置音箱": "Luidspreker op gekozen positie",
+  "所选位置延迟（毫秒）": "Vertraging op gekozen positie (ms)",
+  "所选位置音量偏移": "Volumeverschil op gekozen positie",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Kies een positie om een toegevoegde luidspreker toe te wijzen; pijltjestoetsen wisselen van positie. Druk daarna op Toepassen. Stippellijnen tonen de werkelijke downmixbestemming.",
+  "不分配（保留完整立体声）": "Toewijzing wissen (volledig stereo houden)"
 }

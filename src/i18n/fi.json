@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} lähtöä · {1}",
   "大致同步": "Likimääräinen synkronointi",
   "校准后同步": "Synkronoitu kalibroinnin jälkeen",
-  "AirPlay 时间线同步": "AirPlay-aikajanasynkronointi"
+  "AirPlay 时间线同步": "AirPlay-aikajanasynkronointi",
+  "前左": "Etuvasen",
+  "前右": "Etuoikea",
+  "此音源没有这个声道": "Lähteessä ei ole tätä kanavaa",
+  "未分配：没有可播放的音箱": "Ei määritetty: sopivaa lähtöä ei ole",
+  "未分配：混入{0}": "Ei määritetty: miksataan kohteeseen {0}",
+  "音箱布局图": "Kaiuttimien sijoittelu",
+  "聆听位置": "Kuuntelupaikka",
+  "未分配": "Ei määritetty",
+  "{0}，延迟 {1} 毫秒": "{0}, viive {1} ms",
+  "{0}：正在测量": "{0}: mitataan",
+  "所选位置音箱": "Valitun paikan kaiutin",
+  "所选位置延迟（毫秒）": "Valitun paikan viive (ms)",
+  "所选位置音量偏移": "Valitun paikan äänenvoimakkuuden korjaus",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Valitse paikka ja määritä lisätty kaiutin; nuolinäppäimet vaihtavat paikkaa. Paina muokkauksen jälkeen Käytä. Katkoviivat osoittavat todellisen alasmiksauksen kohteen.",
+  "不分配（保留完整立体声）": "Poista määritys (säilytä täysi stereo)"
 }

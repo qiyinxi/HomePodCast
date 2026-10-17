@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} sorties · {1}",
   "大致同步": "Synchronisation approximative",
   "校准后同步": "Synchronisé après étalonnage",
-  "AirPlay 时间线同步": "Synchronisation de la chronologie AirPlay"
+  "AirPlay 时间线同步": "Synchronisation de la chronologie AirPlay",
+  "前左": "Avant gauche",
+  "前右": "Avant droit",
+  "此音源没有这个声道": "Cette source ne contient pas ce canal",
+  "未分配：没有可播放的音箱": "Non attribué : aucune sortie disponible",
+  "未分配：混入{0}": "Non attribué : mixé vers {0}",
+  "音箱布局图": "Disposition des enceintes",
+  "聆听位置": "Position d’écoute",
+  "未分配": "Non attribué",
+  "{0}，延迟 {1} 毫秒": "{0}, retard {1} ms",
+  "{0}：正在测量": "{0} : mesure en cours",
+  "所选位置音箱": "Enceinte de la position choisie",
+  "所选位置延迟（毫秒）": "Retard de la position choisie (ms)",
+  "所选位置音量偏移": "Décalage de volume de la position",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Choisissez une position pour y affecter une enceinte ajoutée ; les flèches changent de position. Appuyez ensuite sur Appliquer. Les pointillés indiquent la destination réelle du mixage.",
+  "不分配（保留完整立体声）": "Désaffecter (garder la stéréo complète)"
 }

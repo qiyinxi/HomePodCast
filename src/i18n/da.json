@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} udgange · {1}",
   "大致同步": "Omtrentlig synk",
   "校准后同步": "Synk efter kalibrering",
-  "AirPlay 时间线同步": "AirPlay-tidslinjesynk"
+  "AirPlay 时间线同步": "AirPlay-tidslinjesynk",
+  "前左": "Foran venstre",
+  "前右": "Foran højre",
+  "此音源没有这个声道": "Denne kilde har ikke denne kanal",
+  "未分配：没有可播放的音箱": "Ikke tildelt: ingen udgang kan afspille den",
+  "未分配：混入{0}": "Ikke tildelt: mixes til {0}",
+  "音箱布局图": "Højttalerplacering",
+  "聆听位置": "Lytteposition",
+  "未分配": "Ikke tildelt",
+  "{0}，延迟 {1} 毫秒": "{0}, forsinkelse {1} ms",
+  "{0}：正在测量": "{0}: måler",
+  "所选位置音箱": "Højttaler på valgt position",
+  "所选位置延迟（毫秒）": "Forsinkelse på valgt position (ms)",
+  "所选位置音量偏移": "Lydstyrkeforskydning på valgt position",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Vælg en position for at tildele en tilføjet højttaler; piletaster skifter position. Tryk Anvend efter redigering. Stiplede positioner viser den faktiske nedmixning.",
+  "不分配（保留完整立体声）": "Fjern tildeling (behold fuld stereo)"
 }

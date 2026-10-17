@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} Ausgänge · {1}",
   "大致同步": "Grobe Synchronisation",
   "校准后同步": "Nach Kalibrierung synchron",
-  "AirPlay 时间线同步": "AirPlay-Zeitachsensynchronisation"
+  "AirPlay 时间线同步": "AirPlay-Zeitachsensynchronisation",
+  "前左": "Vorne links",
+  "前右": "Vorne rechts",
+  "此音源没有这个声道": "Diese Quelle hat diesen Kanal nicht",
+  "未分配：没有可播放的音箱": "Nicht zugewiesen: keine Ausgabe verfügbar",
+  "未分配：混入{0}": "Nicht zugewiesen: in {0} gemischt",
+  "音箱布局图": "Lautsprecher im Raum",
+  "聆听位置": "Hörposition",
+  "未分配": "Nicht zugewiesen",
+  "{0}，延迟 {1} 毫秒": "{0}, Verzögerung {1} ms",
+  "{0}：正在测量": "{0}: Messung läuft",
+  "所选位置音箱": "Lautsprecher an gewählter Position",
+  "所选位置延迟（毫秒）": "Verzögerung der gewählten Position (ms)",
+  "所选位置音量偏移": "Lautstärkeversatz der gewählten Position",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Position wählen, um einen hinzugefügten Lautsprecher zuzuweisen; Pfeiltasten wechseln die Position. Danach Anwenden drücken. Gestrichelte Positionen zeigen das tatsächliche Downmix-Ziel.",
+  "不分配（保留完整立体声）": "Zuweisung lösen (volles Stereo behalten)"
 }

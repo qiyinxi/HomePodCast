@@ -701,5 +701,20 @@
   "{0} 个输出 · {1}": "{0} wyjścia · {1}",
   "大致同步": "Przybliżona synchronizacja",
   "校准后同步": "Synchronizacja po kalibracji",
-  "AirPlay 时间线同步": "Synchronizacja osi czasu AirPlay"
+  "AirPlay 时间线同步": "Synchronizacja osi czasu AirPlay",
+  "前左": "Przedni lewy",
+  "前右": "Przedni prawy",
+  "此音源没有这个声道": "To źródło nie ma tego kanału",
+  "未分配：没有可播放的音箱": "Nie przypisano: brak odpowiedniego wyjścia",
+  "未分配：混入{0}": "Nie przypisano: miksowane do {0}",
+  "音箱布局图": "Rozmieszczenie głośników",
+  "聆听位置": "Miejsce odsłuchu",
+  "未分配": "Nie przypisano",
+  "{0}，延迟 {1} 毫秒": "{0}, opóźnienie {1} ms",
+  "{0}：正在测量": "{0}: pomiar",
+  "所选位置音箱": "Głośnik w wybranym położeniu",
+  "所选位置延迟（毫秒）": "Opóźnienie wybranego położenia (ms)",
+  "所选位置音量偏移": "Korekta głośności wybranego położenia",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Wybierz położenie, aby przypisać dodany głośnik; strzałki zmieniają położenie. Po edycji naciśnij Zastosuj. Linie przerywane wskazują rzeczywiste miejsce miksowania.",
+  "不分配（保留完整立体声）": "Usuń przypisanie (zachowaj pełne stereo)"
 }

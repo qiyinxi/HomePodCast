@@ -58,6 +58,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
     public bool Finished => _eof && BufferedFrames == 0 && Volatile.Read(ref _tailFrames) >= Volatile.Read(ref _longestDelayFrames);
     public double PositionSeconds => Volatile.Read(ref _taken) / (double)Rate;
     public bool Calibrating => Volatile.Read(ref _request) != 0;
+    /// <summary>The existing measurement request, for the room diagram; reading it never starts a pulse.</summary>
+    internal int CalibrationSpeakerIndex => (int)(Volatile.Read(ref _request) & 0xff) - 1;
     public long PulseStartedTicks => Volatile.Read(ref _pulseStartedTicks);
 
     /// <summary>What each speaker plays, for the log (after <see cref="WaitOpened"/>).</summary>

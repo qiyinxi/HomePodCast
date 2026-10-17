@@ -316,6 +316,8 @@ internal class CinemaPage : ScrollPage
     internal void RefreshStatus()
     {
         var source = _source;
+        int measuring = _measurement != null ? source?.CalibrationSpeakerIndex ?? -1 : -1;
+        _editor.ShowMeasuringSpeaker(measuring >= 0 && measuring < _activeLayout.Length ? _activeLayout[measuring].DeviceId : null);
         var state = source == null ? CinemaState.Ended : _host.CinemaStateOf(source);
         if (source != null && _measurement == null)
         {

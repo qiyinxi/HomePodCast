@@ -51,6 +51,7 @@ internal sealed partial class GroupPanel : StackPanel
         Controls.Add(Ui.Note(L.T("实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。")));
         Controls.Add(Ui.Note(L.T("离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。"))); // experimental since 1.2; hardware untested
         InitializeOutputs();
+        InitializeRoom();
         Controls.Add(_timingControls);
         Controls.Add(_alignmentTier);
         Controls.Add(_members);
@@ -130,6 +131,7 @@ internal sealed partial class GroupPanel : StackPanel
 
     internal void SetPlaybackActive(bool active)
     {
+        bool changed = _active != active;
         _active = active;
         foreach (Control control in _members.Controls) control.Enabled = !active;
         bool singleCapture = !_fileSource && _speakers.Count == 1 && LiveOutputCount == 1;
@@ -144,6 +146,7 @@ internal sealed partial class GroupPanel : StackPanel
             ? L.T("实时组仍在使用的音箱，请在电脑实时声音下移除并应用。") : "";
         UpdateOutputControls();
         if (_tsid != null) _leaderOnly.Enabled = !active;
+        if (changed) RefreshRoom();
     }
 
     private bool DiscreteAllowed(GroupSpeakerSettings speaker) => _found.Any(d =>
@@ -237,18 +240,19 @@ internal sealed partial class GroupPanel : StackPanel
                 if (position.SelectedIndex < 0) return;
                 if (_fileSource) speaker.Position = positions[position.SelectedIndex];
                 else _capturePositions[GroupPlan.Key(speaker.DeviceId)] = positions[position.SelectedIndex];
+                RefreshRoom();
             };
             var delay = Ui.Slider(_fileSource ? 0 : -5000, _fileSource ? 500 : 5000, 1, 10);
             delay.PreferredLength = 120; delay.FillOrigin = 0;
             delay.Value = _fileSource ? speaker.DelayMs : _captureTrims.GetValueOrDefault(GroupPlan.Key(speaker.DeviceId), speaker.DelayMs);
             delay.AccessibleName = L.F("{0} 延迟（毫秒）", speaker.Name);
             var delayValue = new TextBlock(delay.Value.ToString());
-            delay.ValueChanged += (_, _) => delayValue.Text = delay.Value.ToString();
+            delay.ValueChanged += (_, _) => { delayValue.Text = delay.Value.ToString(); RefreshRoom(); };
             var volume = Ui.Slider(-100, 100, 1, 5);
             volume.PreferredLength = 120; volume.FillOrigin = 0; volume.Value = speaker.VolumeOffset;
             volume.AccessibleName = L.F("{0} 音量偏移", speaker.Name);
             var volumeValue = new TextBlock(volume.Value.ToString("+0;-0;0"));
-            volume.ValueChanged += (_, _) => volumeValue.Text = volume.Value.ToString("+0;-0;0");
+            volume.ValueChanged += (_, _) => { volumeValue.Text = volume.Value.ToString("+0;-0;0"); RefreshRoom(); };
             var remove = new FluentButton(L.T("移除")) { AccessibleName = L.F("移除 {0}", speaker.Name) };
             bool liveReference = _fileSource && IsLiveMember(speaker.DeviceId);
             remove.Enabled = _tsid == null && !liveReference && (!_fileSource || GroupPlan.Key(speaker.DeviceId) != GroupPlan.Key(_config.DeviceId ?? ""));
@@ -285,6 +289,7 @@ internal sealed partial class GroupPanel : StackPanel
             : LiveOutputCount == 0 ? L.T("请至少选择一个输出。") : "";
         _refreshing = false;
         SetPlaybackActive(_active);
+        RefreshRoom();
     }
 
     private string LeaderOnlyState()
