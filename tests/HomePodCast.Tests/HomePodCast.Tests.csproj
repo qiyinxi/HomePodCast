@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <!-- The protocol harness collector is pure byte storage; test it without running a sender or receiver. -->
+    <Compile Include="../HomePodCast.ProtocolHarness/PcmCaptureBuffer.cs" Link="ProtocolHarness/PcmCaptureBuffer.cs" />
     <!-- Test the companion's pure timeline/status logic without a WinRT dependency or opening a window. -->
     <Compile Include="../../modules/VideoWindow/DelayQueue.cs" Link="VideoWindow/DelayQueue.cs" />
     <Compile Include="../../modules/VideoWindow/StatusDelay.cs" Link="VideoWindow/StatusDelay.cs" />

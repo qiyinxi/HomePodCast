@@ -7,7 +7,15 @@ if (args is ["--self-test"])
     if (ReceiverKinds.Classify("AppleTV3,2", new Dictionary<string, string> { ["features"] = "10879", ["srcvers"] = "220.68" })
         != ReceiverKind.ThirdPartyAirPlay1) throw new Exception("legacy emulator classification");
     HomePodCast.ProtocolHarness.DlnaPcmComparison.SelfTest();
+    HomePodCast.ProtocolHarness.CompatibilityJitEvents.SelfTest();
     Console.WriteLine("Protocol harness self-test passed");
+    return;
+}
+
+if (args is ["--ptp-cold-start"])
+{
+    // Fixed loopback fakes only; this mode accepts no device address and opens no audio endpoint.
+    await HomePodCast.ProtocolHarness.PtpColdStart.Run();
     return;
 }
 

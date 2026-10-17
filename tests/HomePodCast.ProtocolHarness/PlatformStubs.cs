@@ -5,8 +5,9 @@ namespace HomePodCast
 {
     internal static class Log
     {
+        internal static event Action<string>? WarningObserved;
         public static void Info(string text) => Console.WriteLine(text);
-        public static void Warn(string text) => Console.WriteLine(text);
+        public static void Warn(string text) { WarningObserved?.Invoke(text); Console.WriteLine(text); }
         public static void Debug(string text) => Console.WriteLine(text);
         public static string Name(object? name) => name?.ToString() ?? "";
     }

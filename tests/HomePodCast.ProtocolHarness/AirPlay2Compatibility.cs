@@ -63,6 +63,7 @@ internal static class AirPlay2Compatibility
 
     public static async Task Run(string host, int port, int latency, string directory, string pcmPath, bool realtime, bool coordinated = false)
     {
+        using var diagnostics = new CompatibilityDiagnostics(traceJit: coordinated);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         byte[] reference;
         if (realtime)
@@ -76,7 +77,9 @@ internal static class AirPlay2Compatibility
         // Choose a unique decoded marker after startup muting. Compare all subsequent frames, not just the marker.
         int markerFrame = 44100 / 2;
         byte[] marker = reference.AsSpan(markerFrame * 4, 512).ToArray();
-        var received = new List<byte>(); long arrived = 0; int offset = -1;
+        // 2026-10-17: copying all accumulated PCM per read crosses the LOH threshold during early playback.
+        // Bound and allocate the capture before starting a transport; finding a marker must not generate GC load.
+        var received = new PcmCaptureBuffer(marker, 44100 * 30 * 4);
         using var collecting = new CancellationTokenSource();
         var reader = Task.Run(async () =>
         {
@@ -86,12 +89,9 @@ internal static class AirPlay2Compatibility
             {
                 int size = await file.ReadAsync(buffer, collecting.Token);
                 if (size == 0) { await Task.Delay(2, collecting.Token); continue; }
-                received.AddRange(buffer.AsSpan(0, size).ToArray());
-                if (offset < 0)
-                {
-                    offset = received.ToArray().AsSpan().IndexOf(marker);
-                    if (offset >= 0) arrived = MediaClock.Now;
-                }
+                long completed = MediaClock.Now;
+                received.Append(buffer.AsSpan(0, size), completed);
+                diagnostics.ObserveRead(received.Count, completed, MediaClock.Now);
             }
         });
         var device = new AirPlayDevice("CI AirPlay 2", "CI", IPAddress.Parse(host), port, "Shairport Sync",
@@ -100,11 +100,18 @@ internal static class AirPlay2Compatibility
         ReceiverOutputSet? outputs = null;
         long began = 0, packets = 0;
         string? lost = null;
+        Exception? sessionFailure = null;
         int expectedLatency = latency;
         try
         {
             if (coordinated)
             {
+                // Generate the signal before selecting a future epoch, so waveform construction cannot use its lead.
+                var source = new float[44100 * 14 * 2];
+                for (int frame = 0; frame < source.Length / 2; frame++)
+                    for (int channel = 0; channel < 2; channel++)
+                        source[frame * 2 + channel] = RaopCompatibility.Signal(frame, channel) / 32767f;
+                var timeline = new TimelineBuffer(44100, 44100 * 14, MediaClock.Now);
                 var settings = ReceiverPreferences.Of(device) with
                 {
                     ProtocolOverride = realtime ? ReceiverProtocol.AirPlay2Realtime : ReceiverProtocol.AirPlay2Buffered,
@@ -113,20 +120,18 @@ internal static class AirPlay2Compatibility
                 var options = new ReceiverConnectOptions(latency, 0, 10, null, null, new SignalEffect(), Console.WriteLine);
                 outputs = await ReceiverOutputSet.PrepareAsync([new(device.DeviceId, device.Name,
                     _ => Task.FromResult(new ReceiverGroupTarget(device, settings)), options)], () => 10, timeout.Token,
-                    connect: (protocol, target, preferences, connection, clocks, ct) => ReceiverGroupConnections.PrepareAsync(target,
-                        preferences! with { ProtocolOverride = protocol }, connection, clocks, ct,
-                        encoder: () => new ReplayEncoder(Path.Combine(directory, "blocks.bin"), validateSource: true)));
+                    connect: async (protocol, target, preferences, connection, clocks, ct) => diagnostics.Observe(
+                        await ReceiverGroupConnections.PrepareAsync(target,
+                            preferences! with { ProtocolOverride = protocol }, connection, clocks, ct,
+                            encoder: () => new ReplayEncoder(Path.Combine(directory, "blocks.bin"), validateSource: true))));
                 // Precomputed processed history isolates transport alignment from runner scheduling and audio devices.
                 // The buffered replay additionally checks every source sample before returning the real Windows AAC.
-                began = MediaClock.Now + MediaClock.FromMs(500);
-                var timeline = new TimelineBuffer(44100, 44100 * 14, began);
-                var source = new float[44100 * 14 * 2];
-                for (int frame = 0; frame < source.Length / 2; frame++)
-                    for (int channel = 0; channel < 2; channel++)
-                        source[frame * 2 + channel] = RaopCompatibility.Signal(frame, channel) / 32767f;
-                timeline.WriteFrames(0, source);
+                long firstFrame = timeline.FrameAt(MediaClock.Now + MediaClock.FromMs(500));
+                began = timeline.TicksAt(firstFrame);
+                timeline.WriteFrames(firstFrame, source);
                 const int headroomMs = 20;
                 expectedLatency = outputs.MinimumDelayMs + headroomMs;
+                diagnostics.Report("before-group-start", began + MediaClock.FromMs(headroomMs));
                 await outputs.StartAsync(timeline, expectedLatency, 10, false, began + MediaClock.FromMs(headroomMs), timeout.Token);
             }
             else
@@ -146,20 +151,37 @@ internal static class AirPlay2Compatibility
                 lost = client.LostReason;
             }
         }
-        finally { outputs?.Dispose(); client?.Dispose(); collecting.Cancel(); }
-        try { await reader; } catch (OperationCanceledException) { }
+        catch (Exception error) { sessionFailure = error; throw; }
+        finally
+        {
+            try { outputs?.Dispose(); client?.Dispose(); }
+            finally
+            {
+                collecting.Cancel();
+                try { await reader; }
+                catch (OperationCanceledException) when (collecting.IsCancellationRequested) { }
+                catch (Exception error) when (sessionFailure != null)
+                {
+                    // A collector failure must be observed without replacing the session failure that led here.
+                    Console.WriteLine($"PCM collector also failed during cleanup: {error}");
+                }
+            }
+        }
+        diagnostics.Report("completed");
+        int offset = received.MarkerOffset;
+        long arrived = received.MarkerArrivedAt;
         Console.WriteLine($"AirPlay 2 diagnostics: coordinated={coordinated}, realtime={realtime}, packets={packets}, decoded={received.Count}, marker={offset}, lost={lost}");
         if (lost != null) throw new Exception(lost);
         if (offset < 0 || offset % 4 != 0)
         {
-            Diagnose(reference, received.ToArray());
+            Diagnose(reference, received.Written.ToArray());
             throw new Exception("AirPlay 2 PCM marker missing or unaligned");
         }
         double actual = MediaClock.ToMs(arrived - began) - markerFrame * 1000.0 / 44100;
         if (Math.Abs(actual - expectedLatency) > 50) throw new Exception($"AirPlay 2 latency {actual:F1} ms, expected {expectedLatency} ±50 ms");
         int bytes = Math.Min(6 * 44100 * 4, received.Count - offset);
         if (bytes < 4 * 44100 * 4) throw new Exception("AirPlay 2 decoded fewer than four seconds");
-        if (!received.ToArray().AsSpan(offset, bytes).SequenceEqual(reference.AsSpan(markerFrame * 4, bytes)))
+        if (!received.Written.Slice(offset, bytes).SequenceEqual(reference.AsSpan(markerFrame * 4, bytes)))
             throw new Exception("AirPlay 2 decoded PCM differs from the independent reference or has gaps");
         Console.WriteLine($"PASS: AirPlay 2 {(realtime ? "realtime" : "buffered")}, {bytes / 4} exact decoded frames, latency={actual:F1} ms");
     }
