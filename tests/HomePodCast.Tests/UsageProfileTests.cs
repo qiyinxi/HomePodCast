@@ -198,6 +198,7 @@ public class UsageProfileTests
         [nameof(AppConfig.MeasuredAvOffsetMs)] = "calibration",
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
+        [nameof(AppConfig.Stems)] = "optional experimental module path and stem mixes; enabling is session-only",
         [nameof(AppConfig.SavedOutputGroups)] = "named output presets are shared by every usage profile",
         [nameof(AppConfig.SelectedOutputGroupId)] = "which named output group was selected last",
         [nameof(AppConfig.Cinema)] = "physical surround layout and room-specific acoustic alignment; file playback is session-only",

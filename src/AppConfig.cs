@@ -18,6 +18,7 @@ public sealed class AppConfig
     public int? MeasuredAvOffsetMs { get; set; }
     public Dictionary<string, AvCalibration> SyncCalibrations { get; set; } = [];
     public List<UsageProfile> UsageProfiles { get; set; } = [];
+    public Audio.StemSettings Stems { get; set; } = new();
     public Audio.CinemaSettings Cinema { get; set; } = new();
 
     /// <summary>

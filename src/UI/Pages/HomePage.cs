@@ -428,7 +428,8 @@ internal sealed class HomePage : ScrollPage
         bool live = c.State == StreamState.Streaming && (selection != null || (!_tuner.Pending && ms == cfg.LatencyMs));
         int effective = live ? c.EffectiveLatencyMs : selection?.Value ?? c.SafeLatency(ms);
         int captureExtra = c.Capture?.ExtraLatencyMs ?? (_app.Routing.Active ? Audio.RoutedCapture.RoutedExtraLatencyMs : 0);
-        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs, _app.CurrentCalibrationContext);
+        _lagMs = LatencyTuner.SoundLagMs(effective, cfg, captureExtra, c.Fifo.TargetMs, _app.CurrentCalibrationContext)
+            + (live ? _app.Stems.AddedLatencyMs : 0); // the same as TrayApp.VideoDelayFor
         _lag.Text = L.F("声音比画面晚约 {0} ms", _lagMs);
         _receiverLatency.Refresh(selection, _lag.Text);
         ShowPlayers();
