@@ -36,6 +36,10 @@ delay/volume edits and actual downmix destinations on empty positions. Clearing 
 outputs in full stereo; source changes retain saved surround assignments. The optional acoustic measurement
 highlights its current speaker, and choosing a position starts no measurement. Hardware-untested labels remain.
 
+**Diagnostics** collects the A/V sync test, local log folder and redacted diagnostic report in the former sync-test
+navigation slot. Each action requires its own button click. About keeps version, software updates and license;
+the existing test, log and export behavior stays the same.
+
 Synchronization targets differ: AirPlay 2 uses a shared timeline and aims for tight synchronization; AirPlay 1 and
 ordinary Bluetooth provide basic alignment after calibration; DLNA offers rough alignment for different rooms. Software
 receiver PCM/marker bounds are not acoustic hardware guarantees.
@@ -75,6 +79,9 @@ AirPlay 握手检查不代表播放验证，独立 DLNA 服务仍需实测。
 「多音箱」新增俯视房间图，沿用已有输出路由，可用键盘选位置、调该位置的延迟和音量，空位显示实际下混去向。
 清空位置会明确保留输出的完整立体声，切换音源保留已保存的环绕位置。可选声学测量会高亮当前音箱，点选位置不会
 开始测量；尚未实机验证的标签保留。
+
+「诊断」页在原音画同步测试的位置集中音画同步测试、日志文件夹和脱敏诊断报告，各自需要明确点击按钮才执行。
+关于页保留版本、软件更新和许可证；原有测试、日志和导出行为不变。
 
 同步目标按类型区分：AirPlay 2 共用时间线、目标严格同步；AirPlay 1 和普通蓝牙校准后基本对齐；DLNA 适合不同房间的
 大致对齐。软件接收端的 PCM／标记边界不能当作真实声音的硬件保证。

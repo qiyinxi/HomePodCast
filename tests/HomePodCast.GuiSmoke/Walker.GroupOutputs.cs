@@ -98,6 +98,11 @@ internal sealed partial class Walker
         ShootPage("音画同步", "players-and-viewer", checkEachScroll: true);
         CheckGroupIdle(preferences, baseline.Count, "av-sync-page");
 
+        Navigate("诊断");
+        CheckDiagnostics(Uia.Snapshot(MainWindow()));
+        ShootPage("诊断", "sync-logs-report", checkEachScroll: true);
+        CheckGroupIdle(preferences, baseline.Count, "diagnostics-page");
+
         Navigate(GroupPageName);
         Thread.Sleep(1100); // More than four page timer ticks; opening and idle refresh must remain inert.
         CheckGroupIdle(preferences, baseline.Count, "opened");

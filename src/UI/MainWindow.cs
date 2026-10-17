@@ -55,7 +55,7 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
         _rail.Add(Glyph.Screen, L.T("音画同步"));
-        _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
+        _rail.Add(Glyph.Gauge, L.T("诊断"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
         _rail.Add(Glyph.Info, L.T("关于"), bottom: true);
@@ -72,7 +72,7 @@ internal sealed class MainWindow : Form, ISurface
         _speakers = new SpeakersPage(app);
         _group = new GroupPage(app);
         _viewing = new ViewingPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, new SyncPage(app), _profiles, _settings, _about];
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, new DiagnosticsPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;

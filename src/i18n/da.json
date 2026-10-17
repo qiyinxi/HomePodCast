@@ -36,6 +36,7 @@
   "静音": "Slå lyd fra",
   "系统声音": "Systemlyde",
   "进程 {0}": "Proces {0}",
+  "诊断": "Diagnostik",
   "音画同步测试": "A/V-synkroniseringstest",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Med et eller to sekunders mellemrum (tilfældigt) klikker HomePod, og cirklen blinker.\nHvis du ser blinket, før du hører klikket, så træk skyderen mod højre, indtil de falder sammen.\nDen endelige værdi er, hvor meget lyden er bagefter billedet i spil.",
   "完成": "Udført",

@@ -36,6 +36,7 @@
   "静音": "Mute",
   "系统声音": "System sounds",
   "进程 {0}": "Process {0}",
+  "诊断": "Diagnostics",
   "音画同步测试": "A/V sync test",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Every second or two (at random) the HomePod clicks and the circle flashes.\nIf you see the flash before you hear the click, drag the slider right until they coincide.\nThe final value is how far the sound lags the picture in games.",
   "完成": "Done",

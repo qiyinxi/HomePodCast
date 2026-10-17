@@ -3,7 +3,7 @@ using HomePodCast.Update;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>Version, updates and local maintenance, separate from preferences.</summary>
+/// <summary>Version, updates and license, separate from preferences and diagnostics.</summary>
 internal sealed class AboutPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
@@ -36,20 +36,9 @@ internal sealed class AboutPage : ScrollPage
 
         var license = new FluentButton("GPL-3.0", ButtonKind.Link, Glyph.OpenInNew);
         var licenseRow = new SettingRow(Glyph.Info, L.T("许可证"), "GNU General Public License v3.0", license);
-        var logs = new FluentButton(L.T("打开日志文件夹"), ButtonKind.Secondary, Glyph.Folder);
-        var diagnostic = new FluentButton(L.T("导出诊断"));
-        // The raw log names the speakers and holds IP addresses and paths: it is for the user's own troubleshooting, and
-        // a public report gets the redacted diagnostic report (DiagnosticReports).
-        Content.Controls.AddRange([aboutRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow,
-            Ui.Section(L.T("日志")), new SettingRow(Glyph.Folder, L.T("日志"),
-                L.F("完整的原始日志，自己排查问题时看。里面有音箱名称和 IP 地址，公开报告问题请改用下面的诊断报告。{0} 在这个文件夹里：\n{1}",
-                    AppConfig.LogFileName, AppEnvironment.LogFolder), logs),
-            new SettingRow(Glyph.Info, L.T("诊断报告"),
-                L.T("公开报告问题时附上这个：脱敏后的日志，加上设备和网络统计。不包含配置文件、密码或录音，也不会上传。"), diagnostic)]);
+        Content.Controls.AddRange([aboutRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]);
         link.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl);
         license.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl + "/blob/dev/LICENSE");
-        logs.Click += (_, _) => AppEnvironment.OpenLogFolder();
-        diagnostic.Click += (_, _) => _app.ExportDiagnostics(FindForm());
         _channel.AccessibleName = L.T("更新渠道");
         _channel.SelectionChangeCommitted += (_, _) =>
         {

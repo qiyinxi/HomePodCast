@@ -135,14 +135,3 @@ internal sealed class ViewingPage : ScrollPage
     }
 
 }
-
-internal sealed class SyncPage : ScrollPage
-{
-    public SyncPage(TrayApp app) : base(L.T("音画同步测试"))
-    {
-        var start = new FluentButton(L.T("开始"), ButtonKind.Primary);
-        Content.Controls.AddRange([Ui.Note(L.T("听「咔」声、看闪光，测出声音比画面晚多少。需要先连接音箱。")), Ui.Row(8, null, start)]);
-        // Browsing a page must never start a tone; the existing measurement starts only on this explicit action.
-        start.Click += (_, _) => app.RunSyncTest(FindForm()!);
-    }
-}

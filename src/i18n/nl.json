@@ -36,6 +36,7 @@
   "静音": "Dempen",
   "系统声音": "Systeemgeluiden",
   "进程 {0}": "Proces {0}",
+  "诊断": "Diagnostiek",
   "音画同步测试": "A/V-synchronisatietest",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Elke een à twee seconden (willekeurig) klikt de HomePod en knippert de cirkel.\nZie je de flits voordat je de klik hoort, sleep de schuifregelaar dan naar rechts tot ze samenvallen.\nDe eindwaarde is hoeveel het geluid in games achterloopt op het beeld.",
   "完成": "Gereed",
