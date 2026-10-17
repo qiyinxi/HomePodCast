@@ -67,8 +67,11 @@ internal sealed partial class Walker
             var buttons = room.Descendants().Where(n => n.Type == "Button" && n.Shown).ToArray();
             Expect(buttons.Length == count, "speaker room / " + name, $"the {name} file exposes {buttons.Length} positions instead of {count}");
             var center = buttons.Single(n => n.Name.StartsWith(_t.F("{0}：{1}", T("中置"), ""), StringComparison.Ordinal));
-            Expect(center.Name.Contains(T("未分配：混入{0}").Replace("{0}", ""), StringComparison.Ordinal), "speaker room / " + name,
-                "the empty center slot does not announce the actual downmix destination");
+            // The file fixture has one front-right output. Compare the complete formatted announcement: German
+            // and Japanese place the destination inside the sentence rather than at its end.
+            string expectedCenter = _t.F("{0}：{1}", T("中置"), _t.F("未分配：混入{0}", T("前右")));
+            Expect(center.Name == expectedCenter, "speaker room / " + name,
+                $"the empty center announces 「{center.Name}」 instead of the actual front-right downmix 「{expectedCenter}」");
             Uia.Invoke(ReachRoomNode(n => n.Hwnd == center.Hwnd));
             ReachRoomNode(n => n.Name == T("所选位置音箱") && n.Type == "ComboBox");
             Expect(!GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Enabled,
