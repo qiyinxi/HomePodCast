@@ -37,8 +37,22 @@ internal class CinemaPage : ScrollPage
     private uint _fileMask;
     private long _playRequest;
     private long? _openingRequest;
-    internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } =
-        source => Task.Run(() => source.WaitOpened(TimeSpan.FromSeconds(10)));
+    private CinemaMediaReader.Progress? _inspection;
+    private CinemaFileSource? _openingSource;
+    internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } = WaitOpenedAsync;
+
+    /// <summary>The decoder's own signal, awaited for up to 10 s: no thread is held while it opens.</summary>
+    private static async Task<bool> WaitOpenedAsync(CinemaFileSource source)
+    {
+        try { return await source.Opened.WaitAsync(TimeSpan.FromSeconds(10)) && source.Error == null; }
+        catch (TimeoutException) { return false; }
+    }
+
+    /// <summary>What a file being opened waits for, e.g. for a test's timeout message.</summary>
+    internal string OpeningState => _openingRequest == null ? "nothing is opening"
+        : _openingSource is { } source ? "the decoder is " + source.Progress
+        : _inspection is { } inspection ? "the file inspection is " + inspection
+        : "opening";
 
     /// <param name="inputs">The microphones to offer (null: the system's capture endpoints).</param>
     /// <param name="volumeWait">The volume slider's save debounce (tests pass a manual one).</param>
@@ -185,14 +199,11 @@ internal class CinemaPage : ScrollPage
         _file.Text = Path.GetFileName(path);
         _status.Text = "";
         RefreshStatus();
+        var inspection = _inspection = new CinemaMediaReader.Progress("starting the inspection thread");
         try
         {
             // Media Foundation requires an MTA thread; the WinForms UI is STA. Keep native open off the UI thread too.
-            var info = await Task.Run(() =>
-            {
-                using var reader = new CinemaMediaReader(path);
-                return (reader.Channels, reader.Mask);
-            });
+            var info = await CinemaMediaReader.InspectAsync(path, step => inspection.Step("opening the file: " + step));
             if (IsDisposed || request != _playRequest) return;
             _path = path;
             _fileMultichannel = info.Channels >= 6;
@@ -216,6 +227,7 @@ internal class CinemaPage : ScrollPage
         finally
         {
             if (_openingRequest == request) _openingRequest = null;
+            if (ReferenceEquals(_inspection, inspection)) _inspection = null;
             if (!IsDisposed) RefreshStatus();
         }
     }
@@ -238,13 +250,13 @@ internal class CinemaPage : ScrollPage
         {
             var layout = SelectedLayout();
             CinemaMatrix.Validate(layout);
-            source = new CinemaFileSource(_path, layout);
+            source = _openingSource = new CinemaFileSource(_path, layout);
             _status.Text = L.T("正在打开文件…");
             bool opened = await WaitForFileOpened(source);
             if (IsDisposed || request != _playRequest) { source.Dispose(); return; }
             if (!opened)
                 throw source.Error is { } error ? new CinemaException(error, source.ErrorLog ?? error)
-                    : new CinemaException(L.T("打开文件太久没有反应，已放弃。"), "the decoder did not open the file within 10 s");
+                    : new CinemaException(L.T("打开文件太久没有反应，已放弃。"), $"the decoder did not open the file within 10 s: {source.Progress}");
             _editor.Apply(activateCapture: false);
             _layoutSignature = GroupPanel.SettingsSignature(_host.Config);
             _host.Config.Cinema.Speakers = layout.ToList();
@@ -267,6 +279,7 @@ internal class CinemaPage : ScrollPage
         finally
         {
             if (_openingRequest == request) _openingRequest = null;
+            if (ReferenceEquals(_openingSource, source)) _openingSource = null;
             if (!IsDisposed)
             {
                 _play.Enabled = true;
@@ -461,6 +474,7 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
     internal Task UseFile(string path) => _page.UseFile(path);
     internal Task PlayAsync() => _page.PlayAsync();
     internal void RefreshStatus() => _page.RefreshStatus();
+    internal string OpeningState => _page.OpeningState;
     protected override void OnShown(EventArgs e) { base.OnShown(e); _page.PageShown(); }
     protected override void OnFormClosed(FormClosedEventArgs e) { _page.PageHidden(); base.OnFormClosed(e); }
     protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () => base.OnDpiChanged(e));

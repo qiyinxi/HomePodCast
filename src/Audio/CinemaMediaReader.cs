@@ -28,8 +28,21 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
     /// <summary>The decoder's speaker mask (0: it named none); may change at a format change (see <see cref="Read"/>).</summary>
     public uint Mask { get; private set; }
 
+    // Media Foundation stays started from the first open on. Before 2026-10-17 each reader started it and its Dispose shut
+    // it down again whenever no other user held it, so a file open created Media Foundation's work-queue threads and the
+    // close waited for them to end. Measured 2026-10-17 on 4 CPUs: an open took 29 ms that way and 0.8 ms with the
+    // platform kept; with four above-normal threads keeping those CPUs busy, 1.2 s (up to 2.9 s) against 2 ms. On
+    // 2026-10-16 (CI run 38970600060) a 10 s and a 20 s wait for such opens ran out together, both still in the open.
+    private static int s_platformKept;
+
+    private static void KeepPlatform()
+    {
+        if (Interlocked.CompareExchange(ref s_platformKept, 1, 0) == 0 && MFStartup(0x20070, 0) < 0) Volatile.Write(ref s_platformKept, 0);
+    }
+
+    /// <param name="step">Told each native step before it starts, so a timeout can say where the open waits.</param>
     /// <exception cref="CinemaException">Not a local file, no decoder, or not a layout the cinema plays.</exception>
-    public CinemaMediaReader(string path)
+    public CinemaMediaReader(string path, Action<string>? step = null)
     {
         // A path, never a URL: Media Foundation would otherwise fetch it from the network.
         if (!Path.IsPathFullyQualified(path) || !File.Exists(path))
@@ -37,11 +50,16 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
         nint native = 0, type = 0, current = 0;
         try
         {
+            step?.Invoke("CoInitializeEx");
             Check(CoInitializeEx(0, 0), "CoInitializeEx"); _com = true; // MTA; S_FALSE (already) still needs its CoUninitialize
+            step?.Invoke("MFStartup");
             Check(MFStartup(0x20070, 0), "MFStartup"); _started = true;
+            KeepPlatform();
             try
             {
+                step?.Invoke("MFCreateSourceReaderFromURL");
                 Check(MFCreateSourceReaderFromURL(path, 0, out _reader), "MFCreateSourceReaderFromURL");
+                step?.Invoke("the media type");
                 Check(((delegate* unmanaged[Stdcall]<nint, uint, uint, nint*, int>)Method(_reader, 5))(_reader, Audio, 0, &native), "GetNativeMediaType");
             }
             catch (COMException ex)
@@ -74,6 +92,44 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
         }
         catch { Dispose(); throw; }
         finally { Release(native); Release(type); Release(current); }
+    }
+
+    /// <summary>
+    /// The file's channels and speaker mask, read on an MTA thread of its own (Media Foundation's, as the decoder's),
+    /// never on a pool thread: its native open may take long, and pool threads' COM state isn't ours to set and undo.
+    /// </summary>
+    /// <param name="step">As for the constructor, on the inspection thread.</param>
+    internal static Task<(int Channels, uint Mask)> InspectAsync(string path, Action<string>? step = null)
+    {
+        var result = new TaskCompletionSource<(int, uint)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var reader = new CinemaMediaReader(path, step);
+                result.TrySetResult((reader.Channels, reader.Mask));
+            }
+            catch (Exception ex) { result.TrySetException(ex); }
+        }) { IsBackground = true, Name = "Cinema file inspection" };
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        return result.Task;
+    }
+
+    /// <summary>Where an open is and since when, for the message of a wait that gave up.</summary>
+    internal sealed class Progress(string stage)
+    {
+        private volatile string _stage = stage;
+        private long _since = Environment.TickCount64;
+
+        public void Step(string stage)
+        {
+            _stage = stage;
+            Volatile.Write(ref _since, Environment.TickCount64);
+        }
+
+        public override string ToString() =>
+            FormattableString.Invariant($"{_stage} for {(Environment.TickCount64 - Volatile.Read(ref _since)) / 1000.0:F1} s");
     }
 
     /// <summary>The next decoded frames (interleaved floats), or null at the end of the file.</summary>
