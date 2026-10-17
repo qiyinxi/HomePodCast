@@ -18,12 +18,20 @@ internal sealed partial class Walker
                 // Keep the pane handle: after scrolling, its title may no longer be visible.
                 var page = Find(Uia.Snapshot(MainWindow()), node => node.Hwnd == pane)
                     ?? throw new StepFailed("the diagnostics scroll pane disappeared");
-                foreach (string section in sections) if (Has(page, section)) seen.Add(section);
+                var viewport = page.Rect;
+                foreach (string section in sections)
+                    if (Find(page, node => node.Type == "Text" && node.Name == section && node.Shown && node.HasSize
+                            && viewport.Contains(node.Rect)) != null) seen.Add(section);
                 foreach (string action in actions)
-                    if (Find(page, node => node.Shown && node.Type == "Button" && node.Says(action)) != null) buttons.Add(action);
+                    if (Find(page, node => node.Type == "Button" && node.Name == action && node.Shown && node.HasSize
+                            && viewport.Contains(node.Rect)) != null) buttons.Add(action);
                 var info = Native.VerticalScroll(pane);
                 if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } position || position.nPos + position.nPage > position.nMax) break;
-                Scroll(pane, Native.SB_PAGEDOWN);
+                // Overlap viewports so a section or button split at one edge can be fully visible on the next pass.
+                int next = Math.Min(position.nMax - (int)position.nPage + 1,
+                    position.nPos + Math.Max(1, (int)position.nPage / 2));
+                if (next <= position.nPos) break;
+                Scroll(pane, 4 /* SB_THUMBPOSITION */ | next << 16);
                 if (Native.VerticalScroll(pane) is { } after && after.nPos == position.nPos) break;
             }
         }
