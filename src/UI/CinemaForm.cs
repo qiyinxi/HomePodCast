@@ -81,7 +81,9 @@ internal class CinemaPage : ScrollPage
         _editor.SetFound(host.Speakers.ToList());
         _layoutSignature = GroupPanel.SettingsSignature(config);
         body.Controls.Add(_editor);
-        body.Controls.Add(Ui.Row(8, null, _apply, _saveGroup, _manualAlignment));
+        var groupActions = Ui.Row(8, null, _apply, _saveGroup, _manualAlignment);
+        groupActions.Wrap = true;
+        body.Controls.Add(groupActions);
         _saveGroup.Click += (_, _) => SaveOutputGroup();
         _manualAlignment.Click += (_, _) => AlignManually();
         _apply.Click += (_, _) =>
