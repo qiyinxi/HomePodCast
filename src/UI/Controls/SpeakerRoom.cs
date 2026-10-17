@@ -46,12 +46,21 @@ internal static class SpeakerRoomLayout
         SpeakerPosition.RearRight => bothSurroundPairs ? 145 : 110, _ => 0,
     };
 
-    internal static PointF Location(SpeakerPosition position, bool bothSurroundPairs)
+    internal static PointF Listener(Size size) => new(size.Width * .5f, size.Height * .46f);
+
+    internal static int ButtonWidth(int width, int dpi) => Math.Min(Theme.Dp(68, dpi), Math.Max(Theme.Dp(48, dpi), width / 6));
+
+    internal static PointF Location(SpeakerPosition position, bool bothSurroundPairs, Size size, int dpi = 96)
     {
-        if (position == SpeakerPosition.Stereo) return new(.5f, .92f);
-        if (position == SpeakerPosition.Subwoofer) return new(.09f, .10f);
+        if (position == SpeakerPosition.Stereo) return new(size.Width * .5f, size.Height * .92f);
+        if (position == SpeakerPosition.Subwoofer) return new(Math.Max(ButtonWidth(size.Width, dpi) / 2f + Theme.Dp(4, dpi), size.Width * .09f), Theme.Dp(30, dpi));
         double angle = Angle(position, bothSurroundPairs) * Math.PI / 180;
-        return new((float)(.5 + .42 * Math.Sin(angle)), (float)(.46 - .34 * Math.Cos(angle)));
+        float radius = Math.Min(size.Width / 2f - ButtonWidth(size.Width, dpi) / 2f - Theme.Dp(12, dpi), size.Height * .34f);
+        // The same pixel radius on both axes keeps the displayed angles true at every aspect ratio. Front L/R sit
+        // on a smaller circle so their labels cannot collide with C; radius never means distance or delay.
+        if (position is SpeakerPosition.Left or SpeakerPosition.Right) radius *= .65f;
+        var center = Listener(size);
+        return new(center.X + (float)(radius * Math.Sin(angle)), center.Y - (float)(radius * Math.Cos(angle)));
     }
 
     internal static string Name(SpeakerPosition position) => position switch
@@ -124,8 +133,8 @@ internal sealed class SpeakerRoom : LayoutPanel
 
     private void MoveSelection(PositionButton from, Keys direction)
     {
-        var origin = SpeakerRoomLayout.Location(from.Position, BothPairs);
-        var candidates = _buttons.Where(b => b != from).Select(b => (Button: b, Point: SpeakerRoomLayout.Location(b.Position, BothPairs)))
+        var origin = SpeakerRoomLayout.Location(from.Position, BothPairs, ClientSize, DeviceDpi);
+        var candidates = _buttons.Where(b => b != from).Select(b => (Button: b, Point: SpeakerRoomLayout.Location(b.Position, BothPairs, ClientSize, DeviceDpi)))
             .Select(p => (p.Button, X: p.Point.X - origin.X, Y: p.Point.Y - origin.Y));
         var next = candidates.Where(p => direction switch
             { Keys.Left => p.X < -.01, Keys.Right => p.X > .01, Keys.Up => p.Y < -.01, _ => p.Y > .01 })
@@ -138,12 +147,12 @@ internal sealed class SpeakerRoom : LayoutPanel
 
     protected override int Arrange(int width, bool apply)
     {
-        int height = Dp(300), bw = Math.Min(Dp(76), Math.Max(Dp(48), width / 6)), bh = Dp(44);
+        int height = Dp(360), bw = SpeakerRoomLayout.ButtonWidth(width, DeviceDpi), bh = Dp(44);
         if (apply)
             foreach (var button in _buttons)
             {
-                var p = SpeakerRoomLayout.Location(button.Position, BothPairs);
-                Place(button, (int)Math.Round(p.X * width) - bw / 2, (int)Math.Round(p.Y * height) - bh / 2, bw, bh);
+                var p = SpeakerRoomLayout.Location(button.Position, BothPairs, new Size(width, height), DeviceDpi);
+                Place(button, (int)Math.Round(p.X) - bw / 2, (int)Math.Round(p.Y) - bh / 2, bw, bh);
             }
         return height;
     }
@@ -153,11 +162,16 @@ internal sealed class SpeakerRoom : LayoutPanel
         base.OnPaint(e);
         var g = e.Graphics;
         Shapes.BorderRound(g, P.ControlBorder, new Rectangle(Dp(2), Dp(2), Width - Dp(4), Height - Dp(4)), Dp(12), Dp(1));
-        var center = new PointF(Width * .5f, Height * .46f);
+        var center = SpeakerRoomLayout.Listener(ClientSize);
         using var guide = new Pen(P.Divider, Dp(1)) { DashStyle = DashStyle.Dot };
         foreach (var button in _buttons.Where(b => b.Position is not (SpeakerPosition.Stereo or SpeakerPosition.Subwoofer)))
             g.DrawLine(guide, center, new PointF(button.Left + button.Width / 2f, button.Top + button.Height / 2f));
         Shapes.FillRound(g, P.Control, new RectangleF(center.X - Dp(23), center.Y - Dp(18), Dp(46), Dp(36)), Dp(10));
+        using (var person = new Pen(P.TextSecondary, Dp(1)))
+        {
+            g.DrawEllipse(person, center.X - Dp(5), center.Y - Dp(12), Dp(10), Dp(10));
+            g.DrawArc(person, center.X - Dp(12), center.Y + Dp(1), Dp(24), Dp(18), 180, 180);
+        }
         TextRenderer.DrawText(g, L.T("聆听位置"), Theme.Font(TextStyle.Caption, DeviceDpi),
             new Rectangle(0, (int)center.Y + Dp(22), Width, Dp(35)), P.TextSecondary,
             TextFlags.Line | TextFormatFlags.HorizontalCenter);
@@ -210,7 +224,8 @@ internal sealed class SpeakerRoom : LayoutPanel
             using var pen = new Pen(_measuring ? P.Caution : selected ? P.Accent : P.ControlBorder, Dp(_measuring ? 2 : 1))
                 { DashStyle = _assigned ? DashStyle.Solid : DashStyle.Dash };
             Shapes.DrawRound(g, pen, RectangleF.Inflate(bounds, -Dp(1), -Dp(1)), Dp(6));
-            TextRenderer.DrawText(g, _caption, StyleFont(TextStyle.BodyStrong), new Rectangle(Dp(3), Dp(2), Width - Dp(6), Dp(20)), P.Text,
+            Shapes.Glyph(g, Glyph.Speaker, Theme.IconFont(12, DeviceDpi), new Rectangle(Dp(3), Dp(2), Dp(12), Dp(20)), P.TextSecondary);
+            TextRenderer.DrawText(g, _caption, StyleFont(TextStyle.BodyStrong), new Rectangle(Dp(16), Dp(2), Width - Dp(19), Dp(20)), P.Text,
                 TextFlags.Line | TextFormatFlags.HorizontalCenter);
             TextRenderer.DrawText(g, _names, StyleFont(TextStyle.Caption), new Rectangle(Dp(3), Dp(23), Width - Dp(6), Dp(18)), P.TextSecondary,
                 TextFlags.Line | TextFormatFlags.HorizontalCenter);

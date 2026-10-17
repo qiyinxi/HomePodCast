@@ -34,7 +34,7 @@ internal sealed partial class GroupPanel
             {
                 // There is no persisted "unassigned output" role. Clearing a directional slot deliberately returns
                 // its devices to the existing complete-stereo routing; it never drops a live capture reference.
-                if (_room.SelectedPosition == SpeakerPosition.Stereo) return;
+                if (_room.SelectedPosition == SpeakerPosition.Stereo) { ShowRoomSelection(); return; }
                 foreach (var binding in _roomBindings.Where(b => b.Current == _room.SelectedPosition && b.Position.Enabled))
                     binding.Position.SelectedIndex = Array.IndexOf(binding.Positions, SpeakerPosition.Stereo);
                 _roomSelectedId = null;

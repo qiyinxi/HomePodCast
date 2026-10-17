@@ -30,8 +30,8 @@ public class SpeakerRoomTests
         Assert.Equal(-100, SpeakerRoomLayout.Angle(SpeakerPosition.SideLeft, true));
         Assert.Equal(145, SpeakerRoomLayout.Angle(SpeakerPosition.RearRight, true));
         Assert.Equal(9, SpeakerRoomLayout.Positions(CinemaChannels.Surround71, []).Length);
-        var sub = SpeakerRoomLayout.Location(SpeakerPosition.Subwoofer, true);
-        Assert.True(sub.X < .15 && sub.Y < .15); // front corner, never an invented listener-distance estimate
+        var sub = SpeakerRoomLayout.Location(SpeakerPosition.Subwoofer, true, new Size(280, 360));
+        Assert.True(sub.X < 280 * .15 && sub.Y < 360 * .15); // front corner, never an invented listener-distance estimate
     }
 
     [Fact]
@@ -166,5 +166,12 @@ public class SpeakerRoomTests
         Assert.All(children, button => Assert.True(room.ClientRectangle.Contains(button.Bounds), button.AccessibleName));
         foreach (var (a, index) in children.Select((button, index) => (button, index)))
             Assert.All(children.Skip(index + 1), b => Assert.False(a.Bounds.IntersectsWith(b.Bounds), $"{a.AccessibleName} overlaps {b.AccessibleName}"));
+        var center = SpeakerRoomLayout.Listener(room.ClientSize);
+        foreach (var (name, degrees) in new[] { ("前左", -30), ("前右", 30), ("中置", 0), ("侧左", -100), ("后右", 145) })
+        {
+            var button = children.Single(c => c.AccessibleName!.StartsWith(name + "："));
+            double x = button.Left + button.Width / 2.0 - center.X, y = center.Y - button.Top - button.Height / 2.0;
+            Assert.InRange(Math.Atan2(x, y) * 180 / Math.PI, degrees - 1, degrees + 1);
+        }
     });
 }

@@ -20,6 +20,16 @@ activate a file layout. See [live output groups](multi-output-receivers.md) for 
 
 ### Speakers and channels
 
+The top-down room diagram shares the existing position, delay and volume-offset controls. Add an output first, then
+click its room position and choose a speaker; Tab, arrows and Enter/Space work too. Apply still activates a draft.
+Clearing a directional position explicitly returns its outputs to **full stereo**, where multiple outputs can coexist;
+it does not remove them. The precise output rows remain available for removal and advanced settings. Dashed empty
+positions show the mixer's actual downmix destination. Stereo sources show only front left/right and full stereo;
+5.1/7.1 files show their surround positions, preserving saved inactive assignments when the source changes.
+The diagram uses schematic [Dolby floor-speaker angles](https://www.dolby.com/about/support/guide/surround-sound-speaker-setup/)
+(front ±30°, 5.1 surrounds ±110°, 7.1 sides ±100° and rears ±145°); it does not infer distance or delay.
+An already-started acoustic measurement highlights its current speaker; selecting a position never starts one.
+
 Choose at least one full-stereo output, or a left and a right HomePod; every other position is optional, up to eight
 outputs. Multiple full-stereo outputs each receive the complete stereo downmix. Saved surround positions stay silent on stereo files
 and return when a multichannel file is chosen; they are never silently converted to full stereo. Discrete positions require individual
@@ -123,6 +133,14 @@ HomePod 上实测之前，这个标注不会去掉。
 启用文件布局。各类型的同步目标见[实时输出分组](multi-output-receivers.md)。
 
 ### 音箱和声道
+
+俯视房间图与原有的位置、延迟和音量偏移控件共用同一份草稿。先添加输出，再点选位置并选择音箱；也可用 Tab、方向键和
+Enter／空格操作，仍须按「应用」才启用草稿。清空方向位置会明确把输出移回**完整立体声**，多台完整立体声输出可以并存，
+不会将它们移除；移除和高级设置仍在精确的输出行中。虚线空位标出混音器实际采用的下混去向。立体声音源只显示前左、前右
+和完整立体声；5.1／7.1 文件显示相应环绕位置，切换音源保留暂时不使用的位置。
+房间图参考 [Dolby 平面音箱角度](https://www.dolby.com/about/support/guide/surround-sound-speaker-setup/)，前左／前右 ±30°、
+5.1 环绕 ±110°、7.1 侧环绕 ±100°、后环绕 ±145°，只示意方向，不推算距离或延迟。已经明确启动的声学测量会高亮当前音箱，
+点选位置不会开始测量。
 
 至少选择一台完整立体声输出，或给左、右各选一台 HomePod，其他位置可选，最多八台。多台完整立体声输出都会收到完整的立体声下混。
 已保存的环绕位置在立体声文件中保持静音，切回多声道文件后恢复，不会自动变成完整立体声输出。
