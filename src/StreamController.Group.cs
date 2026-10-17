@@ -254,7 +254,7 @@ public sealed partial class StreamController
         // (both members, or the leader alone with PairLeaderOnly).
         string key = $"{plan.PairTsid}|{plan.PairLeaderOnly}";
         if (_lastPair is { } last && last.Key == key &&
-            (await Task.WhenAll(last.Members.Select(m => IsReachable(m.Address, ct)))).All(ok => ok))
+            (await Task.WhenAll(last.Members.Select(m => IsReachable(m.Address, 7000, ct)))).All(ok => ok))
             return last.Members;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var targets = plan.PairTargets(devices);

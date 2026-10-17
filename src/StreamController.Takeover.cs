@@ -58,10 +58,11 @@ public sealed partial class StreamController
     /// </summary>
     /// <param name="endedBySpeaker">The speaker ended this connection's last session itself: a home theater is not taken back.</param>
     /// <param name="takenFrom">A confirmed takeover (仍然连接) of a HomePod its home-theater Apple TV held: that Apple TV's name.</param>
-    private async Task WaitUntilFreeAsync(ConnectTrigger trigger, string key, IReadOnlyList<BusyTarget> targets, CancellationToken ct,
+    /// <returns>This connection takes the speaker from another sender's session (仍然连接, or 临时接管 of a home theater).</returns>
+    private async Task<bool> WaitUntilFreeAsync(ConnectTrigger trigger, string key, IReadOnlyList<BusyTarget> targets, CancellationToken ct,
         bool endedBySpeaker = false, string? takenFrom = null)
     {
-        if (BusyReader is not { } reader) return;
+        if (BusyReader is not { } reader) return trigger == ConnectTrigger.TakeOver;
         DateTime? waitingSince = null;
         string? logged = null;
         try
@@ -78,7 +79,7 @@ public sealed partial class StreamController
                         Log.Info("takeover check skipped: the user chose to take the speaker over");
                     }
                     else Log.Debug("takeover check skipped: reconnecting our own session");
-                    return;
+                    return trigger == ConnectTrigger.TakeOver;
                 }
                 var recheck = Volatile.Read(ref _recheck).Task;
                 var reading = await reader.ReadAsync(targets, ct);
@@ -94,7 +95,7 @@ public sealed partial class StreamController
                         : waitingSince is { } since
                             ? $"takeover check ({trigger}): {reading.Detail}; free after waiting {(UtcNow() - since).TotalSeconds:F0} s: connecting"
                             : $"takeover check ({trigger}): {reading.Detail}: connecting");
-                    return;
+                    return homeTheater;
                 }
 
                 // Wait (or an Ask nobody can answer here).
