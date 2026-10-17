@@ -305,6 +305,26 @@ public class CinemaTests
         finally { File.Delete(garbage); }
     }
 
+    [Fact]
+    public async Task A_file_is_inspected_on_an_MTA_thread_of_its_own_not_on_the_thread_pool()
+    {
+        string file = TempWave(16, 6, Rear51, 48000);
+        try
+        {
+            var threads = new List<(bool Pool, ApartmentState Apartment)>();
+            var (channels, mask) = await CinemaMediaReader.InspectAsync(file, _ =>
+            {
+                lock (threads) threads.Add((Thread.CurrentThread.IsThreadPoolThread, Thread.CurrentThread.GetApartmentState()));
+            });
+            Assert.Equal(6, channels);
+            Assert.Equal(Rear51, CinemaChannels.Resolve(channels, mask));
+            Assert.NotEmpty(threads);
+            Assert.All(threads, t => Assert.Equal((false, ApartmentState.MTA), t));
+            Assert.Equal("选的文件不存在或打不开。", (await Assert.ThrowsAsync<CinemaException>(() => CinemaMediaReader.InspectAsync(file + ".missing"))).Message);
+        }
+        finally { File.Delete(file); }
+    }
+
     /// <summary>The level each channel of a generated file has: 0.02, 0.04, … (channel order).</summary>
     internal static float Level(int channel) => (channel + 1) * 0.02f;
 

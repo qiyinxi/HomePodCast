@@ -288,7 +288,17 @@ internal sealed class MainWindow : Form, ISurface
                 if (!LayoutPanel.CreateWindows(page, yield)) return false;
             }
             page.ApplyFont();
-            // Windows created first (their DPI is known once they exist), or the window changed size or DPI meanwhile.
+            if (page.LayoutDpi != DeviceDpi && page.DeviceDpi == DeviceDpi)
+            {
+                // Its controls were at another DPI (made at the main monitor's, or left at the last one by a DPI change): their
+                // windows came first, to learn this one. Laid out with them, the page moved every window in it, in one step that
+                // can't yield: 15–45 ms a page on the maintainer's PC (2026-10-16, window at 150 %, controls at 100 %), 75 ms while
+                // it was busy. Now that the controls know the DPI, their windows go (1–7 ms) and the next steps build the page again
+                // laid out first, above: less work in all (480 instead of 520 ms for all the pages), in steps of the usual size.
+                page.ReleaseWindows();
+                return false;
+            }
+            // The window changed size meanwhile, or the windows didn't get its DPI (a DPI change simulated in a test).
             if (page.Bounds != area || page.LayoutDpi != DeviceDpi) LayoutPanel.Place(page, area.X, area.Y, area.Width, area.Height);
             return true;
         }

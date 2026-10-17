@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 
 namespace HomePodCast;
@@ -88,12 +87,9 @@ public sealed record NetworkProfile(string? Interface, AdapterKind Kind, string?
     {
         try
         {
-            // Connecting a UDP socket sends nothing: the stack only picks the route, and with it our local address.
-            // No speaker yet: any off-link address (TEST-NET-1) goes the default route's way.
-            var target = speaker ?? IPAddress.Parse("192.0.2.1");
-            using var socket = new Socket(target.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
-            socket.Connect(new IPEndPoint(target, 7000));
-            return ForLocalAddress(((IPEndPoint)socket.LocalEndPoint!).Address);
+            // The route table's answer, not a connected UDP socket's: that one shows as listening on 0.0.0.0 while
+            // open (Native.SourceAddressFor). No speaker yet: any off-link address (TEST-NET-1) goes the default route's way.
+            return ForLocalAddress(Native.SourceAddressFor(speaker ?? IPAddress.Parse("192.0.2.1")));
         }
         catch (Exception ex)
         {
