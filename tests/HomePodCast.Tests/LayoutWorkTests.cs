@@ -309,7 +309,7 @@ public class LayoutWorkTests
         TestApp.Field<MixerPage>(window, "_mixer").FindApps = _ => [];
         ShowMain(window);
         var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
-        var vlc = TestApp.Field<PasswordBox>(TestApp.Field<SettingsPage>(window, "_settings"), "_vlcPassword");
+        var vlc = TestApp.Field<PasswordBox>(TestApp.Field<ViewingPage>(window, "_viewing"), "_vlcPassword");
         vlc.Password = "typed, not saved yet";
         int start = window.DeviceDpi, other = start == 96 ? 144 : 96;
         ChangeDpi(window, other); // there and back: see A_page_hidden_while_the_scale_changed…

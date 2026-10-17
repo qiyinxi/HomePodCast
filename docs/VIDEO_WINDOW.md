@@ -7,13 +7,16 @@ delayed by HomePodCast's current sound lag, so that the picture lines up with th
 no website, and starts neither a player nor streaming; you control playback in the original window. The Microsoft Store
 version doesn't have it.
 
+The **A/V sync** page also contains **Local players**, including the Movies-scene switch and VLC password controls.
+Those controls remain available when the optional viewing section is not offered.
+
 ### Use
 
 1. Download `HomePodCast-video-window-<version>.zip` of the same version as HomePodCast from
    [Releases](https://github.com/qiyinxi/HomePodCast/releases) and extract it anywhere. It needs Windows 10 version
    2004 or later and the .NET 10 Desktop Runtime (x64). HomePodCast's updates don't update the module: download it again
    for the new version (the window says so when the two versions differ).
-2. In **Synchronized viewing**, choose the module's folder with
+2. In **A/V sync → Synchronized viewing window (experimental)**, choose the module's folder with
    **Choose module…**, then click **Open**.
 3. Turn off other synchronization first: the player's own audio delay, HomePodCast's "Adjust players in the Movies
    scene" and the browser extension's picture delay. With both, the picture is delayed twice.
@@ -60,12 +63,14 @@ API references: [Windows screen capture](https://learn.microsoft.com/en-us/windo
 这是一个**实验性**的可选模块，给没有可用音频延迟设置的播放器用：把你选的窗口按 HomePodCast 当前的声音延迟延后显示，
 让画面对上 HomePod。它不采集声音，不打开网站，不启动播放器，也不开始推流；播放仍在原窗口里操作。Microsoft Store 版没有这个功能。
 
+「音画同步」页同时提供「本地播放器」，包括影视场景开关和 VLC 密码。未提供可选观影模块时，只隐藏观影窗口一节，本地播放器仍可使用。
+
 ### 使用
 
 1. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载和 HomePodCast 同一版本的
    `HomePodCast-video-window-<版本>.zip`，解压到任意位置。需要 Windows 10 2004 或更新版本，以及 .NET 10 桌面运行时（x64）。
    HomePodCast 更新时模块不会跟着更新，请重新下载新版本的模块（两边版本不同时，窗口里会提示）。
-2. 在「同步观影窗口」用「选择模块…」选择模块所在的文件夹，然后点「打开」。
+2. 在「音画同步」页的「同步观影窗口（实验性）」一节，用「选择模块…」选择模块所在的文件夹，然后点「打开」。
 3. 先关掉其他同步补偿：播放器自己的音频延迟、HomePodCast 的「影视场景自动调整播放器」、浏览器插件的画面延迟。同时开着，画面会被延后两次。
 4. 「选择窗口…」打开 Windows 的选择器，在那里选一个窗口或整块屏幕；Windows 会在它周围保留黄色的采集边框。
    取消不影响正在进行的采集；换了来源，旧画面会清掉。不采集鼠标指针。采集期间，这个窗口不出现在任何屏幕采集里

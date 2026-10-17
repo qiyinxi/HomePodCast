@@ -24,6 +24,7 @@ internal sealed class MainWindow : Form, ISurface
     private readonly ProfilesPage _profiles;
     private readonly SpeakersPage _speakers;
     private readonly GroupPage _group;
+    private readonly ViewingPage _viewing;
     private readonly ScrollPage[] _pages;
     private readonly ThemeTransition _transition = new();
     private readonly System.Windows.Forms.Timer _dpiSettle = new() { Interval = DpiSettleMs };
@@ -53,7 +54,7 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Equalizer, L.T("均衡"));
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）"), label: L.T("同步观影窗口")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
+        _rail.Add(Glyph.Screen, L.T("音画同步"));
         _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
@@ -70,7 +71,8 @@ internal sealed class MainWindow : Form, ISurface
         _profiles = new ProfilesPage(app);
         _speakers = new SpeakersPage(app);
         _group = new GroupPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
+        _viewing = new ViewingPage(app);
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, new SyncPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
@@ -521,7 +523,7 @@ internal sealed class MainWindow : Form, ISurface
     public void ShowPlayers()
     {
         _home.ShowPlayers();
-        _settings.ShowPlayers();
+        _viewing.ShowPlayers();
     }
 
     /// <summary>The latency 首页 shows (the scene's, or the slider's while it waits to reconnect).</summary>
@@ -593,6 +595,7 @@ internal sealed class MainWindow : Form, ISurface
         _effects.ReloadConfiguration();
         _equalizer.ReloadConfiguration();
         _settings.ReloadConfiguration();
+        _viewing.ReloadConfiguration();
         _profiles.Reload();
         _speakers.RefreshDevices();
         ShowSoundOptions();

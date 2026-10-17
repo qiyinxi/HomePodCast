@@ -43,7 +43,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "音画同步测试", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -163,6 +163,7 @@ internal sealed partial class Walker
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "设置") CheckSettings();
+            if (page == "音画同步") CheckAvSync(tree);
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
         }
@@ -259,6 +260,7 @@ internal sealed partial class Walker
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
+            if (page == "音画同步") CheckAvSync(tree);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
@@ -522,7 +524,7 @@ internal sealed partial class Walker
     private void CheckSettings()
     {
         var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
-        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）" })
+        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）" })
             Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
@@ -531,6 +533,36 @@ internal sealed partial class Walker
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
 
+    }
+
+    private void CheckAvSync(Node tree)
+    {
+        var pane = PagePane(tree, "音画同步").Hwnd;
+        string[] texts = [T("本地播放器"), T("影视场景自动调整播放器"), T("VLC 网页接口密码（自动读取失败时填写）"),
+            T("同步观影窗口（实验性）"), "mpv", "VLC", "PotPlayer · MPC-HC · MPC-BE"];
+        string[] actions = [T("选择模块…"), T("打开")];
+        var seen = new HashSet<string>();
+        var buttons = new HashSet<string>();
+        Scroll(pane, Native.SB_TOP);
+        try
+        {
+            for (int i = 0; i < 12; i++)
+            {
+                // The title scrolls out of view: keep the pane handle rather than locating it again by its title.
+                var page = Find(Uia.Snapshot(MainWindow()), node => node.Hwnd == pane)
+                    ?? throw new StepFailed("the A/V sync scroll pane disappeared");
+                foreach (string text in texts) if (Has(page, text)) seen.Add(text);
+                foreach (string action in actions)
+                    if (Find(page, node => node.Shown && node.Type == "Button" && node.Says(action)) != null) buttons.Add(action);
+                var info = Native.VerticalScroll(pane);
+                if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } position || position.nPos + position.nPage > position.nMax) break;
+                Scroll(pane, Native.SB_PAGEDOWN);
+                if (Native.VerticalScroll(pane) is { } after && after.nPos == position.nPos) break;
+            }
+        }
+        finally { Scroll(pane, Native.SB_TOP); }
+        foreach (string text in texts) Expect(seen.Contains(text), "音画同步", $"section or row was never shown: {text}");
+        foreach (string action in actions) Expect(buttons.Contains(action), "音画同步", $"module action was never shown: {action}");
     }
 
     private Node CheckAbout()
@@ -610,7 +642,7 @@ internal sealed partial class Walker
     // ---------------------------------------------------------------- 同步观影窗口 (modules/VideoWindow)
 
     /// <summary>
-    /// 设置 → 工具 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
+    /// 音画同步 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
     /// no capture, the idle hint, at this scenario's DPI (per-monitor aware). Then the module on its own with generated 4K
     /// pictures (--smoke-source) against the app's local API: frames through the GPU queue and the swap chain, halved to
     /// 1080p, shown at the picture's aspect ratio, and the delay followed from the app. The window picker is never opened.
@@ -618,11 +650,11 @@ internal sealed partial class Walker
     private void ViewingWindow(bool connected)
     {
         string title = T("同步观影窗口（实验性）"); // experimental since 1.1
-        Navigate("同步观影窗口（实验性）");
+        Navigate("音画同步");
         try
         {
             Uia.Invoke(Button("打开"));
-            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 设置", 20_000);
+            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 音画同步", 20_000);
             Thread.Sleep(1200);
             var tree = Uia.Snapshot(viewer);
             Dump(tree, "viewer");
@@ -930,7 +962,7 @@ internal sealed partial class Walker
         "均衡" => "equalizer",
         "音箱信息" => "speakers",
         "多音箱（实验性）" => "groups",
-        "同步观影窗口（实验性）" => "viewing",
+        "音画同步" => "av-sync",
         "音画同步测试" => "sync-test",
         "使用配置" => "profiles",
         "关于" => "about",
