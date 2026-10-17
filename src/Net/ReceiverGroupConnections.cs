@@ -164,7 +164,7 @@ internal static class ReceiverGroupConnections
             if (UsesPtp) _client.StartCoordinatedPtp(options, source.Read, startAt, Protocol == ReceiverProtocol.AirPlay2Realtime);
             else _client.StartCoordinatedNtp(options, source, startAt);
         }
-        public void SetVolume(double percent, double cap) { _client.VolumeCapPercent = cap; _client.SetVolumePercent(percent); }
+        public void SetVolume(double percent, double cap) { _client.VolumeCapPercent = cap; _client.SetGroupVolumePercentConfirmed(percent); }
         public void StopSending() => _client.StopCoordinatedSending();
         public void Dispose() { _client.Lost -= OnLost; _client.Dispose(); }
     }

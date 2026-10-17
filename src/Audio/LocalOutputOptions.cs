@@ -5,6 +5,8 @@ namespace HomePodCast.Audio;
 /// <summary>An explicitly chosen Windows render endpoint; Bluetooth link latency is additional to WASAPI's latency.</summary>
 public sealed record LocalOutputOptions(string DeviceId, string Name)
 {
+    /// <summary>User classification only: changing this never replaces a measured link latency.</summary>
+    public bool IsBluetooth { get; init; }
     public int ExtraLatencyMs { get; init; }
     public int TrimMs { get; init; }
     public int VolumeOffset { get; init; }

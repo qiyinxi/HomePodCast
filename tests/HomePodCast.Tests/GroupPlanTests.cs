@@ -149,4 +149,52 @@ public class GroupPlanTests
         Assert.Equal(-5, plan.VolumeOffsetFor("AA-00-00-00-00-01"));
         Assert.Equal(0, plan.VolumeOffsetFor("AA:00:00:00:00:02"));
     }
+
+    [Fact]
+    public void Explicit_empty_AirPlay_selection_never_restores_the_remembered_primary_or_pair()
+    {
+        foreach (string remembered in new[] { "AA:BB", StereoPairs.PairId(Tsid) })
+        {
+            var cfg = new AppConfig { DeviceId = remembered, GroupCaptureDeviceIds = [] };
+            var plan = Assert.IsType<GroupPlan>(GroupPlan.FromConfig(cfg));
+            Assert.Empty(plan.Members);
+            Assert.Null(plan.PairTsid);
+            cfg.GroupLocalOutputs = [new("endpoint", "USB")]; cfg.GroupCaptureLocalDeviceIds = ["endpoint"];
+            plan = Assert.IsType<GroupPlan>(GroupPlan.FromConfig(cfg));
+            Assert.Empty(plan.Members);
+            Assert.Single(plan.LocalOutputs);
+        }
+    }
+
+    [Fact]
+    public void Live_trim_delay_and_required_flags_are_detached_from_file_delays_and_config_collections()
+    {
+        var cfg = new AppConfig { DeviceId = "AA:BB", MultiRoomDeviceId = "CC:DD",
+            GroupSpeakers = [new() { DeviceId = "AA:BB", Name = "One", DelayMs = 55 },
+                new() { DeviceId = "CC:DD", Name = "Two", DelayMs = 99 }],
+            GroupCaptureDelayTrims = new() { ["aa-bb"] = -9000 }, GroupDelayMs = 4800,
+            GroupRequiredOutputs = new() { ["aa:bb"] = false, ["cc:dd"] = true, ["local:endpoint"] = true },
+            GroupLocalOutputs = [new("endpoint", "USB")], GroupCaptureLocalDeviceIds = ["endpoint"] };
+        var plan = GroupPlan.FromConfig(cfg)!;
+        Assert.Equal(-5000, plan.DelayTrimFor("AA:BB"));
+        Assert.Equal(99, plan.DelayTrimFor("CC-DD"));
+        Assert.Equal(55, cfg.GroupSpeakers[0].DelayMs);
+        Assert.Equal(4800, plan.GroupDelayMs);
+        Assert.False(plan.RequiredOutputs["AABB"]);
+        Assert.True(Assert.Single(plan.LocalOutputs).Required);
+        cfg.GroupCaptureDelayTrims.Clear(); cfg.GroupRequiredOutputs.Clear(); cfg.GroupCaptureLocalDeviceIds.Clear();
+        Assert.Equal(-5000, plan.DelayTrimFor("AA:BB"));
+        Assert.True(plan.IsRequiredOutput("CC-DD"));
+        Assert.Single(plan.LocalOutputs);
+    }
+
+    [Fact]
+    public void Explicit_members_work_without_a_primary_and_keep_a_pair_with_physical_member_ids()
+    {
+        var cfg = new AppConfig { GroupCaptureDeviceIds = ["AA:BB", "CC:DD"] };
+        Assert.Equal(["AA:BB", "CC:DD"], GroupPlan.FromConfig(cfg)!.Members.Select(m => m.DeviceId));
+        cfg.DeviceId = StereoPairs.PairId(Tsid); cfg.GroupPairLeaderOnly = true;
+        Assert.Equal(GroupKind.StereoPair, GroupPlan.FromConfig(cfg)!.Kind);
+        Assert.True(GroupPlan.FromConfig(cfg)!.PairLeaderOnly);
+    }
 }

@@ -260,23 +260,35 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 #### DLNA 单台输出（1.2 新增，尚未实机验证）
 
-维护者在准备使用极米 Z6X 时自行测试，步骤见 `docs/dlna.md`。命令使用临时配置，先运行 `dlna --scan` 记录 UDN；所有有声测试不超过 25%。没有麦克风也能测试：后续分组支持用手动微调或手机录像校准。本节各项：改了 `src/Net/Dlna*.cs`、`src/DlnaCli.cs` 才需要重测。
+维护者在准备使用极米 Z6X 时自行测试，步骤见 `docs/dlna.md`。命令使用临时配置，先运行 `dlna --scan` 记录 UDN；所有有声测试不超过 25%。没有麦克风也能测试，分组页已有手动微调和手机录像助手。本节各项：改了 `src/Net/Dlna*.cs`、`src/DlnaCli.cs` 才需要重测。
 
 1. - [ ] 发现列表能找到 Z6X 的 DLNA 服务，和不支持的 FairPlay AirPlay 项分清；静音协议检查能够连接和停止
 2. - [ ] 指定采集端点，以不超过 25% 音量播放；记录协商格式、分块或大 Content-Length、第一次出声的等待时间。LPCM 不支持时尝试设备声明支持的 WAV，不能播放则保留日志
 3. - [ ] 连续播放 30 分钟，记录断音、设备主动停止或读取重连；音量变化和静音是否生效
 4. - [ ] 由手机接管后电脑退出本次发送，不抢回；随后退出命令不会停止手机的投屏
 
-#### DLNA 多输出协调（1.2 新增，尚未实机验证）
+#### 统一实时多输出分组（1.2 新增，尚未实机验证）
 
-当前入口为 API／UDN 配置，统一设备选择界面后续接入，见 `docs/dlna.md`。先把音量上限设为不超过 25%。本节各项：改了 `src/Net/DlnaOutputSet.cs`、`src/Audio/DlnaReadClock.cs`、`src/Audio/DlnaTimelineReader.cs` 或协调输出的控制器／时间线才需要重测。
+只由维护者在准备使用设备时测试；先确认没有 iPhone、Apple TV 或其他控制器在使用，所有有声测试上限不超过 25%。设备为
+一台 HomePod 第二代、电脑内置蓝牙连接的普通 SBC 蓝牙音箱，以及极米 Z6X 的独立 DLNA 服务；Z6X 的 FairPlay AirPlay
+仍不支持。用「多音箱 → 电脑实时声音」的统一输出类型和刷新入口，见 `docs/multi-output-receivers.md`、`docs/dlna.md`。
+不需要麦克风。配置、界面和无声打开行为已移到「已自动化」，这里记录真实声音、蓝牙链路、设备断线和接管行为。
+本节各项：改了 `src/UI/GroupPanel.Outputs.cs`、`src/UI/GroupAlignmentForm.cs`、分组控制器、`src/Net/LocalOutputSet.cs`、
+`src/Net/DlnaOutputSet.cs`、`src/Audio/DlnaReadClock.cs`、`src/Audio/DlnaTimelineReader.cs` 或共同时间线才需要重测。
 
-1. - [ ] HomePod + Z6X：输入估计的设备延迟，用正负微调或手机录像对齐；记录所需整组延迟，只按不同房间的大致同步判断
-2. - [ ] HomePod + 普通 SBC 蓝牙音箱（电脑内置蓝牙）+ Z6X：记录三路偏移、30 分钟／一小时后的变化；时钟估计不可用时如实记录，不把 HTTP 时间当成实际声音延迟
-3. - [ ] 可选 Z6X 断开／恢复时 HomePod 继续；手机接管或停止 DLNA 后不自动抢回；设为必需后，接管会停止整组
-4. - [ ] LPCM／WAV 不可用时，试设备声明支持的 MP3／AAC，记录启动等待和编码造成的额外偏移；连接中静音／降低音量不会恢复旧音量
+1. - [ ] 在 Windows 配对 SBC 蓝牙音箱，在编辑器按完整端点选择，明确标记蓝牙；200 毫秒只当起始附加延迟。HomePod + 蓝牙两路都出声，完整立体声／左／右、音量偏移听感与设置一致；不把当前采集端点选为输出
+2. - [ ] HomePod + Z6X：记录 DLNA 实际协商格式、首次出声等待和估计延迟，用正负微调对齐；记录自动整组延迟，以及手动值低于下限时的实际值，只按不同房间的大致同步判断
+3. - [ ] 手机用相同帧率、相同短距离分别靠近参考和目标录闪光／声音，记下两段偏移和差值；目标更晚填正、更早填负。「应用微调」后先保留草稿，再点「应用」听结果；全过程不用麦克风。只有维护者明确点「开始测试音」才发声，测试音不超过 25%
+4. - [ ] HomePod + 普通 SBC 蓝牙音箱（电脑内置蓝牙）+ Z6X：记录三路刚开始、30 分钟／一小时后的偏移；时钟估计不可用时如实记录，不把 HTTP 时间或 CI 标记边界当作实际声音延迟
+5. - [ ] 可选蓝牙／Z6X 断开再恢复时 HomePod 继续，不重启健康输出；手机接管或停止 DLNA 后不自动抢回，退出电脑分组不停止手机的流；设为必需后失败会停止整组。其他发送端占用的 Apple AirPlay／RAOP 设备也只等待明确操作，不为测试强抢
+6. - [ ] 保存一组带名称的真实设备，重启后在首页选择再连接，确认实际去处正确；切到文件音源不会启用本机／DLNA，回到实时仍保留选择，原来单台 HomePod 的低延迟体验不变
+7. - [ ] LPCM／WAV 不可用时，只试设备声明支持的 MP3／AAC，记录启动等待和编码额外偏移；连接中静音／降低音量不会恢复旧音量。沿用现有专用网络和防火墙范围，不为本测试开放公用网络或另加规则
 
 ## 已自动化（不用手测）
+
+- **GroupOutputEditorTests / OutputGroupSettingsTests / GroupPlanTests**：注入本机和 DLNA 发现、假主机与调用记录，检查打开／换源／等待时发现、采集、播放、校准精确为零；按完整端点 ID 和 UDN 添加、离线偏好库不激活、必需／可选、声道／音量／±5000 毫秒微调、自动／手动下限、实时／文件草稿隔离、命名分组存取、无麦克风手机帧差和手动助手只有明确测试才调用发声入口。这些配置／界面项不再列为实机重复验证。
+- **OptionalAppleGroupTests / AppleGroupMemberSessionTests / RaopOutputSetTests / LocalOutputGroupTests / DlnaGroupControllerTests**：可选 Apple／RAOP／本机／DLNA 独立恢复、必需失败、忙碌／认证／接管等待明确操作、不抢回其他发送端，以及健康成员不被重启；仍需上方实机项验证设备实际反应。
+- **gui-output-groups 的 group-outputs 场景**：五份独立运行完整覆盖全部 15 种界面语言、必须为 150% 缩放，自检保证每种语言恰好一次；离线保存的 AirPlay、本机、明确标记的蓝牙和有效 UDN 的 DLNA 行、未选择的偏好库、保存值与类型、展开设置、添加／移除草稿、空选择类型、自动／手动延迟、实时／文件切换、无声手动助手。每次滚动截图都检查布局，实时／文件和校准截图覆盖每种语言，额外相同过渡截图只跑一次；离页再打开仍未连接，API 的 streaming=false、保存偏好不变、没有新增采集／影院／测量／推流失败日志。发现是否精确为零由注入单元测试证明，不靠日志缺失推断。
 
 - **DlnaDiscoveryTests / DlnaControlTests / DlnaStreamServerTests / DlnaClientTests / DlnaCliTests**：回环假设备覆盖 SSDP、描述和 SOAP、格式协商、HTTP 字节序与流量限制、Private 网络策略、音量上限、忙碌与接管、取消和连接清理。
 - **DlnaReadClockTests / DlnaTimelineReaderTests / DlnaOutputSetTests / DlnaGroupControllerTests / DlnaGroupSettingsTests / DlnaEncoderTests**：四组正负漂移的一小时仿真、突发／停顿／时钟置信度失效、实际 PCM 标记、整数帧连续性和无分配读取；UDN 独立解析、可选恢复／必需失败、接管优先级、连接中音量／静音、历史覆盖恢复、编解码线程与分块边界。

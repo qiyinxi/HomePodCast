@@ -74,6 +74,7 @@ internal sealed partial class TrayApp : ApplicationContext
         Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
         InitRaop();
+        InitializeGroupInteractions();
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
         InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
         InitRuntimeWatch(resume); // after InitUpdate: its balloon (TrayApp.Runtime.cs)
@@ -117,10 +118,10 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             _form.SetDevices([new AirPlayDevice(Config.DeviceName ?? "?", Config.DeviceId,
                 System.Net.IPAddress.TryParse(Config.Host, out var ip) ? ip : System.Net.IPAddress.None, 7000, "", new Dictionary<string, string>())]);
-            // In the night window with nobody at the PC (a restart for Windows Update), 夜间自动断开 connects at its end instead.
-            // After 「立即重启」 (resume): connected again if it was, whatever 启动后自动连接 says, and not if it wasn't.
-            if ((resume ?? Config.AutoConnect) && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
         }
+        // In the night window, connect at its end. An update restart preserves its previous connection intent.
+        // Auxiliary-only groups have no primary AirPlay id but are still an explicit startup selection.
+        if (ShouldConnectOnStartup(Config, resume) && !CheckNight(startup: true)) Connect(ConnectTrigger.Automatic);
         RefreshDevices();
     }
 
@@ -157,7 +158,8 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <param name="takenFrom">仍然连接 on a HomePod its home-theater Apple TV held: that Apple TV's name (for the 已连接 line).</param>
     public void Connect(ConnectTrigger trigger, string? takenFrom = null)
     {
-        if (Config.DeviceId == null)
+        var selectedGroup = GroupPlan.FromConfig(Config);
+        if (Config.DeviceId == null && selectedGroup == null || selectedGroup is { Kind: GroupKind.MultiRoom, Members.Count: 0, LocalOutputs.Count: 0, DlnaOutputs.Count: 0 })
         {
             ShowMain();
             return;
@@ -165,17 +167,17 @@ internal sealed partial class TrayApp : ApplicationContext
         _wantConnected = true;
         _nightDisconnected = false;
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
-        string id = Config.DeviceId;
+        string? id = Config.DeviceId;
         string? host = Config.Host;
         int latency = ReceiverSelection?.Value ?? Config.LatencyMs;
         double? volume = Config.Volume;
         int asOf = Controller.VolumeChanges;
-        if (GroupPlan.FromConfig(Config) is { } group) // stereo pair / multi-room (experimental)
+        if (selectedGroup is { } group) // stereo pair / multi-room (experimental)
         {
             PostConnection(() => Controller.StartGroup(group, latency, volume, asOf, trigger, takenFrom));
             return;
         }
-        PostConnection(() => Controller.Start(id, host, latency, volume, asOf, trigger, takenFrom));
+        PostConnection(() => Controller.Start(id!, host, latency, volume, asOf, trigger, takenFrom));
     }
 
     public void Disconnect()
@@ -282,7 +284,7 @@ internal sealed partial class TrayApp : ApplicationContext
                     L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
-            if (Config.DeviceId == null && FirstHomePod(found, scan) is { } homepod)
+            if (Config.DeviceId == null && GroupPlan.FromConfig(Config) == null && FirstHomePod(found, scan) is { } homepod)
             {
                 SelectDevice(homepod);
                 // A home theater's HomePod: taken over (临时接管), or the status names its Apple TV at once (先询问).

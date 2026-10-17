@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 using System.Xml.Linq;
 using HomePodCast.Net;
 
@@ -12,10 +13,27 @@ namespace HomePodCast.Tests;
 internal sealed class FakeDlnaRenderer : IAsyncDisposable
 {
     internal sealed record Request(string Method, string Path, string SoapAction, string Body);
+    internal sealed class DescriptionRequest
+    {
+        private readonly TaskCompletionSource<string> _response = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _written = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal Task ResponseWritten => _written.Task;
+        internal void Respond(string description) => _response.TrySetResult(description);
+        internal Task<string> Response(CancellationToken ct) => _response.Task.WaitAsync(ct);
+        internal void Written() => _written.TrySetResult();
+        internal void Failed(Exception error)
+        {
+            if (error is OperationCanceledException) _written.TrySetCanceled();
+            else _written.TrySetException(error);
+        }
+    }
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _stop = new();
     private readonly ConcurrentBag<Task> _connections = [];
     private readonly Task _accept;
+    private readonly Channel<DescriptionRequest> _descriptionRequests = Channel.CreateUnbounded<DescriptionRequest>();
+    internal bool GateDescriptions { get; set; }
+    internal ValueTask<DescriptionRequest> NextDescriptionAsync(CancellationToken ct) => _descriptionRequests.Reader.ReadAsync(ct);
     internal ConcurrentQueue<Request> Requests { get; } = [];
     internal ConcurrentDictionary<string, int> Faults { get; } = new();
     internal ConcurrentDictionary<string, TimeSpan> Delays { get; } = new();
@@ -69,6 +87,18 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
                 Requests.Enqueue(new(method, path, soapAction, body));
                 if (method == "GET" && path == "/description.xml")
                 {
+                    if (GateDescriptions)
+                    {
+                        var description = new DescriptionRequest();
+                        await _descriptionRequests.Writer.WriteAsync(description, _stop.Token);
+                        try
+                        {
+                            await ReplyAsync(stream, 200, await description.Response(_stop.Token), _stop.Token);
+                            description.Written();
+                        }
+                        catch (Exception error) { description.Failed(error); throw; }
+                        return;
+                    }
                     if (Delays.TryGetValue("Description", out var descriptionDelay)) await Task.Delay(descriptionDelay, _stop.Token);
                     await ReplyAsync(stream, 200, Description, _stop.Token);
                     return;

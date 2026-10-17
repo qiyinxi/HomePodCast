@@ -88,8 +88,12 @@ public class ReceiverTimelineSourceTests
         float[] block = new float[2048];
         reader.Read(origin, block);
         Assert.All(block, value => Assert.Equal(0, value));
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++) reader.Read(origin, block);
-        Assert.Equal(before, GC.GetAllocatedBytesForCurrentThread());
+        // Signals.Allocated settles the runtime's allocation context before measurement; a background
+        // GC must not count its discarded spare bytes as allocations by this realtime reader.
+        long bytes = Signals.Allocated(() =>
+        {
+            for (int i = 0; i < 1000; i++) reader.Read(origin, block);
+        });
+        Assert.Equal(0, bytes);
     }
 }

@@ -120,7 +120,7 @@ public class GroupFormTests
         panel.SetFound([A, B, Other]);
         panel.SetSource(true);
         Position(panel, A.Name).SelectedIndex = (int)SpeakerPosition.Center;
-        All<FluentButton>(panel).Single(b => b.Text == "添加音箱").PerformClick();
+        All<FluentButton>(panel).Single(b => b.Text == "添加输出").PerformClick();
         panel.Apply(activateCapture: false);
         Assert.Equal(SpeakerPosition.Center, cfg.GroupSpeakers![0].Position);
         Assert.Equal(ChannelMode.Stereo, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
@@ -154,7 +154,8 @@ public class GroupFormTests
         panel.Apply();
         Assert.Equal(SpeakerPosition.Left, cfg.GroupCapturePositions![GroupPlan.Key(A.DeviceId)]);
         Assert.Equal(SpeakerPosition.Left, cfg.GroupCapturePositions![GroupPlan.Key(B.DeviceId)]);
-        Assert.Equal(37, cfg.GroupSpeakers![0].DelayMs);
+        Assert.Equal(37, cfg.GroupCaptureDelayTrims[GroupPlan.Key(A.DeviceId)]);
+        Assert.Equal(0, cfg.GroupSpeakers![0].DelayMs); // file timing remains independent of live trim
         Assert.Equal(-6, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor(B.DeviceId));
         Assert.False(cfg.GroupSplitChannels); Assert.False(cfg.GroupSwapChannels);
     });
@@ -189,7 +190,7 @@ public class GroupFormTests
         Assert.Null(GroupPlan.FromConfig(cfg));
         Assert.False(Position(panel, A.Name).Enabled);
         Assert.All(All<FluentSlider>(panel), slider => Assert.False(slider.Enabled));
-        All<FluentButton>(panel).Single(b => b.Text == "添加音箱").PerformClick();
+        All<FluentButton>(panel).Single(b => b.Text == "添加输出").PerformClick();
         Assert.True(Position(panel, A.Name).Enabled);
         panel.Apply();
         Assert.Equal([A.DeviceId, B.DeviceId], GroupPlan.FromConfig(cfg)!.Members.Select(m => m.DeviceId));

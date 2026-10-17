@@ -1,4 +1,6 @@
 using System.Text;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace HomePodCast;
@@ -21,11 +23,46 @@ public readonly record struct AvCalibrationContext(string SpeakerId, string Capt
 
     public static AvCalibrationContext? For(AppConfig config, string? capturedEndpointId, bool perAppRouting)
     {
-        if (string.IsNullOrWhiteSpace(config.DeviceId) || string.IsNullOrWhiteSpace(capturedEndpointId)) return null;
+        if (string.IsNullOrWhiteSpace(capturedEndpointId)) return null;
         // Include the group topology: a measurement for one speaker must not silently become a multi-room one.
-        string speaker = StreamController.Normalize(config.DeviceId.Trim());
+        string speaker;
         if (GroupPlan.FromConfig(config) is { } group)
-            speaker += $"|{group.Kind}|{string.Join(",", group.Members.Select(m => GroupPlan.Key(m.DeviceId)).Order())}|{group.PairLeaderOnly}";
+        {
+            if (group.PairTsid == null && group.Members.Count + group.LocalOutputs.Count + group.DlnaOutputs.Count == 0) return null;
+            // A bounded digest includes timing and channels as well as membership, without putting endpoint names or
+            // addresses in the identity. The plain single-speaker key below stays compatible with existing measurements.
+            var members = group.Members.Select((m, i) => new
+            {
+                Id = GroupPlan.Key(m.DeviceId), Channels = group.ChannelsFor(i, m.DeviceId),
+                Trim = group.DelayTrimFor(m.DeviceId), Required = group.RequiredOutputs.GetValueOrDefault(GroupPlan.Key(m.DeviceId)),
+                ExplicitRequired = group.RequiredOutputs.ContainsKey(GroupPlan.Key(m.DeviceId)),
+            }).OrderBy(m => m.Id).ToArray();
+            var pairMembers = group.Kind == GroupKind.StereoPair
+                ? group.SpeakerSettings.OrderBy(p => p.Key).Select((p, i) => new
+                    { Id = p.Key, Channels = group.ChannelsFor(i, p.Value.DeviceId), Trim = group.DelayTrimFor(p.Value.DeviceId) }).ToArray()
+                : [];
+            var local = group.LocalOutputs.OrderBy(o => LocalGroupSettings.Key(o.DeviceId)).Select(o => new
+            {
+                Id = LocalGroupSettings.Key(o.DeviceId), o.ExtraLatencyMs, o.TrimMs, o.Channels, o.Required, o.IsBluetooth,
+            }).ToArray();
+            var dlna = group.DlnaOutputs.OrderBy(o => DlnaGroupSettings.Key(o.Udn)).Select(o => new
+            {
+                Id = DlnaGroupSettings.Key(o.Udn), o.EstimatedLatencyMs, o.TrimMs, o.Channels, o.Required, o.PreferredFormat, o.Framing,
+            }).ToArray();
+            string topology = JsonSerializer.Serialize(new
+            {
+                group.Kind, Pair = group.PairTsid?.ToUpperInvariant(), group.SplitChannels, group.SwapChannels,
+                group.PairLeaderOnly, group.SharedGroupUuid, group.GroupDelayMs, members, pairMembers, local, dlna,
+                PairTrims = group.Kind == GroupKind.StereoPair ? group.DelayTrims.OrderBy(p => p.Key).ToArray() : [],
+                PairRequired = group.Kind == GroupKind.StereoPair ? group.RequiredOutputs.OrderBy(p => p.Key).ToArray() : [],
+            });
+            speaker = "group:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(topology)));
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(config.DeviceId)) return null;
+            speaker = StreamController.Normalize(config.DeviceId.Trim());
+        }
         return new AvCalibrationContext(speaker, capturedEndpointId.Trim(), perAppRouting,
             Audio.CaptureEndpoint.FollowsDefault(config.CaptureDeviceId));
     }

@@ -53,8 +53,8 @@ internal sealed partial class TrayApp : ICinemaHost
 
     public IDisposable LimitVolumeForMeasurement()
     {
-        Controller.SetMeasurementCap(AcousticAlignment.MeasurementVolumeCapPercent);
-        return new OnDispose(Controller.EndMeasurementCap);
+        long version = Controller.SetScopedMeasurementCap(AcousticAlignment.MeasurementVolumeCapPercent);
+        return new OnDispose(() => Controller.EndMeasurementCap(version));
     }
 
     private sealed class OnDispose(Action action) : IDisposable

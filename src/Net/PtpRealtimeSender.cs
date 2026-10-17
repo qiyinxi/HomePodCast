@@ -23,6 +23,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Dictionary<ushort, byte[]> _history = new();
     private readonly Queue<ushort> _order = new();
+    private readonly object _lifecycle = new();
     private Thread? _sender;
     private Task _resends = Task.CompletedTask;
     private long _packets;
@@ -31,6 +32,11 @@ internal sealed class PtpRealtimeSender : IDisposable
     private ReceiverPcmReader? _readAudio;
     private int _started;
     private int _stopping;
+    [ThreadStatic] private static PtpRealtimeSender? _failureCallbackSender;
+    private bool _senderStarted, _senderExited, _resendsExited = true, _cancelFinished, _resourcesDisposed;
+    // Test barriers run outside the gate, so they can hold either side of a real cleanup interleaving.
+    internal Action? BeforeSenderStartForTest { get; set; }
+    internal Action? BeforeStopCancellationForTest { get; set; }
     public uint RtpBase { get; } = (uint)RandomNumberGenerator.GetInt32(int.MaxValue);
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public long StartedAt { get; private set; }
@@ -50,15 +56,38 @@ internal sealed class PtpRealtimeSender : IDisposable
 
     public void Start(long? startAt = null, ReceiverPcmReader? readAudio = null)
     {
-        if (Interlocked.Exchange(ref _started, 1) != 0) throw new InvalidOperationException("Realtime sender already started");
-        _startAt = startAt; _readAudio = readAudio;
         // Paced on a thread of its own, as RtpSender and BufferedSender are, not on the thread pool: a pool held up by
         // blocking work (synchronous RTSP in Task.Run, here or in other code) must not make it late. 2026-10-17: with the
         // pool sized for 4 cores, as on a CI runner, and blocking work queued on it, the pooled loop woke more than 60 ms
         // after its first deadline in 5 of 20 starts, although that deadline was 247 ms away when Start returned.
-        _sender = new Thread(Send) { IsBackground = true, Name = "AirPlay PTP realtime sender", Priority = ThreadPriority.Highest };
-        _sender.Start();
-        _resends = Task.Run(Resends);
+        lock (_lifecycle)
+        {
+            ThrowIfStopped();
+            if (_started != 0) throw new InvalidOperationException("Realtime sender already started");
+            _started = 1; _startAt = startAt; _readAudio = readAudio;
+            _sender = new Thread(Send) { IsBackground = true, Name = "AirPlay PTP realtime sender", Priority = ThreadPriority.Highest };
+        }
+        try
+        {
+            BeforeSenderStartForTest?.Invoke();
+            lock (_lifecycle)
+            {
+                // Stop may finish while this thread is constructed but not yet started. Only a started thread may
+                // be joined, and publishing both workers here makes either all their work or none precede Stop.
+                ThrowIfStopped();
+                _sender.Start(); _senderStarted = true;
+                _resendsExited = false;
+                try { _resends = Task.Run(Resends); }
+                catch { _resendsExited = true; throw; }
+            }
+        }
+        catch { StopSending(); throw; }
+    }
+
+    private void ThrowIfStopped()
+    {
+        ObjectDisposedException.ThrowIf(_disposed != 0, this);
+        if (_stopping != 0) throw new InvalidOperationException("Realtime sender already stopped");
     }
 
     internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency)
@@ -75,9 +104,9 @@ internal sealed class PtpRealtimeSender : IDisposable
 
     private void Send()
     {
-        using var mmcss = Native.EnterMmcss("Pro Audio");
         try
         {
+            using var mmcss = Native.EnterMmcss("Pro Audio");
             var audio = new float[704]; var pcm = new short[704];
             var stopped = _stop.Token.WaitHandle;
             long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
@@ -147,7 +176,12 @@ internal sealed class PtpRealtimeSender : IDisposable
             }
         }
         catch (Exception) when (_stop.IsCancellationRequested) { }
-        catch (Exception ex) { Failed?.Invoke(ex); }
+        catch (Exception ex) { ReportFailure(ex); }
+        finally
+        {
+            lock (_lifecycle) _senderExited = true;
+            TryDisposeResources();
+        }
     }
 
     private async Task Resends()
@@ -171,22 +205,73 @@ internal sealed class PtpRealtimeSender : IDisposable
             }
         }
         catch (Exception) when (_stop.IsCancellationRequested) { }
-        catch (Exception ex) { Failed?.Invoke(ex); }
+        catch (Exception ex) { ReportFailure(ex); }
+        finally
+        {
+            lock (_lifecycle) _resendsExited = true;
+            TryDisposeResources();
+        }
     }
 
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        lock (_lifecycle)
+        {
+            if (_disposed != 0) return;
+            _disposed = 1;
+        }
         StopSending();
-        bool stopped = _sender == null || _sender == Thread.CurrentThread || _sender.Join(1000);
-        try { stopped &= _resends.Wait(TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
-        // A loop still running (stuck in a reader callback) would use them after Dispose.
-        if (stopped) { _cipher.Dispose(); _stop.Dispose(); }
+        Thread? sender;
+        Task resends;
+        bool cancelFinished;
+        lock (_lifecycle) { sender = _senderStarted ? _sender : null; resends = _resends; cancelFinished = _cancelFinished; }
+        // A reader or failure callback may dispose its sender. It cannot wait for its own exit, and the exit path
+        // below retains the cipher/token until that callback and all other users have actually returned. Nor may a
+        // cancellation callback wait for the Cancel which invoked it: that Stop owns the deferred cleanup instead.
+        if (cancelFinished && sender != Thread.CurrentThread && _failureCallbackSender != this)
+        {
+            sender?.Join(1000);
+            try { resends.Wait(TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
+        }
+        TryDisposeResources();
     }
 
     internal void StopSending()
     {
-        if (Interlocked.Exchange(ref _stopping, 1) != 0) return;
-        _stop.Cancel(); _audio.Dispose();
+        lock (_lifecycle)
+        {
+            if (_stopping != 0) return;
+            _stopping = 1;
+        }
+        try
+        {
+            try { BeforeStopCancellationForTest?.Invoke(); }
+            finally { _stop.Cancel(); }
+        }
+        finally
+        {
+            _audio.Dispose();
+            lock (_lifecycle) _cancelFinished = true;
+            TryDisposeResources();
+        }
+    }
+
+    private void TryDisposeResources()
+    {
+        lock (_lifecycle)
+        {
+            // In particular, another Dispose must not free the token while Stop is outside the gate in Cancel.
+            if (_disposed == 0 || !_cancelFinished || _senderStarted && !_senderExited || !_resendsExited || _resourcesDisposed) return;
+            _resourcesDisposed = true;
+        }
+        _cipher.Dispose(); _stop.Dispose();
+    }
+
+    private void ReportFailure(Exception error)
+    {
+        var previous = _failureCallbackSender;
+        _failureCallbackSender = this;
+        try { Failed?.Invoke(error); }
+        finally { _failureCallbackSender = previous; }
     }
 }

@@ -21,6 +21,12 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _model = new("", TextStyle.Caption, TextRole.Secondary, wrap: true);
     private readonly FluentButton _connect = new(L.T("连接"), ButtonKind.Primary) { MinWidth = 96 };
     private readonly FluentComboBox _device = new();
+    private readonly FluentComboBox _outputGroups = new() { AccessibleName = L.T("已保存的分组"), MinWidth = 180 };
+    private readonly FluentButton _deleteGroup = new(L.T("删除分组"), ButtonKind.Subtle);
+    private readonly TextBlock _groupStatus = Ui.Note();
+    private Control _groupPicker = null!;
+    private string[] _outputGroupIds = [];
+    private string? _outputGroupSignature;
     private readonly FluentButton _refresh;
     private readonly StatusDot _dot = new();
     private readonly TextBlock _status = new("", TextStyle.Body, wrap: true);
@@ -138,8 +144,12 @@ internal sealed class HomePage : ScrollPage
         var head = Ui.Row(14, title, badge, title, _connect);
         _device.AccessibleName = L.T("音箱");
         var picker = Ui.Row(6, _device, _device, _refresh);
+        var groupRow = Ui.Row(6, _outputGroups, _outputGroups, _deleteGroup); groupRow.Wrap = true;
+        _groupPicker = Ui.Stack(3, new TextBlock(L.T("已保存的分组"), TextStyle.Caption, TextRole.Secondary), groupRow);
+        _groupStatus.AccessibleName = L.T("输出状态");
+        _groupStatus.Visible = false;
         var status = Ui.Row(8, _status, _dot, _status);
-        var card = Ui.Card(head, picker, status, _streamStats);
+        var card = Ui.Card(head, _groupPicker, picker, status, _streamStats, _groupStatus);
         card.Gap = 12;
 
         _connect.Click += (_, _) => _app.ToggleConnection();
@@ -148,11 +158,39 @@ internal sealed class HomePage : ScrollPage
         {
             if (_device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count)
             {
-                _app.SelectDevice(_devices[_device.SelectedIndex]);
+                _app.SelectSingleOutput(_devices[_device.SelectedIndex]);
                 ShowSpeaker();
             }
         };
+        _outputGroups.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_outputGroups.SelectedIndex >= 0 && _outputGroups.SelectedIndex < _outputGroupIds.Length)
+                _app.SelectOutputGroup(_outputGroupIds[_outputGroups.SelectedIndex]);
+        };
+        _deleteGroup.Click += (_, _) =>
+        {
+            if (_outputGroups.SelectedIndex < 0 || _outputGroups.SelectedIndex >= _outputGroupIds.Length) return;
+            if (MessageBox.Show(this, L.T("删除选中的分组吗？当前连接不会停止。"), L.T("删除分组"),
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            OutputGroups.Remove(_app.Config, _outputGroupIds[_outputGroups.SelectedIndex]);
+            _app.Config.Save(); ShowOutputGroups(); ShowSpeaker();
+        };
         return card;
+    }
+
+    private void ShowOutputGroups()
+    {
+        var groups = _app.Config.SavedOutputGroups;
+        string signature = string.Join("|", groups.Select(g => g.Id + ":" + g.Name)) + "|" + _app.Config.SelectedOutputGroupId;
+        if (signature != _outputGroupSignature)
+        {
+            _outputGroupSignature = signature;
+            _outputGroupIds = groups.Select(g => g.Id).ToArray();
+            _outputGroups.Items.Clear(); _outputGroups.Items.AddRange(groups.Select(g => g.Name));
+            _outputGroups.SelectedIndex = Array.IndexOf(_outputGroupIds, _app.Config.SelectedOutputGroupId ?? "");
+        }
+        _groupPicker.Visible = groups.Count > 0;
+        _deleteGroup.Enabled = _outputGroups.SelectedIndex >= 0;
     }
 
     private Card BuildSceneCard()
@@ -458,10 +496,23 @@ internal sealed class HomePage : ScrollPage
     private void ShowSpeaker()
     {
         var cfg = _app.Config;
-        _name.Text = cfg.DeviceName ?? L.T("还没有选择音箱");
+        var plan = GroupPlan.FromConfig(cfg);
+        var named = cfg.SavedOutputGroups.FirstOrDefault(g => g.Id == cfg.SelectedOutputGroupId);
+        _name.Text = named?.Name ?? plan?.Name ?? cfg.DeviceName ?? L.T("还没有选择音箱");
         var device = _device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count ? _devices[_device.SelectedIndex] : null;
         _model.Text = device == null ? (cfg.DeviceId == null ? L.T("在下面选择一台 AirPlay 音箱") : "")
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
+        if (plan != null)
+            _model.Text = L.F("{0} 个输出 · {1}", plan.Kind == GroupKind.StereoPair ? (plan.PairLeaderOnly ? 1 : 2) + plan.LocalOutputs.Count + plan.DlnaOutputs.Count
+                : plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count,
+                plan.DlnaOutputs.Count > 0 ? L.T("大致同步") : plan.LocalOutputs.Count > 0
+                    || _app.Controller.GroupOutputStatuses.Any(s => s.Protocol == ReceiverProtocol.Raop)
+                    || plan.Members.Any(m => _app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(m.DeviceId)) is
+                        { ProtocolOverride: ReceiverProtocol.Raop } or { ProtocolOverride: ReceiverProtocol.Auto, LastSuccessfulProtocol: ReceiverProtocol.Raop }
+                        || _devices.Any(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(m.DeviceId)
+                            && d.Kind is ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1))
+                    ? L.T("校准后同步") : L.T("AirPlay 时间线同步"));
+        ShowOutputGroups();
     }
 
     internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
@@ -481,6 +532,7 @@ internal sealed class HomePage : ScrollPage
 
     public void UpdateState()
     {
+        ShowOutputGroups(); ShowSpeaker();
         var c = _app.Controller;
         if (c.State == StreamState.Streaming && _lastState != StreamState.Streaming)
         {
@@ -512,6 +564,7 @@ internal sealed class HomePage : ScrollPage
         }
 #endif
         var c = _app.Controller;
+        ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
         bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
@@ -560,6 +613,33 @@ internal sealed class HomePage : ScrollPage
         SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
+    }
+
+    private void ShowGroupOutputStatus()
+    {
+        var cfg = _app.Config;
+        var plan = GroupPlan.FromConfig(cfg);
+        _groupStatus.Visible = plan != null;
+        if (plan == null) { _groupStatus.Text = ""; return; }
+        var actual = _app.Controller.GroupOutputStatuses;
+        var names = plan.Members.Select(m => (m.DeviceId, m.Name))
+            .Concat(plan.LocalOutputs.Select(o => (o.DeviceId, o.Name)))
+            .Concat(plan.DlnaOutputs.Select(o => (o.Id, o.Name))).ToArray();
+        if (plan.Kind == GroupKind.StereoPair)
+            names = actual.Count > 0 ? actual.Select(s => (s.Id, s.Name)).ToArray()
+                : new[] { (cfg.DeviceId ?? "", cfg.DeviceName ?? plan.Name) }.Concat(names).ToArray();
+        var lines = names.Select(output =>
+        {
+            var state = actual.FirstOrDefault(s => string.Equals(s.Id, output.Item1, StringComparison.OrdinalIgnoreCase)
+                || s.Kind is OutputKind.AirPlay2 or OutputKind.Raop && GroupPlan.Key(s.Id) == GroupPlan.Key(output.Item1));
+            string status = state == null ? L.T("未连接") : state.State == OutputState.Streaming ? L.T("已连接")
+                : state.NeedsUserAction ? L.T("等待操作") : state.Retrying ? L.T("等待重连")
+                : state.State == OutputState.Preparing ? L.T("正在连接…") : L.T("未连接");
+            return L.F("{0}：{1}", output.Item2, status);
+        });
+        _groupStatus.Text = string.Join("\n", lines);
+        if (_app.Controller.State == StreamState.Streaming)
+            _groupStatus.Text += "\n" + L.F("当前整组延迟：{0} ms", _app.Controller.EffectiveLatencyMs);
     }
 
     /// <summary>

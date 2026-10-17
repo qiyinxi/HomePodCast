@@ -88,6 +88,7 @@ internal sealed class SpeakerGroup : IOutputSink
     public IReadOnlyList<RaopGroupOutputStatus> RaopOutputs => _raopOutputs?.Status ?? [];
     public IReadOnlyList<DlnaGroupOutputStatus> DlnaOutputs => _dlnaOutputs?.Status ?? [];
     public IReadOnlyList<ReceiverGroupOutputStatus> ReceiverOutputs => _receiverOutputs?.Status ?? [];
+    internal bool RetryReceiverOutput(string id) => _receiverOutputs?.RetryOutput(id) == true;
     internal (string Name, Exception Error)? RequiredActionFailure => _receiverOutputs?.RequiredActionFailure
         ?? _dlnaOutputs?.RequiredActionFailure ?? _raopOutputs?.RequiredActionFailure;
     internal long TimelineProducedPackets => _pump?.ProducedPackets ?? 0;
@@ -108,9 +109,10 @@ internal sealed class SpeakerGroup : IOutputSink
         RaopOutputSet? raopOutputs = null, DlnaOutputSet? dlnaOutputs = null,
         Func<(double? Percent, bool Muted)>? liveVolume = null, ReceiverOutputSet? receiverOutputs = null)
     {
-        bool coordinated = localOutputs != null || raopOutputs != null || dlnaOutputs != null || receiverOutputs != null;
+        bool coordinated = groupDelayMs != null || localOutputs != null || raopOutputs != null || dlnaOutputs != null || receiverOutputs != null;
         if (setups.Count == 0 && !coordinated) throw new ArgumentException("empty group", nameof(setups));
-        if (setups.Any(s => s.DelayTrimMs is < 0 or > 500)) throw new ArgumentOutOfRangeException(nameof(setups), "Speaker delay must be 0..500 ms");
+        if (setups.Any(s => coordinated ? s.DelayTrimMs is < -5000 or > 5000 : s.DelayTrimMs is < 0 or > 500))
+            throw new ArgumentOutOfRangeException(nameof(setups), "Speaker delay exceeds the timeline range");
         var group = new SpeakerGroup(setups, fifo, volumeCap);
         group._localOutputs = localOutputs;
         group._raopOutputs = raopOutputs;
@@ -154,7 +156,7 @@ internal sealed class SpeakerGroup : IOutputSink
             if (coordinated)
             {
                 coordinatedT0 = MediaClock.Now + MediaClock.FromMs(receiverOutputs == null ? 250 : 500);
-                int historyMs = groupDelayMs!.Value + setups.Select(s => s.DelayTrimMs).DefaultIfEmpty().Max() + 2000;
+                int historyMs = groupDelayMs!.Value + setups.Select(s => Math.Max(0, s.DelayTrimMs)).DefaultIfEmpty().Max() + 2000;
                 historyMs = Math.Max(historyMs, Math.Max(localOutputs?.HistoryMs(groupDelayMs.Value) ?? 0,
                     Math.Max(raopOutputs?.HistoryMs(groupDelayMs.Value) ?? 0, dlnaOutputs?.HistoryMs(groupDelayMs.Value) ?? 0)));
                 historyMs = Math.Max(historyMs, receiverOutputs?.HistoryMs(groupDelayMs.Value) ?? 0);
@@ -199,8 +201,11 @@ internal sealed class SpeakerGroup : IOutputSink
                     ?? (members.Length > 0 ? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0) : 20), group.VolumeCapPercent);
             }
             group.MasterVolume = CurrentMaster();
-            await group.EachAsync((m, i) => m.SetVolumePercent(
-                MemberVolume(CurrentMaster(), setups[i].VolumeOffset, group.VolumeCapPercent)), attemptToken);
+            await group.EachAsync((m, i) =>
+            {
+                if (m is AirPlayClient client) client.VolumeCapPercent = group.VolumeCapPercent;
+                m.SetVolumePercent(MemberVolume(CurrentMaster(), setups[i].VolumeOffset, group.VolumeCapPercent));
+            }, attemptToken);
             group.MasterVolume = CurrentMaster();
 
             if (coordinated)
@@ -429,7 +434,11 @@ internal sealed class SpeakerGroup : IOutputSink
         for (int i = 0; i < _members.Length; i++)
         {
             if (_members[i] is not { } m) continue;
-            try { m.SetVolumePercent(MemberVolume(master, _setups[i].VolumeOffset, cap)); }
+            try
+            {
+                if (m is AirPlayClient client) client.VolumeCapPercent = cap;
+                m.SetVolumePercent(MemberVolume(master, _setups[i].VolumeOffset, cap));
+            }
             catch (Exception ex) { Log.Warn($"group volume, {MemberForLog(_setups[i], i)}: {ex.Message}"); }
         }
     }
@@ -440,6 +449,28 @@ internal sealed class SpeakerGroup : IOutputSink
     /// </summary>
     internal static double MemberVolume(double master, int offset, double cap = 100) =>
         master <= 0 || double.IsNaN(master) ? 0 : Math.Clamp(master + offset, 0, Math.Clamp(cap, 0, 100));
+
+    internal async Task ConfirmMeasurementVolumeAsync(CancellationToken ct)
+    {
+        ThrowIfLost();
+        double cap = VolumeCapPercent;
+        if (cap > 25) throw new InvalidOperationException("No measurement volume ceiling");
+        // Auxiliary sources already enforce the live cap digitally. Classic members need an acknowledged
+        // volume command before the first test click; their ordinary slider publication is best effort.
+        await Task.WhenAll(_members.Select((member, index) => Task.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            if (member == null) return;
+            double percent = MemberVolume(MasterVolume, _setups[index].VolumeOffset, cap);
+            if (member is AirPlayClient client)
+            {
+                client.VolumeCapPercent = cap;
+                client.SetGroupVolumePercentConfirmed(percent);
+            }
+            else member.SetVolumePercent(percent);
+        }, ct))).ConfigureAwait(false);
+        ThrowIfLost(); ct.ThrowIfCancellationRequested();
+    }
 
     public void LogStats()
     {

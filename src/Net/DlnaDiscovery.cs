@@ -14,10 +14,13 @@ internal static class DlnaDiscovery
     private const string SearchTarget = "urn:schemas-upnp-org:device:MediaRenderer:1";
     private const int MaxPacketBytes = 16 * 1024;
     private const int MaxAdvertisements = 128;
+    internal enum BrowseOperation { AliveObserved, WithdrawalProcessed, DescriptionCompleted }
+    internal sealed record BrowseProgress(Advertisement Advertisement, long Revision, BrowseOperation Operation,
+        IReadOnlyList<DlnaDevice> Devices);
 
     /// <summary>An explicit interface and unicast endpoint let tests avoid the real LAN entirely.</summary>
     internal static async Task<IReadOnlyList<DlnaDevice>> BrowseAsync(TimeSpan duration, CancellationToken ct = default,
-        IPAddress? localAddress = null, IPEndPoint? endpoint = null)
+        IPAddress? localAddress = null, IPEndPoint? endpoint = null, Func<BrowseProgress, bool>? progress = null)
     {
         if (duration <= TimeSpan.Zero || duration > TimeSpan.FromMinutes(1)) throw new ArgumentOutOfRangeException(nameof(duration));
         ct.ThrowIfCancellationRequested();
@@ -104,14 +107,22 @@ internal static class DlnaDiscovery
                     if (advertisement.ByeBye || advertisement.Expires <= DateTimeOffset.UtcNow)
                     {
                         cache.Remove(advertisement.Udn, advertisement.Address);
+                        if (progress != null)
+                        if (progress != null)
+                            Report(advertisement, cache.ObserveAlive(advertisement.Udn, advertisement.Address), BrowseOperation.WithdrawalProcessed);
                         continue;
                     }
                     long revision = cache.ObserveAlive(advertisement.Udn, advertisement.Address);
                     string key = $"{advertisement.Address}|{advertisement.Udn}|{advertisement.Location}|{revision}";
-                    if (!pending.TryAdd(key, 0)) continue;
+                    if (!pending.TryAdd(key, 0))
+                    {
+                        Report(advertisement, revision, BrowseOperation.AliveObserved);
+                        continue;
+                    }
                     var bind = ((IPEndPoint)socket.Client.LocalEndPoint!).Address;
                     var client = clients.GetValueOrDefault(bind) ?? clients.Values.FirstOrDefault();
                     if (client is not null) fetches.Add(FetchAsync(client, advertisement, key, revision));
+                    Report(advertisement, revision, BrowseOperation.AliveObserved);
                 }
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
@@ -136,7 +147,19 @@ internal static class DlnaDiscovery
                 finally { fetchSlots.Release(); }
             }
             catch (Exception e) when (e is HttpRequestException or IOException or FormatException or OperationCanceledException) { }
-            finally { pending.TryRemove(key, out _); }
+            finally
+            {
+                pending.TryRemove(key, out _);
+                Report(advertisement, revision, BrowseOperation.DescriptionCompleted);
+            }
+        }
+
+        void Report(Advertisement advertisement, long revision, BrowseOperation operation)
+        {
+            // Tests observe completed cache operations and finish the internal deadline explicitly. The
+            // ordinary browse builds no progress records or snapshots, and caller cancellation still throws.
+            if (progress == null) return;
+            if (progress(new(advertisement, revision, operation, cache.Devices(DateTimeOffset.UtcNow)))) deadline.Cancel();
         }
     }
 
