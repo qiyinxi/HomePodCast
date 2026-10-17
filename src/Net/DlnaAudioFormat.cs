@@ -2,8 +2,11 @@ using System.Buffers.Binary;
 
 namespace HomePodCast.Net;
 
-internal enum DlnaAudioFormat { L16, Wav }
+internal enum DlnaAudioFormat { L16, Wav, Mp3, Aac }
 internal enum DlnaHttpFraming { Chunked, LargeContentLength }
+internal enum DlnaTransferPacing { Sender, Receiver }
+
+internal readonly record struct DlnaWriteObservation(long CompletedTicks, long PcmFrames, bool BackpressureEligible);
 
 /// <summary>Fills 352 stereo frames at 44,100 Hz; underflow is silence, not end of stream.</summary>
 internal delegate void DlnaPcmReader(long sendTicks, Span<short> stereo);
@@ -19,11 +22,17 @@ internal static class DlnaAudioFormats
     // Sender paced, streaming transfer mode, DLNA 1.5. No seek, background or pause capability is advertised.
     // Flag values: https://gnome.pages.gitlab.gnome.org/gupnp-av/docs/flags.DLNAFlags.html
     public const string ContentFeatures = "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=81100000000000000000000000000000";
+    public const string ReceiverPacedContentFeatures = "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01100000000000000000000000000000";
+
+    public static string ContentFeaturesFor(DlnaTransferPacing pacing)
+        => pacing == DlnaTransferPacing.Receiver ? ReceiverPacedContentFeatures : ContentFeatures;
 
     public static string ContentType(DlnaAudioFormat format) => format switch
     {
         DlnaAudioFormat.L16 => "audio/L16;rate=44100;channels=2",
         DlnaAudioFormat.Wav => "audio/wav",
+        DlnaAudioFormat.Mp3 => "audio/mpeg",
+        DlnaAudioFormat.Aac => "audio/aac",
         _ => throw new ArgumentOutOfRangeException(nameof(format)),
     };
 
@@ -31,10 +40,13 @@ internal static class DlnaAudioFormats
     {
         DlnaAudioFormat.L16 => "l16",
         DlnaAudioFormat.Wav => "wav",
+        DlnaAudioFormat.Mp3 => "mp3",
+        DlnaAudioFormat.Aac => "aac",
         _ => throw new ArgumentOutOfRangeException(nameof(format)),
     };
 
-    public static string ProtocolInfo(DlnaAudioFormat format) => $"http-get:*:{ContentType(format)}:{ContentFeatures}";
+    public static string ProtocolInfo(DlnaAudioFormat format, DlnaTransferPacing pacing = DlnaTransferPacing.Sender)
+        => $"http-get:*:{ContentType(format)}:{ContentFeaturesFor(pacing)}";
 
     public static byte[] WavHeader(uint dataLength)
     {

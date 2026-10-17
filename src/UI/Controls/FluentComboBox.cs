@@ -123,22 +123,36 @@ internal sealed class FluentComboBox : FluentControl
     {
         if (!Enabled || Items.Count == 0) return;
         _menu?.Dispose();
+        var menu = _menu = BuildMenu();
+        menu.Show(this, new Point(0, Height + Dp(2)));
+        if (_selected >= 0 && _selected < menu.Items.Count) menu.Items[_selected].Select();
+        Invalidate();
+    }
+
+    /// <summary>The list <see cref="Open"/> shows.</summary>
+    internal ContextMenuStrip BuildMenu()
+    {
         var menu = new ContextMenuStrip
         {
             Renderer = new FluentMenuRenderer(),
             ShowImageMargin = false,
             ShowCheckMargin = false,
-            Font = StyleFont(TextStyle.Body),
             Padding = new Padding(0, Dp(4), 0, Dp(4)),
             MinimumSize = new Size(Width, 0),
         };
+        // The fonts at the menu's own DPI, not this control's: the menu is a window of its own, made at the system DPI (the
+        // main monitor's), and WinForms scales its fonts from there to the monitor it opens on. Made at this control's DPI,
+        // they were scaled twice: 2026-10-15, the window on the 100 % monitor next to a 150 % main one, the list's text
+        // was two thirds of the dropdown's (8.9 px instead of 13.3).
+        int menuDpi = menu.DeviceDpi;
+        menu.Font = Theme.Font(TextStyle.Body, menuDpi);
         for (int i = 0; i < Items.Count; i++)
         {
             int index = i;
             var item = new ToolStripMenuItem(Items[i])
             {
                 Checked = i == _selected,
-                Font = Theme.FontFor(TextStyle.Body, DeviceDpi, Items[i]),
+                Font = Theme.FontFor(TextStyle.Body, menuDpi, Items[i]),
                 Padding = new Padding(Dp(8), Dp(6), Dp(8), Dp(6)),
                 AutoSize = true,
             };
@@ -151,10 +165,7 @@ internal sealed class FluentComboBox : FluentControl
             Invalidate();
         };
         menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
-        _menu = menu;
-        menu.Show(this, new Point(0, Height + Dp(2)));
-        if (_selected >= 0 && _selected < menu.Items.Count) menu.Items[_selected].Select();
-        Invalidate();
+        return menu;
     }
 
     protected override void OnPaint(PaintEventArgs e)

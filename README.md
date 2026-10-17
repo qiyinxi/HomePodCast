@@ -6,11 +6,11 @@ Streams your Windows PC's sound to a HomePod over AirPlay 2 in real time: a low-
 
 TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a native C# implementation written from scratch: a single exe of about 350 KB, no virtual sound card needed.
 
-## Supported receivers — experimental
+## Supported outputs — experimental
 
 Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged.
 
-| Receiver type | Connection | Verification |
+| Output type | Connection | Verification |
 | --- | --- | --- |
 | HomePod | Existing AirPlay 2 realtime | One HomePod 2 on real hardware |
 | Apple TV HD / 4K | AirPlay 2 realtime after PIN pairing | Simulated receiver; hardware untested |
@@ -18,6 +18,9 @@ Third-party receivers are intended mainly for music. AirPlay 1 compatibility and
 | Third-party AirPlay 2 | Realtime, then advertised AirPlay 1, then buffered; remembers the last working mode | shairport-sync AirPlay 2 + nqptp in CI; hardware untested |
 | Third-party AirPlay 1 | AirPlay 1 compatibility | shairport-sync classic in CI |
 | Unknown receivers | Realtime → buffered → AirPlay 1, with each refusal logged | Protocol fakes and software receivers only |
+| Windows local output | WASAPI render endpoint selected by exact ID | Fake endpoint/clock tests; mixed hardware groups untested |
+| Bluetooth speaker or headphones | Windows endpoint, explicitly marked as Bluetooth by the user | 200 ms starting estimate; calibration and hardware testing required |
+| DLNA / UPnP MediaRenderer | SSDP discovery, HTTP audio and SOAP control | Fake renderers and gmrender-resurrect filesink in CI; hardware untested |
 
 | Mode | Recommended minimum | Default | Choices / range |
 | --- | --- | --- | --- |
@@ -31,9 +34,28 @@ Without a reported third-party processing time, the estimate is 150 ms and the o
 
 Speaker info offers a per-device connection override. Compatibility modes replace HomePod scene buttons with their own latency selector; their settings do not overwrite HomePod scenes. The active protocol and reported processing time appear in Speaker info. On first compatibility connection, a one-time notice explains the roughly two-second delay.
 
-Compatibility mode is suited to music, with too much delay for gaming. The browser extension's picture-delay limit remains **2000 ms**; a greater sound delay cannot be fully matched. The A/V sync test can still calibrate the actual offset. Third-party receivers cannot join multi-speaker groups.
+Compatibility mode is suited to music, with too much delay for gaming. The browser extension's picture-delay limit remains **2000 ms**; a greater sound delay cannot be fully matched. The A/V sync test can still calibrate the actual offset. Third-party AirPlay 2 realtime/buffered and AirPlay 1 receivers can join live multi-speaker groups (experimental, not hardware-tested). One capture timeline and group delay coordinate the outputs; receiver behavior and calibration determine actual alignment. Local-file groups still require HomePods. See [group transport details](docs/multi-output-receivers.md).
 
 FairPlay-protected and MFi-authenticated-only receivers are unsupported. In particular, an XGIMI Z6X was checked by handshake only: its audio session requires FairPlay, so it is **unsupported**, not a verified playback device. Do not infer compatibility from an emulated Apple TV model name. For other receivers, reports should include `HomePodCast.exe scan --txt`, the selected mode, the actual connection delay and the refused request from the log.
+
+## Live output groups — experimental since 1.2
+
+On **Multi-speaker**, choose **Live computer audio**, an output type, then **Refresh outputs** and **Add output**.
+Pair Bluetooth in Windows first and explicitly mark its exact endpoint as **Bluetooth output**; names do not identify
+the transport. Windows does not report Bluetooth link delay, so 200 ms is only a starting estimate. An output cannot
+be the same Windows endpoint as the capture source. Opening the editor starts no discovery or audio.
+
+Each output has stereo/left/right channels, volume offset, required/optional behavior and ±5000 ms trim. Automatic
+group delay covers the slowest output; manual delay still respects device floors. Save a named group, select it under
+**Saved groups** on Home, then connect. Saving an offline preference or selecting a group while idle never connects it.
+Optional Apple AirPlay, RAOP, local and DLNA outputs recover independently without reclaiming another sender's stream.
+
+**Manual calibration** opens silently, without a microphone. Its optional explicit test tone is capped at 25%. Film
+separately near the reference and target speakers, subtract their sound-to-flash frame offsets, then apply the result
+to the editor draft; **Apply** on the group page makes it effective. AirPlay 2 targets tight common-timeline sync;
+AirPlay 1/Bluetooth provide basic alignment after calibration; DLNA is rough alignment for different rooms. Mixed
+hardware groups remain unverified. Local files still require HomePods, with independent positions and 0–500 ms delays.
+See [output groups and calibration](docs/multi-output-receivers.md) and [DLNA limits](docs/dlna.md).
 
 ## Measurements
 
@@ -82,7 +104,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Browser extension (beta): delays the picture on YouTube and bilibili so it lines up with the HomePod's sound. The Music scene's 500 ms is meant for listening; video plays smoothest with Movies or Recommended (the extension's popup suggests this when the picture delay is over 300 ms)
 - Synchronized viewing window (experimental): for players without an audio-delay setting, a separate module shows a window you pick (or a whole screen) delayed by the HomePod's sound lag, in full screen if you like, with fine adjustment; the picture stays on the graphics card all the way. It is the optional `HomePodCast-video-window-<version>.zip`, not in the Microsoft Store version. See [Synchronized viewing window](docs/VIDEO_WINDOW.md#english)
 - Update check (off by default, see [Updates](#updates)); with the MSI, a new version installs in one click after its SHA-256 is verified
-- Interface in English, Simplified Chinese, Traditional Chinese and Japanese
+- Interface in 15 languages, including English, Simplified/Traditional Chinese, Japanese and the supported European languages
 
 Playback profiles, per-speaker/source A/V calibration, independent per-app HomePod volume, redacted diagnostic reports, and synchronized browser fullscreen with ±5/±20 ms controls are also available. See [Playback profiles, calibration and diagnostics](docs/PLAYBACK_FEATURES.md#english) for their controls and limitations. The browser extension adds each site's own offset on top of the calibration: if you had already compensated per site, reset those site offsets after calibrating.
 

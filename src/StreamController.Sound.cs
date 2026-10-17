@@ -9,6 +9,8 @@ public sealed partial class StreamController
     private EffectChain? _effects;
     private int _volumeWorker;  // 1 while a sender task runs
     private int _volumeDirty;   // 1 when the speaker should get the current volume
+    private readonly object _measurementLock = new();
+    private long _measurementVersion;
 
     /// <summary>Night mode (dynamic-range compressor); toggled with Enabled, lives in <see cref="Effects"/>.</summary>
     public Compressor NightMode { get; } = new(RtpSender.SampleRate);
@@ -32,15 +34,30 @@ public sealed partial class StreamController
     public double? MeasurementCapPercent { get; private set; }
 
     public void SetMeasurementCap(double capPercent)
+        => SetScopedMeasurementCap(capPercent);
+
+    internal long SetScopedMeasurementCap(double capPercent)
     {
-        MeasurementCapPercent = Math.Clamp(capPercent, 0, 100);
+        long version;
+        lock (_measurementLock)
+        {
+            version = ++_measurementVersion;
+            MeasurementCapPercent = Math.Clamp(capPercent, 0, 100);
+        }
         PushVolume();
+        return version;
     }
 
-    public void EndMeasurementCap()
+    public void EndMeasurementCap() => EndMeasurementCapCore(null);
+    internal void EndMeasurementCap(long version) => EndMeasurementCapCore(version);
+    private void EndMeasurementCapCore(long? version)
     {
-        if (MeasurementCapPercent == null) return;
-        MeasurementCapPercent = null;
+        lock (_measurementLock)
+        {
+            if (MeasurementCapPercent == null || version != null && version != _measurementVersion) return;
+            _measurementVersion++;
+            MeasurementCapPercent = null;
+        }
         PushVolume();
     }
 

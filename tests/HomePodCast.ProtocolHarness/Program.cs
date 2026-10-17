@@ -6,6 +6,7 @@ if (args is ["--self-test"])
         throw new Exception("64-bit features lost their high word");
     if (ReceiverKinds.Classify("AppleTV3,2", new Dictionary<string, string> { ["features"] = "10879", ["srcvers"] = "220.68" })
         != ReceiverKind.ThirdPartyAirPlay1) throw new Exception("legacy emulator classification");
+    HomePodCast.ProtocolHarness.DlnaPcmComparison.SelfTest();
     Console.WriteLine("Protocol harness self-test passed");
     return;
 }
@@ -18,6 +19,17 @@ if (args is ["--dlna", var dlnaName, var localAddress, var rendererAddress, var 
         dlnaFormat, dlnaFraming, dlnaPcm);
     return;
 }
+if (args is ["--dlna", var codecName, var codecLocal, var codecPeer, var codecFormat, var codecFraming, var codecPcm, var codecDirectory])
+{
+    await HomePodCast.ProtocolHarness.DlnaCompatibility.Run(codecName, codecLocal, codecPeer,
+        codecFormat, codecFraming, codecPcm, codecDirectory);
+    return;
+}
+if (args is ["--dlna-codec-fixture", var codecOutput])
+{
+    HomePodCast.ProtocolHarness.DlnaCodecFixture.Generate(codecOutput);
+    return;
+}
 if (args is ["--aac-fixture", var directory])
 {
     HomePodCast.ProtocolHarness.AirPlay2Compatibility.Fixture(directory);
@@ -25,7 +37,8 @@ if (args is ["--aac-fixture", var directory])
 }
 if (args is ["--airplay2", var apHost, var apPort, var apLatency, var fixtureDirectory, var receivedPcm, var mode])
 {
-    await HomePodCast.ProtocolHarness.AirPlay2Compatibility.Run(apHost, int.Parse(apPort), int.Parse(apLatency), fixtureDirectory, receivedPcm, mode == "realtime");
+    await HomePodCast.ProtocolHarness.AirPlay2Compatibility.Run(apHost, int.Parse(apPort), int.Parse(apLatency), fixtureDirectory, receivedPcm,
+        mode is "realtime" or "group-realtime", coordinated: mode.StartsWith("group-"));
     return;
 }
 if (args is ["--raop", var host, var portArg, var etArg, var latencyArg, var password, var pcm])

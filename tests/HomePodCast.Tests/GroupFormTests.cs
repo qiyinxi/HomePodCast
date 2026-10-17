@@ -81,7 +81,7 @@ public class GroupFormTests
     [Theory]
     [InlineData(ReceiverProtocol.Auto, true)]
     [InlineData(ReceiverProtocol.Raop, true)]
-    [InlineData(ReceiverProtocol.AirPlay2Realtime, false)]
+    [InlineData(ReceiverProtocol.AirPlay2Realtime, true)]
     public void RAOP_can_join_live_groups_but_file_playback_stays_HomePod_only(ReceiverProtocol protocol, bool liveAllowed) => OnSta(() =>
     {
         var raop = Device("兼容音箱", "AA:04", "AirPort10,115") with { HasAirPlay = false, RaopPort = 5000 };
@@ -94,7 +94,7 @@ public class GroupFormTests
         panel.SetFound([A, raop]);
         Assert.Equal(liveAllowed, panel.BlockReason == null);
         panel.SetSource(false, fileSource: true);
-        Assert.Equal("本地影音文件暂不支持 AirPlay 1 或本机输出分组。", panel.BlockReason);
+        Assert.Equal("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。", panel.BlockReason);
         panel.SetSource(false);
         Assert.Equal(liveAllowed, panel.BlockReason == null);
     });
@@ -120,7 +120,7 @@ public class GroupFormTests
         panel.SetFound([A, B, Other]);
         panel.SetSource(true);
         Position(panel, A.Name).SelectedIndex = (int)SpeakerPosition.Center;
-        All<FluentButton>(panel).Single(b => b.Text == "添加音箱").PerformClick();
+        All<FluentButton>(panel).Single(b => b.Text == "添加输出").PerformClick();
         panel.Apply(activateCapture: false);
         Assert.Equal(SpeakerPosition.Center, cfg.GroupSpeakers![0].Position);
         Assert.Equal(ChannelMode.Stereo, GroupPlan.FromConfig(cfg)!.ChannelsFor(0));
@@ -154,7 +154,8 @@ public class GroupFormTests
         panel.Apply();
         Assert.Equal(SpeakerPosition.Left, cfg.GroupCapturePositions![GroupPlan.Key(A.DeviceId)]);
         Assert.Equal(SpeakerPosition.Left, cfg.GroupCapturePositions![GroupPlan.Key(B.DeviceId)]);
-        Assert.Equal(37, cfg.GroupSpeakers![0].DelayMs);
+        Assert.Equal(37, cfg.GroupCaptureDelayTrims[GroupPlan.Key(A.DeviceId)]);
+        Assert.Equal(0, cfg.GroupSpeakers![0].DelayMs); // file timing remains independent of live trim
         Assert.Equal(-6, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor(B.DeviceId));
         Assert.False(cfg.GroupSplitChannels); Assert.False(cfg.GroupSwapChannels);
     });
@@ -172,9 +173,9 @@ public class GroupFormTests
         Assert.Equal(9, Position(panel, A.Name).Items.Count);
         Assert.Equal("后左", Position(panel, A.Name).SelectedText); // source switching preserves the saved surround position
         Assert.Equal(["完整立体声"], Position(panel, Other.Name).Items);
-        Assert.Equal("第三方 AirPlay 设备暂不支持多音箱分组。", panel.BlockReason);
+        Assert.Equal("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。", panel.BlockReason);
         Assert.Contains(All<TextBlock>(panel), t => t.Text == panel.BlockReason);
-        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("AirPlay 1 可加入实时分组，校准后基本同步"));
+        Assert.Contains(All<TextBlock>(panel), t => t.Text.Contains("第三方 AirPlay 2 和 AirPlay 1 可加入实时分组"));
         panel.SetSource(false);
         Assert.Equal(["完整立体声", "左", "右"], Position(panel, A.Name).Items);
         Assert.All(panel.SelectedLayout(), s => Assert.Equal(Audio.CinemaRole.Stereo, s.Role));
@@ -189,7 +190,7 @@ public class GroupFormTests
         Assert.Null(GroupPlan.FromConfig(cfg));
         Assert.False(Position(panel, A.Name).Enabled);
         Assert.All(All<FluentSlider>(panel), slider => Assert.False(slider.Enabled));
-        All<FluentButton>(panel).Single(b => b.Text == "添加音箱").PerformClick();
+        All<FluentButton>(panel).Single(b => b.Text == "添加输出").PerformClick();
         Assert.True(Position(panel, A.Name).Enabled);
         panel.Apply();
         Assert.Equal([A.DeviceId, B.DeviceId], GroupPlan.FromConfig(cfg)!.Members.Select(m => m.DeviceId));

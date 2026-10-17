@@ -8,10 +8,15 @@
 only against simulated speakers and generated files. The label stays until it has been tried with several HomePods.
 
 The **Multi-speaker** page combines live PC capture and the **audio track** of a local media file. Choose a source,
-then assign each speaker its position, 0–500 ms extra delay and volume offset. Live capture is downmixed to stereo
+then edit its independent live or file layout. File speakers have positions, 0–500 ms extra delay and volume offset;
+live output trims span ±5000 ms. Live capture is downmixed to stereo
 and offers full stereo, left and right; a 5.1/7.1 file also offers center, LFE, rear and side surrounds. It shows no
 video and does not control a video player. Opening the page starts nothing. The single-speaker live path retains
 its low latency; per-output positions, delay and volume offsets become available when another output is added.
+The live editor also offers exact Windows endpoint IDs, explicitly user-marked Bluetooth, and DLNA, required/optional
+outputs, automatic/manual group delay and named groups selected from Home. Remembered offline preferences do not
+activate outputs. Local/DLNA rows are hidden for files and keep their live selection; live edits never start or
+activate a file layout. See [live output groups](multi-output-receivers.md) for their different synchronization targets.
 
 ### Speakers and channels
 
@@ -21,7 +26,8 @@ and return when a multichannel file is chosen; they are never silently converted
 HomePods, outside a stereo pair: one receiver type gives the channels the same latency and clock. Stereo pairs can use full stereo. Local-file groups cannot use Apple TV yet because that connection path does not
 support its pairing. Local-file playback still requires HomePods. AirPlay 1 compatibility receivers can join live
 stereo groups with a shared delay of at least their transport latency (normally 2 seconds); alignment is approximate
-after manual calibration. Third-party AirPlay 2 groups are not supported yet. Optional AirPlay 1 outputs recover
+after manual calibration. Third-party AirPlay 2 realtime and buffered receivers can also join live groups, using the
+same processed history and a shared NTP/PTP clock projection (experimental, not hardware-tested). Optional AirPlay outputs recover
 independently and pause when another sender takes them over. HomePods have no subwoofer output: the LFE position is a HomePod playing only LFE.
 
 Windows' own decoder (Media Foundation) reads the file with its speaker mask. Mono, stereo, 5.1 (with rear or side
@@ -70,7 +76,17 @@ between speakers as mixed and never depends on the signal. Turn the volume up to
 - The log records each start (layout, what every speaker plays, volume, latency), stop, pause and calibration result,
   with speaker names marked for the diagnostic report's redaction.
 
-### Measuring speaker delays
+### Manual phone-video calibration for live groups
+
+**Manual calibration** opens silently without a microphone. Record flash and sound separately near the reference
+and target speakers, using the same frame rate and short distance. Subtract the reference sound-to-flash offset from
+the target offset: a later target is positive, an earlier target negative. The helper subtracts that measured delay
+from the target's live trim, within ±5000 ms. **Apply trim** only edits a draft; **Apply** on the group page activates it.
+An optional explicit **Start test tone** is available only for an applied, connected group, capped at 25%, and opens
+no microphone. The cap is applied before tones start and remains until queued tones drain; closing the test window
+stops new tones immediately. This is separate from the optional file-playback microphone measurement below.
+
+### Measuring speaker delays with a microphone (optional)
 
 While playing, **Measure speaker delays** opens the chosen microphone, pauses the file and plays a 100 ms test chirp
 (−20 dBFS) on one speaker after the other, **at no more than 25 % volume** whatever the volume is set to. The recording
@@ -87,8 +103,10 @@ and 8 channels and their masks (CinemaTests); one RTP timeline for every speaker
 lock-free ring, pause, calibration that cannot get stuck (CinemaTransportTests); the window's volume, waiting, being
 replaced by another connection, stopping and the 25 % measurement ceiling against fake speakers (CinemaSessionTests,
 CinemaFormTests). Migration, separate live/file selections and per-device editor rules are covered by GroupSettingsTests
-and GroupFormTests. gui-smoke visits the unified page and captures both source modes in every scenario. Nothing in the
-tests plays audio or opens a microphone.
+and GroupFormTests. GroupOutputEditorTests adds injected zero-call checks for discovery/capture/playback/calibration
+on opening, independent live/file drafts and phone calibration. gui-smoke implements focused offline group scenarios
+for all 15 languages at required 150% scale, both source modes, the silent helper and every scrolled layout. These are
+software checks, not acoustic hardware bounds. Nothing in the tests plays audio or opens a microphone.
 
 What needs real HomePods is listed in `docs/device-test-checklist.zh-CN.md` (实验性功能 → 无线影院).
 
@@ -97,9 +115,12 @@ What needs real HomePods is listed in `docs/device-test-checklist.zh-CN.md` (实
 **实验性功能，还没有在真实音箱上测过。** 维护者只有一台 HomePod，下面的内容只用模拟音箱和生成的文件验证过。在多台
 HomePod 上实测之前，这个标注不会去掉。
 
-「多音箱」页合并电脑实时采集与本地影音文件的**音轨**。选好音源后，每台音箱可设置位置、0–500 毫秒额外延迟和音量偏移。
+「多音箱」页合并电脑实时采集与本地影音文件的**音轨**，实时和文件布局独立编辑。文件音箱可设位置、0–500 毫秒额外延迟和音量偏移，实时输出微调范围为 ±5000 毫秒。
 实时采集先混成立体声，只能选完整立体声、左、右；5.1／7.1 文件还能选中置、低音、后环绕和侧环绕。这里不显示视频，也不
 控制视频播放器。打开页面不会开始任何播放。单台实时推流保留原来的低延迟路径；添加另一台后才启用每台的位置、延迟和音量偏移。
+实时编辑器还可按完整 Windows 端点 ID 添加本机、由用户明确标记的蓝牙，以及 DLNA，设置必需／可选、自动／手动整组延迟，
+并保存命名分组在首页选择。记住离线偏好不会启用输出。文件模式隐藏本机／DLNA 行但保留实时选择，实时编辑不会播放文件或
+启用文件布局。各类型的同步目标见[实时输出分组](multi-output-receivers.md)。
 
 ### 音箱和声道
 
@@ -107,7 +128,7 @@ HomePod 上实测之前，这个标注不会去掉。
 已保存的环绕位置在立体声文件中保持静音，切回多声道文件后恢复，不会自动变成完整立体声输出。
 离散位置只能用未组成立体声对的单独 HomePod：同一种接收端才能让各声道共用延迟和时钟。立体声对可选完整立体声；本地文件分组暂不支持 Apple TV，因为该连接路径还不支持它的配对。
 本地文件仍只支持 HomePod。AirPlay 1 兼容模式接收端可以加入实时立体声分组，整组延迟至少为其传输延迟（通常为 2 秒），
-手动校准后基本同步。第三方 AirPlay 2 暂不能加入分组。可选的 AirPlay 1 输出独立恢复，被其他发送端接管后暂停，不会抢回。
+手动校准后基本同步。第三方 AirPlay 2 实时和缓冲接收端也可加入实时分组，共用处理后的历史和 NTP／PTP 时间映射（实验性，尚未实机验证）。可选的 AirPlay 输出独立恢复，被其他发送端接管后暂停，不会抢回。
 HomePod 没有低音炮输出：「低音」位置是一台只放 LFE 的 HomePod。
 
 Windows 自带的解码器（Media Foundation）读取文件和它的声道掩码。能播放单声道、立体声、5.1（后环绕或侧环绕）、6.1 和
@@ -150,7 +171,15 @@ MKV、MOV 要看 Windows 能不能读，AC-3、E-AC-3 只有 Windows 装了对�
   的连接。
 - 日志记录每次开始（布局、每台音箱放什么、音量、延迟）、停止、暂停和校准结果，音箱名称做了标记，导出诊断时会被隐藏。
 
-### 测量音箱延迟
+### 实时分组的手机录像手动校准
+
+「手动校准」打开时无声，不用麦克风。用相同帧率和短距离，分别靠近参考、待校准音箱录像，记录声音相对闪光的偏移。
+用待校准偏移减参考偏移，更晚为正、更早为负；助手从目标实时微调中扣除测出的差值，范围为 ±5000 毫秒。
+「应用微调」只改草稿，再点分组页「应用」才生效。可选「开始测试音」只在分组已应用并连接后可用，必须明确点击，
+音量不超过 25%，不会开启麦克风。发声前先应用上限，已排队的测试音放完才解除，关闭测试窗口立即停止产生新测试音。
+这和下方文件播放的可选麦克风测量是两项功能。
+
+### 用麦克风测量音箱延迟（可选）
 
 播放时点「测量音箱延迟」：打开所选的麦克风，文件暂停，每台音箱依次放一声 100 ms 的测试音（−20 dBFS），**音量不超过
 25%**，不管当前音量是多少。录音只在内存里和测试音做匹配，找出每一声到达的时间（设备时间戳对照测试音的 RTP 时间），然后
@@ -163,6 +192,8 @@ MKV、MOV 要看 Windows 能不能读，AC-3、E-AC-3 只有 Windows 装了对�
 （CinemaTests）；Windows 解码生成的 16 位和浮点 WAV，1、2、6、8 声道及其掩码（CinemaTests）；所有音箱共用一条 RTP 时间线，
 无锁环形缓冲里每一帧都按顺序送到，暂停，校准不会卡住（CinemaTransportTests）；窗口的音量、等待、被其他连接取代、停止，
 以及测量时 25% 的上限，用模拟音箱测（CinemaSessionTests、CinemaFormTests）。GroupSettingsTests 和 GroupFormTests 覆盖配置迁移、
-实时与文件选择互不影响，以及每设备编辑规则。gui-smoke 在每个场景都访问统一页并拍摄两种音源。测试不会播放声音，也不会打开麦克风。
+实时与文件选择互不影响，以及每设备编辑规则。GroupOutputEditorTests 通过注入调用记录，检查打开时发现／采集／播放／校准
+为零、独立实时／文件草稿和手机校准。gui-smoke 实现全部 15 种语言、必须为 150% 缩放的离线分组专用场景、两种音源、无声
+助手和每次滚动布局检查。这些是软件检查，不代表声音同步的硬件边界；测试不会播放声音，也不会打开麦克风。
 
 需要真实 HomePod 才能测的部分见 `docs/device-test-checklist.zh-CN.md`（实验性功能 → 无线影院）。

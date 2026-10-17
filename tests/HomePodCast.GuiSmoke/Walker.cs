@@ -10,11 +10,13 @@ namespace HomePodCast.GuiSmoke;
 /// <summary>
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
 /// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
-/// or <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), in a UI
-/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
+/// <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), or
+/// <c>group-outputs</c> (offline saved output settings, without starting audio), in a UI language, at a display scale,
+/// in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
 /// <see cref="DpiChange"/> changes the display scale to 100 % and back while the app runs (as a move to another monitor).
 /// </summary>
-internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false)
+internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false,
+    bool RequiredScale = false)
 {
     public string Id => $"{Kind}-{Language}-{Scale}" + (Theme == "auto" ? "" : "-" + Theme);
 }
@@ -80,6 +82,7 @@ internal sealed partial class Walker
                 case "streaming": RunStreaming(); break;
                 case "compatibility": RunCompatibility(); break;
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
+                case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -894,7 +897,7 @@ internal sealed partial class Walker
     }
 
     /// <summary>Screenshots of the whole page, a screen at a time (it scrolls the page, then back to the top).</summary>
-    private void ShootPage(string page, string label)
+    private void ShootPage(string page, string label, bool checkEachScroll = false)
     {
         var main = MainWindow();
         var pane = PagePane(Uia.Snapshot(main), page).Hwnd;
@@ -903,6 +906,12 @@ internal sealed partial class Walker
         Dump(Uia.Snapshot(main), name);
         for (int i = 1; i <= 12; i++)
         {
+            if (checkEachScroll)
+            {
+                var tree = Uia.Snapshot(main);
+                Dump(tree, $"{name}-{i}");
+                Layout(tree, $"{page} ({label}) / scroll {i}");
+            }
             Shoot(main, $"{name}-{i}", $"{page}{(label.Length > 0 ? " (" + label + ")" : "")} {i}");
             var info = Native.VerticalScroll(pane);
             if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } si || si.nPos + si.nPage > si.nMax) break;

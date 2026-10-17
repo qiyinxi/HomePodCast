@@ -53,7 +53,7 @@ internal sealed class Report
         sb.AppendLine();
         sb.AppendLine(Failures.Count == 0 ? "**Passed.**" : $"**{Failures.Count} failure(s).**");
         sb.AppendLine();
-        sb.AppendLine("Screenshots of every page and dialog: the `gui-screenshots` artifact of this run (open `index.html`).");
+        sb.AppendLine("Download this job's screenshot artifact and open its `index.html` for the captured pages and dialogs.");
         sb.AppendLine();
         sb.AppendLine("| Scenario | Result |");
         sb.AppendLine("| --- | --- |");

@@ -17,20 +17,21 @@ public class DlnaClientTests
     [InlineData("http-get:*:*:*", "L16")]
     [InlineData("*:*:audio/L16;rate=*;channels=*:*", "L16")]
     [InlineData("http-get:*:audio/wav:*", "Wav")]
+    [InlineData("http-get:*:audio/mpeg:*", "Mp3")]
+    [InlineData("http-get:*:audio/aac:*", "Aac")]
     [InlineData("http-get:*:audio/L16;rate=48000;channels=2:*,http-get:*:audio/wav:*", "Wav")]
     public void Negotiation_matches_MIME_wildcards_parameters_and_supported_rate(string protocols, string expected) =>
         Assert.Equal(expected, DlnaClient.SelectFormat(protocols.Split(',')).ToString());
 
     [Theory]
-    [InlineData("http-get:*:audio/mpeg:*")]
     [InlineData("rtsp-rtp-udp:*:audio/L16:*")]
     [InlineData("http-get:*:audio/L16;rate=48000:*")]
     [InlineData("http-get:*:audio/L16;channels=1:*")]
     [InlineData("http-get:*:audio/L16;rate=44100;rate=48000:*")]
     [InlineData("http-get:*:audio/L16;broken:*")]
     [InlineData("http-get:audio/L16:*")]
-    public void Negotiation_rejects_compressed_wrong_transport_rate_channels_and_malformed_fields(string protocol) =>
-        Assert.Throws<NotSupportedException>(() => DlnaClient.SelectFormat([protocol]));
+    public void Negotiation_rejects_wrong_transport_rate_channels_and_malformed_fields(string protocol) =>
+        Assert.Throws<DlnaUnsupportedException>(() => DlnaClient.SelectFormat([protocol]));
 
     [Fact]
     public void Negotiation_honors_explicit_supported_format_and_rejects_unsupported_preference()
@@ -38,7 +39,46 @@ public class DlnaClientTests
         string[] protocols = ["http-get:*:audio/L16:*", "http-get:*:audio/wav:*"];
         Assert.Equal(DlnaAudioFormat.L16, DlnaClient.SelectFormat(protocols));
         Assert.Equal(DlnaAudioFormat.Wav, DlnaClient.SelectFormat(protocols, DlnaAudioFormat.Wav));
-        Assert.Throws<NotSupportedException>(() => DlnaClient.SelectFormat([protocols[0]], DlnaAudioFormat.Wav));
+        Assert.Throws<DlnaUnsupportedException>(() => DlnaClient.SelectFormat([protocols[0]], DlnaAudioFormat.Wav));
+    }
+
+    [Fact]
+    public void Negotiation_prefers_lossless_then_MP3_then_AAC()
+    {
+        string[] protocols = ["http-get:*:audio/aac:*", "http-get:*:audio/mpeg:*", "http-get:*:audio/wav:*", "http-get:*:audio/L16:*"];
+        Assert.Equal(DlnaAudioFormat.L16, DlnaClient.SelectFormat(protocols));
+        Assert.Equal(DlnaAudioFormat.Wav, DlnaClient.SelectFormat(protocols[..3]));
+        Assert.Equal(DlnaAudioFormat.Mp3, DlnaClient.SelectFormat(protocols[..2]));
+        Assert.Equal(DlnaAudioFormat.Aac, DlnaClient.SelectFormat(protocols[..1]));
+        Assert.Equal(DlnaAudioFormat.Aac, DlnaClient.SelectFormat(protocols, DlnaAudioFormat.Aac));
+    }
+
+    [Fact]
+    public void Metadata_receiver_pacing_matches_its_HTTP_DLNA_flags()
+    {
+        var document = XDocument.Parse(DlnaClient.Metadata(new Uri("http://127.0.0.1/audio"), DlnaAudioFormat.Mp3, DlnaTransferPacing.Receiver));
+        Assert.Equal(DlnaAudioFormats.ProtocolInfo(DlnaAudioFormat.Mp3, DlnaTransferPacing.Receiver),
+            document.Descendants().Single(e => e.Name.LocalName == "res").Attribute("protocolInfo")!.Value);
+    }
+
+    [Fact]
+    public async Task A_lowered_live_cap_attenuates_PCM_without_waiting_for_remote_volume()
+    {
+        await using var fake = new FakeDlnaRenderer();
+        await using var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        int produce = 0;
+        double cap = 25;
+        await using var client = await DlnaClient.ConnectAsync(fake.Device, Options() with
+        {
+            VolumePercent = 20, LiveVolumeCapPercent = () => Volatile.Read(ref cap),
+            ReadAudio = (_, pcm) => pcm.Fill(Volatile.Read(ref produce) == 0 ? (short)0 : (short)10000),
+        });
+        int remoteWrites = fake.Requests.Count(r => r.SoapAction.EndsWith("#SetVolume"));
+        Volatile.Write(ref cap, 5);
+        Volatile.Write(ref produce, 1);
+        Assert.Equal(2500, await pull.FirstNonzeroAsync());
+        Assert.Equal(remoteWrites, fake.Requests.Count(r => r.SoapAction.EndsWith("#SetVolume")));
     }
 
     [Fact]
@@ -145,7 +185,7 @@ public class DlnaClientTests
     public async Task Busy_renderer_is_inspected_without_any_write_command(string state, string currentUri)
     {
         await using var fake = new FakeDlnaRenderer { TransportState = state, CurrentUri = currentUri };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => DlnaClient.ConnectAsync(fake.Device, Options()));
+        await Assert.ThrowsAsync<DlnaBusyException>(() => DlnaClient.ConnectAsync(fake.Device, Options()));
         Assert.Equal(new[] { "GetTransportInfo", "GetMediaInfo" }, Actions(fake));
     }
 
@@ -168,7 +208,7 @@ public class DlnaClientTests
         fake.CurrentUri = "http://192.0.2.10/replacement";
         fake.TransportState = newState;
         releaseProtocols.TrySetResult();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => pending);
+        await Assert.ThrowsAsync<DlnaBusyException>(() => pending);
         Assert.DoesNotContain(Actions(fake), action => action is "SetVolume" or "SetMute" or "SetAVTransportURI" or "Play" or "Stop");
     }
 
@@ -213,7 +253,7 @@ public class DlnaClientTests
         await using var client = await DlnaClient.ConnectAsync(fake.Device, Options());
         int before = fake.Requests.Count;
         fake.CurrentUri = "http://192.0.2.10/replacement";
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SetVolumeAsync(15, false));
+        await Assert.ThrowsAsync<DlnaTakenOverException>(() => client.SetVolumeAsync(15, false));
         Assert.Contains("taken over", await client.Lost.WaitAsync(Guard));
         Assert.DoesNotContain(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetVolume") || r.SoapAction.EndsWith("#SetMute"));
         Assert.True(client.StreamServer.IsStopped);
@@ -234,7 +274,7 @@ public class DlnaClientTests
             if (action == "SetVolume") fake.CurrentUri = "http://192.0.2.10/replacement";
             return Task.CompletedTask;
         };
-        await Assert.ThrowsAsync<InvalidOperationException>(() => client.SetVolumeAsync(15, true));
+        await Assert.ThrowsAsync<DlnaTakenOverException>(() => client.SetVolumeAsync(15, true));
         Assert.Contains("taken over", await client.Lost.WaitAsync(Guard));
         Assert.Single(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetVolume"));
         Assert.DoesNotContain(fake.Requests.Skip(before), r => r.SoapAction.EndsWith("#SetMute"));
@@ -348,12 +388,39 @@ public class DlnaClientTests
     public async Task Nonprivate_network_is_rejected_before_any_renderer_request()
     {
         await using var fake = new FakeDlnaRenderer();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => DlnaClient.ConnectAsync(fake.Device,
+        await Assert.ThrowsAsync<DlnaPolicyException>(() => DlnaClient.ConnectAsync(fake.Device,
             Options() with { IsPrivateNetwork = () => false }));
         Assert.Empty(fake.Requests);
     }
 
     private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_or_stalled_HTTP_pull_is_lost_even_if_transport_still_reports_PLAYING(bool activeButStalled)
+    {
+        await using var fake = new FakeDlnaRenderer();
+        var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        int reads = 0;
+        try
+        {
+            await using var client = await DlnaClient.ConnectAsync(fake.Device, Options() with
+            {
+                PollInterval = TimeSpan.FromMilliseconds(20), PullTimeout = TimeSpan.FromMilliseconds(200),
+                BeforeReadAsync = (_, ct) => activeButStalled && Interlocked.Increment(ref reads) > 1
+                    ? new ValueTask(Task.Delay(Timeout.Infinite, ct)) : ValueTask.CompletedTask,
+            });
+            if (!activeButStalled) await pull.DisposeAsync();
+            await client.Lost.WaitAsync(Guard);
+            Assert.Equal("PLAYING", fake.TransportState);
+            Assert.IsType<IOException>(client.LostException);
+            Assert.False(DlnaFailures.RequiresUserAction(client.LostException));
+            Assert.True(client.StreamServer.IsStopped);
+        }
+        finally { await pull.DisposeAsync(); }
+    }
+
     private static DlnaClientOptions Options() => new(IPAddress.Loopback, (_, samples) => samples.Fill(10000), () => true)
     {
         PollInterval = TimeSpan.FromSeconds(30), PullTimeout = Guard,
@@ -406,6 +473,19 @@ public class DlnaClientTests
                 }
             }
             catch (IOException) { } // A closed chunked response has no final chunk and HttpClient reports truncation.
+        }
+
+        internal async Task<short> FirstNonzeroAsync()
+        {
+            Assert.NotNull(_stream);
+            using var guard = new CancellationTokenSource(Guard);
+            byte[] bytes = new byte[2];
+            while (true)
+            {
+                await _stream.ReadExactlyAsync(bytes, guard.Token);
+                short sample = BinaryPrimitives.ReadInt16BigEndian(bytes);
+                if (sample != 0) return sample;
+            }
         }
 
         public ValueTask DisposeAsync()

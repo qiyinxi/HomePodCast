@@ -252,6 +252,7 @@ public class CinemaSessionTests : IDisposable
         await Until(() => Last(left) == 60, "60 % on the speaker");
 
         c.SetMeasurementCap(AcousticAlignment.MeasurementVolumeCapPercent);
+        await c.ConfirmGroupMeasurementVolumeAsync(default);
         await Until(() => Last(left) == 25, "the measurement's 25 %");
         Assert.Equal(60, c.Volume); // what the app shows and saves is unchanged
         c.SetVolume(40);           // a change meanwhile stays under the ceiling too

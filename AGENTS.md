@@ -38,6 +38,11 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - A Debug build goes to `app\HomePodCast.exe`: a firewall rule on the maintainer's PC points at that path, so keep it.
 - The C# tests use in-process fakes (AirPlay receiver, HomePod, Apple TV, release feed, local API); they need no
   speaker and make no sound. Every change keeps them green, and new behaviour gets a test.
+- Tests listen on loopback only (`IPAddress.Loopback`, never `Any` or a LAN address), fakes and the code under test
+  alike. Anything else makes Windows ask for a firewall rule, once per test build path, so once per worktree; a prompt
+  left open at night held up the maintainer's other automation. `LoopbackOnlyTests` fails on such a listener, and on
+  a UDP socket that only `Connect` or a send bound: Windows lists it on 0.0.0.0. For the local address that reaches a
+  destination, use `Native.SourceAddressFor`, not a connected probe socket.
 - CI (`.github/workflows/build.yml`, every push and PR to dev/main/release) also runs, on its own runners:
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
   the extension), `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact) and

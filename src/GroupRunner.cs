@@ -73,10 +73,23 @@ internal sealed class GroupRunner(
                 Log.Warn($"group failed: {DescribeForLog(ex)}");
                 if (Find<FirewallBlockedException>(ex) != null) FirewallBlocked?.Invoke();
                 stopIdle = Find<RaopUnsupportedException>(ex) != null || Find<RaopPasswordRequiredException>(ex) != null
-                    || Find<RaopBusyException>(ex) != null || Find<RaopRefusedException>(ex) != null;
+                    || Find<RaopBusyException>(ex) != null || Find<RaopRefusedException>(ex) != null
+                    || Find<DlnaBusyException>(ex) != null || Find<DlnaTakenOverException>(ex) != null
+                    || Find<DlnaPolicyException>(ex) != null || Find<DlnaUnsupportedException>(ex) != null
+                    || Find<DlnaStoppedException>(ex) != null || Find<ReceiverGroupStoppedException>(ex) != null
+                    || Find<ReceiverGroupUnsupportedException>(ex) != null || Find<ReceiverGroupDelayUnavailableException>(ex) != null
+                    || Find<PairingRequiredException>(ex) != null;
             }
             finally
             {
+                // A terminal required leg wins over a simultaneous transient/AP2 event even when that event
+                // completed Lost first. Check the transports before teardown clears their live sessions.
+                if (Current?.RequiredActionFailure is { } terminal)
+                {
+                    stopIdle = true;
+                    lostReason = terminal.Error.Message;
+                    lostText = Describe(new GroupMemberException(terminal.Name, terminal.Error));
+                }
                 if (streamed) StreamEnded?.Invoke(lostReason, ct.IsCancellationRequested);
                 TearDown();
             }
@@ -111,6 +124,8 @@ internal sealed class GroupRunner(
     internal static string Describe(Exception ex) => ex switch
     {
         GroupMemberException g => L.F("{0}：{1}", g.Member, Describe(g.InnerException!)),
+        DlnaBusyException or DlnaTakenOverException or DlnaPolicyException or DlnaUnsupportedException or DlnaStoppedException
+            => StreamController.DlnaMessage(DlnaFailures.Kind(ex)),
         AirPlayException => ex.Message,
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };

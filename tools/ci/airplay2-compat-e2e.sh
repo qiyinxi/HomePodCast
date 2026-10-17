@@ -121,3 +121,5 @@ run_case realtime 500
 run_case buffered 1000
 run_case buffered 1500
 run_case buffered 2000
+run_case group-realtime 500
+run_case group-buffered 1500

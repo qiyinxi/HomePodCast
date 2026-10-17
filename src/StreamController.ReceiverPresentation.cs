@@ -4,7 +4,7 @@ namespace HomePodCast;
 
 public sealed partial class StreamController
 {
-    public object? AudioSessionIdentity => (object?)_receiverSession ?? _raopClient ?? (object?)ActiveSender;
+    public object? AudioSessionIdentity => (object?)_receiverSession ?? _raopClient ?? (object?)_groupRunner?.Current ?? ActiveSender;
 
     public void ObserveAudioOnset(Action<long>? observer)
     {

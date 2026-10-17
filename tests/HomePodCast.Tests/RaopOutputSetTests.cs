@@ -54,6 +54,28 @@ public class RaopOutputSetTests
     }
 
     [Fact]
+    public async Task A_failed_measurement_cap_stops_sending_before_background_cleanup_can_run()
+    {
+        using var fake = new FakeGroupRaop();
+        RaopClient? client = null;
+        double cap = 100;
+        using var set = await RaopOutputSet.PrepareAsync([Output(fake)], () => cap, default,
+            connect: async (o, options, ct) => client = await RaopClient.ConnectAsync(o.Address, o.Port, options, ct));
+        await set.StartAsync(History(MediaClock.Now - MediaClock.FromMs(3000)), 2000, 60, default);
+        await fake.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var commands = typeof(RaopOutputSet).GetField("_commands", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(set)!;
+        var stopped = (CancellationTokenSource)typeof(RaopClient).GetField("_stop", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(client)!;
+        // RunSlot must acquire this lock before detaching and disposing the failed session. Hold it so
+        // the assertion proves SetVolume stopped audio, independently of worker scheduling.
+        lock (commands)
+        {
+            cap = 25; fake.VolumeStatus = 403;
+            set.SetVolume(25);
+            Assert.True(stopped.IsCancellationRequested);
+        }
+    }
+
+    [Fact]
     public async Task Preparation_is_silent_until_timeline_volume_and_epoch_are_bound()
     {
         using var left = new FakeGroupRaop();
@@ -454,6 +476,8 @@ public class RaopOutputSetTests
         public TaskCompletionSource Closed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource FlushEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task? FlushGate { get; init; }
+        public Task? VolumeGate;
+        public TaskCompletionSource VolumeEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Port => ((IPEndPoint)_listen.LocalEndpoint).Port;
         public int AnnounceStatus { get; init; } = 200;
         public int VolumeStatus = 200;
@@ -540,6 +564,8 @@ public class RaopOutputSetTests
                         string volume = Encoding.ASCII.GetString(request.Body)["volume: ".Length..].Trim();
                         Volumes.Enqueue(double.Parse(volume, System.Globalization.CultureInfo.InvariantCulture));
                         status = Volatile.Read(ref VolumeStatus);
+                        if (Volatile.Read(ref VolumeGate) is { } volumeGate)
+                        { VolumeEntered.TrySetResult(); await volumeGate.WaitAsync(_stop.Token); }
                     }
                     if (method == "FLUSH")
                     {

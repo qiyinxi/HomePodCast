@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HomePodCast.Audio;
 using HomePodCast.Net;
 
@@ -44,12 +45,17 @@ public class CinemaTransportTests
     private static CinemaFileSource Open(string path, List<CinemaSpeaker> layout)
     {
         var source = new CinemaFileSource(path, layout);
-        Assert.True(source.WaitOpened(TimeSpan.FromSeconds(10)), source.ErrorLog);
-        return source;
+        if (source.WaitOpened(TimeSpan.FromSeconds(10))) return source;
+        // 2026-10-16 (CI run 38970600060): this said nothing but "Assert.True() Failure", and the source was left running.
+        string progress = source.Progress;
+        source.Dispose();
+        Assert.Fail($"the decoder did not open {Path.GetFileName(path)} within 10 s: {progress}");
+        throw new UnreachableException();
     }
 
     private static void WaitForPacket(CinemaFileSource source) =>
-        Assert.True(SpinWait.SpinUntil(() => source.BufferedFrames >= RtpSender.FramesPerPacket, 5000), "the decoder did not fill the ring");
+        Assert.True(SpinWait.SpinUntil(() => source.BufferedFrames >= RtpSender.FramesPerPacket, 5000),
+            $"the decoder did not fill the ring: {source.BufferedFrames} frames buffered, {source.Progress}");
 
     [Fact]
     public void A_71_file_plays_every_channel_on_seven_HomePods_with_the_LFE_in_the_fronts()
@@ -192,5 +198,57 @@ public class CinemaTransportTests
             Assert.InRange(pcm[100], 0.019f, 0.021f);
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task A_slow_open_says_where_it_waits_and_every_waiter_sees_it_open()
+    {
+        // The decoder is held inside its open: a waiter that gives up is told where the decoder is, and the signal still
+        // reaches one that subscribed before the open finished and one that comes after it.
+        string path = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 44100);
+        using var held = new ManualResetEventSlim();
+        var source = new CinemaFileSource(path, CinemaTests.Layout(CinemaTests.L2), (file, step) =>
+        {
+            step("held by the test");
+            held.Wait();
+            return new CinemaMediaReader(file, step);
+        });
+        try
+        {
+            var early = source.Opened;
+            Assert.True(SpinWait.SpinUntil(() => source.Progress.StartsWith("opening the file: held by the test", StringComparison.Ordinal), 5000),
+                source.Progress);
+            Assert.False(source.WaitOpened(TimeSpan.FromMilliseconds(50)));
+            Assert.Null(source.Error);
+            Assert.False(early.IsCompleted);
+            Assert.Matches(@"^opening the file: held by the test for \d+\.\d s$", source.Progress);
+
+            held.Set();
+            Assert.True(await early.WaitAsync(TimeSpan.FromSeconds(10)), source.Progress);
+            Assert.True(source.WaitOpened(TimeSpan.Zero));
+            Assert.Equal(2, source.Channels);
+        }
+        finally
+        {
+            held.Set();
+            source.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task A_file_without_a_decoder_ends_the_open_with_its_reason()
+    {
+        string garbage = Path.Combine(Path.GetTempPath(), "hpc-cinema-" + Guid.NewGuid().ToString("N") + ".wav");
+        File.WriteAllBytes(garbage, Enumerable.Range(0, 4096).Select(i => (byte)(i * 37)).ToArray());
+        try
+        {
+            using var source = new CinemaFileSource(garbage, CinemaTests.Layout(CinemaTests.L2));
+            Assert.False(await source.Opened.WaitAsync(TimeSpan.FromSeconds(10)), source.Progress);
+            Assert.Equal("这个文件在这台电脑上无法解码：Windows 没有它的解码器，或者文件已损坏。", source.Error);
+            Assert.StartsWith("failed: ", source.Progress, StringComparison.Ordinal);
+            Assert.False(source.WaitOpened(TimeSpan.Zero));
+        }
+        finally { File.Delete(garbage); }
     }
 }

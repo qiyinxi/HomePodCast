@@ -11,3 +11,4 @@ extension/test/*.mp4
 .worktrees/
 .claude/settings.local.json
 .stem-cache/
+**/TestResults/

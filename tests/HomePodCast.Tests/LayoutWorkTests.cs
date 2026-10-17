@@ -187,6 +187,8 @@ public class LayoutWorkTests
                     ChangeDpi(window, dpi);
                     long changed = watch.ElapsedMilliseconds;
                     Assert.Empty(work.Arranged); // laid out once the window has settled at its DPI
+                    // The hidden pages' windows went before Windows told and moved each of them; built again at idle.
+                    Assert.All(pages.Where(p => p != shown), p => Assert.False(p.IsHandleCreated, $"{p.GetType().Name} kept its windows"));
                     watch.Restart();
                     window.FinishDpiChange(); // what the settle timer does
                     output.WriteLine($"{page} → {dpi} dpi: {changed} ms, then {watch.ElapsedMilliseconds} ms laying out {work.Arranged.Count} containers");
@@ -197,10 +199,12 @@ public class LayoutWorkTests
                     foreach (var p in pages.Where(p => p != shown)) Assert.True(fonts.In(p) == 0, $"{p.GetType().Name}: {fonts.Describe(p)}");
                 }
                 Assert.Equal(dpi, window.DeviceDpi);
-                var settings = TestApp.Field<SettingsPage>(window, "_settings");
-                var night = TestApp.Field<ToggleSwitch>(settings, "_night");
-                Assert.Equal(dpi, night.DeviceDpi);
-                if (page == AppPage.Settings) Assert.Equal(night.GetPreferredSize(Size.Empty), night.Size); // laid out at the new DPI
+                if (page == AppPage.Settings)
+                {
+                    var night = TestApp.Field<ToggleSwitch>(TestApp.Field<SettingsPage>(window, "_settings"), "_night");
+                    Assert.Equal(dpi, night.DeviceDpi);
+                    Assert.Equal(night.GetPreferredSize(Size.Empty), night.Size); // laid out at the new DPI
+                }
                 var rail = TestApp.Field<NavRail>(window, "_rail");
                 Assert.All(rail.Items, item => Assert.Equal(Theme.Dp(38, dpi), item.Height));
                 AssertNoOverlap(shown.Content);
@@ -264,29 +268,31 @@ public class LayoutWorkTests
         using var window = new MainWindow(TestApp.Create(TestApp.Config()));
         TestApp.Field<MixerPage>(window, "_mixer").FindApps = _ => []; // the rows of playing apps are built when shown
         ShowMain(window); // the other pages built ahead at this DPI
+        window.PrepareAhead = false; // visited before they are built again at idle
         var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
         int start = window.DeviceDpi, other = start == 96 ? 144 : 96;
+        // There and back: a window made in a test has its monitor's DPI, so the pages are checked back at that one.
         ChangeDpi(window, other);
+        Settle(window);
+        ChangeDpi(window, start);
         Settle(window);
         foreach (var page in Enum.GetValues<AppPage>().Where(p => p != AppPage.Home))
         {
             var root = pages[(int)page];
-            Assert.Equal(start, root.LayoutDpi); // left for its visit
-            int handles = Handles(window);
+            Assert.False(root.IsHandleCreated); // its windows went with the change
             using (var fonts = new FontWatch(window))
             using (var work = new Work())
             {
                 window.ShowPage(page);
-                work.AssertOnce($"→ {page} at {other} dpi", output);
+                work.AssertOnce($"→ {page} after {other} and back to {start} dpi", output);
                 Assert.Equal(1, work.Pages);
                 Assert.True(fonts.In(root) > 0); // the font it missed while hidden
             }
-            Assert.Equal(handles, Handles(window));
             Application.DoEvents();
-            Assert.Equal(other, root.LayoutDpi);
+            Assert.Equal(start, root.LayoutDpi);
             foreach (var c in All(root).Where(c => c.IsHandleCreated))
             {
-                Assert.Equal(other, c.DeviceDpi);
+                Assert.Equal(start, c.DeviceDpi);
                 if (c is ToggleSwitch && c.Visible) Assert.Equal(c.GetPreferredSize(new Size(c.Width, 0)).Height, c.Height);
                 if (c is TextBlock { Wrap: true, Visible: true } text && text.Width > 0)
                     Assert.Equal(text.GetPreferredSize(new Size(text.Width, 0)).Height, text.Height); // measured with the new font
@@ -296,18 +302,66 @@ public class LayoutWorkTests
         window.Hide();
     }));
 
+    [Fact]
+    public void Pages_whose_windows_went_with_a_scale_change_are_built_again_at_idle_at_the_new_scale() => Sta.Run(() => PerMonitor(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        TestApp.Field<MixerPage>(window, "_mixer").FindApps = _ => [];
+        ShowMain(window);
+        var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
+        var vlc = TestApp.Field<PasswordBox>(TestApp.Field<SettingsPage>(window, "_settings"), "_vlcPassword");
+        vlc.Password = "typed, not saved yet";
+        int start = window.DeviceDpi, other = start == 96 ? 144 : 96;
+        ChangeDpi(window, other); // there and back: see A_page_hidden_while_the_scale_changed…
+        Settle(window);
+        ChangeDpi(window, start);
+        Assert.Equal(pages.Length - 1, pages.Count(p => !p.IsHandleCreated));
+        Assert.False(window.PagesPrepared);
+        Settle(window);
+        Pump(() => window.PagesPrepared, 60_000); // a few milliseconds at a time while the window is idle
+        Assert.True(window.LongestPrepareStepMs < 100, $"a step took {window.LongestPrepareStepMs} ms");
+        Assert.Equal("typed, not saved yet", vlc.Password);
+        foreach (var page in Enum.GetValues<AppPage>().Where(p => p != AppPage.Home))
+        {
+            var root = pages[(int)page];
+            Assert.True(root.IsHandleCreated);
+            Assert.Equal(start, root.LayoutDpi);
+            int handles = Handles(window);
+            using (var work = new Work())
+            {
+                window.ShowPage(page);
+                Assert.True(work.Pages <= 1, $"{page}: laid out {work.Pages} times");
+            }
+            Assert.Equal(handles, Handles(window)); // shown as built
+            Assert.All(All(root).Where(c => c.IsHandleCreated), c => Assert.Equal(start, c.DeviceDpi));
+            AssertNoOverlap(root.Content);
+        }
+        window.Hide();
+    }));
+
     [Theory]
-    [InlineData(false)] // windows at 96 dpi everywhere: laid out before their windows are created
-    [InlineData(true)]  // per-monitor, as the app: on a 150 % monitor the windows come first (controls without one are at 96 dpi here)
-    public void Pages_built_ahead_show_without_creating_windows_and_with_one_layout(bool perMonitor) => Sta.Run(() =>
+    [InlineData(false, false)] // windows at 96 dpi everywhere: laid out before their windows are created
+    [InlineData(true, false)]  // per-monitor, as the app, its controls made at the window's DPI (the window on the main monitor): the same
+    [InlineData(true, true)]   // per-monitor, its controls made at another DPI: their windows first, to learn the window's
+    public void Pages_built_ahead_show_without_creating_windows_and_with_one_layout(bool perMonitor, bool otherDpi) => Sta.Run(() =>
     {
         void Body()
         {
             var app = TestApp.Create(TestApp.Config());
-            using var window = new MainWindow(app);
+            // Controls are made at the main monitor's DPI (here the test process's: 96) and take their window's when it is
+            // created. The two differ when the window is on the other monitor (2026-10-16: 100 % next to a 150 % main monitor),
+            // and for the hidden pages after each move across. Set here, so that both cases run on every PC: until 2026-10-16
+            // the second ran only where the off-screen window isn't at 96 dpi (the maintainer's PC, not CI).
+            int dpi = perMonitor ? WindowDpi() : 96, made = otherDpi ? (dpi == 96 ? 144 : 96) : dpi;
+            using var window = perMonitor ? WithSystemDpi(made, () => new MainWindow(app)) : new MainWindow(app);
             TestApp.Field<MixerPage>(window, "_mixer").FindApps = _ => []; // the rows of playing apps are built when shown
             ShowHidden(window);
             var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
+            if (perMonitor)
+            {
+                Assert.Equal(dpi, window.DeviceDpi);
+                Assert.All(pages.Where(p => !p.IsHandleCreated), p => Assert.Equal(made, p.DeviceDpi));
+            }
             var watch = System.Diagnostics.Stopwatch.StartNew();
             using (var work = new Work())
             {
@@ -320,6 +374,11 @@ public class LayoutWorkTests
                 Assert.DoesNotContain(pages[(int)AppPage.Home], work.Arranged.Keys);
                 Assert.DoesNotContain(TestApp.Field<NavRail>(window, "_rail"), work.Arranged.Keys);
                 Assert.All(pages, p => Assert.True(work.Arranged.GetValueOrDefault(p) <= 1, $"{p.GetType().Name} ×{work.Arranged.GetValueOrDefault(p)}"));
+                // Laid out before their windows were created, never with them: a layout that moves a page's windows is one step
+                // that can't yield (2026-10-16, controls at another DPI: 15–45 ms a page on the maintainer's PC, 75 ms while it was
+                // busy). Counted, as the time a step takes depends on how busy the PC is.
+                Assert.True(work.WithWindows.Count == 0, "laid out with their windows: " +
+                    string.Join(", ", work.WithWindows.Select(c => c.GetType().Name).Distinct().Take(10)));
             }
             foreach (var page in Enum.GetValues<AppPage>().Where(p => p != AppPage.Home))
             {
@@ -366,19 +425,29 @@ public class LayoutWorkTests
     {
         const int WM_MOUSEMOVE = 0x0200;
         using var window = new MainWindow(TestApp.Create(TestApp.Config()));
-        ShowHidden(window);
+        void Move() => PostMessage(window.Handle, WM_MOUSEMOVE, 0, (IntPtr)(20 | 20 << 16));
+        // The mouse moves before the first step can come. When showing the window started the building ahead, a window that took
+        // longer than PrepareStartMs to show and paint took a step before the test's first mouse move, and rightly so: idle, no
+        // input yet. 2026-10-16 on the maintainer's PC: 1 step, in a full test run and alone. Showing used 150 of the 400 ms there
+        // while the PC was quiet; 420 ms more before the first message loop gave that step every time.
+        ShowMain(window, prepare: false);
+        Move();
+        window.PrepareAhead = true;
+        window.ShowPage(AppPage.Home); // starts it, as showing the window does
         var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
         var until = Environment.TickCount64 + MainWindow.PrepareStartMs + 1000;
-        while (Environment.TickCount64 < until) // the mouse moves over the window
+        while (Environment.TickCount64 < until) // the mouse moves over the window: a move before each pass of the message loop
         {
-            PostMessage(window.Handle, WM_MOUSEMOVE, 0, (IntPtr)(20 | 20 << 16));
-            PumpFor(20);
+            Application.DoEvents();
+            Thread.Sleep(5);
+            Move();
         }
         Assert.Equal(0, window.PrepareSteps);
         Assert.All(pages.Where(p => p != pages[(int)AppPage.Home]), p => Assert.False(p.IsHandleCreated));
         Pump(() => window.PagesPrepared, 60_000); // and goes on once it stops
         window.Hide();
     });
+
     [Theory]
     [InlineData(Theme.Auto)]
     [InlineData(Theme.Light)]
@@ -412,6 +481,63 @@ public class LayoutWorkTests
     });
 
     // ---------------------------------------------------------------- helpers
+
+    /// <summary>
+    /// The window on a monitor at another scale than the main one (2026-10-15: 100 % next to a 150 % main monitor). The list
+    /// is a window of its own, made at the system DPI (the main monitor's), and WinForms scales its fonts from there to the
+    /// monitor it opens on: fonts made at the dropdown's DPI came out two thirds of its size.
+    /// </summary>
+    [Fact]
+    public void A_dropdown_list_has_the_dropdown_s_text_size_when_the_main_monitor_has_another_scale() => Sta.Run(() => PerMonitor(() =>
+    {
+        using var form = new Form();
+        var combo = new FluentComboBox { Width = 300 };
+        combo.Items.AddRange(["卧室（HomePod 第二代）", "书房电视（Apple TV 4K 第三代）· Apple TV"]);
+        form.Controls.Add(combo);
+        ShowHidden(form);
+        int dpi = combo.DeviceDpi;
+        WithSystemDpi(dpi == 144 ? 96 : 144, () =>
+        {
+            using var menu = combo.BuildMenu();
+            _ = menu.Handle; // made on this monitor, as it opens next to the dropdown
+            Assert.Equal(dpi, menu.DeviceDpi);
+            foreach (ToolStripItem item in menu.Items)
+                Assert.Equal(Theme.FontFor(TextStyle.Body, dpi, item.Text!).Size, item.Font.Size, 2);
+        });
+    }));
+
+    /// <summary>The DPI a window made here gets, per-monitor: its monitor's (off-screen: the main monitor's, 2026-10-16).</summary>
+    private static int WindowDpi()
+    {
+        using var probe = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) };
+        _ = probe.Handle;
+        return probe.DeviceDpi;
+    }
+
+    /// <summary><see cref="WithSystemDpi(int, Action)"/>: what <paramref name="body"/> made, its controls at <paramref name="dpi"/>.</summary>
+    private static T WithSystemDpi<T>(int dpi, Func<T> body)
+    {
+        T made = default!;
+        WithSystemDpi(dpi, () => { made = body(); });
+        return made;
+    }
+
+    /// <summary>The system DPI WinForms starts each new control at, as when the main monitor has this scale.</summary>
+    private static void WithSystemDpi(int dpi, Action body)
+    {
+        var helper = Type.GetType("System.Windows.Forms.ScaleHelper, System.Windows.Forms.Primitives", throwOnError: true)!;
+        var field = helper.GetField("<InitialSystemDpi>k__BackingField", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object? before = field.GetValue(null);
+        field.SetValue(null, dpi);
+        try
+        {
+            body();
+        }
+        finally
+        {
+            field.SetValue(null, before);
+        }
+    }
 
     private static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => All(c).Prepend(c));
 
@@ -470,9 +596,16 @@ public class LayoutWorkTests
         public readonly Dictionary<Control, int> Arranged = new();
         public readonly List<string> Measured = [];
 
+        /// <summary>The containers laid out while they had a window: a layout that moves the windows in them.</summary>
+        public readonly List<Control> WithWindows = [];
+
         public Work()
         {
-            LayoutPanel.Arranged = c => Arranged[c] = Arranged.GetValueOrDefault(c) + 1;
+            LayoutPanel.Arranged = c =>
+            {
+                Arranged[c] = Arranged.GetValueOrDefault(c) + 1;
+                if (c.IsHandleCreated) WithWindows.Add(c);
+            };
             // The font object itself, as the cache keys it: a regular and a bold font can share name and size.
             TextMeasure.Measured = (text, font, size, flags) =>
                 Measured.Add($"「{text}」 {font.Name} {font.Style} {font.Size}px (font #{RuntimeHelpers.GetHashCode(font)}) {size} {flags}");
@@ -577,12 +710,26 @@ public class LayoutWorkTests
     }
 
     /// <summary>
-    /// What Windows sends when the window moves to a monitor with another scale: WM_DPICHANGED_BEFOREPARENT to the child
-    /// windows bottom-up, WM_DPICHANGED with the new rectangle (the same size: WinForms asks for it, AutoScaleMode.None), then
-    /// WM_DPICHANGED_AFTERPARENT top-down.
+    /// What Windows does when the window moves to a monitor with another scale, as seen on the maintainer's monitors
+    /// (2026-10-15, a hook on every message): WM_GETDPISCALEDSIZE to the window; then to each child window, bottom-up,
+    /// WM_DPICHANGED_BEFOREPARENT, and the child moved and resized to the new scale right after; WM_DPICHANGED with the new
+    /// rectangle (the same size: WinForms asks for it, AutoScaleMode.None); the window's frame at the new scale, which changes
+    /// its client area (here: the window's height); then WM_DPICHANGED_AFTERPARENT top-down.
     /// </summary>
     private static void ChangeDpi(Form window, int dpi)
     {
+        int old = window.DeviceDpi;
+        var size = Marshal.AllocHGlobal(8);
+        try
+        {
+            Marshal.WriteInt32(size, 0, window.Width);
+            Marshal.WriteInt32(size, 4, window.Height);
+            SendMessage(window.Handle, 0x02E4, dpi, size);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(size);
+        }
         var children = new List<Control>();
         void Walk(Control c)
         {
@@ -593,7 +740,14 @@ public class LayoutWorkTests
             }
         }
         Walk(window);
-        for (int i = children.Count - 1; i >= 0; i--) SendMessage(children[i].Handle, 0x02E2, dpi, IntPtr.Zero);
+        for (int i = children.Count - 1; i >= 0; i--)
+        {
+            var child = children[i];
+            SendMessage(child.Handle, 0x02E2, dpi, IntPtr.Zero);
+            var b = child.Bounds;
+            SetWindowPos(child.Handle, IntPtr.Zero, b.X * dpi / old, b.Y * dpi / old, b.Width * dpi / old, b.Height * dpi / old,
+                0x0004 | 0x0010); // SWP_NOZORDER | SWP_NOACTIVATE
+        }
         var bounds = window.Bounds;
         var rect = Marshal.AllocHGlobal(16);
         try
@@ -608,8 +762,12 @@ public class LayoutWorkTests
         {
             Marshal.FreeHGlobal(rect);
         }
-        foreach (var child in children) SendMessage(child.Handle, 0x02E3, 0, IntPtr.Zero);
+        window.Height += dpi > old ? -17 : 17; // the frame (on screen: 1484×1011 at 96 dpi, 1478×994 at 144)
+        foreach (var child in children.Where(c => c.IsHandleCreated)) SendMessage(child.Handle, 0x02E3, 0, IntPtr.Zero);
     }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     [DllImport("user32.dll")] private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hwnd, int msg, nint wParam, IntPtr lParam);

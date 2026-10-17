@@ -20,8 +20,17 @@ public sealed partial class StreamController
         => CoordinatedDelay(airPlayMinimumMs, outputs, null, requestedMs);
 
     internal static int CoordinatedDelay(int airPlayMinimumMs, LocalOutputSet? locals, RaopOutputSet? raops, int? requestedMs = null)
+        => CoordinatedDelay(airPlayMinimumMs, locals, raops, null, requestedMs);
+
+    internal static int CoordinatedDelay(int airPlayMinimumMs, LocalOutputSet? locals, RaopOutputSet? raops, DlnaOutputSet? dlnas, int? requestedMs = null)
+        => CoordinatedDelay(airPlayMinimumMs, locals, raops, dlnas, null, requestedMs);
+
+    internal static int CoordinatedDelay(int airPlayMinimumMs, LocalOutputSet? locals, RaopOutputSet? raops, DlnaOutputSet? dlnas,
+        ReceiverOutputSet? receivers, int? requestedMs = null)
     {
-        int floor = Math.Max(100, Math.Max(airPlayMinimumMs, Math.Max(locals?.MinimumDelayMs ?? 0, raops?.MinimumDelayMs ?? 0))) + TimelinePump.HeadroomMs;
+        int floor = Math.Max(100, Math.Max(airPlayMinimumMs,
+            Math.Max(receivers?.MinimumDelayMs ?? 0, Math.Max(dlnas?.MinimumDelayMs ?? 0,
+                Math.Max(locals?.MinimumDelayMs ?? 0, raops?.MinimumDelayMs ?? 0))))) + TimelinePump.HeadroomMs;
         return Math.Clamp(Math.Max(floor, requestedMs ?? floor), floor, 30000);
     }
 
@@ -30,43 +39,75 @@ public sealed partial class StreamController
     {
         // Preserve the original member index before filtering: a legacy [RAOP left, AP2 right] split stays that way.
         var indexed = members.Select((member, index) => (Member: member, Index: index)).ToArray();
-        var airplay = indexed.Where(m => !GroupUsesRaop(m.Member.Device)).ToArray();
+        var airplay = indexed.Where(m => !GroupUsesRaop(m.Member.Device) && !GroupUsesReceiver(m.Member.Device)
+            && !ExplicitlyOptionalApple(plan, m.Member.Device, m.Member.DeviceId)).ToArray();
         var raop = indexed.Where(m => GroupUsesRaop(m.Member.Device)).ToArray();
+        var receivers = indexed.Where(m => GroupUsesReceiver(m.Member.Device) || ExplicitlyOptionalApple(plan, m.Member.Device, m.Member.DeviceId)).ToArray();
+        // One UUID survives every independent rejoin, including the initial offline attempt.
+        var sessionExtras = plan.SessionExtras(Guid.NewGuid());
+        int appleLatency = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         var required = airplay.Select(m => m.Member).Concat(raop.Where(m => plan.IsRequiredOutput(m.Member.DeviceId)).Select(m => m.Member)).ToArray();
         await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
             required.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address, m.Port)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
         EnsureCapture(ct);
         LocalOutputSet? locals = null;
         RaopOutputSet? raops = null;
+        DlnaOutputSet? dlnas = null;
+        ReceiverOutputSet? receiverOutputs = null;
         try
         {
             if (plan.LocalOutputs.Count > 0)
-                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, () => VolumeCapPercent, ct, OpenLocalOutput);
+                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, CurrentGroupCap, ct, OpenLocalOutput);
             if (raop.Length > 0)
             {
                 var outputs = raop.Select(m => RaopGroupOptions(plan, m.Member, m.Index, run)).ToArray();
-                raops = await RaopOutputSet.PrepareAsync(outputs, () => VolumeCapPercent, ct, ConnectGroupRaopOutput, RetryGroupRaopOutput);
+                raops = await RaopOutputSet.PrepareAsync(outputs, CurrentGroupCap, ct, ConnectGroupRaopOutput, RetryGroupRaopOutput);
             }
-            int minimum = airplay.Length == 0 ? 0 : Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
-            EffectiveLatencyMs = CoordinatedDelay(minimum, locals, raops, plan.GroupDelayMs);
+            if (plan.DlnaOutputs.Count > 0)
+                dlnas = await DlnaOutputSet.PrepareAsync(plan.DlnaOutputs.Select(DlnaGroupOptions).ToArray(),
+                    CurrentGroupCap, ct, ConnectGroupDlnaOutput, RetryGroupDlnaOutput, liveVolume: CurrentGroupVolume);
+            if (receivers.Length > 0)
+            {
+                receiverOutputs = await ReceiverOutputSet.PrepareAsync(receivers.Select(m => ReceiverGroupOptions(plan, m.Member, m.Index, run,
+                        appleLatency, sessionExtras)).ToArray(),
+                    CurrentGroupCap, ct, ConnectGroupReceiverOutput, RetryGroupReceiverOutput, liveVolume: CurrentGroupVolume);
+                if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
+                    Volatile.Write(ref _preparingReceiverOutputs, receiverOutputs);
+            }
+            int maxAdvance = airplay.Select(m => Math.Max(0, -plan.DelayTrimFor(m.Member.DeviceId))).DefaultIfEmpty().Max();
+            int minimum = airplay.Length == 0 ? 0 : appleLatency + maxAdvance;
+            EffectiveLatencyMs = CoordinatedDelay(minimum, locals, raops, dlnas, receiverOutputs, plan.GroupDelayMs);
             // A long group delay belongs in the history, not in an arbitrarily large receiver jitter buffer.
             int protocolFloor = Math.Max((ArrivalToRenderMs ?? 85) + SafetyMarginMs, (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
-            int transportDelay = Math.Max(protocolFloor, Math.Min(2000, EffectiveLatencyMs - TimelinePump.HeadroomMs));
+            int available = EffectiveLatencyMs - TimelinePump.HeadroomMs - maxAdvance;
+            int transportDelay = Math.Min(Math.Max(protocolFloor, Math.Min(2000, available)), available);
             var options = new StreamOptions(transportDelay, null)
             {
-                VolumeCapPercent = VolumeCapPercent, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
+                VolumeCapPercent = CurrentGroupCap(), SessionSetupExtras = sessionExtras, Pairings = Pairings,
             };
-            var prepare = PrepareGroupMember ??
-                          (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
             var setups = airplay.Select(m => new MemberSetup(m.Member.Label,
-                c => prepare(m.Member, options, plan.ChannelsFor(m.Index, m.Member.DeviceId), c), plan.VolumeOffsetFor(m.Member.DeviceId), m.Member.DeviceId,
+                c => PrepareRequiredAppleAsync(m.Member, options with { DeviceId = m.Member.DeviceId, VolumeCapPercent = CurrentGroupCap() },
+                    plan.ChannelsFor(m.Index, m.Member.DeviceId), run, c), plan.VolumeOffsetFor(m.Member.DeviceId), m.Member.DeviceId,
                 plan.DelayTrimFor(m.Member.DeviceId))).ToList();
             _groupConnectCap = options.VolumeCapPercent;
             SpeakerGroup group;
             try
             {
                 group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, Effects,
-                    () => VolumeCapPercent, localOutputs: locals, groupDelayMs: EffectiveLatencyMs, raopOutputs: raops);
+                    CurrentGroupCap, localOutputs: locals, groupDelayMs: EffectiveLatencyMs, raopOutputs: raops, dlnaOutputs: dlnas,
+                    liveVolume: CurrentGroupVolume,
+                    receiverOutputs: receiverOutputs);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && receiverOutputs?.Lost.IsCompleted == true)
+            {
+                throw new GroupMemberException(receiverOutputs.LostOutputName ?? plan.Name,
+                    receiverOutputs.LostException ?? new IOException(receiverOutputs.LostReason));
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && dlnas?.Lost.IsCompleted == true)
+            {
+                string reason = dlnas.LostReason ?? await dlnas.Lost;
+                Exception error = dlnas.LostException ?? new IOException(reason);
+                throw new GroupMemberException(dlnas.LostOutputName ?? plan.Name, error);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested && raops?.Lost.IsCompleted == true)
             {
@@ -88,7 +129,8 @@ public sealed partial class StreamController
             if (!ct.IsCancellationRequested) Volume ??= group.MasterVolume;
             return group;
         }
-        catch { locals?.Dispose(); raops?.Dispose(); throw; }
+        catch { locals?.Dispose(); raops?.Dispose(); dlnas?.Dispose(); receiverOutputs?.Dispose(); throw; }
+        finally { if (receiverOutputs != null) Interlocked.CompareExchange(ref _preparingReceiverOutputs, null, receiverOutputs); }
     }
 
     private RaopGroupOutputOptions RaopGroupOptions(GroupPlan plan, ResolvedMember member, int index, GroupRun run)

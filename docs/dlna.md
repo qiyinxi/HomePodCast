@@ -1,6 +1,8 @@
 # DLNA output (experimental)
 
-P3 adds a standalone DLNA/UPnP MediaRenderer command. Group coordination and the unified device picker follow in P4/P5. Hardware compatibility has not been verified. FairPlay-only AirPlay remains unsupported; a device's separate DLNA service may work.
+DLNA/UPnP MediaRenderer is available in the unified **Multi-speaker** editor and through the standalone command below. Hardware compatibility has not been verified. FairPlay-only AirPlay remains unsupported; a device's separate DLNA service may work.
+
+For live PC audio, choose **DLNA** as the output type, explicitly **Refresh outputs**, add the intended renderer and apply. Opening the editor does not discover or play anything. The row exposes channels, volume offset and ±5000 ms trim; **More settings** contains required/optional behavior, estimated latency, preferred format and HTTP framing. Automatic group delay accommodates device floors; a manual value cannot reduce them. Save a named group and select it on Home before explicitly connecting. Offline UDN preferences are a bank, separate from the active selection, and never connect on their own. File playback remains HomePod-only and hides these live rows without changing their selection. See [output groups and phone calibration](multi-output-receivers.md).
 
 ```text
 HomePodCast.exe dlna --scan
@@ -10,19 +12,39 @@ HomePodCast.exe dlna --udn uuid:DEVICE --capture ENDPOINT_ID --volume 20 --cap 2
 
 Run playback commands only when you intend to use that renderer. Select exactly one source: silence for protocol checks, or a Windows capture endpoint by ID. The command does not save settings. An active or paused renderer requires explicit `--take-over`; the sender stops if another controller replaces its URI or stops playback, and does not stop a replacement stream when closing.
 
-The sender discovers SSDP MediaRenderer advertisements and resolves their descriptions and services on the replying IPv4 peer. It negotiates 44.1 kHz stereo LPCM (`audio/L16`, signed 16-bit big endian), then WAV (16-bit little endian). `--format l16|wav` chooses an advertised format. Compressed formats follow in P4. HTTP uses chunking by default; `--large-length` selects a finite large Content-Length for renderers that require it. WAV's RIFF lengths are finite too: these sessions cannot run indefinitely. Reconnect before the advertised response ends. Seeking is unavailable.
+The sender discovers SSDP MediaRenderer advertisements and resolves their descriptions and services on the replying IPv4 peer. It prefers 44.1 kHz stereo LPCM (`audio/L16`, signed 16-bit big endian), then WAV (16-bit little endian), MP3, and AAC-LC in ADTS. Compressed formats use Windows Media Foundation. `--format l16|wav|mp3|aac` chooses an advertised format. HTTP uses chunking by default; `--large-length` selects a finite large Content-Length for renderers that require it. WAV's RIFF lengths are finite too: these sessions cannot run indefinitely. Reconnect before the advertised response ends. Seeking is unavailable.
 
-The session serves HTTP only on the selected local interface, while Windows reports that interface's network as Private. Only the selected renderer's IP can fetch the random session URL. A profile change closes the listener. Existing MSI/portable Private + LocalSubnet rules and MSIX Private TCP rules already cover this endpoint; P3 adds no rule, Public access or HTTP.sys URL reservation. Custom firewall rules may still block it. The command never changes network or firewall settings.
+The session serves HTTP only on the selected local interface, while Windows reports that interface's network as Private. Only the selected renderer's IP can fetch the random session URL. A profile change closes the listener. Existing MSI/portable Private + LocalSubnet rules and MSIX Private TCP rules already cover this endpoint; the unified editor adds no rule, Public access or HTTP.sys URL reservation. Custom firewall rules may still block it. The command never changes network or firewall settings.
 
 Volume is capped before starting playback. RenderingControl volume/mute are used where supported; explicitly unsupported actions fall back to digital attenuation/mute. Control or authentication failures stop startup rather than silently bypassing the error. DLNA receiver buffering and its clock vary: promise only rough alignment, suitable for different rooms. HTTP-to-filesink timing in CI measures a software renderer, not acoustic latency.
 
-Verification uses loopback fake renderers and a pinned gmrender-resurrect/GStreamer filesink in isolated Linux CI namespaces. No sound device is used. The `dlna-compat-e2e` job checks discovery, SOAP control, both HTTP formats and sample-exact stereo PCM. Real-device testing belongs to the maintainer; keep volume at or below 25% and use manual trim or phone-video calibration when group support arrives.
+Groups resolve each saved UDN afresh, rather than trusting a saved address. A DLNA output is optional by default and reconnects independently after transport failure. A required output ends the group on failure. Busy, unsupported, stopped or taken-over outputs wait for explicit action; automatic retries do not reclaim another controller's stream. The existing single-HomePod path is unchanged.
+
+Each output has an estimated receiver latency, signed trim, channel assignment and volume offset. Positive trim delays that output further. The shared delay covers the estimates, negative trims, a 250 ms priming margin and the common producer's headroom; manual delay still respects this floor. This aligns outputs against the shared processed history; it does not measure the earlier capture/FIFO delay or an acoustic arrival time. The silent manual helper needs no microphone: compare separate phone videos near the reference and target, enter target-minus-reference sound-to-flash frames, then apply the draft trim on the group page. Its optional explicit test tone is capped at 25% and never opens a microphone.
+
+Receiver-paced HTTP corrects drift only after a stable backpressured read-rate window becomes observable. Startup bursts and sender-paced writes cannot establish a receiver clock. The fit needs 45 seconds, keeps at most 60 seconds of evidence, and expires after a two-second observation gap. Long stalls, history wrap and a new HTTP GET re-anchor the reader. Clock confidence describes this transport proxy, not acoustic accuracy. Four fake-clock hour simulations at ±300/±1000 ppm remain within 500 ms under their tested conditions; real hardware has no verified bound. DLNA still promises rough alignment for different rooms.
+
+For an API/configuration test, save preferences and an explicit live selection separately. This example selects only DLNA; the empty AirPlay selection excludes even a remembered stereo pair. Saving the preference bank alone never connects anything. Omit the empty AirPlay selection to retain the current ordinary AirPlay primary, or select its saved IDs explicitly. Do not include discovery addresses or service URLs.
+
+```json
+{
+  "GroupDlnaOutputs": [
+    { "Udn": "uuid:DEVICE", "Name": "Living room", "EstimatedLatencyMs": 2000, "TrimMs": 0, "Required": false }
+  ],
+  "GroupCaptureDlnaUdns": ["uuid:DEVICE"],
+  "GroupCaptureDeviceIds": []
+}
+```
+
+Verification uses loopback fake renderers and a pinned gmrender-resurrect/GStreamer filesink in isolated Linux CI namespaces. No sound device is used. `dlna-compat-e2e` checks discovery, SOAP, sample-exact LPCM/WAV, and MP3/AAC with both HTTP framings. Windows CI generates the real encoded fixtures; Linux independently decodes them and compares aligned renderer PCM with decoder-rounding tolerance. Real-device testing belongs to the maintainer; keep volume at or below 25% and calibrate with manual trim or phone video.
 
 ## 简体中文
 
 # DLNA 输出（实验性）
 
-P3 提供独立的 DLNA/UPnP MediaRenderer 命令；分组协调和统一设备选择器在 P4/P5 接入。尚未验证真实设备兼容性。只认 FairPlay 的 AirPlay 设备仍不支持，但其独立的 DLNA 服务可能可用。
+DLNA/UPnP MediaRenderer 已接入统一「多音箱」编辑器，也可用下方独立命令。尚未验证真实设备兼容性。只认 FairPlay 的 AirPlay 设备仍不支持，但其独立的 DLNA 服务可能可用。
+
+电脑实时声音下，输出类型选 DLNA，明确点「刷新输出」，添加需要的设备后应用。打开编辑器不会发现或播放。行内可设声道、音量偏移和 ±5000 毫秒微调，「更多设置」包含必需／可选、估计延迟、首选格式和 HTTP 传输。自动整组延迟覆盖设备下限，手动值不能降低下限。可保存命名分组，在首页选择后再明确连接。离线 UDN 偏好库与当前选择分开保存，不会自行连接。文件播放仍只支持 HomePod，隐藏这些实时行但保留选择。见[输出分组和手机校准](multi-output-receivers.md)。
 
 ```text
 HomePodCast.exe dlna --scan
@@ -32,10 +54,28 @@ HomePodCast.exe dlna --udn uuid:DEVICE --capture ENDPOINT_ID --volume 20 --cap 2
 
 只有准备使用该设备时才运行播放命令。必须选择一种音源：协议检查用静音，或按 ID 指定 Windows 采集端点。命令不保存设置。正在播放或暂停的设备需要明确加上 `--take-over`；其他控制器更换媒体 URI 或停止播放后，本次发送停止，关闭时不会停止后来接管的流。
 
-发送端通过 SSDP 发现 MediaRenderer，并且只向应答设备的 IPv4 地址读取描述和服务。格式优先为 44.1 kHz 双声道 LPCM（`audio/L16`，16 位有符号大端序），其次是 WAV（16 位小端序）。`--format l16|wav` 可以指定设备声明支持的格式。压缩格式留到 P4。默认使用 HTTP 分块传输；需要较大 Content-Length 的设备可加 `--large-length`。WAV 的 RIFF 长度同样有限，因此会话不能无限持续，达到声明长度前需要重新连接。不支持跳转。
+发送端通过 SSDP 发现 MediaRenderer，并且只向应答设备的 IPv4 地址读取描述和服务。格式优先为 44.1 kHz 双声道 LPCM（`audio/L16`，16 位有符号大端序），其次是 WAV（16 位小端序）、MP3、ADTS 封装的 AAC-LC。压缩格式使用 Windows Media Foundation。`--format l16|wav|mp3|aac` 可以指定设备声明支持的格式。默认使用 HTTP 分块传输；需要较大 Content-Length 的设备可加 `--large-length`。WAV 的 RIFF 长度同样有限，因此会话不能无限持续，达到声明长度前需要重新连接。不支持跳转。
 
-HTTP 只绑定选定的本机接口，并要求 Windows 将该接口的网络识别为 Private。只有选定设备的 IP 能读取随机会话地址；网络类型改变后关闭监听。现有 MSI、便携版的 Private + LocalSubnet 规则和 MSIX 的 Private TCP 规则已经覆盖该端点；P3 不新增规则、不开放 Public 网络，也不创建 HTTP.sys URL 预留。自定义防火墙规则仍可能阻止连接。命令不会修改网络或防火墙设置。
+HTTP 只绑定选定的本机接口，并要求 Windows 将该接口的网络识别为 Private。只有选定设备的 IP 能读取随机会话地址；网络类型改变后关闭监听。现有 MSI、便携版的 Private + LocalSubnet 规则和 MSIX 的 Private TCP 规则已经覆盖该端点；统一编辑器不新增规则、不开放 Public 网络，也不创建 HTTP.sys URL 预留。自定义防火墙规则仍可能阻止连接。命令不会修改网络或防火墙设置。
 
 播放前先应用音量上限。设备支持时使用 RenderingControl 音量和静音；只有明确不支持相应操作时才改用数字衰减或静音。控制或认证失败会停止连接，不会默默绕过错误。DLNA 设备的预缓冲和时钟各异，只承诺大致对齐，适合不同房间。CI 的 HTTP 到文件输出时间只是软件渲染器的测量结果，不代表实际声音延迟。
 
-自动验证使用回环假设备，以及隔离 Linux CI 网络命名空间内固定版本的 gmrender-resurrect/GStreamer 文件输出，不使用声音设备。`dlna-compat-e2e` 检查发现、SOAP 控制、两种 HTTP 格式和逐样本一致的双声道 PCM。真实设备由维护者测试，音量不超过 25%；后续分组支持可用手动微调或手机录像校准。
+分组每次都按保存的 UDN 重新发现设备，不信任保存的地址。DLNA 输出默认为可选，传输失败后独立重连；必需输出失败会结束整组。忙碌、不支持、停止播放或被接管的设备等待明确操作，自动重试不会抢回其他控制器的流。原有单台 HomePod 路径不变。
+
+每台可设置估计的接收端延迟、有正负值的微调、声道和音量偏移。正微调让该输出更晚播放。整组延迟覆盖各台估计值、负微调、250 毫秒启动余量和公共生产者的余量，手动仍遵守这个下限。这是在共用的效果处理后历史上对齐，不会测出更早的采集／FIFO 延迟或实际声音到达时间。无声打开的手动助手不需要麦克风：分别靠近参考和待校准音箱录手机视频，填入待校准减参考的声音相对闪光偏移帧数，再在分组页应用草稿微调。可选测试音必须明确点击，音量不超过 25%，不会开启麦克风。
+
+由接收端控制的 HTTP 流只有在稳定背压使读取速率可观测后才校正漂移；启动突发和发送端限速不能证明设备时钟。拟合至少需要 45 秒，最多保留 60 秒证据，两秒没有有效观测就失效。长时间停顿、历史覆盖和新的 HTTP GET 都会重新定位读取器。时钟置信度只描述传输代理，不代表声学精度。正负 300／1000 ppm 的四组假时钟小时仿真在测试条件下偏差小于 500 毫秒，真实硬件尚无经过验证的上限。DLNA 仍只承诺大致对齐，适合不同房间。
+
+API／配置测试需要分别保存偏好和明确的实时选择。下例只选择 DLNA；空的 AirPlay 选择也会排除记住的立体声对。仅保存偏好库不会连接设备。要保留当前普通 AirPlay 主音箱，可省略空的 AirPlay 选择，或明确选择保存的 ID。不要保存发现时的地址和服务 URL。
+
+```json
+{
+  "GroupDlnaOutputs": [
+    { "Udn": "uuid:DEVICE", "Name": "客厅", "EstimatedLatencyMs": 2000, "TrimMs": 0, "Required": false }
+  ],
+  "GroupCaptureDlnaUdns": ["uuid:DEVICE"],
+  "GroupCaptureDeviceIds": []
+}
+```
+
+自动验证使用回环假设备，以及隔离 Linux CI 网络命名空间内固定版本的 gmrender-resurrect/GStreamer 文件输出，不使用声音设备。`dlna-compat-e2e` 检查发现、SOAP、逐样本一致的 LPCM／WAV，以及两种 HTTP 传输方式的 MP3／AAC。Windows CI 生成真实编码样本，Linux 独立解码，并在对齐后以解码器舍入容差比较设备输出 PCM。真实设备由维护者测试，音量不超过 25%，使用手动微调或手机录像校准。

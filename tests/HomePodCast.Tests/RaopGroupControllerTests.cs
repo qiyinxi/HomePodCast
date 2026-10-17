@@ -218,7 +218,7 @@ public class RaopGroupControllerTests
     [InlineData(ReceiverProtocol.AirPlay2Realtime, false)]
     [InlineData(ReceiverProtocol.AirPlay2Buffered, false)]
     [InlineData(ReceiverProtocol.Raop, true)]
-    public async Task Third_party_AP2_remains_guarded_except_explicit_RAOP_override(ReceiverProtocol protocol, bool allowed)
+    public async Task Third_party_preferences_route_to_the_matching_coordinated_transport(ReceiverProtocol protocol, bool raop)
     {
         using var fake = new FakeRaop();
         var device = Raop(fake.Port) with
@@ -228,16 +228,23 @@ public class RaopGroupControllerTests
         var preferences = ReceiverPreferences.Of(device) with { ProtocolOverride = protocol };
         using var controller = Controller(new Capture(), device);
         controller.ReceiverSettings = _ => preferences;
-        controller.StartGroup(Plan(device), 120, 10);
-        if (allowed)
+        ReceiverProtocol? attempted = null;
+        controller.ConnectGroupReceiverOutput = (selected, _, _, _, _, _) =>
         {
-            await Until(() => controller.State == StreamState.Streaming);
+            attempted = selected;
+            return Task.FromResult<IPreparedReceiverSession>(new ReceiverOutputSetTests.Transport(protocol: selected));
+        };
+        controller.StartGroup(Plan(device), 120, 10);
+        await Until(() => controller.State == StreamState.Streaming);
+        if (raop)
+        {
             Assert.Single(controller.RaopGroupOutputs);
+            Assert.Null(attempted);
         }
         else
         {
-            Assert.Equal(StreamState.Idle, controller.State);
-            Assert.Contains("第三方", controller.StatusText);
+            Assert.Equal(protocol == ReceiverProtocol.Auto ? ReceiverProtocol.AirPlay2Realtime : protocol, attempted);
+            Assert.Single(controller.ReceiverGroupOutputs);
             Assert.Empty(fake.Methods);
         }
     }

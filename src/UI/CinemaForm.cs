@@ -18,6 +18,8 @@ internal class CinemaPage : ScrollPage
     private readonly FluentButton _choose = new(L.T("选择影音文件"));
     private readonly FluentButton _play = new(L.T("播放"), ButtonKind.Primary), _pause = new(L.T("暂停")), _stop = new(L.T("停止"));
     private readonly FluentButton _calibrate = new(L.T("测量音箱延迟"));
+    private readonly FluentButton _manualAlignment = new(L.T("手动校准"));
+    private readonly FluentButton _saveGroup = new(L.T("保存分组"));
     private readonly FluentComboBox _microphone = new() { MinWidth = 160 };
     private readonly FluentSlider _volume = Ui.Slider(0, 100, 1, 5);
     private readonly TextBlock _volumeValue = new("");
@@ -37,8 +39,22 @@ internal class CinemaPage : ScrollPage
     private uint _fileMask;
     private long _playRequest;
     private long? _openingRequest;
-    internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } =
-        source => Task.Run(() => source.WaitOpened(TimeSpan.FromSeconds(10)));
+    private CinemaMediaReader.Progress? _inspection;
+    private CinemaFileSource? _openingSource;
+    internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } = WaitOpenedAsync;
+
+    /// <summary>The decoder's own signal, awaited for up to 10 s: no thread is held while it opens.</summary>
+    private static async Task<bool> WaitOpenedAsync(CinemaFileSource source)
+    {
+        try { return await source.Opened.WaitAsync(TimeSpan.FromSeconds(10)) && source.Error == null; }
+        catch (TimeoutException) { return false; }
+    }
+
+    /// <summary>What a file being opened waits for, e.g. for a test's timeout message.</summary>
+    internal string OpeningState => _openingRequest == null ? "nothing is opening"
+        : _openingSource is { } source ? "the decoder is " + source.Progress
+        : _inspection is { } inspection ? "the file inspection is " + inspection
+        : "opening";
 
     /// <param name="inputs">The microphones to offer (null: the system's capture endpoints).</param>
     /// <param name="volumeWait">The volume slider's save debounce (tests pass a manual one).</param>
@@ -65,7 +81,11 @@ internal class CinemaPage : ScrollPage
         _editor.SetFound(host.Speakers.ToList());
         _layoutSignature = GroupPanel.SettingsSignature(config);
         body.Controls.Add(_editor);
-        body.Controls.Add(Ui.Row(8, null, _apply));
+        var groupActions = Ui.Row(8, null, _apply, _saveGroup, _manualAlignment);
+        groupActions.Wrap = true;
+        body.Controls.Add(groupActions);
+        _saveGroup.Click += (_, _) => SaveOutputGroup();
+        _manualAlignment.Click += (_, _) => AlignManually();
         _apply.Click += (_, _) =>
         {
             if (_editor.BlockReason is { } blocked) { _status.Text = blocked; return; }
@@ -185,14 +205,11 @@ internal class CinemaPage : ScrollPage
         _file.Text = Path.GetFileName(path);
         _status.Text = "";
         RefreshStatus();
+        var inspection = _inspection = new CinemaMediaReader.Progress("starting the inspection thread");
         try
         {
             // Media Foundation requires an MTA thread; the WinForms UI is STA. Keep native open off the UI thread too.
-            var info = await Task.Run(() =>
-            {
-                using var reader = new CinemaMediaReader(path);
-                return (reader.Channels, reader.Mask);
-            });
+            var info = await CinemaMediaReader.InspectAsync(path, step => inspection.Step("opening the file: " + step));
             if (IsDisposed || request != _playRequest) return;
             _path = path;
             _fileMultichannel = info.Channels >= 6;
@@ -216,6 +233,7 @@ internal class CinemaPage : ScrollPage
         finally
         {
             if (_openingRequest == request) _openingRequest = null;
+            if (ReferenceEquals(_inspection, inspection)) _inspection = null;
             if (!IsDisposed) RefreshStatus();
         }
     }
@@ -238,13 +256,13 @@ internal class CinemaPage : ScrollPage
         {
             var layout = SelectedLayout();
             CinemaMatrix.Validate(layout);
-            source = new CinemaFileSource(_path, layout);
+            source = _openingSource = new CinemaFileSource(_path, layout);
             _status.Text = L.T("正在打开文件…");
             bool opened = await WaitForFileOpened(source);
             if (IsDisposed || request != _playRequest) { source.Dispose(); return; }
             if (!opened)
                 throw source.Error is { } error ? new CinemaException(error, source.ErrorLog ?? error)
-                    : new CinemaException(L.T("打开文件太久没有反应，已放弃。"), "the decoder did not open the file within 10 s");
+                    : new CinemaException(L.T("打开文件太久没有反应，已放弃。"), $"the decoder did not open the file within 10 s: {source.Progress}");
             _editor.Apply(activateCapture: false);
             _layoutSignature = GroupPanel.SettingsSignature(_host.Config);
             _host.Config.Cinema.Speakers = layout.ToList();
@@ -267,6 +285,7 @@ internal class CinemaPage : ScrollPage
         finally
         {
             if (_openingRequest == request) _openingRequest = null;
+            if (ReferenceEquals(_openingSource, source)) _openingSource = null;
             if (!IsDisposed)
             {
                 _play.Enabled = true;
@@ -330,11 +349,16 @@ internal class CinemaPage : ScrollPage
         _play.Enabled = !opening && _sourceKind.SelectedIndex == 1 && _path != null && _measurement == null && _editor.BlockReason == null;
         _choose.Enabled = _sourceKind.SelectedIndex == 1 && _measurement == null;
         _apply.Enabled = !active && !opening && _editor.BlockReason == null;
+        _saveGroup.Enabled = !active && !opening && _sourceKind.SelectedIndex == 0 && _editor.LiveOutputCount > 0;
+        _manualAlignment.Enabled = !active && !opening && _sourceKind.SelectedIndex == 0 && _editor.LiveOutputCount >= 2;
         _pause.Enabled = _stop.Enabled = active && _measurement == null;
         _pause.Text = source?.Paused == true ? L.T("继续") : L.T("暂停");
         _calibrate.Enabled = state == CinemaState.Playing && _measurement == null && _activeLayout.Length >= 2;
         _microphone.Enabled = !active && !opening;
         _editor.SetPlaybackActive(active || opening);
+        if (_host is TrayApp app)
+            _editor.ShowOutputStatus(app.Controller.GroupOutputStatuses,
+                app.Controller.State == StreamState.Streaming && app.Controller.GroupOutputStatuses.Count > 0 ? app.Controller.EffectiveLatencyMs : null);
         if (source != null)
         {
             string layout = CinemaChannels.DisplayName(source.Channels, source.Mask);
@@ -346,6 +370,40 @@ internal class CinemaPage : ScrollPage
             };
         }
         ShowSoundOptions();
+    }
+
+    private void SaveOutputGroup()
+    {
+        if (!_saveGroup.Enabled) return;
+        using var dialog = new OutputGroupNameDialog();
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK) return;
+        var existing = _host.Config.SavedOutputGroups.FirstOrDefault(g => string.Equals(g.Name, dialog.GroupName, StringComparison.OrdinalIgnoreCase));
+        if (existing != null && MessageBox.Show(this, L.T("用编辑器中的设置覆盖同名分组吗？"), L.T("保存分组"),
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        try
+        {
+            OutputGroups.Save(_host.Config, dialog.GroupName, _editor.CaptureSettings(), existing?.Id);
+            _host.Config.Save();
+            _status.Text = L.T("分组已保存，可在首页选择后连接。");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"output group save: {ex.Message}");
+            _status.Text = L.T("保存失败，请稍后重试。");
+        }
+    }
+
+    private void AlignManually()
+    {
+        if (!_manualAlignment.Enabled) return;
+        bool test = _host is TrayApp app && app.CanTestOutputGroup && _editor.HasAppliedSelection();
+        using var dialog = new GroupAlignmentForm(_editor.AlignmentOutputs(), test,
+            _host is TrayApp live ? live.RunGroupAlignmentTest : null);
+        if (dialog.ShowDialog(FindForm()) == DialogResult.OK && dialog.Adjustment is { } adjustment)
+        {
+            _editor.ApplyManualTrim(adjustment);
+            _status.Text = L.T("微调已写入编辑器，请点应用更新分组。");
+        }
     }
 
     // ---------------------------------------------------------------- volume
@@ -461,6 +519,7 @@ internal sealed class CinemaForm : Form, ISurface, ILayoutRoot
     internal Task UseFile(string path) => _page.UseFile(path);
     internal Task PlayAsync() => _page.PlayAsync();
     internal void RefreshStatus() => _page.RefreshStatus();
+    internal string OpeningState => _page.OpeningState;
     protected override void OnShown(EventArgs e) { base.OnShown(e); _page.PageShown(); }
     protected override void OnFormClosed(FormClosedEventArgs e) { _page.PageHidden(); base.OnFormClosed(e); }
     protected override void OnDpiChanged(DpiChangedEventArgs e) => LayoutPanel.ScaleForDpi(this, () => base.OnDpiChanged(e));

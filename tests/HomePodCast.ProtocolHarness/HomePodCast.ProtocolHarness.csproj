@@ -24,6 +24,7 @@
     <Compile Include="../../src/Net/DlnaControl.cs" Link="Net/DlnaControl.cs" />
     <Compile Include="../../src/Net/DlnaStreamServer.cs" Link="Net/DlnaStreamServer.cs" />
     <Compile Include="../../src/Net/DlnaClient.cs" Link="Net/DlnaClient.cs" />
+    <Compile Include="../../src/Net/DlnaFailures.cs" Link="Net/DlnaFailures.cs" />
     <Compile Include="../../src/Protocol/RaopAudio.cs" Link="Protocol/RaopAudio.cs" />
     <Compile Include="../../src/Protocol/RaopDigest.cs" Link="Protocol/RaopDigest.cs" />
     <Compile Include="../../src/Protocol/HapCrypto.cs" Link="Protocol/HapCrypto.cs" />
@@ -32,11 +33,17 @@
     <Compile Include="../../src/Protocol/Curve25519.cs" Link="Protocol/Curve25519.cs" />
     <Compile Include="../../src/Net/AirPlayClient.cs" Link="Net/AirPlayClient.cs" />
     <Compile Include="../../src/Net/AirPlayClient.Buffered.cs" Link="Net/AirPlayClient.Buffered.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.Coordinated.cs" Link="Net/AirPlayClient.Coordinated.cs" />
+    <Compile Include="../../src/Net/AirPlayClient.GroupVolume.cs" Link="Net/AirPlayClient.GroupVolume.cs" />
     <Compile Include="../../src/Net/BufferedSender.cs" Link="Net/BufferedSender.cs" />
     <Compile Include="../../src/Net/PtpRealtimeSender.cs" Link="Net/PtpRealtimeSender.cs" />
     <Compile Include="../../src/Net/PtpMaster.cs" Link="Net/PtpMaster.cs" />
+    <Compile Include="../../src/Net/PtpClockPool.cs" Link="Net/PtpClockPool.cs" />
     <Compile Include="../../src/Net/PtpPackets.cs" Link="Net/PtpPackets.cs" />
     <Compile Include="../../src/Net/ReceiverSession.cs" Link="Net/ReceiverSession.cs" />
+    <Compile Include="../../src/Net/ReceiverGroupConnections.cs" Link="Net/ReceiverGroupConnections.cs" />
+    <Compile Include="../../src/Net/ReceiverOutputSet.cs" Link="Net/ReceiverOutputSet.cs" />
+    <Compile Include="../../src/Net/GroupMemberException.cs" Link="Net/GroupMemberException.cs" />
     <Compile Include="../../src/Net/ReceiverPreferences.cs" Link="Net/ReceiverPreferences.cs" />
     <Compile Include="../../src/Net/ReceiverProtocols.cs" Link="Net/ReceiverProtocols.cs" />
     <Compile Include="../../src/Net/StatusFlags.cs" Link="Net/StatusFlags.cs" />
@@ -47,7 +54,10 @@
     <Compile Include="../../src/Audio/IGroupPacketSource.cs" Link="Audio/IGroupPacketSource.cs" />
     <Compile Include="../../src/Audio/AudioFifo.cs" Link="Audio/AudioFifo.cs" />
     <Compile Include="../../src/Audio/TimelineBuffer.cs" Link="Audio/TimelineBuffer.cs" />
+    <Compile Include="../../src/Audio/ReceiverTimelineSource.cs" Link="Audio/ReceiverTimelineSource.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
+    <Compile Include="../../src/Audio/DlnaAudioEncoder.cs" Link="Audio/DlnaAudioEncoder.cs" />
+    <Compile Include="../../src/Audio/DlnaMediaFoundationEncoder.cs" Link="Audio/DlnaMediaFoundationEncoder.cs" />
     <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
     <Compile Include="../../src/Protocol/BufferedAudio.cs" Link="Protocol/BufferedAudio.cs" />
     <Compile Include="../../src/Protocol/Srp.cs" Link="Protocol/Srp.cs" />

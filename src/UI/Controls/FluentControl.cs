@@ -688,6 +688,15 @@ internal class ScrollPage : Panel, ISurface
         base.OnVisibleChanged(e);
     }
 
+    /// <summary>
+    /// The hidden page's windows destroyed (its controls stay, built and with what they hold): MainWindow before a move to a
+    /// monitor with another scale, and its idle preparation creates them again at the new DPI.
+    /// </summary>
+    internal void ReleaseWindows()
+    {
+        if (!Visible && IsHandleCreated) DestroyHandle();
+    }
+
     /// <summary>The font change the hidden page left for later (<see cref="OnParentFontChanged"/>), with one layout.</summary>
     internal void ApplyFont()
     {

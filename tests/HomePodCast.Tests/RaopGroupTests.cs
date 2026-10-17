@@ -133,11 +133,15 @@ public class RaopGroupTests
             () => "capture", () => 10, default, _ => device) : null;
         using var group = await SpeakerGroup.ConnectAsync([], new AudioFifo(44100, 0, 1000), 5, default,
             localOutputs: locals, raopOutputs: outputs, groupDelayMs: 2020);
+        long publishedBy = Environment.TickCount64 + 5000;
         await receiver.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Null(group.Sender);
         Assert.NotNull(group.Timeline);
         Assert.Equal(OutputKind.Raop, group.Kind);
-        Assert.True(group.Stats.PacketsSent > 0);
+        // 2026-10-17: the loopback receiver resumed before SendAsync's continuation published PacketsSent.
+        // Receipt proves the audio was sent, but the statistics have their own asynchronous publication.
+        while (group.Stats.PacketsSent == 0 && Environment.TickCount64 < publishedBy) await Task.Delay(5);
+        Assert.True(group.Stats.PacketsSent > 0, "RAOP received its first packet but did not publish the send count");
         group.SetVolume(0);
         Assert.Equal(-144, receiver.Volumes.Last());
         group.Dispose();

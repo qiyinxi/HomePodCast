@@ -16,6 +16,7 @@ public sealed partial class StreamController
     private long _groupGeneration;
     private sealed record GroupSelection(long Generation, FrozenSet<string> Members);
     private GroupSelection? _groupSelection;
+    private GroupRun? _activeGroupRun;
 
     internal sealed record ResolvedMember(string DeviceId, string Label, IPAddress Address, int Port)
     {
@@ -63,6 +64,8 @@ public sealed partial class StreamController
         public Audio.IGroupPacketSource? Source { get; } = source;
         public long Generation { get; } = generation;
         public System.Collections.Concurrent.ConcurrentDictionary<string, int> RaopAttempts { get; } = new();
+        public System.Collections.Concurrent.ConcurrentDictionary<string, int> ReceiverAttempts { get; } = new();
+        public System.Collections.Concurrent.ConcurrentDictionary<string, ConnectTrigger> ReceiverUserTriggers { get; } = new();
         public volatile bool Streamed;
         public volatile bool EndedBySpeaker;
     }
@@ -76,16 +79,22 @@ public sealed partial class StreamController
         lock (_lifecycle)
         {
             Stop();
-            if (source != null && (plan.LocalOutputs.Count > 0 || plan.Members.Any(m => GroupUsesRaop(GroupDevice(m.DeviceId)))))
-            {
-                source.Dispose();
-                Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
-                return;
-            }
-            if (plan.Members.Any(m => GroupDevice(m.DeviceId) is { } device && !GroupUsesRaop(device) && UsesThirdPartyPath(device)))
+            if (plan.Kind == GroupKind.MultiRoom && plan.Members.Count == 0 && plan.LocalOutputs.Count == 0 && plan.DlnaOutputs.Count == 0)
             {
                 source?.Dispose();
-                Set(StreamState.Idle, L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+                Set(StreamState.Idle, L.T("还没有选择音箱"));
+                return;
+            }
+            if (source != null && (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || plan.Members.Any(m => GroupUsesRaop(GroupDevice(m.DeviceId)))))
+            {
+                source.Dispose();
+                Set(StreamState.Idle, L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"));
+                return;
+            }
+            if (source != null && plan.Members.Any(m => GroupUsesReceiver(GroupDevice(m.DeviceId))))
+            {
+                source?.Dispose();
+                Set(StreamState.Idle, L.T("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。"));
                 return;
             }
             var cts = new CancellationTokenSource();
@@ -93,6 +102,9 @@ public sealed partial class StreamController
             long generation = Interlocked.Increment(ref _groupGeneration);
             Volatile.Write(ref _groupSelection, new(generation, plan.Members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
             var run = new GroupRun(trigger, OwnSession.KeyOf(plan), takenFrom, source, generation);
+            Volatile.Write(ref _groupStatusPlan, plan);
+            _groupOutputFailures.Clear();
+            Volatile.Write(ref _activeGroupRun, run);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
                 (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text),
@@ -126,6 +138,7 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
+        _groupOutputFailures.Clear();
         // A capture collision is refused before resolution, including when that output is optional.
         foreach (var output in plan.LocalOutputs) LocalOutputSink.CheckCapture(output.DeviceId, LocalCapturedId());
         var members = (await (ResolveGroupMembers ?? ResolveGroupAsync)(plan, ct)).Select(m =>
@@ -136,18 +149,20 @@ public sealed partial class StreamController
         ct.ThrowIfCancellationRequested();
         if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
             Volatile.Write(ref _groupSelection, new(run.Generation, members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
-        if (members.Any(m => m.Device is { } d && !GroupUsesRaop(d) && UsesThirdPartyPath(d)))
+        if (run.Source != null && members.Any(m => GroupUsesReceiver(m.Device)))
         {
             if (run.Source != null && Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source)
                 run.Source.Dispose();
-            throw new RaopRefusedException(L.T("第三方 AirPlay 设备暂不支持多音箱分组。"));
+            throw new RaopRefusedException(L.T("本地文件分组暂不支持第三方 AirPlay 设备；请使用 HomePod。"));
         }
-        if (plan.LocalOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device)))
+        if (plan.LocalOutputs.Count > 0 || plan.DlnaOutputs.Count > 0 || members.Any(m => GroupUsesRaop(m.Device) || GroupUsesReceiver(m.Device))
+            || run.Source == null && (plan.GroupDelayMs != null || members.Any(m => plan.DelayTrimFor(m.DeviceId) is < 0 or > 500
+                || ExplicitlyOptionalApple(plan, m.Device, m.DeviceId))))
         {
             if (run.Source != null)
             {
                 if (Interlocked.CompareExchange(ref _groupSource, null, run.Source) == run.Source) run.Source.Dispose();
-                throw new RaopRefusedException(L.T("本地影音文件暂不支持 AirPlay 1 或本机输出分组。"));
+                throw new RaopRefusedException(L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"));
             }
             return await ConnectLocalGroupAsync(plan, members, latencyMs, run, ct);
         }
@@ -162,18 +177,17 @@ public sealed partial class StreamController
         var options = new StreamOptions(EffectiveLatencyMs, null)
         {
             VolumeCapPercent = VolumeCapPercent, Effects = run.Source == null ? Effects : null, SessionSetupExtras = plan.SessionExtras(Guid.NewGuid()),
+            Pairings = Pairings,
         };
 
-        var prepare = PrepareGroupMember ??
-                      (async (m, o, channels, c) => await AirPlayClient.PrepareAsync(m.Address, m.Port, o, channels, c));
         var setups = members.Select((m, i) => new MemberSetup(m.Label,
-            c => prepare(m, options, plan.ChannelsFor(i, m.DeviceId), c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId,
+            c => PrepareRequiredAppleAsync(m, options with { DeviceId = m.DeviceId }, plan.ChannelsFor(i, m.DeviceId), run, c), plan.VolumeOffsetFor(m.DeviceId), m.DeviceId,
             plan.DelayTrimFor(m.DeviceId))).ToList();
         // A volume, mute or cap change from now on finds no group to send to until GroupRunner publishes it:
         // OnGroupConnected pushes again if anything changed meanwhile.
         _groupConnectCap = options.VolumeCapPercent;
         // The cap is read live, so lowering it while streaming also caps members with a positive offset.
-        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, () => VolumeCapPercent, run.Source);
+        var group = await SpeakerGroup.ConnectAsync(setups, _fifo, Muted ? 0 : Volume, ct, options.Effects, CurrentGroupCap, run.Source);
         if (group.ArrivalToRenderMs is { } a2r) _groupArrivalToRenderMs = a2r;
         if (!ct.IsCancellationRequested) Volume ??= group.MasterVolume;
         return group;
@@ -186,7 +200,7 @@ public sealed partial class StreamController
     /// </summary>
     private void OnGroupConnected(SpeakerGroup group)
     {
-        double cap = VolumeCapPercent;
+        double cap = CurrentGroupCap();
         foreach (var m in group.Members)
             if (m is AirPlayClient member) member.VolumeCapPercent = cap;
         double? want = Muted ? 0 : Volume;
@@ -203,6 +217,13 @@ public sealed partial class StreamController
             foreach (var m in plan.Members)
             {
                 var device = GroupDevice(m.DeviceId);
+                if (GroupSource == null && ExplicitlyOptionalApple(plan, device, m.DeviceId))
+                {
+                    // Independent attempts resolve fresh. An offline optional Apple output must never hold
+                    // required members in resolution or the whole-group busy wait.
+                    list.Add(new(m.DeviceId, m.Name, device?.Address ?? IPAddress.None, device?.Port ?? 7000) { Device = device });
+                    continue;
+                }
                 IPAddress address;
                 try
                 {
@@ -215,6 +236,7 @@ public sealed partial class StreamController
                                 ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
                         address = device.Address;
                     }
+                    else if (GroupUsesReceiver(device)) address = device!.Address;
                     else address = await ResolveAsync(m.DeviceId, m.Host, ct);
                 }
                 catch (AirPlayException ex)
@@ -249,6 +271,9 @@ public sealed partial class StreamController
     {
         Interlocked.Increment(ref _groupGeneration);
         Volatile.Write(ref _groupSelection, null);
+        Volatile.Write(ref _groupStatusPlan, null);
+        Volatile.Write(ref _activeGroupRun, null);
+        Volatile.Write(ref _preparingReceiverOutputs, null);
         Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
         Interlocked.Exchange(ref _groupSource, null)?.Dispose();
     }
