@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
@@ -19,12 +20,35 @@ public sealed class LoopbackOnlyTests
         int port;
         using (var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0))) port = ((IPEndPoint)probe.Client.LocalEndPoint!).Port;
         var group = new IPEndPoint(IPAddress.Parse("239.255.77.78"), port);
-        var browse = Mdns.BrowseNetworkAsync(TimeSpan.FromMilliseconds(800), [IPAddress.Loopback], group);
-        await Task.Delay(250);
-        var open = Listening();
-        await browse;
-        Assert.Contains(open, e => e.Port == port); // the multicast listener was there
-        // Every listener of this process, including those of tests running alongside.
+        // The browse lasts until the sampling is over, not a fixed time. 2026-10-16 (CI run 38970600060): an 800 ms browse,
+        // sampled once after a 250 ms delay, found no socket at all; a stalled runner timed out two Cinema tests at the same
+        // time. When the delay's continuation comes that late, the browse has closed its sockets: blocking the thread
+        // pool's threads beside this test reproduced the empty sample.
+        using var stop = new CancellationTokenSource();
+        var browse = Mdns.BrowseNetworkAsync(TimeSpan.FromMinutes(1), [IPAddress.Loopback], group, stop.Token);
+        var open = new HashSet<IPEndPoint>();
+        bool seen = false;
+        try
+        {
+            // Every listener of this process, including those of tests running alongside: sampled for 800 ms. The browse's
+            // listener is bound before BrowseNetworkAsync returns, so the first sample has it; it may take longer all the same.
+            var watched = Stopwatch.StartNew();
+            while (watched.Elapsed < TimeSpan.FromMilliseconds(800) || (!seen && watched.Elapsed < TimeSpan.FromSeconds(30)))
+            {
+                var sample = Listening();
+                seen |= sample.Any(e => e.Port == port);
+                open.UnionWith(sample);
+                await Task.Delay(20);
+            }
+        }
+        finally
+        {
+            stop.Cancel();
+        }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => browse);
+        Assert.True(seen, $"the browse's listener on port {port} never showed up; this process had [{string.Join(", ", open)}]");
+        // A UDP socket that only Connect bound shows as 0.0.0.0 too, and the table can't tell it from a listener: the tests'
+        // code mustn't open one (RouteLookupTests).
         Assert.All(open, e => Assert.True(IPAddress.IsLoopback(e.Address), $"this test process listens on {e}"));
     }
 
@@ -45,23 +69,31 @@ public sealed class LoopbackOnlyTests
         void Read(bool udp, int family, int rowSize, Func<IntPtr, (IPAddress Address, int Port, int Pid)> parse)
         {
             int size = 0;
-            Call(IntPtr.Zero, ref size);
-            var table = Marshal.AllocHGlobal(size);
-            try
+            uint status = Call(IntPtr.Zero, ref size);
+            // The whole machine's table: with the tests opening sockets alongside, it may grow between the two calls.
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                if (Call(table, ref size) != 0) throw new InvalidOperationException($"the {(udp ? "UDP" : "TCP")} table can't be read");
-                int count = Marshal.ReadInt32(table);
-                for (int i = 0; i < count; i++)
+                var table = Marshal.AllocHGlobal(size);
+                try
                 {
-                    var (address, rawPort, owner) = parse(table + 4 + i * rowSize);
-                    int port = ((rawPort & 0xFF) << 8) | ((rawPort >> 8) & 0xFF); // network byte order
-                    if ((uint)owner == pid) found.Add(new IPEndPoint(address, port));
+                    status = Call(table, ref size);
+                    if (status == ErrorInsufficientBuffer) continue; // size is the new one
+                    if (status != 0) break;
+                    int count = Marshal.ReadInt32(table);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var (address, rawPort, owner) = parse(table + 4 + i * rowSize);
+                        int port = ((rawPort & 0xFF) << 8) | ((rawPort >> 8) & 0xFF); // network byte order
+                        if ((uint)owner == pid) found.Add(new IPEndPoint(address, port));
+                    }
+                    return;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(table);
                 }
             }
-            finally
-            {
-                Marshal.FreeHGlobal(table);
-            }
+            throw new InvalidOperationException($"the {(udp ? "UDP" : "TCP")} table can't be read ({status})");
 
             uint Call(IntPtr buffer, ref int length) => udp
                 ? GetExtendedUdpTable(buffer, ref length, false, family, 1, 0)  // UDP_TABLE_OWNER_PID
@@ -77,6 +109,7 @@ public sealed class LoopbackOnlyTests
     }
 
     private const int AF_INET = 2, AF_INET6 = 23;
+    private const uint ErrorInsufficientBuffer = 122;
 
     [DllImport("iphlpapi.dll")]
     private static extern uint GetExtendedUdpTable(IntPtr table, ref int size, bool order, int family, int tableClass, uint reserved);

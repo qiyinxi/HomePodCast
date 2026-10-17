@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using HomePodCast.Net;
 using Xunit.Abstractions;
 
@@ -172,5 +175,72 @@ public class NetworkProfileTests(ITestOutputHelper output)
         Assert.Equal(NetworkProfile.Unknown, NetworkProfile.ForSpeaker(IPAddress.Loopback));
         Assert.Equal(NetworkProfile.Unknown, NetworkProfile.ForLocalAddress(IPAddress.Parse("192.0.2.123"))); // no adapter has it
         output.WriteLine($"firewall: {Firewall.Inspect()}, active profiles {Firewall.CurrentProfileTypes()}");
+    }
+}
+
+/// <summary>
+/// Alone, never beside LoopbackOnlyTests: a UDP socket that only Connect bound is listed as 0.0.0.0 (every address) in
+/// Windows' UDP table while it is open, though its own local address is the one Connect chose. 2026-10-16: connected to
+/// 192.0.2.1, one said 192.168.50.200:51782 and the table had 0.0.0.0:51782; connected to 127.0.0.1, the same.
+/// </summary>
+[CollectionDefinition("Connected UDP sockets", DisableParallelization = true)]
+public sealed class ConnectedUdpSocketsCollection;
+
+[Collection("Connected UDP sockets")]
+public class RouteLookupTests
+{
+    /// <summary>The route table's answer is the one NetworkProfile.ForSpeaker got from a connected socket before.</summary>
+    [Theory]
+    [InlineData("192.0.2.1")]   // TEST-NET-1: the default route, as ForSpeaker(null) asks
+    [InlineData("127.0.0.1")]   // the tests' fakes
+    [InlineData("::1")]
+    [InlineData("2001:db8::1")] // the default IPv6 route, or none
+    public void Picks_the_local_address_a_connected_socket_gets(string destination)
+    {
+        var to = IPAddress.Parse(destination);
+        IPAddress? connected = null, routed = null;
+        try
+        {
+            using var socket = new Socket(to.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
+            socket.Connect(new IPEndPoint(to, 7000)); // sends nothing
+            connected = ((IPEndPoint)socket.LocalEndPoint!).Address;
+        }
+        catch (SocketException) { } // no route (or no IPv6 at all)
+        try { routed = Native.SourceAddressFor(to); }
+        catch (Win32Exception) { }
+        Assert.Equal(connected, routed);
+    }
+
+    /// <summary>
+    /// The network lookup leaves nothing in the UDP table while it runs. 2026-10-16: LoopbackOnlyTests failed on
+    /// 0.0.0.0:51095 in a full test run. The lookup's probe socket was the only one of that kind the tests reach, open
+    /// through the Network List Manager query (about 100 ms); a sampler like this one saw it about 1300 times a second.
+    /// </summary>
+    [Fact]
+    public async Task Looking_up_the_network_opens_no_socket()
+    {
+        using var done = new CancellationTokenSource();
+        var seen = new ConcurrentBag<IPEndPoint>();
+        var sampling = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sampler = Task.Factory.StartNew(() =>
+        {
+            while (!done.IsCancellationRequested)
+            {
+                foreach (var e in LoopbackOnlyTests.Listening().Where(e => !IPAddress.IsLoopback(e.Address))) seen.Add(e);
+                sampling.TrySetResult();
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default); // its own thread: a busy pool doesn't hold it up
+        try
+        {
+            await Task.WhenAny(sampling.Task, sampler); // a sampler that failed is awaited below
+            for (int i = 0; i < 3; i++) NetworkProfile.ForSpeaker(null);
+            for (int i = 0; i < 100; i++) NetworkProfile.ForSpeaker(IPAddress.Loopback); // as every connection to a fake asks
+        }
+        finally
+        {
+            done.Cancel();
+            await sampler;
+        }
+        Assert.Empty(seen);
     }
 }
