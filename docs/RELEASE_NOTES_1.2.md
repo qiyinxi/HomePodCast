@@ -31,6 +31,11 @@ The always-available **A/V sync** page combines local player delay controls with
 window. Settings retains preferences; the viewing section keeps its experimental label and is hidden where the module
 is not offered. Configuration fields and existing player behavior remain unchanged.
 
+**Multi-speaker** adds a top-down room diagram for existing output routing, with keyboard selection, per-position
+delay/volume edits and actual downmix destinations on empty positions. Clearing a position explicitly keeps its
+outputs in full stereo; source changes retain saved surround assignments. The optional acoustic measurement
+highlights its current speaker, and choosing a position starts no measurement. Hardware-untested labels remain.
+
 **Diagnostics** collects the A/V sync test, local log folder and redacted diagnostic report in the former sync-test
 navigation slot. Each action requires its own button click. About keeps version, software updates and license;
 the existing test, log and export behavior stays the same.
@@ -70,6 +75,10 @@ AirPlay 握手检查不代表播放验证，独立 DLNA 服务仍需实测。
 
 常驻的「音画同步」页合并本地播放器延迟控制和可选同步观影窗口，设置页保留偏好。观影窗口一节保留实验性标签，
 未提供模块时只隐藏这一节；配置字段和现有播放器行为不变。
+
+「多音箱」新增俯视房间图，沿用已有输出路由，可用键盘选位置、调该位置的延迟和音量，空位显示实际下混去向。
+清空位置会明确保留输出的完整立体声，切换音源保留已保存的环绕位置。可选声学测量会高亮当前音箱，点选位置不会
+开始测量；尚未实机验证的标签保留。
 
 「诊断」页在原音画同步测试的位置集中音画同步测试、日志文件夹和脱敏诊断报告，各自需要明确点击按钮才执行。
 关于页保留版本、软件更新和许可证；原有测试、日志和导出行为不变。

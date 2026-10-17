@@ -250,6 +250,7 @@ internal sealed partial class GroupPanel
     {
         foreach (var control in _auxiliaryMembers.Controls.Cast<Control>().ToArray()) control.Dispose();
         _readAuxiliaryRows.Clear();
+        _auxRoomBindings.Clear();
         if (_fileSource) return;
         foreach (var output in _localBank.Where(o => _localSelection.Contains(LocalGroupSettings.Key(o.DeviceId))).ToArray())
         {
@@ -262,7 +263,7 @@ internal sealed partial class GroupPanel
             var bluetooth = new ToggleSwitch(L.T("蓝牙输出")) { AccessibleName = L.F("{0} 蓝牙输出", name), Checked = output.IsBluetooth };
             bluetooth.CheckedChanged += (_, _) => { if (bluetooth.Checked && extra.Value == 0) extra.Value = 200; };
             var required = RequiredControl("local:" + output.DeviceId, name, output.Required);
-            var entry = AuxiliaryRow(name, output.IsBluetooth ? L.T("蓝牙") : L.T("本机输出"), channels, trim, volume,
+            var entry = AuxiliaryRow("local:" + output.DeviceId, name, output.IsBluetooth ? L.T("蓝牙") : L.T("本机输出"), channels, trim, volume,
                 () => { _localSelection.Remove(LocalGroupSettings.Key(output.DeviceId)); ShowMembers(); });
             entry.Controls.Add(StatusRow(OutputKind.Local, output.DeviceId, name, endpoint != null));
             AddDetails(entry, name, required, bluetooth, SliderField(L.T("附加延迟"), extra),
@@ -291,7 +292,7 @@ internal sealed partial class GroupPanel
             format.SelectedIndex = Math.Max(0, Array.IndexOf(formats, output.PreferredFormat));
             var framing = new FluentComboBox { AccessibleName = L.F("{0} HTTP 传输", name), MinWidth = 160 };
             framing.Items.AddRange([L.T("分块传输"), L.T("固定长度")]); framing.SelectedIndex = output.Framing == "length" ? 1 : 0;
-            var entry = AuxiliaryRow(name, "DLNA", channels, trim, volume,
+            var entry = AuxiliaryRow(output.Id, name, "DLNA", channels, trim, volume,
                 () => { _dlnaSelection.Remove(DlnaGroupSettings.Key(output.Udn)); ShowMembers(); });
             entry.Controls.Add(StatusRow(OutputKind.Dlna, output.Id, name, device != null));
             AddDetails(entry, name, required, SliderField(L.T("估计延迟"), estimate), new FieldRow(L.T("首选格式"), format),
@@ -324,8 +325,12 @@ internal sealed partial class GroupPanel
         control.Items.AddRange([PositionName(SpeakerPosition.Stereo), PositionName(SpeakerPosition.Left), PositionName(SpeakerPosition.Right)]);
         control.SelectedIndex = (int)selected; return control;
     }
-    private StackPanel AuxiliaryRow(string name, string type, FluentComboBox channels, FluentSlider trim, FluentSlider volume, Action remove)
+    private StackPanel AuxiliaryRow(string id, string name, string type, FluentComboBox channels, FluentSlider trim, FluentSlider volume, Action remove)
     {
+        _auxRoomBindings.Add(new(id, name, channels, [SpeakerPosition.Stereo, SpeakerPosition.Left, SpeakerPosition.Right], trim, volume));
+        channels.SelectedIndexChanged += (_, _) => RefreshRoom();
+        trim.ValueChanged += (_, _) => RefreshRoom();
+        volume.ValueChanged += (_, _) => RefreshRoom();
         var button = new FluentButton(L.T("移除")) { AccessibleName = L.F("移除 {0}", name) };
         button.Click += (_, _) => { if (_active) return; ReadRows(); remove(); };
         var fields = Ui.Row(8, null, Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary, wrap: true), channels),

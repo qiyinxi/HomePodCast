@@ -1093,7 +1093,10 @@ internal sealed partial class Walker
     {
         foreach (var h in Native.TopLevelWindows(App.Id))
         {
-            if (Native.ClassName(h) != "#32770") continue;
+            // A closed native picker can remain as a hidden window briefly while its owner disposes it.
+            // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
+            if (Native.ClassName(h) != "#32770" || !Native.IsWindowVisible(h)
+                || Native.WindowRect(h) is not { Width: > 0, Height: > 0 }) continue;
             string title = Native.WindowText(h);
             Node tree;
             try { tree = Uia.Snapshot(h); }
@@ -1189,14 +1192,14 @@ internal sealed partial class Walker
         }
     }
 
-    private IntPtr WaitWindow(Func<IntPtr> find, string what, int timeoutMs)
+    private IntPtr WaitWindow(Func<IntPtr> find, string what, int timeoutMs, bool handlePrompts = true)
     {
         IntPtr found = IntPtr.Zero;
-        WaitUntil(() => (found = find()) != IntPtr.Zero, what, timeoutMs);
+        WaitUntil(() => (found = find()) != IntPtr.Zero, what, timeoutMs, handlePrompts: handlePrompts);
         return found;
     }
 
-    private void WaitUntil(Func<bool> condition, string what, int timeoutMs, bool fail = true)
+    private void WaitUntil(Func<bool> condition, string what, int timeoutMs, bool fail = true, bool handlePrompts = true)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (true)
@@ -1209,7 +1212,7 @@ internal sealed partial class Walker
                 _report.Warn(Where(), $"waited {timeoutMs / 1000} s for {what}");
                 return;
             }
-            HandlePrompts();
+            if (handlePrompts) HandlePrompts();
             Thread.Sleep(200);
         }
     }

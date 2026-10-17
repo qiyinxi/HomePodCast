@@ -110,11 +110,13 @@ internal sealed partial class Walker
         CheckGroupOutputRows(fileSource: false); // Includes all saved values after adding/removing an independent draft.
         CheckGroupDelayModes();
         CheckGroupManualCalibration();
+        CheckSpeakerRoomLive();
         ShootPage(GroupPageName, "saved-live-outputs", checkEachScroll: true);
         CheckGroupIdle(preferences, baseline.Count, "live");
 
         SetGroupSource(fileSource: true);
         CheckGroupOutputRows(fileSource: true);
+        CheckSpeakerRoomFiles();
         ShootPage(GroupPageName, "saved-file-outputs", checkEachScroll: true);
         CheckGroupIdle(preferences, baseline.Count, "file");
         SetGroupSource(fileSource: false);

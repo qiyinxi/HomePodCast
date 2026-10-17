@@ -702,5 +702,20 @@
   "{0} 个输出 · {1}": "{0} outputs · {1}",
   "大致同步": "Rough synchronization",
   "校准后同步": "Synchronized after calibration",
-  "AirPlay 时间线同步": "AirPlay timeline synchronization"
+  "AirPlay 时间线同步": "AirPlay timeline synchronization",
+  "前左": "Front left",
+  "前右": "Front right",
+  "此音源没有这个声道": "This source has no such channel",
+  "未分配：没有可播放的音箱": "Unassigned: no output can play it",
+  "未分配：混入{0}": "Unassigned: mixed into {0}",
+  "音箱布局图": "Speaker room layout",
+  "聆听位置": "Listening position",
+  "未分配": "Unassigned",
+  "{0}，延迟 {1} 毫秒": "{0}, delay {1} ms",
+  "{0}：正在测量": "{0}: measuring",
+  "所选位置音箱": "Selected position speaker",
+  "所选位置延迟（毫秒）": "Selected position delay (ms)",
+  "所选位置音量偏移": "Selected position volume offset",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Select a position to assign an added speaker; arrow keys move between positions. Press Apply after editing. Dashed positions show the actual downmix destination.",
+  "不分配（保留完整立体声）": "Unassign (keep full stereo)"
 }

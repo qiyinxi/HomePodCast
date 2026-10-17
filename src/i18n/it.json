@@ -702,5 +702,20 @@
   "{0} 个输出 · {1}": "{0} uscite · {1}",
   "大致同步": "Sincronizzazione approssimativa",
   "校准后同步": "Sincronizzato dopo calibrazione",
-  "AirPlay 时间线同步": "Sincronizzazione temporale AirPlay"
+  "AirPlay 时间线同步": "Sincronizzazione temporale AirPlay",
+  "前左": "Anteriore sinistro",
+  "前右": "Anteriore destro",
+  "此音源没有这个声道": "Questa sorgente non ha questo canale",
+  "未分配：没有可播放的音箱": "Non assegnato: nessuna uscita disponibile",
+  "未分配：混入{0}": "Non assegnato: miscelato in {0}",
+  "音箱布局图": "Disposizione dei diffusori",
+  "聆听位置": "Posizione di ascolto",
+  "未分配": "Non assegnato",
+  "{0}，延迟 {1} 毫秒": "{0}, ritardo {1} ms",
+  "{0}：正在测量": "{0}: misurazione",
+  "所选位置音箱": "Diffusore della posizione scelta",
+  "所选位置延迟（毫秒）": "Ritardo della posizione scelta (ms)",
+  "所选位置音量偏移": "Offset volume della posizione scelta",
+  "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Scegli una posizione per assegnare un diffusore aggiunto; le frecce cambiano posizione. Poi premi Applica. Le posizioni tratteggiate mostrano la destinazione effettiva del downmix.",
+  "不分配（保留完整立体声）": "Rimuovi assegnazione (mantieni stereo)"
 }
