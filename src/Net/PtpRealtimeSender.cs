@@ -10,6 +10,7 @@ namespace HomePodCast.Net;
 /// <summary>Third-party type 96 over PTP; independent of the HomePod RtpSender and NTP timeline.</summary>
 internal sealed class PtpRealtimeSender : IDisposable
 {
+    private static readonly long LateLimit = MediaClock.FromMs(60);
     private readonly UdpClient _audio, _control;
     private readonly IPEndPoint _controlPeer;
     private readonly CounterCipher _cipher;
@@ -22,7 +23,8 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Dictionary<ushort, byte[]> _history = new();
     private readonly Queue<ushort> _order = new();
-    private Task[] _tasks = [];
+    private Thread? _sender;
+    private Task _resends = Task.CompletedTask;
     private long _packets;
     private int _disposed;
     private long? _startAt;
@@ -50,7 +52,13 @@ internal sealed class PtpRealtimeSender : IDisposable
     {
         if (Interlocked.Exchange(ref _started, 1) != 0) throw new InvalidOperationException("Realtime sender already started");
         _startAt = startAt; _readAudio = readAudio;
-        _tasks = [Task.Run(Send), Task.Run(Resends)];
+        // Paced on a thread of its own, as RtpSender and BufferedSender are, not on the thread pool: a pool held up by
+        // blocking work (synchronous RTSP in Task.Run, here or in other code) must not make it late. 2026-10-17: with the
+        // pool sized for 4 cores, as on a CI runner, and blocking work queued on it, the pooled loop woke more than 60 ms
+        // after its first deadline in 5 of 20 starts, although that deadline was 247 ms away when Start returned.
+        _sender = new Thread(Send) { IsBackground = true, Name = "AirPlay PTP realtime sender", Priority = ThreadPriority.Highest };
+        _sender.Start();
+        _resends = Task.Run(Resends);
     }
 
     internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency)
@@ -65,33 +73,50 @@ internal sealed class PtpRealtimeSender : IDisposable
         return packet;
     }
 
-    private async Task Send()
+    private void Send()
     {
+        using var mmcss = Native.EnterMmcss("Pro Audio");
         try
         {
             var audio = new float[704]; var pcm = new short[704];
+            var stopped = _stop.Token.WaitHandle;
             long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
             int quiet = 0;
+            bool sent = false;
             while (!_stop.IsCancellationRequested)
             {
                 long deadline = start + (long)(n * 352.0 * MediaClock.Frequency / 44100);
                 if (_startAt != null)
                 {
                     while (MediaClock.Now < deadline)
-                        await Task.Delay(Math.Max(1, (int)MediaClock.ToMs(deadline - MediaClock.Now)), _stop.Token);
+                        if (stopped.WaitOne(Math.Max(1, (int)MediaClock.ToMs(deadline - MediaClock.Now)))) return;
                 }
                 else
                 {
                     int wait = (int)MediaClock.ToMs(deadline - MediaClock.Now);
-                    if (wait > 0) await Task.Delay(wait, _stop.Token);
+                    if (wait > 0 && stopped.WaitOne(wait)) return;
                 }
                 if (!_clock.IsMaster) throw new IOException("PTP master changed; reconnect is required");
-                if (MediaClock.ToMs(MediaClock.Now - deadline) > 60) throw new IOException("PTP realtime sender missed its deadline");
+                long late = MediaClock.Now - deadline;
+                if (late > LateLimit)
+                {
+                    if (sent) throw new IOException($"PTP realtime sender missed its deadline: packet {n} {MediaClock.ToMs(late):F0} ms late");
+                    // Nothing has gone out yet, so the receiver loses nothing if this leg joins the common timeline
+                    // where it is now, as RtpSender does after a stall: a later packet with the RTP time the epoch gives
+                    // it, and still none sent more than 60 ms late. Its Start came late (the group's RTSP round trips, a
+                    // busy machine) or it woke late for packet 0. 2026-10-17: with forced GCs running on this PC, the
+                    // test's Start returned 425-648 ms after the epoch it had chosen, and failing cost the session.
+                    long skip = (long)(late * 44100.0 / 352 / MediaClock.Frequency);
+                    Log.Warn($"PTP realtime sender {MediaClock.ToMs(late):F0} ms late for packet {n} before sending any, joins at packet {n + skip}");
+                    n += skip;
+                    continue;
+                }
                 if (MediaClock.Now >= nextSync)
                 {
                     long syncTicks = MediaClock.Now;
                     uint now = unchecked(RtpBase + (uint)Math.Round((syncTicks - start) * 44100.0 / MediaClock.Frequency));
-                    await _control.SendAsync(Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId, _latency), _controlPeer, _stop.Token);
+                    byte[] sync = Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId, _latency);
+                    _control.Send(sync, sync.Length, _controlPeer);
                     nextSync = MediaClock.Now + MediaClock.FromMs(125);
                 }
                 if (_readAudio is { } read) read(deadline, audio);
@@ -108,7 +133,7 @@ internal sealed class PtpRealtimeSender : IDisposable
                 byte[] payload = _alac ? RaopAudio.Alac(pcm) : RaopAudio.L16(pcm);
                 ushort sequence = unchecked((ushort)(FirstSeq + n));
                 var packet = RaopPackets.Audio(sequence, unchecked(RtpBase + (uint)(n * 352)), _ssrc,
-                    new byte[payload.Length + 24], n == 0);
+                    new byte[payload.Length + 24], !sent);
                 ulong nonce = _cipher.Counter;
                 _cipher.Encrypt(payload, packet.AsSpan(4, 8), packet.AsSpan(12, payload.Length + 16));
                 BinaryPrimitives.WriteUInt64LittleEndian(packet.AsSpan(packet.Length - 8), nonce);
@@ -117,8 +142,8 @@ internal sealed class PtpRealtimeSender : IDisposable
                     _history[sequence] = packet; _order.Enqueue(sequence);
                     if (_order.Count > 512) _history.Remove(_order.Dequeue());
                 }
-                await _audio.SendAsync(packet, _stop.Token);
-                n++; Interlocked.Increment(ref _packets);
+                _audio.Send(packet, packet.Length);
+                sent = true; n++; Interlocked.Increment(ref _packets);
             }
         }
         catch (Exception) when (_stop.IsCancellationRequested) { }
@@ -153,8 +178,10 @@ internal sealed class PtpRealtimeSender : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         StopSending();
-        try { Task.WaitAll(_tasks, TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
-        _cipher.Dispose(); _stop.Dispose();
+        bool stopped = _sender == null || _sender == Thread.CurrentThread || _sender.Join(1000);
+        try { stopped &= _resends.Wait(TimeSpan.FromSeconds(1)); } catch (AggregateException) { }
+        // A loop still running (stuck in a reader callback) would use them after Dispose.
+        if (stopped) { _cipher.Dispose(); _stop.Dispose(); }
     }
 
     internal void StopSending()
