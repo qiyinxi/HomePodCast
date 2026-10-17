@@ -49,7 +49,21 @@ internal sealed partial class Walker
             string path = Path.Combine(_dir, "room-layout-" + name + ".wav");
             WriteRoomWave(path, channels, mask);
             OpenRoomFile(path);
-            var room = ReachRoomNode(n => n.Name == T("音箱布局图"));
+            var room = ReachRoomNode(n => n.Name == T("音箱布局图") && n.Type == "Group");
+            // The page creates child windows on an idle budget. A visible group can precede its new source's buttons.
+            try
+            {
+                WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Hwnd == room.Hwnd)?.Descendants()
+                        .Count(n => n.Type == "Button" && n.Shown) == count,
+                    "the " + name + " room position windows", 8000);
+            }
+            catch (StepFailed)
+            {
+                Dump(Uia.Snapshot(MainWindow()), "speaker-room-" + name + "-positions-missing");
+                Shoot(MainWindow(), "speaker-room-" + name + "-positions-missing", "room child window creation at failure");
+                throw;
+            }
+            room = ReachRoomNode(n => n.Hwnd == room.Hwnd);
             var buttons = room.Descendants().Where(n => n.Type == "Button" && n.Shown).ToArray();
             Expect(buttons.Length == count, "speaker room / " + name, $"the {name} file exposes {buttons.Length} positions instead of {count}");
             var center = buttons.Single(n => n.Name.StartsWith(_t.F("{0}：{1}", T("中置"), ""), StringComparison.Ordinal));
@@ -96,13 +110,29 @@ internal sealed partial class Walker
 
     private void OpenRoomFile(string path)
     {
+        var main = MainWindow();
         var choose = ReachRoomNode(n => n.Type == "Button" && n.Says(T("选择影音文件")));
         Uia.Invoke(choose);
-        var dialog = WaitWindow(() => Native.TopLevelWindows(App.Id).FirstOrDefault(hwnd => hwnd != MainWindow()
-            && Native.ClassName(hwnd) == "#32770"), "the generated room file picker", 10_000);
-        var tree = Uia.Snapshot(dialog);
-        var filename = Find(tree, n => n.Type == "Edit" && (n.AutomationId is "1148" or "1001"
-            || n.Ancestors().Any(a => a.AutomationId is "1148" or "FileNameControlHost")))
+        // A common file picker is also #32770. Drive and validate it explicitly instead of letting the generic
+        // unexpected-message-box handler click Cancel while it is opening or closing (2026-10-17 CI).
+        var dialog = WaitWindow(() => Native.TopLevelWindows(App.Id).FirstOrDefault(hwnd => hwnd != main
+            && Native.ClassName(hwnd) == "#32770" && Native.IsWindowVisible(hwnd)
+            && Native.WindowRect(hwnd) is { Width: > 0, Height: > 0 }),
+            "the generated room file picker", 10_000, handlePrompts: false);
+        Node tree;
+        try
+        {
+            WaitUntil(() => Find(Uia.Snapshot(dialog), IsRoomFileNameEdit) != null,
+                "the native file picker filename control", 5000, handlePrompts: false);
+            tree = Uia.Snapshot(dialog);
+        }
+        catch (StepFailed)
+        {
+            Dump(Uia.Snapshot(dialog), "speaker-room-file-picker-error");
+            Shoot(dialog, "speaker-room-file-picker-error", "unexpected or incomplete file picker");
+            throw;
+        }
+        var filename = Find(tree, IsRoomFileNameEdit)
             ?? throw new StepFailed("speaker room: file picker has no filename edit");
         if (!filename.Element.TryGetCurrentPattern(ValuePattern.Pattern, out var value))
             throw new StepFailed("speaker room: filename edit has no value pattern");
@@ -110,12 +140,29 @@ internal sealed partial class Walker
         var open = Find(tree, n => n.Type == "Button" && n.AutomationId == "1")
             ?? throw new StepFailed("speaker room: file picker has no Open action");
         Uia.Invoke(open);
-        WaitUntil(() => !Native.IsWindowVisible(dialog), "the generated room file picker to close", 10_000);
+        try
+        {
+            WaitUntil(() => !Native.IsWindowVisible(dialog), "the generated room file picker to close", 10_000,
+                handlePrompts: false);
+        }
+        catch (StepFailed)
+        {
+            foreach (var hwnd in Native.TopLevelWindows(App.Id).Where(hwnd => Native.IsWindowVisible(hwnd)
+                && Native.ClassName(hwnd) == "#32770"))
+            {
+                Dump(Uia.Snapshot(hwnd), "speaker-room-file-open-error");
+                Shoot(hwnd, "speaker-room-file-open-error", "file picker or native error still blocks opening the fixture");
+            }
+            throw;
+        }
         WaitUntil(() => PagePane(Uia.Snapshot(MainWindow()), GroupPageName).Descendants().Any(n => n.Type == "Text"
             && n.Name.Contains(Path.GetFileName(path), StringComparison.Ordinal) && n.Name.Contains(channelsName(path), StringComparison.Ordinal)),
             "the generated multichannel file inspection", 20_000);
         static string channelsName(string file) => file.EndsWith("51.wav", StringComparison.Ordinal) ? "5.1" : "7.1";
     }
+
+    private static bool IsRoomFileNameEdit(Node node) => node.Type == "Edit" && (node.AutomationId is "1148" or "1001"
+        || node.Ancestors().Any(ancestor => ancestor.AutomationId is "1148" or "FileNameControlHost"));
 
     private static void WriteRoomWave(string path, int channels, uint mask)
     {
