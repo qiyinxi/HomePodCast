@@ -7,6 +7,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Loopback datagram recording/decryption only: no xUnit, Windows settings, or audio device dependency. -->
+    <Compile Include="../HomePodCast.Tests/FakeReceiver.cs" Link="Fakes/FakeReceiver.cs" />
     <Compile Include="../../src/Net/Mdns.cs" Link="Net/Mdns.cs" />
     <Compile Include="../../src/Net/ReceiverKind.cs" Link="Net/ReceiverKind.cs" />
     <Compile Include="../../src/Net/TxtRecord.cs" Link="Net/TxtRecord.cs" />

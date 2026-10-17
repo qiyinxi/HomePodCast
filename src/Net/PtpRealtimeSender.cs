@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using HomePodCast.Audio;
 using HomePodCast.Protocol;
@@ -102,6 +103,10 @@ internal sealed class PtpRealtimeSender : IDisposable
         return packet;
     }
 
+    // 2026-10-17: runtime events locate synchronous OSR on this thread around packet 14 (38 ms on a fast CI run;
+    // other cold runs fail at packet 15, 68-70 ms late). Compile before entering, while startup can still join late,
+    // rather than spending the active stream's unchanged 60 ms budget optimizing the loop on its own thread.
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void Send()
     {
         try

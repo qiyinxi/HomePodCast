@@ -13,6 +13,8 @@ docker build -t homepodcast-airplay2-ci -f "$root/tools/ci/airplay2-receiver.Doc
 docker run --rm --entrypoint ffmpeg -v "$fixture:/fixture" homepodcast-airplay2-ci \
   -hide_banner -loglevel error -i /fixture/signal.aac -f s16le -acodec pcm_s16le /fixture/reference.pcm
 dotnet build "$root/tests/HomePodCast.ProtocolHarness" -c Release
+# A separate process preserves the first invocation's runtime compilation behavior. It uses only loopback fakes.
+dotnet "$root/tests/HomePodCast.ProtocolHarness/bin/Release/net10.0/HomePodCast.ProtocolHarness.dll" --ptp-cold-start
 
 since() { awk -v start="$1" -v now="$EPOCHREALTIME" 'BEGIN { printf "%.2f", now - start }'; }
 receiver_running() { [[ "$(docker inspect -f '{{.State.Running}}' "$receiver" 2>/dev/null)" == true ]]; }

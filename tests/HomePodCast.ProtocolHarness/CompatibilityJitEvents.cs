@@ -75,10 +75,25 @@ internal sealed class CompatibilityJitEvents : EventListener
         long deadline = Environment.TickCount64 + 3000;
         while (true)
         {
-            lock (events._gate) if (events._count != 0) break;
+            lock (events._gate) if (events.SenderCompilations().Length != 0) break;
             if (Environment.TickCount64 >= deadline) throw new Exception("Runtime JIT diagnostic events were not observed");
             Thread.Sleep(10);
         }
         events.Report();
     }
+
+    public void RequireNoSenderThreadRecompilation()
+    {
+        lock (_gate)
+        {
+            var send = SenderCompilations();
+            if (send.Length == 0) throw new Exception("Cold PTP did not observe the sender's runtime compilation");
+            if (send.GroupBy(item => item.Thread).Any(group => group.Count() > 1))
+                throw new Exception("Cold PTP recompiled its paced loop synchronously on the sender thread after startup");
+        }
+    }
+
+    private Completed[] SenderCompilations() => Enumerable.Range(Math.Max(0, _count - _completed.Length), Math.Min(_count, _completed.Length))
+        .Select(index => _completed[index % _completed.Length])
+        .Where(item => item.Type == "HomePodCast.Net.PtpRealtimeSender" && item.Method == "Send").ToArray();
 }

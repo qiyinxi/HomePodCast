@@ -100,8 +100,10 @@ internal sealed class CompatibilityDiagnostics : IDisposable
             $"lastAudioReadAgeMs={(lastAudio == 0 ? 0 : MediaClock.ToMs(now - lastAudio)):F1}, cpuMs={process.TotalProcessorTime.TotalMilliseconds:F1}{margin}");
         if (OperatingSystem.IsLinux() && File.Exists("/sys/fs/cgroup/cpu.stat"))
             Console.WriteLine("Compatibility cgroup CPU: " + File.ReadAllText("/sys/fs/cgroup/cpu.stat").Replace('\n', ';'));
-        if (stage is "session-lost" or "completed") _jit?.Report();
+        if (stage is "session-lost" or "completed" or "cold-stopped") _jit?.Report();
     }
+
+    public void RequireNoSenderThreadRecompilation() => _jit!.RequireNoSenderThreadRecompilation();
 
     public void Dispose() { Log.WarningObserved -= Warning; _jit?.Dispose(); }
 }

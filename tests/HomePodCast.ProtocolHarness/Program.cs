@@ -12,6 +12,13 @@ if (args is ["--self-test"])
     return;
 }
 
+if (args is ["--ptp-cold-start"])
+{
+    // Fixed loopback fakes only; this mode accepts no device address and opens no audio endpoint.
+    await HomePodCast.ProtocolHarness.PtpColdStart.Run();
+    return;
+}
+
 if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true")
     throw new InvalidOperationException("Receiver integration tests only run in GitHub Actions");
 if (args is ["--dlna", var dlnaName, var localAddress, var rendererAddress, var dlnaFormat, var dlnaFraming, var dlnaPcm])
