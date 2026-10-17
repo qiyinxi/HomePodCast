@@ -77,7 +77,7 @@ public static class GroupSettings
         foreach (var row in cfg.GroupSpeakers)
         {
             if (!Enum.IsDefined(row.Position)) row.Position = SpeakerPosition.Stereo;
-            row.DelayMs = Math.Clamp(row.DelayMs, 0, 500); row.VolumeOffset = Math.Clamp(row.VolumeOffset, -30, 30);
+            row.DelayMs = Math.Clamp(row.DelayMs, 0, 500); row.VolumeOffset = Math.Clamp(row.VolumeOffset, -100, 100);
         }
     }
 

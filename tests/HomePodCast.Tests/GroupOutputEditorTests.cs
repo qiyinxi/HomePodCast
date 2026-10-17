@@ -52,6 +52,27 @@ public class GroupOutputEditorTests
     }
 
     [Fact]
+    public void AirPlay_volume_offsets_keep_the_full_slider_range_across_save_reopen_and_presets() => Sta.Run(() =>
+    {
+        foreach (int offset in new[] { -100, 100 })
+        {
+            var cfg = Config(true);
+            using (var panel = new GroupPanel(cfg))
+            {
+                panel.SetFound([Home()]);
+                Slider(panel, "Home 音量偏移").Value = offset;
+                panel.Apply();
+            }
+            Assert.Equal(offset, GroupPlan.FromConfig(cfg)!.VolumeOffsetFor("AA:01"));
+            GroupSettings.Normalize(cfg); OutputGroups.Normalize(cfg); // the same bounds used when loading a config
+            using (var reopened = new GroupPanel(cfg)) Assert.Equal(offset, Slider(reopened, "Home 音量偏移").Value);
+            var saved = OutputGroups.Save(cfg, "volume", OutputGroups.Capture(cfg));
+            var restored = Config(true); OutputGroups.Apply(restored, saved.Settings);
+            Assert.Equal(offset, GroupPlan.FromConfig(restored)!.VolumeOffsetFor("AA:01"));
+        }
+    });
+
+    [Fact]
     public void Auxiliary_only_startup_respects_autoconnect_and_restart_intent_without_AirPlay_discovery()
     {
         var cfg = new AppConfig { AutoConnect = true, DeviceId = null, GroupCaptureDeviceIds = [],

@@ -216,7 +216,7 @@ public static class OutputGroups
                 && !StereoPairs.IsPairId(r.DeviceId)).DistinctBy(r => GroupPlan.Key(r.DeviceId)).Take(8));
             foreach (var row in s.GroupSpeakers)
             {
-                row.DelayMs = Math.Clamp(row.DelayMs, 0, 500); row.VolumeOffset = Math.Clamp(row.VolumeOffset, -30, 30);
+                row.DelayMs = Math.Clamp(row.DelayMs, 0, 500); row.VolumeOffset = Math.Clamp(row.VolumeOffset, -100, 100);
                 if (!Enum.IsDefined(row.Position)) row.Position = SpeakerPosition.Stereo;
             }
         }
