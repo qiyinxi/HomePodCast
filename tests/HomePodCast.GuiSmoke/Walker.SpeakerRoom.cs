@@ -37,7 +37,7 @@ internal sealed partial class Walker
         Native.Msaa(delay.Hwnd)?.set_accValue(0, "29");
         WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), _t.F("{0} 延迟（毫秒）", GroupBluetoothName), "Slider").Hwnd) == "29",
             "room delay draft restored", 5000);
-        ReachRoomNode(n => n.Name == T("音箱布局图"));
+        ReachSpeakerRoom();
         Shoot(MainWindow(), "speaker-room-live", "top-down stereo room, keyboard selection, saved offline outputs");
         Layout(Uia.Snapshot(MainWindow()), "speaker room / stereo");
     }
@@ -49,7 +49,7 @@ internal sealed partial class Walker
             string path = Path.Combine(_dir, "room-layout-" + name + ".wav");
             WriteRoomWave(path, channels, mask);
             OpenRoomFile(path);
-            var room = ReachRoomNode(n => n.Name == T("音箱布局图") && n.Type == "Group");
+            var room = ReachSpeakerRoom();
             // The page creates child windows on an idle budget. A visible group can precede its new source's buttons.
             try
             {
@@ -76,11 +76,15 @@ internal sealed partial class Walker
             ReachRoomNode(n => n.Name == T("所选位置音箱") && n.Type == "ComboBox");
             Expect(!GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Enabled,
                 "speaker room / " + name, "the offline file receiver is incorrectly offered for a discrete channel");
-            ReachRoomNode(n => n.Name == T("音箱布局图"));
+            ReachSpeakerRoom();
             Shoot(MainWindow(), "speaker-room-" + name, "top-down " + name + " room with actual empty-slot downmix destinations");
             Layout(Uia.Snapshot(MainWindow()), "speaker room / " + name);
         }
     }
+
+    // Danish and Polish translate the section heading and diagram name identically. The heading is a Text;
+    // require the accessible Group so the whole diagram, rather than just that heading, is in each screenshot.
+    private Node ReachSpeakerRoom() => ReachRoomNode(node => node.Type == "Group" && node.Name == T("音箱布局图"));
 
     /// <summary>A control must fit inside the page viewport. WS_VISIBLE alone also describes scrolled-away children.</summary>
     private Node ReachRoomNode(Func<Node, bool> match)
