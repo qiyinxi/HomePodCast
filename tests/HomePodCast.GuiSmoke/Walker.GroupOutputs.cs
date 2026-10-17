@@ -91,6 +91,13 @@ internal sealed partial class Walker
         File.WriteAllLines(Path.Combine(_dir, "group-idle-baseline.log"), baseline);
         CheckGroupIdle(preferences, 0, "startup");
 
+        // Exercise the always-available player page in every UI language at the required 150% scale, without opening
+        // the optional viewing module, a player connection or a sync test.
+        Navigate("音画同步");
+        CheckAvSync(Uia.Snapshot(MainWindow()));
+        ShootPage("音画同步", "players-and-viewer", checkEachScroll: true);
+        CheckGroupIdle(preferences, baseline.Count, "av-sync-page");
+
         Navigate(GroupPageName);
         Thread.Sleep(1100); // More than four page timer ticks; opening and idle refresh must remain inert.
         CheckGroupIdle(preferences, baseline.Count, "opened");
