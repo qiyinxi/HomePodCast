@@ -537,14 +537,32 @@ internal sealed partial class Walker
 
     private void CheckAvSync(Node tree)
     {
-        var page = PagePane(tree, "音画同步");
-        foreach (var text in new[] { "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）", "同步观影窗口（实验性）" })
-            Expect(Has(page, T(text)), "音画同步", $"missing section or row: {T(text)}");
-        foreach (var player in new[] { "mpv", "VLC", "PotPlayer · MPC-HC · MPC-BE" })
-            Expect(Has(page, player), "音画同步", $"missing player: {player}");
-        foreach (var action in new[] { "选择模块…", "打开" })
-            Expect(Find(page, node => node.Type == "Button" && node.Says(T(action))) != null,
-                "音画同步", $"missing module action: {T(action)}");
+        var pane = PagePane(tree, "音画同步").Hwnd;
+        string[] texts = [T("本地播放器"), T("影视场景自动调整播放器"), T("VLC 网页接口密码（自动读取失败时填写）"),
+            T("同步观影窗口（实验性）"), "mpv", "VLC", "PotPlayer · MPC-HC · MPC-BE"];
+        string[] actions = [T("选择模块…"), T("打开")];
+        var seen = new HashSet<string>();
+        var buttons = new HashSet<string>();
+        Scroll(pane, Native.SB_TOP);
+        try
+        {
+            for (int i = 0; i < 12; i++)
+            {
+                // The title scrolls out of view: keep the pane handle rather than locating it again by its title.
+                var page = Find(Uia.Snapshot(MainWindow()), node => node.Hwnd == pane)
+                    ?? throw new StepFailed("the A/V sync scroll pane disappeared");
+                foreach (string text in texts) if (Has(page, text)) seen.Add(text);
+                foreach (string action in actions)
+                    if (Find(page, node => node.Shown && node.Type == "Button" && node.Says(action)) != null) buttons.Add(action);
+                var info = Native.VerticalScroll(pane);
+                if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } position || position.nPos + position.nPage > position.nMax) break;
+                Scroll(pane, Native.SB_PAGEDOWN);
+                if (Native.VerticalScroll(pane) is { } after && after.nPos == position.nPos) break;
+            }
+        }
+        finally { Scroll(pane, Native.SB_TOP); }
+        foreach (string text in texts) Expect(seen.Contains(text), "音画同步", $"section or row was never shown: {text}");
+        foreach (string action in actions) Expect(buttons.Contains(action), "音画同步", $"module action was never shown: {action}");
     }
 
     private Node CheckAbout()

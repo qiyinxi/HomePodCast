@@ -109,7 +109,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 2. 從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下載 HomePodCast，有兩種套件，另有一個選用模組：
    - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
-   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「同步觀影視窗」頁選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
+   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「音畫同步」頁的「同步觀影視窗（實驗性）」一節選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
 
    防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定和記錄檔都儲存在 `%APPDATA%\HomePodCast`。Microsoft Store 版寫入的檔案放在它自己的儲存空間：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，解除安裝時由 Windows 刪除；不論哪種版本，「關於 → 記錄檔 → 開啟記錄檔資料夾」開啟的都是正確的資料夾。
 3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 Windows 音量就是 HomePod 音量：兩邊保持一致（連線時對齊到較小的那個），Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。

@@ -13,7 +13,7 @@ internal static class VideoWindowModule
 
     /// <summary>
     /// Not in the Microsoft Store version: starting an exe downloaded apart from the package is what Store policy
-    /// 10.2.2 forbids (the review of PR #23, 2026-10-13), so Settings has no row for it there.
+    /// 10.2.2 forbids (the review of PR #23, 2026-10-13), so its A/V sync section is omitted there.
     /// </summary>
     public static bool Offered => OfferedIn(AppEnvironment.IsPackaged);
 
