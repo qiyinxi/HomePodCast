@@ -258,7 +258,7 @@ internal sealed partial class GroupPanel : StackPanel
                 ReadRows(); _speakers.Remove(speaker); ShowMembers();
             };
             var title = new TextBlock(device == null ? L.F("{0}（未发现）", speaker.Name) : speaker.Name, TextStyle.BodyStrong, wrap: true);
-            var positionField = Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary), position);
+            var positionField = Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary, wrap: true), position);
             var delayField = Ui.Stack(2, new TextBlock(L.T("延迟"), TextStyle.Caption, TextRole.Secondary), Ui.Row(4, null, delay, delayValue));
             var volumeField = Ui.Stack(2, new TextBlock(L.T("音量偏移"), TextStyle.Caption, TextRole.Secondary), Ui.Row(4, null, volume, volumeValue));
             var fields = Ui.Row(8, null, positionField, delayField, volumeField, remove);

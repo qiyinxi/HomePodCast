@@ -328,7 +328,7 @@ internal sealed partial class GroupPanel
     {
         var button = new FluentButton(L.T("移除")) { AccessibleName = L.F("移除 {0}", name) };
         button.Click += (_, _) => { if (_active) return; ReadRows(); remove(); };
-        var fields = Ui.Row(8, null, Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary), channels),
+        var fields = Ui.Row(8, null, Ui.Stack(2, new TextBlock(L.T("音箱位置"), TextStyle.Caption, TextRole.Secondary, wrap: true), channels),
             SliderField(L.T("延迟"), trim), SliderField(L.T("音量偏移"), volume), button); fields.Wrap = true;
         return Ui.Stack(4, new TextBlock(name + " · " + type, TextStyle.BodyStrong, wrap: true), fields);
     }

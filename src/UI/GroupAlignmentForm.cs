@@ -28,6 +28,7 @@ internal sealed class GroupAlignmentForm : FluentDialog
     private readonly TextBlock _result = Ui.Note();
     private readonly FluentButton _apply = new(L.T("应用微调"), ButtonKind.Primary);
     private readonly int[] _rates = [30, 60, 120, 240];
+    private bool _placed;
     public GroupAlignmentOutput? Adjustment { get; private set; }
 
     internal GroupAlignmentForm(IReadOnlyList<GroupAlignmentOutput> outputs, bool canPlayTest,
@@ -70,6 +71,38 @@ internal sealed class GroupAlignmentForm : FluentDialog
             Adjustment = adjustment; DialogResult = DialogResult.OK;
         };
         AcceptButton = _apply; CancelButton = close; UpdateResult();
+    }
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        PerformLayout();
+        // FluentDialog fits its translated content after the initial CenterParent placement.
+        // Centre the final DPI-sized window again, then keep its buttons above the taskbar.
+        PlaceWithinWorkingArea(center: true);
+        _placed = true;
+    }
+
+    protected override void OnSizeChanged(EventArgs e)
+    {
+        base.OnSizeChanged(e);
+        if (_placed) PlaceWithinWorkingArea(center: false);
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        if (_placed) PlaceWithinWorkingArea(center: false);
+    }
+
+    private void PlaceWithinWorkingArea(bool center)
+    {
+        var work = Screen.FromControl(Owner ?? this).WorkingArea;
+        var anchor = Owner?.Bounds ?? work;
+        int x = center ? anchor.Left + (anchor.Width - Width) / 2 : Left;
+        int y = center ? anchor.Top + (anchor.Height - Height) / 2 : Top;
+        Location = new Point(Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - Width)),
+            Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - Height)));
     }
 
     private bool TryAdjustment(out GroupAlignmentOutput? result)

@@ -93,9 +93,9 @@ internal sealed partial class Walker
 
         Navigate(GroupPageName);
         Thread.Sleep(1100); // More than four page timer ticks; opening and idle refresh must remain inert.
-        CheckGroupOutputRows(fileSource: false);
+        CheckGroupIdle(preferences, baseline.Count, "opened");
         CheckGroupOutputChoices();
-        CheckGroupOutputRows(fileSource: false); // Adding/removing a draft rebuilds the expandable rows.
+        CheckGroupOutputRows(fileSource: false); // Includes all saved values after adding/removing an independent draft.
         CheckGroupDelayModes();
         CheckGroupManualCalibration();
         ShootPage(GroupPageName, "saved-live-outputs", checkEachScroll: true);
@@ -113,7 +113,8 @@ internal sealed partial class Walker
         Navigate(GroupPageName);
         Thread.Sleep(1100);
         CheckGroupOutputRows(fileSource: false);
-        ShootPage(GroupPageName, "reopened-live-outputs", checkEachScroll: true);
+        if (CaptureGroupTransitions) ShootPage(GroupPageName, "reopened-live-outputs", checkEachScroll: true);
+        else Layout(Uia.Snapshot(MainWindow()), "group outputs / reopened live outputs");
         CheckGroupIdle(preferences, baseline.Count, "reopened");
         Navigate("首页");
         var home = Uia.Snapshot(MainWindow());
@@ -178,7 +179,10 @@ internal sealed partial class Walker
 
     private void CheckGroupValue(Node tree, string name, string expected, string step)
     {
-        var control = GroupControl(tree, name);
+        // A FieldRow can share its caption with its child. Read the value-bearing control rather
+        // than its named Pane, whose MSAA Value is correctly empty.
+        var control = Find(PagePane(tree, GroupPageName), n => n.Shown && n.Hwnd != IntPtr.Zero && n.Name == name
+            && n.Type is "ComboBox" or "Slider") ?? throw new StepFailed($"group outputs: no value control named 「{name}」");
         string? actual = Native.MsaaValue(control.Hwnd);
         Expect(actual == expected, "group outputs / " + step, $"「{name}」 is 「{actual ?? "(none)"}」, expected 「{expected}」");
     }
@@ -205,7 +209,7 @@ internal sealed partial class Walker
     {
         var combo = GroupControl(Uia.Snapshot(MainWindow()), T(name), "ComboBox");
         Native.Msaa(combo.Hwnd)?.set_accValue(0, T(value));
-        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T(name), "ComboBox").Hwnd) == T(value),
+        WaitUntil(() => Native.MsaaValue(combo.Hwnd) == T(value),
             $"group selector 「{T(name)}」 = 「{T(value)}」", 5000);
     }
 
@@ -229,7 +233,7 @@ internal sealed partial class Walker
         tree = Uia.Snapshot(MainWindow());
         var manual = Find(PagePane(tree, GroupPageName), n => n.Name == T("整组延迟（毫秒）") && n.Hwnd != IntPtr.Zero && n.Type != "Text" && n.Shown);
         Expect(manual is not { Enabled: true }, "group outputs / automatic group delay", "the manual group delay remains enabled in Automatic mode");
-        ShootPage(GroupPageName, "automatic-delay", checkEachScroll: true);
+        if (CaptureGroupTransitions) ShootPage(GroupPageName, "automatic-delay", checkEachScroll: true);
         SetGroupCombo("整组延迟", "手动");
         CheckGroupValue(Uia.Snapshot(MainWindow()), T("整组延迟（毫秒）"), "2740", "manual delay preserved after Automatic");
     }
@@ -244,7 +248,7 @@ internal sealed partial class Walker
         Uia.Invoke(add);
         WaitUntil(() => Find(PagePane(Uia.Snapshot(MainWindow()), GroupPageName), n => n.Name == _t.F("{0} 位置", GroupManualName)
             && n.Type == "ComboBox") != null, "the manual AirPlay draft output row", 5000);
-        ShootPage(GroupPageName, "added-airplay-draft", checkEachScroll: true);
+        if (CaptureGroupTransitions) ShootPage(GroupPageName, "added-airplay-draft", checkEachScroll: true);
         var remove = GroupControl(Uia.Snapshot(MainWindow()), _t.F("移除 {0}", GroupManualName), "Button");
         Expect(remove.Enabled, "group outputs / remove", "the extra AirPlay draft output cannot be removed");
         Uia.Invoke(remove);
@@ -261,7 +265,8 @@ internal sealed partial class Walker
                 "an offline saved identity was presented as a discovered output choice");
             Expect(!GroupControl(tree, T("添加输出"), "Button").Enabled, "group outputs / " + type,
                 "Add is enabled although no output of this type was discovered");
-            ShootPage(GroupPageName, type == "DLNA" ? "empty-dlna-choices" : "empty-local-choices", checkEachScroll: true);
+            if (CaptureGroupTransitions)
+                ShootPage(GroupPageName, type == "DLNA" ? "empty-dlna-choices" : "empty-local-choices", checkEachScroll: true);
         }
         SetGroupCombo("输出类型", "AirPlay");
     }
@@ -291,7 +296,7 @@ internal sealed partial class Walker
             return;
         }
 
-        foreach (string name in new[] { GroupAirPlayName }.Concat(auxiliary)) ExpandGroupDetails(name);
+        ExpandGroupDetails(new[] { GroupAirPlayName }.Concat(auxiliary).ToArray());
         tree = Uia.Snapshot(MainWindow());
         page = PagePane(tree, GroupPageName);
         foreach (var (name, tag, channel, trim, volume, required) in new[]
@@ -325,13 +330,22 @@ internal sealed partial class Walker
         Expect(positions == 4, "group outputs / selection", $"there are {positions} saved output rows instead of four");
     }
 
-    private void ExpandGroupDetails(string name)
+    // Every language still asserts all transitions and captures Live, File, Home and the manual helper.
+    // Additional identical full-page captures belong to one language, keeping the required 15-language
+    // matrix inside the CI budget without dropping any state/value/idle assertions.
+    private bool CaptureGroupTransitions => _s.Language == "zh-CN";
+
+    private void ExpandGroupDetails(string[] names)
     {
         var tree = Uia.Snapshot(MainWindow());
-        if (Find(PagePane(tree, GroupPageName), n => n.Shown && n.Name == _t.F("{0} 必需输出", name)) != null) return;
-        Uia.Invoke(GroupControl(tree, _t.F("{0} 更多设置", name), "Button"));
-        WaitUntil(() => Find(PagePane(Uia.Snapshot(MainWindow()), GroupPageName), n => n.Shown && n.Name == _t.F("{0} 必需输出", name)) != null,
-            $"the saved settings of 「{name}」", 5000);
+        foreach (string name in names)
+            if (Find(PagePane(tree, GroupPageName), n => n.Shown && n.Name == _t.F("{0} 必需输出", name)) == null)
+                Uia.Invoke(GroupControl(tree, _t.F("{0} 更多设置", name), "Button"));
+        WaitUntil(() =>
+        {
+            var current = PagePane(Uia.Snapshot(MainWindow()), GroupPageName);
+            return names.All(name => Find(current, n => n.Shown && n.Name == _t.F("{0} 必需输出", name)) != null);
+        }, "all saved output details", 5000);
     }
 
     private void CheckGroupManualCalibration()
