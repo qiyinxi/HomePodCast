@@ -63,6 +63,7 @@ internal static class AirPlay2Compatibility
 
     public static async Task Run(string host, int port, int latency, string directory, string pcmPath, bool realtime, bool coordinated = false)
     {
+        using var diagnostics = new CompatibilityDiagnostics();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(25));
         byte[] reference;
         if (realtime)
@@ -86,12 +87,14 @@ internal static class AirPlay2Compatibility
             {
                 int size = await file.ReadAsync(buffer, collecting.Token);
                 if (size == 0) { await Task.Delay(2, collecting.Token); continue; }
+                long completed = MediaClock.Now;
                 received.AddRange(buffer.AsSpan(0, size).ToArray());
                 if (offset < 0)
                 {
                     offset = received.ToArray().AsSpan().IndexOf(marker);
                     if (offset >= 0) arrived = MediaClock.Now;
                 }
+                diagnostics.ObserveRead(received.Count, completed, MediaClock.Now);
             }
         });
         var device = new AirPlayDevice("CI AirPlay 2", "CI", IPAddress.Parse(host), port, "Shairport Sync",
@@ -127,6 +130,7 @@ internal static class AirPlay2Compatibility
                 timeline.WriteFrames(0, source);
                 const int headroomMs = 20;
                 expectedLatency = outputs.MinimumDelayMs + headroomMs;
+                diagnostics.Report("before-group-start", began + MediaClock.FromMs(headroomMs));
                 await outputs.StartAsync(timeline, expectedLatency, 10, false, began + MediaClock.FromMs(headroomMs), timeout.Token);
             }
             else
@@ -148,6 +152,7 @@ internal static class AirPlay2Compatibility
         }
         finally { outputs?.Dispose(); client?.Dispose(); collecting.Cancel(); }
         try { await reader; } catch (OperationCanceledException) { }
+        diagnostics.Report("completed");
         Console.WriteLine($"AirPlay 2 diagnostics: coordinated={coordinated}, realtime={realtime}, packets={packets}, decoded={received.Count}, marker={offset}, lost={lost}");
         if (lost != null) throw new Exception(lost);
         if (offset < 0 || offset % 4 != 0)
