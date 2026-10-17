@@ -36,6 +36,7 @@
   "静音": "Muet",
   "系统声音": "Sons système",
   "进程 {0}": "Processus {0}",
+  "诊断": "Diagnostic",
   "音画同步测试": "Test de synchro A/V",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Toutes les une à deux secondes (au hasard), le HomePod émet un clic et le cercle clignote.\nSi vous voyez le flash avant d'entendre le clic, faites glisser le curseur vers la droite jusqu'à ce qu'ils coïncident.\nLa valeur finale indique le retard du son sur l'image dans les jeux.",
   "完成": "Terminé",

@@ -36,6 +36,7 @@
   "静音": "Mykistä",
   "系统声音": "Järjestelmän äänet",
   "进程 {0}": "Prosessi {0}",
+  "诊断": "Diagnostiikka",
   "音画同步测试": "A/V-synkronointitesti",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "HomePod naksahtaa sekunnin tai kahden välein (satunnaisesti), ja ympyrä välähtää samalla.\nJos näet välähdyksen ennen kuin kuulet naksahduksen, vedä liukusäädintä oikealle, kunnes ne osuvat yhteen.\nLopullinen arvo kertoo, kuinka paljon ääni on peleissä kuvaa jäljessä.",
   "完成": "Valmis",
