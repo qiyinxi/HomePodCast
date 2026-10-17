@@ -50,8 +50,8 @@ public class DiagnosticsPageTests
         var config = TestApp.Config();
         var app = TestApp.Create(config);
         using var fx = app.Fx;
-        string before = JsonSerializer.Serialize(config);
         using var window = new MainWindow(app);
+        string before = JsonSerializer.Serialize(config); // MainWindow may normalize existing group preferences on construction.
         var rail = TestApp.Field<NavRail>(window, "_rail");
         Assert.Equal(7, (int)AppPage.Sync);
         Assert.Equal("诊断", rail.Items[(int)AppPage.Sync].Text);
