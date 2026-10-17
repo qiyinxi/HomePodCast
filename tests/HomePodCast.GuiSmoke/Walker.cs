@@ -43,7 +43,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "音画同步测试", "使用配置", "设置", "关于"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "诊断", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -164,6 +164,7 @@ internal sealed partial class Walker
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
+            if (page == "诊断") CheckDiagnostics(tree);
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
         }
@@ -261,6 +262,7 @@ internal sealed partial class Walker
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
+            if (page == "诊断") CheckDiagnostics(tree);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
@@ -569,7 +571,8 @@ internal sealed partial class Walker
     {
         var tree = Uia.Snapshot(MainWindow());
         var page = PagePane(tree, "关于");
-        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "关于", "diagnostic export missing");
+        foreach (var moved in new[] { "日志", "诊断报告", "导出诊断", "打开日志文件夹" })
+            Expect(!page.Descendants().Any(n => n.Says(T(moved))), "关于", $"moved diagnostic feature remains: {T(moved)}");
         Expect(Has(page, T("许可证")), "关于", "license missing");
         // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
         // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
@@ -963,7 +966,7 @@ internal sealed partial class Walker
         "音箱信息" => "speakers",
         "多音箱（实验性）" => "groups",
         "音画同步" => "av-sync",
-        "音画同步测试" => "sync-test",
+        "诊断" => "diagnostics",
         "使用配置" => "profiles",
         "关于" => "about",
         _ => "settings",

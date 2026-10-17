@@ -36,6 +36,7 @@
   "静音": "Stummschalten",
   "系统声音": "Systemsounds",
   "进程 {0}": "Prozess {0}",
+  "诊断": "Diagnose",
   "音画同步测试": "A/V-Synchrontest",
   "HomePod 隔一两秒（随机）「咔」一声，圆圈同时闪一下。\n如果先看到闪光、后听到声音，就把滑块往右拖，直到闪光和声音同时出现。\n最后的数值 = 打游戏时声音比画面晚多少。": "Alle ein bis zwei Sekunden (zufällig) klickt der HomePod, und der Kreis blinkt.\nKommt das Blinken vor dem Klick, den Regler nach rechts ziehen, bis beides gleichzeitig ist.\nDer Endwert zeigt, wie weit der Ton in Spielen dem Bild hinterherhinkt.",
   "完成": "Fertig",
