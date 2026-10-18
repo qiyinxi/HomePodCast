@@ -12,10 +12,10 @@ internal sealed partial class TrayApp
     private long _idleSince;             // Stopwatch timestamp the controller was first seen Idle; 0 while it isn't
     private int _pcChangePending;        // a Windows volume change waits to be posted (notification thread → UI)
 
-    /// <summary>Called once from InitSound, after the Windows volume watcher.</summary>
+    /// <summary>Called once from InitSound, after the Windows volume watcher and before anything can stream.</summary>
     private void InitPcMute()
     {
-        _pcMute = new PcMute(new WindowsPcOutput());
+        UsePcOutput(new WindowsPcOutput());
         var check = new TimerDebounce(PcMute.IdleGraceMs);
         check.Tick += () =>
         {
@@ -24,6 +24,29 @@ internal sealed partial class TrayApp
         };
         _pcMuteCheck = check;
         if (_forwarder != null) _forwarder.Notified += OnWindowsVolumeNotified;
+    }
+
+    /// <summary>
+    /// The default output 推流时电脑静音 works on (the tests give a fake). First the sound a killed or crashed last run left
+    /// muted comes back (AppConfig.PcMutedEndpointId); the record is cleared and saved whatever happened to it.
+    /// </summary>
+    internal void UsePcOutput(IPcOutput output)
+    {
+        if (Config.PcMutedEndpointId is { } leftover)
+        {
+            PcMute.RestoreLeftover(output, leftover);
+            Config.PcMutedEndpointId = null;
+            Config.Save();
+        }
+        _pcMute = new PcMute(output, RememberPcMute);
+    }
+
+    /// <summary>PcMute's mute became ours (an endpoint id) or stopped being ours (null): saved at once, for a crash.</summary>
+    private void RememberPcMute(string? id)
+    {
+        if (Config.PcMutedEndpointId == id) return;
+        Config.PcMutedEndpointId = id;
+        Config.Save();
     }
 
     /// <summary>Quitting (also for Windows: QuitForSystem): the PC's sound comes back, if the mute is ours and still there.</summary>

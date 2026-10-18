@@ -227,6 +227,7 @@ public class UsageProfileTests
         [nameof(AppConfig.AppSendVolumesOff)] = "where an app's own HomePod volume starts when turned on again; the levels in use are AppSendVolumes",
         [nameof(AppConfig.MutePcWhileStreaming)] = "about this PC's speakers, not a use; a profile's FollowWindows is handled as WhileStreaming while it is on (VolumeKeyRules.Effective)",
         [nameof(AppConfig.PcSoundHintDismissed)] = "asked once",
+        [nameof(AppConfig.PcMutedEndpointId)] = "a record of this PC's own mute, given back at the next start after a crash",
     };
 
     [Fact]

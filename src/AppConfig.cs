@@ -147,6 +147,13 @@ public sealed class AppConfig
     public bool PcSoundHintDismissed { get; set; }
 
     /// <summary>
+    /// The render endpoint 推流时电脑静音 keeps muted right now (saved as soon as it mutes, cleared once the mute is no
+    /// longer ours). Still set at startup: the last run was killed or crashed with the PC muted, and the next start gives
+    /// the sound back (PcMute.RestoreLeftover).
+    /// </summary>
+    public string? PcMutedEndpointId { get; set; }
+
+    /// <summary>
     /// 「影视场景自动调整播放器」: while the 影视 scene streams, mpv and VLC get an audio delay of −videoDelayMs
     /// (Players.PlayerSync); their own value comes back when the scene changes, the stream stops or the app exits.
     /// </summary>

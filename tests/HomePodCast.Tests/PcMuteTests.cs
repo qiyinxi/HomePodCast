@@ -68,6 +68,8 @@ internal sealed class FakePcOutput : IPcOutput
         Writes.Add((id, muted));
         return true;
     }
+
+    public string? Name(string id) => Devices.TryGetValue(id, out var d) && !d.Gone ? d.Endpoint.Name : null;
 }
 
 /// <summary>
@@ -293,6 +295,95 @@ public class PcMuteTests
         Assert.Empty(pc.Writes);
     }
 
+    // ---------------------------------------------------------------- the record for a crash (AppConfig.PcMutedEndpointId)
+
+    private static (PcMute Mute, FakePcOutput Pc, List<string?> Saved) Recorded(bool muted = false)
+    {
+        var pc = FakePcOutput.WithSpeakers(muted);
+        var saved = new List<string?>();
+        return (new PcMute(pc, saved.Add), pc, saved);
+    }
+
+    [Fact]
+    public void Our_mute_is_written_down_when_it_begins_and_cleared_when_it_is_given_back()
+    {
+        var (mute, _, saved) = Recorded();
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        Assert.Equal(new string?[] { FakePcOutput.Speakers }, saved);
+        mute.Update(PcMutePhase.Between, true, FollowDefault);
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        Assert.Single(saved); // kept through retrying, written once
+        mute.Update(PcMutePhase.Ended, true, FollowDefault);
+        Assert.Equal(new string?[] { FakePcOutput.Speakers, null }, saved);
+
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        mute.Release("HomePodCast quits");
+        Assert.Equal(new string?[] { FakePcOutput.Speakers, null, FakePcOutput.Speakers, null }, saved);
+    }
+
+    [Fact]
+    public void An_unmute_by_hand_clears_the_record()
+    {
+        var (mute, pc, saved) = Recorded();
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        pc[FakePcOutput.Speakers].Muted = false;
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault); // hands off
+        Assert.Equal(new string?[] { FakePcOutput.Speakers, null }, saved);
+        mute.Update(PcMutePhase.Ended, true, FollowDefault);
+        Assert.Equal(2, saved.Count);
+    }
+
+    [Fact]
+    public void A_mute_that_is_not_ours_is_never_written_down()
+    {
+        var (mute, pc, saved) = Recorded(muted: true);
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault); // muted already
+        mute.Update(PcMutePhase.Ended, true, FollowDefault);
+        pc[FakePcOutput.Speakers].Muted = false;
+        pc.FailWrites = true;
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault); // the mute failed
+        Assert.Empty(saved);
+    }
+
+    [Fact]
+    public void A_new_default_output_moves_the_record_and_a_failed_unmute_keeps_it_for_the_next_start()
+    {
+        var (mute, pc, saved) = Recorded();
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        pc.DefaultId = FakePcOutput.Headphones;
+        mute.Update(PcMutePhase.Streaming, true, FollowDefault);
+        Assert.Equal(new string?[] { FakePcOutput.Speakers, null, FakePcOutput.Headphones }, saved);
+
+        pc.FailWrites = true; // Windows refuses the unmute at the end
+        mute.Update(PcMutePhase.Ended, true, FollowDefault);
+        Assert.Equal(FakePcOutput.Headphones, saved[^1]);
+        Assert.True(pc[FakePcOutput.Headphones].Muted);
+    }
+
+    [Fact]
+    public void The_next_start_gives_back_what_a_crashed_run_left_muted()
+    {
+        var pc = FakePcOutput.WithSpeakers(muted: true); // muted by us, then the process was killed
+        PcMute.RestoreLeftover(pc, FakePcOutput.Speakers);
+        Assert.False(pc[FakePcOutput.Speakers].Muted);
+        Assert.Equal(new[] { (FakePcOutput.Speakers, false) }, pc.Writes);
+    }
+
+    [Fact]
+    public void A_leftover_unmuted_meanwhile_or_gone_is_left_alone()
+    {
+        var pc = FakePcOutput.WithSpeakers(); // the user unmuted it before starting again
+        PcMute.RestoreLeftover(pc, FakePcOutput.Speakers);
+        Assert.Empty(pc.Writes);
+        Assert.False(pc[FakePcOutput.Speakers].Muted);
+
+        pc[FakePcOutput.Headphones].Muted = true;
+        pc[FakePcOutput.Headphones].Gone = true; // unplugged
+        PcMute.RestoreLeftover(pc, FakePcOutput.Headphones);
+        PcMute.RestoreLeftover(pc, "{0.0.0.00000000}.{uninstalled}");
+        Assert.Empty(pc.Writes);
+    }
+
     [Fact]
     public void Idle_without_a_mute_reads_nothing()
     {
@@ -424,15 +515,39 @@ public sealed class PcMuteAppCollection { }
 [Collection("PC mute app")]
 public class PcMuteAppTests
 {
-    private static (TrayApp App, FakePcOutput Pc) Make(VolumeKeyMode keys = VolumeKeyMode.FollowWindows, bool streaming = true)
+    private static (TrayApp App, FakePcOutput Pc) Make(VolumeKeyMode keys = VolumeKeyMode.FollowWindows, bool streaming = true,
+        string? leftover = null, bool leftoverMuted = false)
     {
         var cfg = TestApp.Config();
         cfg.VolumeKeys = keys;
+        cfg.PcMutedEndpointId = leftover;
         var app = TestApp.Create(cfg);
-        var pc = FakePcOutput.WithSpeakers();
-        typeof(TrayApp).GetField("_pcMute", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, new PcMute(pc));
+        var pc = FakePcOutput.WithSpeakers(leftoverMuted);
+        app.UsePcOutput(pc); // what InitPcMute does with the real output
         SetState(app, streaming ? StreamState.Streaming : StreamState.Idle);
         return (app, pc);
+    }
+
+    [Fact]
+    public void A_start_after_a_crash_gives_the_sound_back_and_forgets_the_record()
+    {
+        var (app, pc) = Make(streaming: false, leftover: FakePcOutput.Speakers, leftoverMuted: true);
+        Assert.False(pc[FakePcOutput.Speakers].Muted);
+        Assert.Null(app.Config.PcMutedEndpointId);
+
+        var (again, untouched) = Make(streaming: false, leftover: FakePcOutput.Speakers); // unmuted meanwhile
+        Assert.Empty(untouched.Writes);
+        Assert.Null(again.Config.PcMutedEndpointId);
+    }
+
+    [Fact]
+    public void The_app_writes_the_record_while_its_mute_stands()
+    {
+        var (app, _) = Make();
+        app.SetMutePcWhileStreaming(true);
+        Assert.Equal(FakePcOutput.Speakers, app.Config.PcMutedEndpointId);
+        app.SetMutePcWhileStreaming(false);
+        Assert.Null(app.Config.PcMutedEndpointId);
     }
 
     private static void SetState(TrayApp app, StreamState state) =>

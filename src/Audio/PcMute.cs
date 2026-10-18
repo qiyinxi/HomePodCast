@@ -23,6 +23,9 @@ internal interface IPcOutput
 
     /// <summary>Mute or unmute endpoint <paramref name="id"/> with <see cref="PcMute.EventContext"/>; false when that failed.</summary>
     bool SetMute(string id, bool muted);
+
+    /// <summary>The friendly name of endpoint <paramref name="id"/> (for the log); null when it is gone or can't be read.</summary>
+    string? Name(string id);
 }
 
 /// <summary>Where the stream is, as far as the PC's mute goes (<see cref="PcMute.PhaseFor"/>).</summary>
@@ -73,9 +76,14 @@ internal readonly record struct PcCapture(bool SystemCapture, string? DeviceId, 
 /// touched at the end.</item>
 /// </list>
 /// Our own changes carry <see cref="EventContext"/>, so the volume watcher can tell them apart. Every mute and unmute is
-/// logged, so a PC left muted by a crash can be explained. UI thread only.
+/// logged, and the endpoint whose mute is ours is remembered (AppConfig.PcMutedEndpointId): a PC left muted by a crash
+/// or 「结束任务」 gets its sound back at the next start (<see cref="RestoreLeftover"/>; review of #77). UI thread only.
 /// </summary>
-internal sealed class PcMute(IPcOutput output)
+/// <param name="remember">
+/// Called with the endpoint id when a mute becomes ours, and with null once it no longer is (given back, unmuted by
+/// someone else); saved right away by the app. Not called after an unmute that failed: the next start tries again.
+/// </param>
+internal sealed class PcMute(IPcOutput output, Action<string?>? remember = null)
 {
     /// <summary>The event context of our mute changes (AUDIO_VOLUME_NOTIFICATION_DATA.guidEventContext); any fixed GUID.</summary>
     public static readonly Guid EventContext = new("3f0c5e2a-9b7d-4c61-8e45-1d2a7b9c6e10");
@@ -145,6 +153,7 @@ internal sealed class PcMute(IPcOutput output)
             {
                 _ours = false;
                 _handsOff = true;
+                remember?.Invoke(null);
                 Log.Info($"PC mute: \"{_name}\" was unmuted by someone else; left as it is for this session");
             }
             return;
@@ -161,6 +170,7 @@ internal sealed class PcMute(IPcOutput output)
         if (output.SetMute(current.Id, true))
         {
             _ours = true;
+            remember?.Invoke(current.Id);
             Log.Info($"PC mute: muted the Windows default output \"{_name}\" ({current.Id}) while streaming; " +
                      "it is unmuted again when the session ends or HomePodCast quits");
         }
@@ -178,13 +188,40 @@ internal sealed class PcMute(IPcOutput output)
                 Log.Info($"PC mute: unmuted \"{_name}\" ({id}) again ({why})");
                 break;
             case true:
+                // Still remembered: the next start tries again (RestoreLeftover).
                 Log.Warn($"PC mute: unmuting \"{_name}\" ({id}) failed ({why}); it can be unmuted in Windows");
-                break;
+                return;
             case false:
                 Log.Info($"PC mute: \"{_name}\" is unmuted already ({why}); nothing to undo");
                 break;
             default:
                 Log.Info($"PC mute: \"{_name}\" ({id}) is gone ({why}); nothing to undo");
+                break;
+        }
+        remember?.Invoke(null);
+    }
+
+    /// <summary>
+    /// At startup, before anything streams: the last run kept <paramref name="id"/> muted and never gave it back (it was
+    /// killed, crashed, or Windows ended it). Unmuted if it is still muted, with <see cref="EventContext"/>; left as it is
+    /// when it is unmuted already; forgotten when it is gone. The caller clears the record either way.
+    /// </summary>
+    public static void RestoreLeftover(IPcOutput output, string id)
+    {
+        string name = output.Name(id) ?? "?";
+        switch (output.IsMuted(id))
+        {
+            case true when output.SetMute(id, false):
+                Log.Info($"PC mute: unmuted \"{name}\" ({id}) left muted by the last run");
+                break;
+            case true:
+                Log.Warn($"PC mute: \"{name}\" ({id}) was left muted by the last run and unmuting it failed; it can be unmuted in Windows");
+                break;
+            case false:
+                Log.Info($"PC mute: \"{name}\" ({id}), muted by the last run, is unmuted already; left as it is");
+                break;
+            default:
+                Log.Info($"PC mute: {id}, muted by the last run, is gone or can't be read; forgotten");
                 break;
         }
     }
@@ -273,6 +310,20 @@ internal sealed class WindowsPcOutput : IPcOutput
         {
             Log.Warn($"PC mute: SetMute({muted}) on {id} failed: {ex.Message}");
             return false;
+        }
+    }
+
+    public string? Name(string id)
+    {
+        try
+        {
+            using var opened = Opened.Open(id);
+            return opened == null ? null : CoreAudio.FriendlyName(opened.Device);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"PC mute: {id} can't be read: {ex.Message}");
+            return null;
         }
     }
 
