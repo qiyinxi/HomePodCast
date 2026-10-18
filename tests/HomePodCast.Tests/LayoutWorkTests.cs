@@ -43,11 +43,18 @@ public class LayoutWorkTests
         var page = new ScrollPage("painted title");
         var status = new TextBlock("current value") { AccessibleName = "status" };
         var button = new FluentButton("push");
-        page.Content.Controls.AddRange([status, button]);
+        var combo = new FluentComboBox { AccessibleName = "source" };
+        combo.Items.AddRange(["live", "file"]); combo.SelectedIndex = 0;
+        page.Content.Controls.AddRange([status, button, new FieldRow("source", combo)]);
         using var host = new Host(page, 784);
         Assert.True(host.Page.TitleText!.Visible);
         var hwnd = host.Handle;
         var contentHwnd = host.Page.Content.Handle;
+        var buttonHwnd = button.Handle;
+        var comboHwnd = combo.Handle;
+        using var groupHost = new Host(new GroupPage(TestApp.Create(new AppConfig { AutoConnect = false }), inputs: []), 784);
+        var groupHwnd = groupHost.Handle;
+        var groupSourceHwnd = All(groupHost.Page).OfType<FluentComboBox>().Single(c => c.AccessibleName == "音源").Handle;
         Exception? error = null;
         bool done = false;
         var reader = new Thread(() =>
@@ -81,6 +88,12 @@ public class LayoutWorkTests
                 Assert.Contains(nodes, n => n.Name == "painted title" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
                 Assert.Contains(nodes, n => n.Name == "status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
                 Assert.Contains(nodes, n => n.Name == "push" && n.ControlType == System.Windows.Automation.ControlType.Button && n.NativeWindowHandle != 0);
+                Assert.Equal(buttonHwnd.ToInt32(), nodes.Single(n => n.Name == "push").NativeWindowHandle);
+                var sourceNode = nodes.Single(n => n.Name == "source" && n.ControlType == System.Windows.Automation.ControlType.ComboBox);
+                Assert.Equal(comboHwnd.ToInt32(), sourceNode.NativeWindowHandle);
+                Assert.Equal(0, AccessibleObjectFromWindow(new IntPtr(sourceNode.NativeWindowHandle), 0xFFFFFFFC, ref iid, out var sourceMsaa));
+                ((Accessibility.IAccessible)sourceMsaa).set_accValue(0, "file");
+                Assert.Equal("file", ((Accessibility.IAccessible)sourceMsaa).get_accValue(0));
                 var statusNode = System.Windows.Automation.AutomationElement.FromHandle(contentHwnd)
                     .FindFirst(System.Windows.Automation.TreeScope.Children,
                         new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "status"));
@@ -88,12 +101,36 @@ public class LayoutWorkTests
                 var value = (System.Windows.Automation.ValuePattern)statusNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
                 Assert.True(value.Current.IsReadOnly);
                 Assert.Equal("current value", value.Current.Value);
+                // The real unified page mixes many fragments with native controls and rebuilds its rows on source changes.
+                var groupRoot = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
+                var groupSource = groupRoot.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                    new System.Windows.Automation.AndCondition(
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "音源"),
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.ControlTypeProperty, System.Windows.Automation.ControlType.ComboBox)));
+                Assert.NotNull(groupSource);
+                Assert.Equal(groupSourceHwnd.ToInt32(), groupSource.Current.NativeWindowHandle);
+                Assert.Equal(0, AccessibleObjectFromWindow(groupSourceHwnd, 0xFFFFFFFC, ref iid, out var groupAcc));
+                foreach (var selected in new[] { "本地影音文件", "电脑实时声音" })
+                {
+                    ((Accessibility.IAccessible)groupAcc).set_accValue(0, selected);
+                    Assert.Equal(selected, ((Accessibility.IAccessible)groupAcc).get_accValue(0));
+                    using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
+                }
             }
             catch (Exception ex) { error = ex; }
             finally { Volatile.Write(ref done, true); }
         }) { IsBackground = true };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        using var completion = new System.Windows.Forms.Timer { Interval = 10 };
+        completion.Tick += (_, _) =>
+        {
+            if (Volatile.Read(ref done) || watch.ElapsedMilliseconds >= 10_000) Application.ExitThread();
+        };
         reader.Start();
-        Pump(() => Volatile.Read(ref done), 10_000);
+        completion.Start();
+        Application.Run(); // service UIA's COM callbacks with the real message loop, not intermittent DoEvents
+        completion.Stop();
+        Assert.True(Volatile.Read(ref done), "UIA did not finish within 10 seconds");
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
     });
 

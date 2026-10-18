@@ -50,8 +50,13 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
             AutomationInteropProvider.RaiseAutomationPropertyChangedEvent(provider,
                 new AutomationPropertyChangedEventArgs(AutomationElementIdentifiers.IsEnabledProperty, null, text.Enabled));
         else if (change == AccessibleEvents.LocationChange)
+        {
+            var bounds = provider.BoundingRectangle;
+            // UIA's property-change ABI takes a VARIANT SAFEARRAY, not WindowsBase's managed Rect record.
             AutomationInteropProvider.RaiseAutomationPropertyChangedEvent(provider,
-                new AutomationPropertyChangedEventArgs(AutomationElementIdentifiers.BoundingRectangleProperty, null, provider.BoundingRectangle));
+                new AutomationPropertyChangedEventArgs(AutomationElementIdentifiers.BoundingRectangleProperty, null,
+                    new double[] { bounds.X, bounds.Y, bounds.Width, bounds.Height }));
+        }
     }
 
     [DllImport("UIAutomationCore.dll")]

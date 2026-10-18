@@ -12,15 +12,8 @@ internal sealed partial class Walker
         var left = ReachRoomNode(n => n.Type == "Button" && n.Name.StartsWith(_t.F("{0}：{1}", T("前左"), ""), StringComparison.Ordinal));
         Expect(left.Name.Contains(GroupAirPlayName, StringComparison.Ordinal) && left.Name.Contains(GroupLocalName, StringComparison.Ordinal),
             "speaker room / names", "the front-left position omits an assigned AirPlay/local output");
-        var roomDevice = GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd;
-        var right = ReachRoomNode(n => n.Type == "Button" && n.Name.StartsWith(_t.F("{0}：{1}", T("前右"), ""), StringComparison.Ordinal));
-        // The fixture already starts on Left. Move away first so an old value cannot acknowledge the pending click.
-        Uia.Invoke(right);
-        WaitUntil(() => Native.MsaaValue(roomDevice) == GroupBluetoothName, "front-right room selection", 5000);
         Uia.Invoke(left);
-        // PositionAccessible posts its click. Wait for that retained control's acknowledgement before asking Windows
-        // for a whole cached tree: 2026-10-18 the cache response was malformed during this transition in every language.
-        WaitUntil(() => Native.MsaaValue(roomDevice) == GroupAirPlayName,
+        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd) == GroupAirPlayName,
             "front-left room selection", 5000);
         var selectedDelay = ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
         Expect(selectedDelay.Rect.Width >= 140 * _s.Scale / 100, "speaker room / slider width",
@@ -33,17 +26,16 @@ internal sealed partial class Walker
         // The custom position button receives actual keyboard messages; selecting a position opens no audio path.
         left = ReachRoomNode(n => n.Hwnd == left.Hwnd);
         Native.SendMessageTimeout(left.Hwnd, 0x0100 /* WM_KEYDOWN */, new IntPtr(0x27 /* VK_RIGHT */), IntPtr.Zero, 0x2, 5000, out _);
-        WaitUntil(() => Native.MsaaValue(roomDevice) == GroupBluetoothName,
+        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd) == GroupBluetoothName,
             "arrow-key room selection", 5000);
         ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
         CheckGroupValue(Uia.Snapshot(MainWindow()), T("所选位置延迟（毫秒）"), "29", "room right delay");
         var delay = GroupControl(Uia.Snapshot(MainWindow()), T("所选位置延迟（毫秒）"), "Slider");
-        var groupDelay = GroupControl(Uia.Snapshot(MainWindow()), _t.F("{0} 延迟（毫秒）", GroupBluetoothName), "Slider").Hwnd;
         Native.Msaa(delay.Hwnd)?.set_accValue(0, "31");
-        WaitUntil(() => Native.MsaaValue(groupDelay) == "31",
+        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), _t.F("{0} 延迟（毫秒）", GroupBluetoothName), "Slider").Hwnd) == "31",
             "room delay reflected in the existing output row", 5000);
         Native.Msaa(delay.Hwnd)?.set_accValue(0, "29");
-        WaitUntil(() => Native.MsaaValue(groupDelay) == "29",
+        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), _t.F("{0} 延迟（毫秒）", GroupBluetoothName), "Slider").Hwnd) == "29",
             "room delay draft restored", 5000);
         ReachSpeakerRoom();
         Shoot(MainWindow(), "speaker-room-live", "top-down stereo room, keyboard selection, saved offline outputs");
