@@ -52,9 +52,26 @@ public class LayoutWorkTests
         var contentHwnd = host.Page.Content.Handle;
         var buttonHwnd = button.Handle;
         var comboHwnd = combo.Handle;
-        using var groupHost = new Host(new GroupPage(TestApp.Create(new AppConfig { AutoConnect = false }), inputs: []), 784);
+        var groupConfig = TestApp.Config();
+        groupConfig.GroupSpeakers = [new() { DeviceId = TestApp.DeviceId, Name = "A", Position = SpeakerPosition.Left },
+            new() { DeviceId = "AA:00:00:00:00:02", Name = "B", Position = SpeakerPosition.Right }];
+        groupConfig.GroupCaptureDeviceIds = [TestApp.DeviceId, "AA:00:00:00:00:02"];
+        groupConfig.GroupCapturePositions = new() { [GroupPlan.Key(TestApp.DeviceId)] = SpeakerPosition.Left,
+            [GroupPlan.Key("AA:00:00:00:00:02")] = SpeakerPosition.Right };
+        using var groupHost = new Host(new GroupPage(TestApp.Create(groupConfig), inputs: []), 784);
         var groupHwnd = groupHost.Handle;
         var groupSourceHwnd = All(groupHost.Page).OfType<FluentComboBox>().Single(c => c.AccessibleName == "音源").Handle;
+        using var dialogHost = new Host(new ScrollPage("temporary dialog"), 400);
+        var dialogHwnd = dialogHost.Handle;
+        using var modal = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000),
+            Opacity = 0, ShowInTaskbar = false, Size = new Size(400, 300) };
+        var modalContent = Ui.Stack(4, new TextBlock("modal title"), new TextBlock("modal description"));
+        modalContent.Dock = DockStyle.Fill;
+        modal.Controls.Add(modalContent);
+        using var modalShown = new ManualResetEventSlim();
+        using var modalClosed = new ManualResetEventSlim();
+        IntPtr modalHwnd = IntPtr.Zero;
+        modal.Shown += (_, _) => { modalHwnd = modal.Handle; modalShown.Set(); };
         Exception? error = null;
         bool done = false;
         var reader = new Thread(() =>
@@ -75,6 +92,10 @@ public class LayoutWorkTests
                 request.Add(System.Windows.Automation.AutomationElement.NameProperty);
                 request.Add(System.Windows.Automation.AutomationElement.ControlTypeProperty);
                 request.Add(System.Windows.Automation.AutomationElement.NativeWindowHandleProperty);
+                request.Add(System.Windows.Automation.AutomationElement.BoundingRectangleProperty);
+                request.Add(System.Windows.Automation.AutomationElement.IsEnabledProperty);
+                request.Add(System.Windows.Automation.AutomationElement.ClassNameProperty);
+                request.Add(System.Windows.Automation.AutomationElement.AutomationIdProperty);
                 System.Windows.Automation.AutomationElement root;
                 using (request.Activate()) root = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
                 var nodes = new List<(string Name, System.Windows.Automation.ControlType ControlType, int NativeWindowHandle)>();
@@ -101,6 +122,14 @@ public class LayoutWorkTests
                 var value = (System.Windows.Automation.ValuePattern)statusNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
                 Assert.True(value.Current.IsReadOnly);
                 Assert.Equal("current value", value.Current.Value);
+                using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(dialogHwnd);
+                using (var closed = new ManualResetEventSlim())
+                {
+                    host.BeginInvoke(() => { dialogHost.Dispose(); closed.Set(); });
+                    Assert.True(closed.Wait(TimeSpan.FromSeconds(3)));
+                }
+                using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+                Assert.Equal("current value", value.Current.Value); // closing another fragment must not disconnect this one
                 // The real unified page mixes many fragments with native controls and rebuilds its rows on source changes.
                 var groupRoot = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
                 var groupSource = groupRoot.FindFirst(System.Windows.Automation.TreeScope.Descendants,
@@ -116,6 +145,36 @@ public class LayoutWorkTests
                     Assert.Equal(selected, ((Accessibility.IAccessible)groupAcc).get_accValue(0));
                     using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
                 }
+                var positions = groupRoot.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                    new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.ControlTypeProperty, System.Windows.Automation.ControlType.Button))
+                    .Cast<System.Windows.Automation.AutomationElement>().Where(n => n.Current.Name.StartsWith("前右：") || n.Current.Name.StartsWith("前左："))
+                    .ToDictionary(n => n.Current.Name[..2], n => n.Current.NativeWindowHandle);
+                string repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+                string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+                string probeDll = Path.Combine(repo, "tests", "HomePodCast.GuiSmoke", "bin", configuration, "net10.0-windows", "HomePodCast.GuiSmoke.dll");
+                var start = new System.Diagnostics.ProcessStartInfo("dotnet")
+                {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                };
+                foreach (var arg in new[] { probeDll, "--uia-probe", groupHwnd.ToInt64().ToString(), groupSourceHwnd.ToInt64().ToString(),
+                    positions["前左"].ToString(), positions["前右"].ToString() }) start.ArgumentList.Add(arg);
+                using var probe = new System.Diagnostics.Process { StartInfo = start };
+                bool ready = false;
+                probe.OutputDataReceived += (_, e) => { if (e.Data == "READY") Volatile.Write(ref ready, true); };
+                probe.Start(); probe.BeginOutputReadLine();
+                var readyWait = System.Diagnostics.Stopwatch.StartNew();
+                while (!Volatile.Read(ref ready) && !probe.HasExited && readyWait.ElapsedMilliseconds < 3000) Thread.Sleep(10);
+                if (!Volatile.Read(ref ready) && !probe.HasExited) probe.Kill(entireProcessTree: true);
+                Assert.True(Volatile.Read(ref ready), "The UIA probe did not become ready.");
+                host.BeginInvoke(() => { modal.ShowDialog(groupHost); modalClosed.Set(); });
+                Assert.True(modalShown.Wait(TimeSpan.FromSeconds(3)));
+                probe.StandardInput.WriteLine(modalHwnd.ToInt64()); probe.StandardInput.Flush();
+                bool exited = probe.WaitForExit(5000);
+                if (!exited) probe.Kill(entireProcessTree: true);
+                Assert.True(exited, "The UIA probe did not finish.");
+                output.WriteLine(probe.StandardError.ReadToEnd());
+                Assert.Equal(0, probe.ExitCode);
             }
             catch (Exception ex) { error = ex; }
             finally { Volatile.Write(ref done, true); }

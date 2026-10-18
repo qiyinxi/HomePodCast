@@ -15,17 +15,35 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
 {
     private LayoutPanel Host => host;
     private readonly ConditionalWeakTable<TextBlock, TextProvider> _providers = new();
-    private bool _released;
+    private readonly IntPtr _hwnd = host.Handle;
+    private bool _released, _disconnecting, _reportedUnavailable;
     private TextBlock[] Texts => host.Controls.OfType<TextBlock>().Where(t => t.ParentPainted && t.Visible && !t.Collapsed).ToArray();
     private TextProvider Provider(TextBlock text) => _providers.GetValue(text, t => new TextProvider(this, t));
     private void CheckAvailable()
     {
-        if (_released || host.IsDisposed || !host.IsHandleCreated) throw new ElementNotAvailableException();
+        if (_released || host.IsDisposed || !host.IsHandleCreated)
+        {
+            if (!_reportedUnavailable)
+            {
+                _reportedUnavailable = true;
+                Log.Warn($"UIA: stale {host.GetType().Name} root {_hwnd:X}, released={_released}, disposed={host.IsDisposed}, window={host.IsHandleCreated}");
+            }
+            throw new ElementNotAvailableException();
+        }
     }
     internal void Disconnect()
     {
-        _released = true;
-        UiaDisconnectProvider(this);
+        if (_released) return;
+        _disconnecting = true;
+        try
+        {
+            // Clear the HWND's raised-event map as well as its remote providers. Do not return this provider from
+            // a re-entrant WM_GETOBJECT, but keep its HWND identity usable while UIA disconnects it.
+            UiaReturnRawElementProvider(_hwnd, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            int result = UiaDisconnectProvider(this);
+            if (result < 0) Log.Warn($"UIA: disconnect {_hwnd:X} returned 0x{result:X8}");
+        }
+        finally { _released = true; _disconnecting = false; }
     }
 
     internal void Notify(TextBlock text, AccessibleEvents change)
@@ -61,11 +79,13 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
 
     [DllImport("UIAutomationCore.dll")]
     private static extern int UiaDisconnectProvider([MarshalAs(UnmanagedType.Interface)] IRawElementProviderSimple provider);
+    [DllImport("UIAutomationCore.dll")]
+    private static extern IntPtr UiaReturnRawElementProvider(IntPtr hwnd, IntPtr wParam, IntPtr lParam, IntPtr provider);
 
     public ProviderOptions ProviderOptions => ProviderOptions.ServerSideProvider;
     public IRawElementProviderSimple HostRawElementProvider
     {
-        get { CheckAvailable(); return AutomationInteropProvider.HostProviderFromHandle(host.Handle); }
+        get { if (!_disconnecting) CheckAvailable(); return AutomationInteropProvider.HostProviderFromHandle(_hwnd); }
     }
     public object? GetPatternProvider(int patternId) => null;
     public object? GetPropertyValue(int propertyId)
@@ -116,10 +136,19 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
     {
         private static int _nextId;
         private readonly int _id = Interlocked.Increment(ref _nextId);
+        private bool _reportedUnavailable;
         private void CheckAvailable()
         {
             root.CheckAvailable();
-            if (text.IsDisposed || text.Parent != root.Host) throw new ElementNotAvailableException();
+            if (text.IsDisposed || text.Parent != root.Host)
+            {
+                if (!_reportedUnavailable)
+                {
+                    _reportedUnavailable = true;
+                    Log.Warn($"UIA: stale text {_id}, disposed={text.IsDisposed}, attached={text.Parent == root.Host}");
+                }
+                throw new ElementNotAvailableException();
+            }
         }
         public ProviderOptions ProviderOptions => ProviderOptions.ServerSideProvider;
         public IRawElementProviderSimple? HostRawElementProvider => null;

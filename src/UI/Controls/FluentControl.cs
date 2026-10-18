@@ -238,6 +238,7 @@ internal abstract class LayoutPanel : Panel
 {
     private bool _collapsed;
     private TextAutomation? _textAutomation;
+    private bool _releasingTextAutomation;
 
     protected LayoutPanel()
     {
@@ -361,7 +362,12 @@ internal abstract class LayoutPanel : Panel
 
     protected override void WndProc(ref Message m)
     {
-        if (m.Msg == 0x003D && m.LParam == (IntPtr)(-25) && (AccessibleRole == AccessibleRole.Default
+        if (m.Msg == 0x003D && unchecked((int)m.LParam.ToInt64()) == -25 && _releasingTextAutomation)
+        {
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        if (m.Msg == 0x003D && unchecked((int)m.LParam.ToInt64()) == -25 && (AccessibleRole == AccessibleRole.Default
                 || _textAutomation != null || Controls.OfType<TextBlock>().Any(t => t.ParentPainted)))
         {
             _textAutomation ??= new TextAutomation(this);
@@ -375,9 +381,15 @@ internal abstract class LayoutPanel : Panel
 
     protected override void OnHandleDestroyed(EventArgs e)
     {
-        _textAutomation?.Disconnect();
+        var provider = _textAutomation;
         _textAutomation = null;
-        base.OnHandleDestroyed(e);
+        _releasingTextAutomation = true;
+        try
+        {
+            provider?.Disconnect();
+            base.OnHandleDestroyed(e);
+        }
+        finally { _releasingTextAutomation = false; }
     }
 
     /// <summary>
