@@ -24,7 +24,7 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentComboBox _outputGroups = new() { AccessibleName = L.T("已保存的分组"), MinWidth = 180 };
     private readonly FluentButton _deleteGroup = new(L.T("删除分组"), ButtonKind.Subtle);
     private readonly TextBlock _groupStatus = Ui.Note();
-    private Control _groupPicker = null!;
+    private StackPanel _groupPicker = null!;
     private string[] _outputGroupIds = [];
     private string? _outputGroupSignature;
     private readonly FluentButton _refresh;
@@ -106,7 +106,8 @@ internal sealed class HomePage : ScrollPage
         };
 
         var left = Ui.Stack(12, BuildSpeakerCard(), BuildVolumeCard());
-        var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330 };
+        left.FillLast = true; // the volume card ends where the scene card does
+        var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330, EqualHeights = true };
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
         // Diagnostics live in 设置 → 工具, marking a stutter on a hotkey (unset by default): neither is for every day.
@@ -151,7 +152,7 @@ internal sealed class HomePage : ScrollPage
         var groupRow = Ui.Row(6, _outputGroups, _outputGroups, _deleteGroup); groupRow.Wrap = true;
         _groupPicker = Ui.Stack(3, new TextBlock(L.T("已保存的分组"), TextStyle.Caption, TextRole.Secondary), groupRow);
         _groupStatus.AccessibleName = L.T("输出状态");
-        _groupStatus.Visible = false;
+        _groupStatus.Collapsed = true;
         var status = Ui.Row(8, _status, _dot, _status);
         var card = Ui.Card(head, _groupPicker, picker, status, _streamStats, _groupStatus);
         card.Gap = 12;
@@ -193,7 +194,7 @@ internal sealed class HomePage : ScrollPage
             _outputGroups.Items.Clear(); _outputGroups.Items.AddRange(groups.Select(g => g.Name));
             _outputGroups.SelectedIndex = Array.IndexOf(_outputGroupIds, _app.Config.SelectedOutputGroupId ?? "");
         }
-        _groupPicker.Visible = groups.Count > 0;
+        _groupPicker.Collapsed = groups.Count == 0;
         _deleteGroup.Enabled = _outputGroups.SelectedIndex >= 0;
     }
 
@@ -627,7 +628,7 @@ internal sealed class HomePage : ScrollPage
     {
         var cfg = _app.Config;
         var plan = GroupPlan.FromConfig(cfg);
-        _groupStatus.Visible = plan != null;
+        _groupStatus.Collapsed = plan == null;
         if (plan == null) { _groupStatus.Text = ""; return; }
         var actual = _app.Controller.GroupOutputStatuses;
         var names = plan.Members.Select(m => (m.DeviceId, m.Name))
