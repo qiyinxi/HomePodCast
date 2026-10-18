@@ -57,7 +57,7 @@ internal sealed partial class TrayApp
         _pcMute?.Release("HomePodCast quits");
     }
 
-    /// <summary>设置 →「推流时电脑静音」. Applies at once while streaming: muted now, or unmuted if the mute was ours.</summary>
+    /// <summary>首页 →「仅 HomePod 输出」. Applies at once while streaming: muted now, or unmuted if the mute was ours.</summary>
     public void SetMutePcWhileStreaming(bool on)
     {
         if (Config.MutePcWhileStreaming == on) return;
