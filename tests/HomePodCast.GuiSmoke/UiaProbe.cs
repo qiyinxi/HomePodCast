@@ -20,7 +20,13 @@ internal static class UiaProbe
                 if (actual != owner) throw new InvalidOperationException("Test window belongs to another process.");
             }
             foreach (var hwnd in handles) CheckOwner(hwnd);
-            _ = Uia.Snapshot(handles[0]);
+            var cached = Uia.Snapshot(handles[0]);
+            var live = Uia.SnapshotLive(handles[0]);
+            static string[] Contents(Node root) => root.Descendants().Prepend(root)
+                .Select(n => $"{n.Type}|{n.Name}|{n.Hwnd}|{n.Rect}|{n.Enabled}|{n.ClassName}|{n.AutomationId}")
+                .Order(StringComparer.Ordinal).ToArray();
+            if (!Contents(cached).SequenceEqual(Contents(live)))
+                throw new InvalidOperationException("Live and cached UIA readers disagree.");
             Console.WriteLine("READY"); Console.Out.Flush();
             var dialog = new IntPtr(long.Parse(Console.ReadLine()!));
             CheckOwner(dialog);

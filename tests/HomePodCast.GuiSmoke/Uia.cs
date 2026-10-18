@@ -93,20 +93,54 @@ internal static class Uia
     /// <summary>The whole tree under a window, read in one request (again if a control went away while it was read).</summary>
     public static Node Snapshot(IntPtr hwnd)
     {
+        bool live = false;
         for (int attempt = 1; ; attempt++)
         {
             try
             {
+                if (live) return SnapshotLive(hwnd);
                 AutomationElement root;
-                using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
+                try
+                {
+                    using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
+                }
+                catch (IndexOutOfRangeException ex) when (ex.TargetSite?.DeclaringType?.FullName == "MS.Internal.Automation.CacheHelper"
+                                                          && ex.TargetSite.Name == "ParseTreeDescription")
+                {
+                    // A malformed native bulk-cache response is not a tree we can validate. Read the live raw tree
+                    // instead; every content/layout assertion still runs, and any unrelated array error still fails.
+                    Console.WriteLine("note  UIA native cache parser failed; reading the live raw tree");
+                    live = true;
+                    return SnapshotLive(hwnd);
+                }
                 return Convert(root, null);
             }
             catch (Exception ex) when (attempt < 4 && ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException
                                            or InvalidOperationException && Native.IsWindow(hwnd))
             {
+                live = true;
                 Thread.Sleep(300);
             }
         }
+    }
+
+    internal static Node SnapshotLive(IntPtr hwnd)
+    {
+        Node Read(AutomationElement element, Node? parent)
+        {
+            var current = element.Current;
+            var node = new Node
+            {
+                Element = element, Parent = parent, Name = current.Name,
+                Type = current.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                Rect = ToRectangle(current.BoundingRectangle), Hwnd = new IntPtr(current.NativeWindowHandle),
+                Enabled = current.IsEnabled, ClassName = current.ClassName, AutomationId = current.AutomationId,
+            };
+            for (var child = TreeWalker.RawViewWalker.GetFirstChild(element); child != null;
+                 child = TreeWalker.RawViewWalker.GetNextSibling(child)) node.Children.Add(Read(child, node));
+            return node;
+        }
+        return Read(AutomationElement.FromHandle(hwnd), null);
     }
 
     private static Node Convert(AutomationElement e, Node? parent)
