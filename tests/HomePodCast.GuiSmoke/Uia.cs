@@ -106,6 +106,16 @@ internal static class Uia
             {
                 Thread.Sleep(300);
             }
+            catch (IndexOutOfRangeException ex) when (attempt < 4 && Native.IsWindow(hwnd)
+                && ex.TargetSite?.DeclaringType?.FullName == "MS.Internal.Automation.CacheHelper"
+                && ex.TargetSite.Name == "ParseTreeDescription")
+            {
+                // 2026-10-18 CI: closing the common file picker while its new source rebuilt the page produced
+                // an inconsistent native bulk-cache response. Retry the same complete request, within the existing
+                // four-attempt budget; a persistent response error or an array error in our own code still fails.
+                Console.WriteLine($"note  UIA cache changed during collection; retrying complete snapshot ({attempt}/4)");
+                Thread.Sleep(300);
+            }
         }
     }
 
