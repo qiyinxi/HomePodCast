@@ -80,6 +80,17 @@ internal static class VolumeKeyRules
         null => Enum.IsDefined(current) ? current : VolumeKeyMode.FollowWindows,
     };
 
+    /// <summary>
+    /// The mode that applies, for every place that decides the route: with 推流时电脑静音
+    /// (AppConfig.MutePcWhileStreaming) on, <see cref="VolumeKeyMode.FollowWindows"/> is handled as
+    /// <see cref="VolumeKeyMode.WhileStreaming"/>. Following a Windows output we muted ourselves would mute the HomePod,
+    /// and every key press would unmute the PC speakers again (user report 2026-10-18: 「一调音量，电脑那边就又响了」).
+    /// Applied here rather than by rewriting the setting, so a usage profile that still says FollowWindows can't bring
+    /// that back. The other modes are unchanged: WhenWindowsMuted works on a muted Windows by design.
+    /// </summary>
+    public static VolumeKeyMode Effective(VolumeKeyMode mode, bool mutePcWhileStreaming) =>
+        mutePcWhileStreaming && mode == VolumeKeyMode.FollowWindows ? VolumeKeyMode.WhileStreaming : mode;
+
     public static VolumeKeyCommand CommandFor(int vk) => vk switch
     {
         VkVolumeUp => VolumeKeyCommand.Up,

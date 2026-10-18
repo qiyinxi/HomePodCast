@@ -68,6 +68,7 @@ internal sealed partial class TrayApp
         Routing.Reload();
         UpdateMonitorGuard();
         UpdateVolumeKeys();
+        UpdatePcMute(); // the profile may capture another device
         _followLink?.CapChanged();
         _form.ReloadConfiguration();
         KickPlayers();

@@ -40,6 +40,14 @@ highlights its current speaker, and choosing a position starts no measurement. H
 navigation slot. Each action requires its own button click. About keeps version, software updates and license;
 the existing test, log and export behavior stays the same.
 
+**Mute the PC while streaming** (Settings, experimental since 1.2, off by default) mutes the Windows default output
+while streaming, so only the HomePod plays, and unmutes it when the session ends or HomePodCast quits. It only undoes
+its own mute: a Windows muted before, or unmuted by hand while streaming, is left alone; a PC left muted by a crash
+or "End task" gets its sound back at the next start. While it is on, "HomePod
+follows the Windows volume" works like "Control the HomePod while streaming". When the sound also plays on the PC's
+speakers or headphones, Home says so, with **Play on the HomePod only** and **Don't show again**. Nothing is muted
+while another capture device is chosen.
+
 Synchronization targets differ: AirPlay 2 uses a shared timeline and aims for tight synchronization; AirPlay 1 and
 ordinary Bluetooth provide basic alignment after calibration; DLNA offers rough alignment for different rooms. Software
 receiver PCM/marker bounds are not acoustic hardware guarantees.
@@ -82,6 +90,12 @@ AirPlay 握手检查不代表播放验证，独立 DLNA 服务仍需实测。
 
 「诊断」页在原音画同步测试的位置集中音画同步测试、日志文件夹和脱敏诊断报告，各自需要明确点击按钮才执行。
 关于页保留版本、软件更新和许可证；原有测试、日志和导出行为不变。
+
+「推流时电脑静音」（设置，从 1.2 起为实验性，默认关）在推流时把 Windows 默认输出静音，只让 HomePod 出声；会话结束
+或退出 HomePodCast 时恢复。它只取消自己设的静音：推流前已经静音的、推流时被手动取消静音的，都不去动；崩溃或被「结束任务」后电脑仍静音的，
+下次启动时恢复。打开后，
+「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。声音也从电脑的扬声器或耳机里放出来时，首页会提示，并提供
+「只用 HomePod 播放」和「不再提示」。选了别的采集设备时不会静音。
 
 同步目标按类型区分：AirPlay 2 共用时间线、目标严格同步；AirPlay 1 和普通蓝牙校准后基本对齐；DLNA 适合不同房间的
 大致对齐。软件接收端的 PCM／标记边界不能当作真实声音的硬件保证。

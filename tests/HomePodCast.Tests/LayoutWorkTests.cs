@@ -750,6 +750,46 @@ public class LayoutWorkTests
         return made;
     }
 
+    /// <summary>
+    /// A row hidden in a layout is Collapsed, never only Visible = false: the layouts leave out collapsed controls only, so
+    /// a merely hidden one kept its height. 2026-10-18, 首页: the empty 「已保存的分组」 row left a blank under the speaker's
+    /// name.
+    /// </summary>
+    [Fact]
+    public void Hidden_rows_take_no_space_on_any_page() => Sta.Run(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        TestApp.Field<MixerPage>(window, "_mixer").FindApps = _ => [];
+        ShowMain(window);
+        var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
+        foreach (var page in Enum.GetValues<AppPage>())
+        {
+            Go(window, page);
+            var hidden = All(pages[(int)page])
+                .Where(c => c.Parent is LayoutPanel { Visible: true } && !c.Visible && !LayoutPanel.IsCollapsed(c) && c.Height > 0)
+                .Select(c => $"{c.GetType().Name} in {c.Parent!.GetType().Name} ({c.Height} px)").ToList();
+            Assert.True(hidden.Count == 0, $"{page}: hidden but not collapsed: {string.Join(", ", hidden)}");
+        }
+        window.Hide();
+    });
+
+    /// <summary>首页 side by side: the speaker and volume cards end where the scene card does (2026-10-18: 60 px apart).</summary>
+    [Fact]
+    public void Home_s_columns_end_on_one_line() => Sta.Run(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        ShowMain(window, prepare: false);
+        window.ClientSize = new Size(Theme.Dp(1100, window.DeviceDpi), Theme.Dp(800, window.DeviceDpi));
+        Go(window, AppPage.Home);
+        window.PerformLayout();
+        var columns = All(window).OfType<Columns>().First();
+        var (left, right) = (columns.Controls[0], columns.Controls[1]);
+        Assert.True(left.Right < right.Left, "not side by side at this width");
+        var lastLeft = left.Controls.Cast<Control>().Last(c => !LayoutPanel.IsCollapsed(c));
+        Assert.Equal(right.Bottom, left.Top + lastLeft.Bottom);
+        window.Hide();
+    });
+
     /// <summary>The system DPI WinForms starts each new control at, as when the main monitor has this scale.</summary>
     private static void WithSystemDpi(int dpi, Action body)
     {

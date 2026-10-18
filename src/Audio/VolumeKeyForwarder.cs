@@ -169,13 +169,21 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
 
     private static bool IsStep(float delta, float step) => step > 0 && MathF.Abs(MathF.Abs(delta) - step) < 0.003f;
 
+    /// <summary>
+    /// Raised on Windows' notification thread for every change of the watched endpoint's volume or mute, in every mode,
+    /// with the change's event context (推流时电脑静音 tells its own changes apart by <see cref="PcMute.EventContext"/>).
+    /// Handlers must only set flags or post.
+    /// </summary>
+    public event Action<Guid>? Notified;
+
     private void OnNotify(Guid context, bool muted, float level)
     {
+        Notified?.Invoke(context);
         switch (_mode)
         {
             case EndpointMode.Follow:
                 (EndpointState From, EndpointState To)? change;
-                lock (_follower) change = _follower.Next(new EndpointState(muted, level), ours: context == _context);
+                lock (_follower) change = _follower.Next(new EndpointState(muted, level), NotFollowed(context, _context));
                 if (change is { } c) WindowsChanged?.Invoke(c.From, c.To);
                 return;
             case EndpointMode.Forward when context != _context: // not our own restore
@@ -184,6 +192,13 @@ internal sealed partial class VolumeKeyForwarder : IDisposable
                 return;
         }
     }
+
+    /// <summary>
+    /// A change Follow never follows: our own level writes, and PcMute's mute changes (推流时电脑静音). Its unmute when
+    /// the setting is turned off can arrive after following has started again; it is not the user's, and must not
+    /// unmute (or mute) the HomePod.
+    /// </summary>
+    internal static bool NotFollowed(Guid context, Guid ownContext) => context == ownContext || context == PcMute.EventContext;
 
     private static VolumeKeys KeysHeld()
     {

@@ -85,7 +85,7 @@
   "仅在 Windows 静音时": "Only while Windows is muted",
   "关": "Off",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "While streaming, volume up, volume down and mute change only the HomePod and leave the Windows volume alone; the HomePod volume shows at the bottom of the screen. When not streaming, they change Windows as usual.",
-  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "The Windows volume is the HomePod volume (Windows 100% = the volume limit): the keys change Windows as usual, and changing the HomePod in this app changes Windows too; on connecting, both sides go to the lower of the two. Muting Windows mutes the HomePod; if your default output is the PC speakers and you want to hear only the HomePod, choose \"Control the HomePod while streaming\".",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开下面的「推流时电脑静音」。": "The Windows volume is the HomePod volume (Windows 100% = the volume limit): the keys change Windows as usual, and changing the HomePod in this app changes Windows too; on connecting, both sides go to the lower of the two. Muting Windows mutes the HomePod; if your default output is the PC speakers and you want to hear only the HomePod, turn on \"Mute the PC while streaming\" below.",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Only while Windows is muted or at 0%, the volume keys change the HomePod instead, and Windows stays muted (mute it rather than setting 0%).",
   "音量键只调 Windows，不影响 HomePod。": "The volume keys change only Windows, not the HomePod.",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "No usable output device: while streaming, the volume keys control the HomePod directly.",
@@ -214,7 +214,7 @@
   "按下": "Press",
   "全部推送与按程序分流": "Stream everything vs. per-app routing",
   "全部推送（默认，推荐打游戏）": "Stream everything (default, recommended for gaming)",
-  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Captures the whole sound output directly, with no added latency. Every app goes to the HomePod; whether this PC also plays depends on the Windows volume, so mute Windows to hear it on the speaker only.",
+  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「设置 → 推流时电脑静音」。": "Captures the whole sound output directly, with no added latency. Every app goes to the HomePod; whether this PC also plays depends on the Windows volume. To hear it on the speaker only, turn on Settings → \"Mute the PC while streaming\".",
   "按程序分流（额外延迟约 {0} ms）": "Per-app routing (about {0} ms more latency)",
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Turns on as soon as any app has its own destination, or the default is \"This PC\". Windows can only capture apps one by one, and that path is slower: sound sent to the HomePod is about {0} ms later. The browser extension adds this to its picture delay automatically; games can't compensate. Apps set to \"HomePod\" are silent on this PC and show 0% in the Windows volume mixer; system sounds play on this PC only. Set every app back to \"Default\" with HomePod as the default to return to streaming everything.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Giving an app its own destination switches to per-app routing: Windows can only capture apps one by one, so sound sent to the HomePod is about {0} ms later than when streaming everything (the browser extension compensates the picture; games can't).\n\nApps set to \"HomePod\" become silent on this PC (0% in the Windows volume mixer), and system sounds play on this PC only.\n\nIf latency matters most, for example when gaming, keep streaming everything. Turn on per-app routing?",
@@ -717,5 +717,13 @@
   "所选位置延迟（毫秒）": "Selected position delay (ms)",
   "所选位置音量偏移": "Selected position volume offset",
   "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Select a position to assign an added speaker; arrow keys move between positions. Press Apply after editing. Dashed positions show the actual downmix destination.",
-  "不分配（保留完整立体声）": "Unassign (keep full stereo)"
+  "不分配（保留完整立体声）": "Unassign (keep full stereo)",
+  "推流时电脑静音（实验性）": "Mute the PC while streaming (experimental)",
+  "推流时把 Windows 默认输出静音，只让 HomePod 出声，断开或退出时恢复。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。": "While streaming, mutes the Windows default output so only the HomePod plays; the PC's sound comes back when you disconnect or quit. While this is on, \"HomePod follows the Windows volume\" works like \"Control the HomePod while streaming\".",
+  "已打开「推流时电脑静音」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。": "\"Mute the PC while streaming\" is on, so this works like \"Control the HomePod while streaming\": while streaming, volume up, volume down and mute change only the HomePod. When not streaming, they change Windows as usual.",
+  "电脑也在出声": "The PC is playing too",
+  "HomePod 跟随 Windows 音量，所以电脑这边也在放。": "The HomePod follows the Windows volume, so the PC plays as well.",
+  "推送到 HomePod 的声音，电脑这边也在放。": "What is sent to the HomePod is playing on this PC as well.",
+  "只用 HomePod 播放": "Play on the HomePod only",
+  "不再提示": "Don't show again"
 }

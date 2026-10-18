@@ -60,7 +60,7 @@ internal sealed partial class GroupPanel
         _clearOutputs.Click += (_, _) =>
         {
             if (_active || _fileSource) return;
-            ReadRows(); _speakers.Clear(); _tsid = null; _leaderOnly.Visible = false;
+            ReadRows(); _speakers.Clear(); _tsid = null; _leaderOnly.Collapsed = true;
             _localSelection.Clear(); _dlnaSelection.Clear(); ShowMembers();
         };
         _delayMode.Items.AddRange([L.T("自动"), L.T("手动")]);
@@ -166,10 +166,10 @@ internal sealed partial class GroupPanel
         _outputType.Enabled = !_active && !_fileSource;
         _refreshOutputs.Enabled = !_active && !_fileSource && !_scanningOutputs;
         _clearOutputs.Enabled = !_active && !_fileSource && LiveOutputCount > 0;
-        _timingControls.Visible = !_fileSource;
+        _timingControls.Collapsed = _fileSource;
         _delayMode.Enabled = !_active;
         _groupDelay.Enabled = !_active && _delayMode.SelectedIndex == 1;
-        _auxiliaryMembers.Visible = !_fileSource;
+        _auxiliaryMembers.Collapsed = _fileSource;
         _add.Enabled = !_active && _addActions.Count > 0 && (_tsid == null || _outputType.SelectedIndex != 0 && !_fileSource);
         _addButton.Enabled = _add.Enabled && LiveOutputCount < 8;
         _alignmentTier.Text = AlignmentText();
@@ -203,12 +203,12 @@ internal sealed partial class GroupPanel
 
     private static void AddDetails(StackPanel entry, string name, params Control[] controls)
     {
-        var body = Ui.Stack(4, controls); body.Visible = false;
+        var body = Ui.Stack(4, controls); body.Collapsed = true;
         var toggle = new FluentButton(L.T("更多设置"), ButtonKind.Subtle) { AccessibleName = L.F("{0} 更多设置", name) };
         bool expanded = false;
         toggle.Click += (_, _) =>
         {
-            expanded = !expanded; body.Visible = expanded;
+            expanded = !expanded; body.Collapsed = !expanded;
             toggle.Text = expanded ? L.T("收起设置") : L.T("更多设置");
         };
         entry.Controls.Add(toggle); entry.Controls.Add(body);

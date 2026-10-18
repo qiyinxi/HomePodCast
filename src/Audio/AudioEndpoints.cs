@@ -73,7 +73,7 @@ public static class AudioEndpoints
         }
     }
 
-    private static AudioEndpoint? Describe(IMMDevice device)
+    internal static AudioEndpoint? Describe(IMMDevice device)
     {
         if (device.GetId(out var id) < 0 || id == null) return null;
         return new AudioEndpoint(id, CoreAudio.FriendlyName(device), FormFactor(device));

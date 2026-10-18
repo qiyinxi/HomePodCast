@@ -85,7 +85,7 @@
   "仅在 Windows 静音时": "Kun når Windows er lydløs",
   "关": "Fra",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "Under streaming ændrer tasterne for lydstyrke op, lydstyrke ned og slå lyd fra kun HomePod, og lydstyrken i Windows ændres ikke; HomePods lydstyrke vises nederst på skærmen. Uden streaming styrer de Windows som normalt.",
-  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Lydstyrken i Windows er HomePods lydstyrke (100 % i Windows = maks. lydstyrke): tasterne styrer Windows som normalt, og ændrer du HomePod i appen, ændres Windows også; ved tilslutning går begge sider til den laveste af de to. Når Windows er lydløs, er HomePod det også; hvis computerens højttalere er standardoutput, og du kun vil høre HomePod, så vælg \"Styr HomePod under streaming\".",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开下面的「推流时电脑静音」。": "Lydstyrken i Windows er HomePods lydstyrke (100 % i Windows = maks. lydstyrke): tasterne styrer Windows som normalt, og ændrer du HomePod i appen, ændres Windows også; ved tilslutning går begge sider til den laveste af de to. Når Windows er lydløs, er HomePod det også; hvis computerens højttalere er standardoutput, og du kun vil høre HomePod, så slå \"Slå lyden fra på computeren under streaming\" til nedenfor.",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Kun når Windows er lydløs eller på 0 %, styrer lydstyrketasterne HomePod i stedet, og Windows forbliver lydløs (slå hellere lyden fra end at vælge 0 %).",
   "音量键只调 Windows，不影响 HomePod。": "Lydstyrketasterne styrer kun Windows, ikke HomePod.",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "Ingen brugbar outputenhed: Under streaming styrer lydstyrketasterne HomePod direkte.",
@@ -214,7 +214,7 @@
   "按下": "Tryk",
   "全部推送与按程序分流": "Stream alt eller routing pr. app",
   "全部推送（默认，推荐打游戏）": "Stream alt (standard, anbefalet til spil)",
-  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Optager hele lydoutputtet direkte uden ekstra forsinkelse. Alle apps sendes til HomePod; om pc'en også afspiller, afhænger af lydstyrken i Windows, så slå lyden fra i Windows for kun at høre den i højttaleren.",
+  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「设置 → 推流时电脑静音」。": "Optager hele lydoutputtet direkte uden ekstra forsinkelse. Alle apps sendes til HomePod; om pc'en også afspiller, afhænger af lydstyrken i Windows. Slå Indstillinger → \"Slå lyden fra på computeren under streaming\" til for kun at høre den i højttaleren.",
   "按程序分流（额外延迟约 {0} ms）": "Routing pr. app (ca. {0} ms mere forsinkelse)",
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Slås til, så snart en app har sin egen destination, eller standarden er \"Denne pc\". Windows kan kun optage apps én ad gangen, og den vej er langsommere: lyd til HomePod kommer ca. {0} ms senere. Browserudvidelsen lægger automatisk dette til billedforsinkelsen; spil kan ikke kompensere. Apps, der er indstillet til \"HomePod\", er lydløse på pc'en og vises med 0 % i lydstyrkemixeren i Windows; systemlyde afspilles kun på pc'en. Sæt alle apps tilbage til \"Standard\" med HomePod som standard for at vende tilbage til at streame alt.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Hvis en app får sin egen destination, skiftes der til routing pr. app: Windows kan kun optage apps én ad gangen, så lyd til HomePod kommer ca. {0} ms senere end ved streaming af alt (browserudvidelsen kompenserer billedet; spil kan ikke).\n\nApps, der er indstillet til \"HomePod\", bliver lydløse på pc'en (0 % i lydstyrkemixeren i Windows), og systemlyde afspilles kun på pc'en.\n\nHvis forsinkelsen betyder mest, f.eks. i spil, så fortsæt med at streame alt. Slå routing pr. app til?",
@@ -717,5 +717,13 @@
   "所选位置延迟（毫秒）": "Forsinkelse på valgt position (ms)",
   "所选位置音量偏移": "Lydstyrkeforskydning på valgt position",
   "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Vælg en position for at tildele en tilføjet højttaler; piletaster skifter position. Tryk Anvend efter redigering. Stiplede positioner viser den faktiske nedmixning.",
-  "不分配（保留完整立体声）": "Fjern tildeling (behold fuld stereo)"
+  "不分配（保留完整立体声）": "Fjern tildeling (behold fuld stereo)",
+  "推流时电脑静音（实验性）": "Slå lyden fra på computeren under streaming (eksperimentelt)",
+  "推流时把 Windows 默认输出静音，只让 HomePod 出声，断开或退出时恢复。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。": "Slår lyden fra på Windows' standardoutput under streaming, så kun HomePod spiller; lyden kommer tilbage, når du afbryder eller afslutter. Mens det er slået til, virker \"HomePod følger Windows' lydstyrke\" som \"Styr HomePod under streaming\".",
+  "已打开「推流时电脑静音」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。": "\"Slå lyden fra på computeren under streaming\" er slået til, så det virker som \"Styr HomePod under streaming\": under streaming ændrer tasterne for lydstyrke op, lydstyrke ned og slå lyd fra kun HomePod. Uden streaming styrer de Windows som normalt.",
+  "电脑也在出声": "Computeren spiller også",
+  "HomePod 跟随 Windows 音量，所以电脑这边也在放。": "HomePod følger Windows' lydstyrke, så computeren spiller også.",
+  "推送到 HomePod 的声音，电脑这边也在放。": "Det, der sendes til HomePod, spiller også på denne computer.",
+  "只用 HomePod 播放": "Afspil kun på HomePod",
+  "不再提示": "Vis ikke igen"
 }

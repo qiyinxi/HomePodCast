@@ -537,7 +537,12 @@ internal sealed partial class Walker
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
-
+        // 推流时电脑静音 is off on a fresh config too. Not switched on here either: it would mute the runner's default output.
+        string mutePcTitle = T("推流时电脑静音（实验性）"); // experimental since 1.2
+        var mutePc = Find(page, n => n.Name == mutePcTitle && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var mutePcState = mutePc == null ? null : Native.MsaaState(mutePc.Hwnd);
+        Expect(mutePcState is { } ms && (ms & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
+            $"「{mutePcTitle}」 is not off on a fresh config (state {mutePcState?.ToString("X") ?? "not found"})");
     }
 
     private void CheckAvSync(Node tree)
