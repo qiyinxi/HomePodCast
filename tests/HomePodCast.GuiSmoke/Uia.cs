@@ -22,7 +22,8 @@ internal sealed class Node
     private string? _text;
 
     /// <summary>The control's own text (its window text), read when asked.</summary>
-    public string Text => _text ??= Hwnd == IntPtr.Zero ? "" : Native.ControlText(Hwnd);
+    public string Text => _text ??= Hwnd != IntPtr.Zero ? Native.ControlText(Hwnd)
+        : Element.TryGetCurrentPattern(ValuePattern.Pattern, out var value) ? ((ValuePattern)value).Current.Value : "";
 
     /// <summary>
     /// Shows or is named <paramref name="text"/>. A settings row (SettingRow) may name its control after the row's title;

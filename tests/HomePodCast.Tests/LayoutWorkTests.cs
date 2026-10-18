@@ -38,6 +38,92 @@ public class LayoutWorkTests
     }
 
     [Fact]
+    public void Windows_UI_Automation_can_read_parent_painted_text_as_text_nodes() => Sta.Run(() =>
+    {
+        var page = new ScrollPage("painted title");
+        var status = new TextBlock("current value") { AccessibleName = "status" };
+        var button = new FluentButton("push");
+        page.Content.Controls.AddRange([status, button]);
+        using var host = new Host(page, 784);
+        Assert.True(host.Page.TitleText!.Visible);
+        var hwnd = host.Handle;
+        var contentHwnd = host.Page.Content.Handle;
+        Exception? error = null;
+        bool done = false;
+        var reader = new Thread(() =>
+        {
+            try
+            {
+                var iid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+                Assert.Equal(0, AccessibleObjectFromWindow(contentHwnd, 0xFFFFFFFC, ref iid, out var msaa));
+                var acc = (Accessibility.IAccessible)msaa;
+                output.WriteLine($"MSAA children: {acc.accChildCount}");
+                var child = (Accessibility.IAccessible)acc.get_accChild(1);
+                output.WriteLine($"MSAA text: {child.get_accName(0)}, role {child.get_accRole(0)}, state {child.get_accState(0)}");
+                var request = new System.Windows.Automation.CacheRequest
+                {
+                    TreeScope = System.Windows.Automation.TreeScope.Subtree,
+                    TreeFilter = System.Windows.Automation.Automation.RawViewCondition,
+                };
+                request.Add(System.Windows.Automation.AutomationElement.NameProperty);
+                request.Add(System.Windows.Automation.AutomationElement.ControlTypeProperty);
+                request.Add(System.Windows.Automation.AutomationElement.NativeWindowHandleProperty);
+                System.Windows.Automation.AutomationElement root;
+                using (request.Activate()) root = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+                var nodes = new List<(string Name, System.Windows.Automation.ControlType ControlType, int NativeWindowHandle)>();
+                void Walk(System.Windows.Automation.AutomationElement node)
+                {
+                    nodes.Add((node.Cached.Name, node.Cached.ControlType, node.Cached.NativeWindowHandle));
+                    foreach (System.Windows.Automation.AutomationElement child in node.CachedChildren) Walk(child);
+                }
+                Walk(root);
+                output.WriteLine(string.Join("\n", nodes.Select(n => $"{n.ControlType.ProgrammaticName}: {n.Name} hwnd={n.NativeWindowHandle}")));
+                Assert.Contains(nodes, n => n.Name == "painted title" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "push" && n.ControlType == System.Windows.Automation.ControlType.Button && n.NativeWindowHandle != 0);
+                var statusNode = System.Windows.Automation.AutomationElement.FromHandle(contentHwnd)
+                    .FindFirst(System.Windows.Automation.TreeScope.Children,
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "status"));
+                Assert.NotNull(statusNode);
+                var value = (System.Windows.Automation.ValuePattern)statusNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
+                Assert.True(value.Current.IsReadOnly);
+                Assert.Equal("current value", value.Current.Value);
+            }
+            catch (Exception ex) { error = ex; }
+            finally { Volatile.Write(ref done, true); }
+        }) { IsBackground = true };
+        reader.Start();
+        Pump(() => Volatile.Read(ref done), 10_000);
+        if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
+    });
+
+    [DllImport("oleacc.dll")]
+    private static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid,
+        [MarshalAs(UnmanagedType.Interface)] out object accessible);
+
+    [Fact]
+    public void Every_page_prepares_text_without_windows_including_dynamic_mixer_rows() => Sta.Run(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        var mixer = TestApp.Field<MixerPage>(window, "_mixer");
+        mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" }];
+        ShowMain(window);
+        int saved = 0;
+        foreach (var page in Enum.GetValues<AppPage>())
+        {
+            Go(window, page);
+            var shown = TestApp.Field<ScrollPage[]>(window, "_pages")[(int)page];
+            var texts = All(shown).OfType<TextBlock>().Where(t => t.ParentPainted).ToArray();
+            saved += texts.Length;
+            output.WriteLine($"{page}: {texts.Length} windowless texts, {Handles(shown)} windows");
+            Assert.NotEmpty(texts);
+            Assert.All(texts, text => Assert.False(text.IsHandleCreated, $"{page}: 「{text.Text}」 created a window"));
+        }
+        Assert.True(saved >= 140, $"only {saved} text windows removed");
+        window.Hide();
+    });
+
+    [Fact]
     public void Home_texts_keep_their_layout_and_accessibility_without_windows() => Sta.Run(() =>
     {
         using var host = new Host(new HomePage(TestApp.Create(TestApp.Config())), 784);
@@ -748,7 +834,7 @@ public class LayoutWorkTests
 
     private static void AssertNoOverlap(Control root)
     {
-        var shown = root.Controls.Cast<Control>().Where(c => c.Visible && c.Width > 0 && c.Height > 0).ToList();
+        var shown = root.Controls.Cast<Control>().Where(c => (c is TextBlock text ? text.Visible : c.Visible) && c.Width > 0 && c.Height > 0).ToList();
         for (int i = 0; i < shown.Count; i++)
         for (int j = i + 1; j < shown.Count; j++)
             Assert.False(shown[i].Bounds.IntersectsWith(shown[j].Bounds), $"{shown[i].GetType().Name} {shown[i].Bounds} and {shown[j].GetType().Name} {shown[j].Bounds} overlap");

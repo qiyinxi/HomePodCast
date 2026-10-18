@@ -60,7 +60,7 @@ internal static class Checks
             if (!texts.Cjk && Texts.HasCjk(n.Name) && !AllowedCjk(n.Name, userData))
                 report.Fail(where, $"untranslated text in {texts.Language}: {n.Describe()}");
 
-            if (n.Type == "Text" && n.HasSize && n.Hwnd != IntPtr.Zero && TextFit.Needed(n.Name, n.Rect, dpi, !texts.Cjk) is { } needed)
+            if (n.Type == "Text" && n.HasSize && TextFit.Needed(n.Name, n.Rect, dpi, !texts.Cjk) is { } needed)
                 report.Warn(where, $"{n.Describe()} is probably cut off with an ellipsis (needs about {needed}px)");
         }
     }

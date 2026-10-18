@@ -237,6 +237,7 @@ internal static class Shapes
 internal abstract class LayoutPanel : Panel
 {
     private bool _collapsed;
+    private TextAutomation? _textAutomation;
 
     protected LayoutPanel()
     {
@@ -302,11 +303,33 @@ internal abstract class LayoutPanel : Panel
             if (text.ParentPainted) text.DrawInParent(e.Graphics);
     }
 
+    protected override void OnControlRemoved(ControlEventArgs e)
+    {
+        base.OnControlRemoved(e);
+        if (e.Control is TextBlock { ParentPainted: true })
+        {
+            Invalidate(e.Control.Bounds);
+            if (IsHandleCreated) AccessibilityNotifyClients(AccessibleEvents.Reorder, -1);
+            _textAutomation?.Notify((TextBlock)e.Control, AccessibleEvents.Reorder);
+        }
+    }
+
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        base.OnControlAdded(e);
+        if (e.Control is TextBlock { ParentPainted: true } text && IsHandleCreated)
+        {
+            Invalidate(text.Bounds);
+            PaintedTextChanged(text, AccessibleEvents.Reorder);
+        }
+    }
+
     protected override AccessibleObject CreateAccessibilityInstance() => new LayoutAccessible(this);
 
     internal void PaintedTextChanged(TextBlock text, AccessibleEvents change)
     {
         if (!IsHandleCreated) return;
+        _textAutomation?.Notify(text, change);
         if (change == AccessibleEvents.Reorder) AccessibilityNotifyClients(change, -1);
         else if (AccessibilityObject is LayoutAccessible accessible)
         {
@@ -338,8 +361,23 @@ internal abstract class LayoutPanel : Panel
 
     protected override void WndProc(ref Message m)
     {
+        if (m.Msg == 0x003D && m.LParam == (IntPtr)(-25) && (AccessibleRole == AccessibleRole.Default
+                || _textAutomation != null || Controls.OfType<TextBlock>().Any(t => t.ParentPainted)))
+        {
+            _textAutomation ??= new TextAutomation(this);
+            m.Result = System.Windows.Automation.Provider.AutomationInteropProvider.ReturnRawElementProvider(
+                Handle, m.WParam, m.LParam, _textAutomation);
+            return;
+        }
         KeepChildOrder(ref m);
         base.WndProc(ref m);
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        _textAutomation?.Disconnect();
+        _textAutomation = null;
+        base.OnHandleDestroyed(e);
     }
 
     /// <summary>

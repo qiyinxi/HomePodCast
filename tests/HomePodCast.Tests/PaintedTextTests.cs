@@ -11,7 +11,7 @@ public class PaintedTextTests
     public void Painting_matches_windowed_text_and_invalidates_old_and_new_bounds() => Sta.Run(() =>
     {
         using var host = new StackPanel { Size = new Size(300, 160) };
-        using var text = new TextBlock("Text 国\nsecond line", wrap: true);
+        using var text = new TextBlock("Text 国\nsecond line", wrap: true, nativeWindow: true);
         host.Controls.Add(text);
         text.Bounds = new Rectangle(12, 10, 220, 70);
         using var expected = new Bitmap(text.Width, text.Height);
@@ -20,7 +20,6 @@ public class PaintedTextTests
         // A different instance: migration is deliberately forbidden once a native window exists.
         using var painted = new TextBlock(text.Text, wrap: true) { Bounds = text.Bounds };
         host.Controls.Add(painted);
-        painted.PaintInParent();
         Assert.Equal(text.DeviceDpi, painted.DeviceDpi);
         Assert.Equal(text.TextFont, painted.TextFont);
         using var actual = new Bitmap(host.Width, host.Height);
@@ -40,6 +39,9 @@ public class PaintedTextTests
         painted.Text = "changed";
         Assert.NotEmpty(invalidated);
         Assert.Equal("changed", painted.AccessibilityObject.Name);
+        painted.AccessibleName = "status";
+        Assert.Equal("status", painted.AccessibilityObject.Name);
+        Assert.Equal("changed", painted.AccessibilityObject.Value);
         Assert.True(painted.AccessibilityObject.State.HasFlag(AccessibleStates.Unavailable));
         Assert.False(painted.IsHandleCreated);
     });
@@ -52,8 +54,6 @@ public class PaintedTextTests
         using var button = new FluentButton("button");
         using var last = new TextBlock("last");
         host.Controls.AddRange([first, button, last]);
-        first.PaintInParent();
-        last.PaintInParent();
         LayoutPanel.CreateWindows(host, () => false);
         var accessible = host.AccessibilityObject;
         Assert.Equal(3, accessible.GetChildCount());
@@ -69,5 +69,31 @@ public class PaintedTextTests
         host.Visible = true;
         Assert.True(first.Visible);
         Assert.False(first.IsHandleCreated || last.IsHandleCreated);
+    });
+
+    [Fact]
+    public void Native_services_and_plain_hosts_keep_a_window_but_dynamic_layout_texts_do_not() => Sta.Run(() =>
+    {
+        using var host = new StackPanel();
+        _ = host.Handle;
+        using var tooltipText = new TextBlock("tooltip", nativeWindow: true);
+        using var tips = new ToolTip();
+        tips.SetToolTip(tooltipText, "details");
+        host.Controls.Add(tooltipText);
+        using var dynamicText = new TextBlock("added after the host's window");
+        host.Controls.Add(dynamicText);
+        Assert.True(tooltipText.IsHandleCreated);
+        Assert.False(dynamicText.IsHandleCreated);
+        Assert.Equal("details", tips.GetToolTip(tooltipText));
+        var invalidated = new List<Rectangle>();
+        host.Invalidated += (_, e) => invalidated.Add(e.InvalidRect);
+        host.Controls.Remove(dynamicText);
+        Assert.NotEmpty(invalidated);
+        using var plainHost = new Panel();
+        using var plainText = new TextBlock("plain WinForms host");
+        plainHost.Controls.Add(plainText);
+        LayoutPanel.CreateWindows(plainHost, () => false);
+        Assert.False(plainText.ParentPainted);
+        Assert.True(plainText.IsHandleCreated);
     });
 }

@@ -68,7 +68,7 @@ internal sealed class HomePage : ScrollPage
 
     // network: a status line while streaming; instead of it, a hint when the jitter eats the latency's margin
     // (only the hint's button changes the latency)
-    private readonly TextBlock _netStatus = new("", TextStyle.Body, TextRole.Secondary, wrap: true);
+    private readonly TextBlock _netStatus = new("", TextStyle.Body, TextRole.Secondary, wrap: true, nativeWindow: true);
     private readonly RowPanel _netLine;
     private readonly TextBlock _netHintText = new("", TextStyle.Body, TextRole.Caution, wrap: true);
     private readonly FluentButton _netApply = new(L.T("应用"), ButtonKind.Secondary) { MinWidth = 72 };
@@ -133,17 +133,6 @@ internal sealed class HomePage : ScrollPage
         LoadFromConfig();
         ShowUpdate();
         ShowRuntimeNotice();
-        PaintTexts(Content);
-    }
-
-    // First page of the windowless-text migration. The network line retains its native ToolTip service.
-    private void PaintTexts(Control root)
-    {
-        foreach (Control child in root.Controls)
-        {
-            if (child is TextBlock text && text != _netStatus) text.PaintInParent();
-            else PaintTexts(child);
-        }
     }
 
     // ---------------------------------------------------------------- layout
