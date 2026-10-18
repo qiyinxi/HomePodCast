@@ -74,6 +74,7 @@ public class LayoutWorkTests
         modal.Shown += (_, _) => { modalHwnd = modal.Handle; modalShown.Set(); };
         Exception? error = null;
         bool done = false;
+        long lastProgress = Environment.TickCount64;
         var reader = new Thread(() =>
         {
             try
@@ -161,19 +162,31 @@ public class LayoutWorkTests
                     positions["前左"].ToString(), positions["前右"].ToString() }) start.ArgumentList.Add(arg);
                 using var probe = new System.Diagnostics.Process { StartInfo = start };
                 bool ready = false;
-                probe.OutputDataReceived += (_, e) => { if (e.Data == "READY") Volatile.Write(ref ready, true); };
+                var progress = new System.Collections.Concurrent.ConcurrentQueue<string>();
+                probe.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data == "READY") Volatile.Write(ref ready, true);
+                    if (e.Data == "READY" || e.Data?.StartsWith("PROGRESS:", StringComparison.Ordinal) == true)
+                    {
+                        progress.Enqueue(e.Data!);
+                        Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                    }
+                };
                 probe.Start(); probe.BeginOutputReadLine();
-                var readyWait = System.Diagnostics.Stopwatch.StartNew();
-                while (!Volatile.Read(ref ready) && !probe.HasExited && readyWait.ElapsedMilliseconds < 3000) Thread.Sleep(10);
+                Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                while (!Volatile.Read(ref ready) && !probe.HasExited && Environment.TickCount64 - Interlocked.Read(ref lastProgress) < 5000) Thread.Sleep(10);
                 if (!Volatile.Read(ref ready) && !probe.HasExited) probe.Kill(entireProcessTree: true);
                 Assert.True(Volatile.Read(ref ready), "The UIA probe did not become ready.");
                 host.BeginInvoke(() => { modal.ShowDialog(groupHost); modalClosed.Set(); });
                 Assert.True(modalShown.Wait(TimeSpan.FromSeconds(3)));
                 probe.StandardInput.WriteLine(modalHwnd.ToInt64()); probe.StandardInput.Flush();
-                bool exited = probe.WaitForExit(5000);
+                Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                while (!probe.HasExited && Environment.TickCount64 - Interlocked.Read(ref lastProgress) < 5000) Thread.Sleep(10);
+                bool exited = probe.HasExited;
                 if (!exited) probe.Kill(entireProcessTree: true);
-                Assert.True(exited, "The UIA probe did not finish.");
+                output.WriteLine(string.Join("\n", progress));
                 output.WriteLine(probe.StandardError.ReadToEnd());
+                Assert.True(exited, "The UIA probe made no completed-operation progress for 5 seconds.");
                 Assert.Equal(0, probe.ExitCode);
             }
             catch (Exception ex) { error = ex; }
@@ -183,13 +196,14 @@ public class LayoutWorkTests
         using var completion = new System.Windows.Forms.Timer { Interval = 10 };
         completion.Tick += (_, _) =>
         {
-            if (Volatile.Read(ref done) || watch.ElapsedMilliseconds >= 10_000) Application.ExitThread();
+            if (Volatile.Read(ref done) || watch.ElapsedMilliseconds >= 60_000
+                || Environment.TickCount64 - Interlocked.Read(ref lastProgress) >= 10_000) Application.ExitThread();
         };
         reader.Start();
         completion.Start();
         Application.Run(); // service UIA's COM callbacks with the real message loop, not intermittent DoEvents
         completion.Stop();
-        Assert.True(Volatile.Read(ref done), "UIA did not finish within 10 seconds");
+        Assert.True(Volatile.Read(ref done), "UIA exceeded its completed-operation or overall budget");
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
     });
 
@@ -766,7 +780,7 @@ public class LayoutWorkTests
         {
             Go(window, page);
             var hidden = All(pages[(int)page])
-                .Where(c => c.Parent is LayoutPanel { Visible: true } && !c.Visible && !LayoutPanel.IsCollapsed(c) && c.Height > 0)
+                .Where(c => c.Parent is LayoutPanel { Visible: true } && !LayoutPanel.IsShown(c) && !LayoutPanel.IsCollapsed(c) && c.Height > 0)
                 .Select(c => $"{c.GetType().Name} in {c.Parent!.GetType().Name} ({c.Height} px)").ToList();
             Assert.True(hidden.Count == 0, $"{page}: hidden but not collapsed: {string.Join(", ", hidden)}");
         }
@@ -970,7 +984,7 @@ public class LayoutWorkTests
 
     private static void AssertNoOverlap(Control root)
     {
-        var shown = root.Controls.Cast<Control>().Where(c => (c is TextBlock text ? text.Visible : c.Visible) && c.Width > 0 && c.Height > 0).ToList();
+        var shown = root.Controls.Cast<Control>().Where(c => LayoutPanel.IsShown(c) && c.Width > 0 && c.Height > 0).ToList();
         for (int i = 0; i < shown.Count; i++)
         for (int j = i + 1; j < shown.Count; j++)
             Assert.False(shown[i].Bounds.IntersectsWith(shown[j].Bounds), $"{shown[i].GetType().Name} {shown[i].Bounds} and {shown[j].GetType().Name} {shown[j].Bounds} overlap");

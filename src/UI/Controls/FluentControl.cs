@@ -410,6 +410,9 @@ internal abstract class LayoutPanel : Panel
 
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
+    /// <summary>Visibility on the rendered surface, including text whose native child window is deliberately hidden.</summary>
+    public static bool IsShown(Control c) => c is TextBlock text ? text.Visible : c.Visible;
+
     /// <summary>Height a child wants at <paramref name="width"/> (0 when collapsed).</summary>
     public static int HeightFor(Control c, int width) => IsCollapsed(c) ? 0 : c.GetPreferredSize(new Size(width, 0)).Height;
 

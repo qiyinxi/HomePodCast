@@ -21,6 +21,7 @@ internal static class UiaProbe
             }
             foreach (var hwnd in handles) CheckOwner(hwnd);
             var cached = Uia.Snapshot(handles[0]);
+            Console.WriteLine("PROGRESS: cached tree"); Console.Out.Flush();
             var live = Uia.SnapshotLive(handles[0]);
             static string[] Contents(Node root) => root.Descendants().Prepend(root)
                 .Select(n => $"{n.Type}|{n.Name}|{n.Hwnd}|{n.Rect}|{n.Enabled}|{n.ClassName}|{n.AutomationId}")
@@ -36,16 +37,19 @@ internal static class UiaProbe
             while (Native.IsWindowVisible(dialog) && wait.ElapsedMilliseconds < 5000) Thread.Sleep(10);
             if (Native.IsWindowVisible(dialog)) throw new TimeoutException("Test dialog did not close.");
             _ = Uia.Snapshot(handles[0]);
+            Console.WriteLine("PROGRESS: modal closed"); Console.Out.Flush();
             for (int i = 0; i < 4; i++)
             {
                 Native.Msaa(handles[2 + i % 2])!.accDoDefaultAction(0);
                 _ = Uia.Snapshot(handles[0]);
+                Console.WriteLine($"PROGRESS: room {i}"); Console.Out.Flush();
             }
             foreach (var source in new[] { "本地影音文件", "电脑实时声音" })
             {
                 Native.Msaa(handles[1])!.set_accValue(0, source);
                 if (Native.MsaaValue(handles[1]) != source) throw new InvalidOperationException("Source did not change.");
                 _ = Uia.Snapshot(handles[0]);
+                Console.WriteLine("PROGRESS: source " + (source == "本地影音文件" ? "file" : "live")); Console.Out.Flush();
             }
             return 0;
         }
