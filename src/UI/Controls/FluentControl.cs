@@ -341,6 +341,10 @@ internal abstract class LayoutPanel : Panel
 
     private sealed class LayoutAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
     {
+        // 2026-10-18: the base Parent wraps OLEACC's native proxy on every external query. Releasing thousands
+        // of those GIT entries re-entered COM's STA message pump until the published app overflowed its stack.
+        // Our parent is already a managed accessible object; return that stable identity directly.
+        public override AccessibleObject? Parent => owner.Parent?.AccessibilityObject;
         private bool HasPaintedText => owner.Controls.OfType<TextBlock>().Any(t => t.ParentPainted);
         // Native children keep their providers and keyboard behavior. Painted text occupies its original layout position.
         internal Control[] Children => owner.Controls.Cast<Control>()

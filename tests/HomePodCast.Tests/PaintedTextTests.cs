@@ -8,6 +8,21 @@ namespace HomePodCast.Tests;
 public class PaintedTextTests
 {
     [Fact]
+    public void Layout_accessibility_returns_its_managed_parent_without_allocating_native_proxies() => Sta.Run(() =>
+    {
+        using var parent = new StackPanel();
+        using var child = new StackPanel();
+        child.Controls.Add(new TextBlock("child"));
+        parent.Controls.Add(child);
+        LayoutPanel.CreateWindows(parent, () => false);
+        var expected = parent.AccessibilityObject;
+        var accessible = child.AccessibilityObject;
+        for (int i = 0; i < 1000; i++) Assert.Same(expected, accessible.Parent);
+        parent.Controls.Remove(child);
+        Assert.Null(accessible.Parent);
+    });
+
+    [Fact]
     public void Painting_matches_windowed_text_and_invalidates_old_and_new_bounds() => Sta.Run(() =>
     {
         using var host = new StackPanel { Size = new Size(300, 160) };

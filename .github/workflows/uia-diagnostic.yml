@@ -23,20 +23,12 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
           restore-keys: nuget-${{ runner.os }}-
-      - uses: actions/download-artifact@v7
-        with:
-          name: packages
-          run-id: 39126789136
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: diagnostic-packages
-      - name: Use the exact failing app and module
+      - name: Publish the current app with the release packaging options
         shell: pwsh
         run: |
-          $app = @(Get-ChildItem diagnostic-packages -Filter '*-win-x64.zip')
-          $module = @(Get-ChildItem diagnostic-packages -Filter 'HomePodCast-video-window-*.zip')
-          if ($app.Count -ne 1 -or $module.Count -ne 1) { throw 'Expected app and module packages.' }
-          Expand-Archive $app[0].FullName -DestinationPath diagnostic-app
-          Expand-Archive $module[0].FullName -DestinationPath diagnostic-module
+          dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:Version=1.2.0-pr.78.999 -o diagnostic-app
+          if ($LASTEXITCODE) { throw 'Publish failed.' }
+          ./tools/build-video-window.ps1 -Version '1.2.0-pr.78.999'
       - name: Download the native exception monitor
         shell: pwsh
         run: |
@@ -52,7 +44,7 @@ jobs:
           New-Item uia-diagnostics/dumps -ItemType Directory -Force | Out-Null
           $monitor = Start-Process diagnostic-tools/procdump64.exe -WindowStyle Hidden -PassThru -ArgumentList @('-accepteula', '-ma', '-e', '1', '-g', '-f', 'C00000FD', '-n', '1', '-w', 'HomePodCast.exe', 'uia-diagnostics/dumps') -RedirectStandardOutput uia-diagnostics/procdump.txt -RedirectStandardError uia-diagnostics/procdump-error.txt
           try {
-            ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app diagnostic-app/HomePodCast.exe --video-window diagnostic-module --out uia-diagnostics --only group-outputs-zh-CN-150
+            ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app diagnostic-app/HomePodCast.exe --video-window publish/video-window --out uia-diagnostics --only group-outputs-zh-CN-150
             $result = $LASTEXITCODE
             $monitor.WaitForExit(30000) | Out-Null
             if ($result) { throw 'Focused GUI reproduction failed; inspect the artifact.' }
