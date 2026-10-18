@@ -21,6 +21,17 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     internal TimeSpan TakeoverGrace { get; set; } = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// A connection that took a single speaker from another sender's session ends its own session after streaming this
+    /// long and starts it once more. 2026-10-16: a HomePod taken over while its home-theater Apple TV held it (flags
+    /// 0xA0C04) played our audio for a moment, then nothing, while the session stayed up and every packet went out (no
+    /// loss, no retransmit requests); 断开 and 连接 a few minutes later, the HomePod in its own group by then, played at once.
+    /// </summary>
+    internal TimeSpan TakeoverRestartAfter { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>The AirPlay port a single speaker is connected on (tests: an in-process receiver's).</summary>
+    internal int AirPlayPort { get; set; } = 7000;
+
     private readonly AudioFifo _fifo;
 
     public StreamController(int fifoTargetMs = AppConfig.DefaultFifoTargetMs)
@@ -179,7 +190,7 @@ public sealed partial class StreamController : IDisposable
             var started = Stopwatch.StartNew();
             string? lostReason = null;
             AirPlayClient? mine = null;
-            bool live = false;
+            bool live = false, restart = false;
             IPAddress? resolved = null;
             PairingRequiredException? needsPairing = null;
             try
@@ -189,8 +200,8 @@ public sealed partial class StreamController : IDisposable
                 resolved = address;
                 host = address.ToString();
                 HostResolved?.Invoke(host);
-                await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key, [new BusyTarget(deviceId, host, address)], ct,
-                    endedBySpeaker, takenFrom);
+                bool tookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key,
+                    [new BusyTarget(deviceId, host, address)], ct, endedBySpeaker, takenFrom);
                 started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
                 EnsureCapture(ct);
@@ -203,7 +214,7 @@ public sealed partial class StreamController : IDisposable
                 {
                     VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,
                 };
-                var client = await AirPlayClient.ConnectAsync(address, 7000, options, _fifo, ct);
+                var client = await AirPlayClient.ConnectAsync(address, AirPlayPort, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
                 // by now: publish only while still current, and never touch another loop's client.
@@ -236,7 +247,16 @@ public sealed partial class StreamController : IDisposable
                     using var health = FeedHealth(net, () => client.Sender, () => NetworkProfile.ForSpeaker(address)); // 首页's network status
                     net.Start(); // only now that FeedHealth listens: the connection's first spikes count too
                     using (var statsTimer = new System.Threading.Timer(_ => LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
-                        lostReason = await lost.Task.WaitAsync(ct);
+                    {
+                        if (tookOver && await Task.WhenAny(lost.Task, Task.Delay(TakeoverRestartAfter, ct)) != lost.Task)
+                        {
+                            ct.ThrowIfCancellationRequested();
+                            restart = true;
+                            Log.Info($"takeover: starting our session once more after {TakeoverRestartAfter.TotalSeconds:F0} s " +
+                                     "(a HomePod taken from another sender may keep the session but play nothing)");
+                        }
+                        else lostReason = await lost.Task.WaitAsync(ct);
+                    }
                     LogStats();
                 }
             }
@@ -259,13 +279,14 @@ public sealed partial class StreamController : IDisposable
             {
                 // Ended by the speaker itself: another sender took over, so a set flag is not ours. Stopped by us: TEARDOWN.
                 if (live && lostReason == EventChannel.ClosedBySpeaker) OwnSession.Forget();
-                else if (live) OwnSession.Ended(UtcNow(), clean: ct.IsCancellationRequested);
+                else if (live) OwnSession.Ended(UtcNow(), clean: ct.IsCancellationRequested || restart);
                 if (live) endedBySpeaker = lostReason == EventChannel.ClosedBySpeaker; // a home theater's Apple TV is not fought
                 // Only this loop's own session (Stop may already have taken and disposed it).
                 if (mine != null && Interlocked.CompareExchange(ref _client, null, mine) == mine) mine.Dispose();
             }
 
             if (ct.IsCancellationRequested) break;
+            if (restart) continue; // our own session again at once: no takeover check (ours, just ended), no delay
 
             if (needsPairing != null && resolved != null)
             {
@@ -315,9 +336,9 @@ public sealed partial class StreamController : IDisposable
 
     public event Action<int>? ArrivalToRenderChanged;
 
-    private static async Task<IPAddress> ResolveAsync(string deviceId, string? host, CancellationToken ct)
+    private async Task<IPAddress> ResolveAsync(string deviceId, string? host, CancellationToken ct)
     {
-        if (host != null && IPAddress.TryParse(host, out var known) && await IsReachable(known, ct))
+        if (host != null && IPAddress.TryParse(host, out var known) && await IsReachable(known, AirPlayPort, ct))
             return known;
         var devices = await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
         var match = devices.FirstOrDefault(d => string.Equals(Normalize(d.DeviceId), Normalize(deviceId), StringComparison.OrdinalIgnoreCase));
@@ -326,14 +347,14 @@ public sealed partial class StreamController : IDisposable
 
     public static string Normalize(string id) => id.Replace(":", "").Replace("-", "");
 
-    private static async Task<bool> IsReachable(IPAddress ip, CancellationToken ct)
+    private static async Task<bool> IsReachable(IPAddress ip, int port, CancellationToken ct)
     {
         using var tcp = new System.Net.Sockets.TcpClient();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(1500);
         try
         {
-            await tcp.ConnectAsync(ip, 7000, timeout.Token);
+            await tcp.ConnectAsync(ip, port, timeout.Token);
             return true;
         }
         catch when (!ct.IsCancellationRequested)
@@ -344,14 +365,15 @@ public sealed partial class StreamController : IDisposable
 
     private void LogStats()
     {
-        var s = _client?.Sender;
+        var client = _client;
+        var s = client?.Sender;
         if (s == null) return;
         Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +
                  $"drift={_capture?.DriftPpm ?? 0:F0}ppm underruns={_fifo.Underruns} idle={_fifo.IdleGaps} " +
                  $"maxGap={_capture?.TakeMaxGapMs() ?? 0:F0}ms overflows={_fifo.Overflows} " +
                  $"sent={s.PacketsSent} late={s.LateWakeups} " +
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
-                 $"rtxMiss={s.RetransmitMisses} {_net?.TakeSummary()}");
+                 $"rtxMiss={s.RetransmitMisses} ntp={client!.TimingRequests} {_net?.TakeSummary()}");
     }
 
     private NetworkWatch? _net; // the current session's; a disposed one just reports nothing new
