@@ -12,8 +12,11 @@ internal sealed partial class Walker
         var left = ReachRoomNode(n => n.Type == "Button" && n.Name.StartsWith(_t.F("{0}：{1}", T("前左"), ""), StringComparison.Ordinal));
         Expect(left.Name.Contains(GroupAirPlayName, StringComparison.Ordinal) && left.Name.Contains(GroupLocalName, StringComparison.Ordinal),
             "speaker room / names", "the front-left position omits an assigned AirPlay/local output");
+        var roomDevice = GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd;
         Uia.Invoke(left);
-        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd) == GroupAirPlayName,
+        // PositionAccessible posts its click. Wait for that retained control's acknowledgement before asking Windows
+        // for a whole cached tree: 2026-10-18 the cache response was malformed during this transition in every language.
+        WaitUntil(() => Native.MsaaValue(roomDevice) == GroupAirPlayName,
             "front-left room selection", 5000);
         var selectedDelay = ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
         Expect(selectedDelay.Rect.Width >= 140 * _s.Scale / 100, "speaker room / slider width",
@@ -26,7 +29,7 @@ internal sealed partial class Walker
         // The custom position button receives actual keyboard messages; selecting a position opens no audio path.
         left = ReachRoomNode(n => n.Hwnd == left.Hwnd);
         Native.SendMessageTimeout(left.Hwnd, 0x0100 /* WM_KEYDOWN */, new IntPtr(0x27 /* VK_RIGHT */), IntPtr.Zero, 0x2, 5000, out _);
-        WaitUntil(() => Native.MsaaValue(GroupControl(Uia.Snapshot(MainWindow()), T("所选位置音箱"), "ComboBox").Hwnd) == GroupBluetoothName,
+        WaitUntil(() => Native.MsaaValue(roomDevice) == GroupBluetoothName,
             "arrow-key room selection", 5000);
         ReachRoomNode(n => n.Name == T("所选位置延迟（毫秒）") && n.Type == "Slider");
         CheckGroupValue(Uia.Snapshot(MainWindow()), T("所选位置延迟（毫秒）"), "29", "room right delay");
