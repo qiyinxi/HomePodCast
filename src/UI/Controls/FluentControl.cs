@@ -295,6 +295,47 @@ internal abstract class LayoutPanel : Panel
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
 
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        foreach (var text in Controls.OfType<TextBlock>())
+            if (text.ParentPainted) text.DrawInParent(e.Graphics);
+    }
+
+    protected override AccessibleObject CreateAccessibilityInstance() => new LayoutAccessible(this);
+
+    internal void PaintedTextChanged(TextBlock text, AccessibleEvents change)
+    {
+        if (!IsHandleCreated) return;
+        if (change == AccessibleEvents.Reorder) AccessibilityNotifyClients(change, -1);
+        else if (AccessibilityObject is LayoutAccessible accessible)
+        {
+            int index = Array.IndexOf(accessible.Children, text);
+            if (index >= 0) AccessibilityNotifyClients(change, index);
+        }
+    }
+
+    private sealed class LayoutAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
+    {
+        private bool HasPaintedText => owner.Controls.OfType<TextBlock>().Any(t => t.ParentPainted);
+        // Native children keep their providers and keyboard behavior. Painted text occupies its original layout position.
+        internal Control[] Children => owner.Controls.Cast<Control>()
+            .Where(c => c is TextBlock { ParentPainted: true } t ? t.Visible && !t.Collapsed : c.IsHandleCreated).ToArray();
+        public override int GetChildCount() => HasPaintedText ? Children.Length : base.GetChildCount();
+        public override AccessibleObject? GetChild(int index)
+        {
+            if (!HasPaintedText) return base.GetChild(index);
+            var children = Children;
+            return index >= 0 && index < children.Length ? children[index].AccessibilityObject : null;
+        }
+        public override AccessibleObject? HitTest(int x, int y)
+        {
+            foreach (var text in owner.Controls.OfType<TextBlock>())
+                if (text.ParentPainted && text.Visible && text.AccessibilityObject.HitTest(x, y) is { } hit) return hit;
+            return base.HitTest(x, y);
+        }
+    }
+
     protected override void WndProc(ref Message m)
     {
         KeepChildOrder(ref m);
@@ -331,6 +372,7 @@ internal abstract class LayoutPanel : Panel
     /// </summary>
     internal static bool CreateWindows(Control root, Func<bool> yield)
     {
+        if (root is TextBlock { ParentPainted: true }) return true;
         if (!root.IsHandleCreated)
         {
             _ = root.Handle;

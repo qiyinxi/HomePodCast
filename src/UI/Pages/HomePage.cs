@@ -133,6 +133,17 @@ internal sealed class HomePage : ScrollPage
         LoadFromConfig();
         ShowUpdate();
         ShowRuntimeNotice();
+        PaintTexts(Content);
+    }
+
+    // First page of the windowless-text migration. The network line retains its native ToolTip service.
+    private void PaintTexts(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is TextBlock text && text != _netStatus) text.PaintInParent();
+            else PaintTexts(child);
+        }
     }
 
     // ---------------------------------------------------------------- layout

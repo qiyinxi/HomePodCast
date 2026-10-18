@@ -38,6 +38,46 @@ public class LayoutWorkTests
     }
 
     [Fact]
+    public void Home_texts_keep_their_layout_and_accessibility_without_windows() => Sta.Run(() =>
+    {
+        using var host = new Host(new HomePage(TestApp.Create(TestApp.Config())), 784);
+        var texts = All(host.Page).OfType<TextBlock>().ToArray();
+        var painted = texts.Where(t => t.ParentPainted).ToArray();
+        output.WriteLine($"首页: {painted.Length} parent-painted texts, {Handles(host.Page)} native windows");
+        Assert.True(painted.Length >= 20, $"only {painted.Length} texts moved to their containers");
+        Assert.All(painted, t => Assert.False(t.IsHandleCreated, $"「{t.Text}」 created a window"));
+        Assert.True(LayoutPanel.CreateWindows(host.Page, () => false)); // preparation must not undo the saving
+        Assert.All(painted, t => Assert.False(t.IsHandleCreated));
+        foreach (var text in painted.Where(t => t.Visible && !t.Collapsed && t.Height > 0))
+        {
+            var parent = text.Parent!.AccessibilityObject;
+            var node = text.AccessibilityObject;
+            Assert.Contains(node, Enumerable.Range(0, parent.GetChildCount()).Select(parent.GetChild));
+            Assert.Equal(text.AccessibleName ?? text.Text, node.Name);
+            Assert.Equal(AccessibleRole.StaticText, node.Role);
+            Assert.Equal(text.Parent.RectangleToScreen(text.Bounds), node.Bounds);
+            Assert.Same(parent, node.Parent);
+            Assert.False(node.State.HasFlag(AccessibleStates.Focusable));
+            Assert.Equal(text.Parent.DeviceDpi, text.DeviceDpi);
+        }
+        var status = TestApp.Field<TextBlock>(host.Page, "_status");
+        using (var work = new Work())
+        {
+            status.Text = "A much longer status that is wrapped at the available width";
+            work.AssertOnce("parent-painted status change", output);
+        }
+        Assert.Equal(status.Text, status.AccessibilityObject.Name);
+        Assert.Equal(status.GetPreferredSize(new Size(status.Width, 0)).Height, status.Height);
+        status.Collapsed = true;
+        Assert.DoesNotContain(status.AccessibilityObject, Enumerable.Range(0, status.Parent!.AccessibilityObject.GetChildCount())
+            .Select(status.Parent.AccessibilityObject.GetChild));
+        status.Collapsed = false;
+        Assert.True(status.Visible);
+        Assert.False(status.IsHandleCreated);
+        Assert.All(All(host.Page).OfType<FluentButton>().Where(b => b.Visible), b => Assert.True(b.IsHandleCreated));
+    });
+
+    [Fact]
     public void Toggling_night_disconnect_lays_each_container_out_once_and_measures_each_text_once() => Sta.Run(() =>
     {
         var config = TestApp.Config();
@@ -208,6 +248,12 @@ public class LayoutWorkTests
                 var rail = TestApp.Field<NavRail>(window, "_rail");
                 Assert.All(rail.Items, item => Assert.Equal(Theme.Dp(38, dpi), item.Height));
                 AssertNoOverlap(shown.Content);
+                foreach (var text in All(shown).OfType<TextBlock>().Where(t => t.ParentPainted && t.Visible && t.Height > 0))
+                {
+                    Assert.False(text.IsHandleCreated);
+                    Assert.Equal(dpi, text.DeviceDpi);
+                    Assert.Equal(text.GetPreferredSize(new Size(text.Width, 0)).Height, text.Height);
+                }
             }
         }
         Assert.Equal(0, transition.Snapshots); // the theme fade never captures the window for a DPI change

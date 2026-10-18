@@ -458,6 +458,9 @@ internal sealed partial class Walker
     private void CheckHome(Node tree, bool connected)
     {
         var page = PagePane(tree, "首页");
+        foreach (var caption in new[] { "首页", "推流状态" })
+            Expect(page.Descendants().Any(n => n.Type == "Text" && n.Says(T(caption)) && n.Hwnd == IntPtr.Zero && n.HasSize),
+                "首页", $"parent-painted 「{T(caption)}」 has no UI Automation text node/bounds, or created a window");
         var buttons = page.Descendants().Where(n => n.Type == "Button" && n.Shown).ToList();
         string expected = connected ? T("断开") : T("连接");
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
