@@ -136,6 +136,17 @@ public sealed class AppConfig
     public bool? ForwardVolumeKeys { get; set; }
 
     /// <summary>
+    /// 推流时电脑静音 (experimental since 1.2): while the pushed sound is what plays on the Windows default output, that
+    /// output is muted, so only the HomePod is heard; unmuted again when the session ends or the app quits (Audio.PcMute).
+    /// <see cref="VolumeKeyMode.FollowWindows"/> then acts as WhileStreaming (VolumeKeyRules.Effective). About this PC's
+    /// speakers, so it is not part of a usage profile.
+    /// </summary>
+    public bool MutePcWhileStreaming { get; set; }
+
+    /// <summary>首页's 「电脑也在出声」 hint was closed with 不再提示: never shown again.</summary>
+    public bool PcSoundHintDismissed { get; set; }
+
+    /// <summary>
     /// 「影视场景自动调整播放器」: while the 影视 scene streams, mpv and VLC get an audio delay of −videoDelayMs
     /// (Players.PlayerSync); their own value comes back when the scene changes, the stream stops or the app exits.
     /// </summary>

@@ -85,7 +85,7 @@
   "仅在 Windows 静音时": "Vain kun Windows on mykistetty",
   "关": "Pois käytöstä",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "Suoratoiston aikana äänenvoimakkuuden lisäys-, vähennys- ja mykistysnäppäimet säätävät vain HomePodia, eikä Windowsin äänenvoimakkuus muutu; HomePodin äänenvoimakkuus näkyy näytön alareunassa. Kun suoratoisto ei ole käynnissä, ne säätävät Windowsia tavalliseen tapaan.",
-  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Windowsin äänenvoimakkuus on HomePodin äänenvoimakkuus (Windowsin 100 % = äänenvoimakkuuden yläraja): näppäimet säätävät Windowsia tavalliseen tapaan, ja HomePodin säätäminen tässä sovelluksessa muuttaa myös Windowsia; yhdistettäessä molemmat puolet asettuvat pienempään arvoon. Kun Windows mykistetään, myös HomePod mykistyy; jos oletustoistolaite on tietokoneen kaiutin ja haluat kuulla vain HomePodin, valitse \"Ohjaa HomePodia suoratoiston aikana\".",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开下面的「推流时电脑静音」。": "Windowsin äänenvoimakkuus on HomePodin äänenvoimakkuus (Windowsin 100 % = äänenvoimakkuuden yläraja): näppäimet säätävät Windowsia tavalliseen tapaan, ja HomePodin säätäminen tässä sovelluksessa muuttaa myös Windowsia; yhdistettäessä molemmat puolet asettuvat pienempään arvoon. Kun Windows mykistetään, myös HomePod mykistyy; jos oletustoistolaite on tietokoneen kaiutin ja haluat kuulla vain HomePodin, ota alta käyttöön \"Mykistä tietokone suoratoiston aikana\".",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Vain kun Windows on mykistetty tai äänenvoimakkuus on 0 %, äänenvoimakkuusnäppäimet säätävät HomePodia, ja Windows pysyy mykistettynä (mykistä mieluummin kuin aseta 0 %).",
   "音量键只调 Windows，不影响 HomePod。": "Äänenvoimakkuusnäppäimet säätävät vain Windowsia, eivät HomePodia.",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "Käyttökelpoista toistolaitetta ei ole: suoratoiston aikana äänenvoimakkuusnäppäimet ohjaavat HomePodia suoraan.",
@@ -214,7 +214,7 @@
   "按下": "Paina",
   "全部推送与按程序分流": "Kaiken suoratoisto vai sovelluskohtainen reititys",
   "全部推送（默认，推荐打游戏）": "Kaiken suoratoisto (oletus, suositeltu pelaamiseen)",
-  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Kaappaa koko äänilähdön suoraan ilman lisäviivettä. Kaikki sovellukset ohjataan HomePodiin; se, kuuluuko ääni myös tietokoneelta, riippuu Windowsin äänenvoimakkuudesta, joten mykistä Windows, jos haluat kuulla äänen vain kaiuttimesta.",
+  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「设置 → 推流时电脑静音」。": "Kaappaa koko äänilähdön suoraan ilman lisäviivettä. Kaikki sovellukset ohjataan HomePodiin; se, kuuluuko ääni myös tietokoneelta, riippuu Windowsin äänenvoimakkuudesta. Jos haluat kuulla äänen vain kaiuttimesta, ota käyttöön Asetukset → \"Mykistä tietokone suoratoiston aikana\".",
   "按程序分流（额外延迟约 {0} ms）": "Sovelluskohtainen reititys (noin {0} ms lisäviivettä)",
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "Otetaan käyttöön heti, kun jollakin sovelluksella on oma kohde tai oletuskohde on \"Tämä tietokone\". Windows voi kaapata sovelluksia vain yksi kerrallaan, ja tämä tapa on hitaampi: HomePodiin lähetetty ääni tulee noin {0} ms myöhemmin. Selainlaajennus lisää tämän automaattisesti kuvan viiveeseen; peleissä sitä ei voi korvata. Sovellukset, joiden asetus on \"HomePod\", ovat hiljaa tällä tietokoneella, ja niillä näkyy 0 % Windowsin äänenvoimakkuuden mikserissä; järjestelmän äänet toistetaan vain tällä tietokoneella. Palaa kaiken suoratoistoon asettamalla kaikki sovellukset takaisin asetukseen \"Oletus\" ja oletuskohteeksi HomePod.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Kun sovellukselle annetaan oma kohde, käyttöön otetaan sovelluskohtainen reititys: Windows voi kaapata sovelluksia vain yksi kerrallaan, joten HomePodiin lähetetty ääni tulee noin {0} ms myöhemmin kuin kaiken suoratoistossa (selainlaajennus korjaa kuvan viiveen, pelit eivät).\n\nSovellukset, joiden asetus on \"HomePod\", mykistyvät tällä tietokoneella (0 % Windowsin äänenvoimakkuuden mikserissä), ja järjestelmän äänet toistetaan vain tällä tietokoneella.\n\nJos viive on tärkeintä, esimerkiksi pelatessa, jatka kaiken suoratoistoa. Otetaanko sovelluskohtainen reititys käyttöön?",
@@ -717,5 +717,13 @@
   "所选位置延迟（毫秒）": "Valitun paikan viive (ms)",
   "所选位置音量偏移": "Valitun paikan äänenvoimakkuuden korjaus",
   "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Valitse paikka ja määritä lisätty kaiutin; nuolinäppäimet vaihtavat paikkaa. Paina muokkauksen jälkeen Käytä. Katkoviivat osoittavat todellisen alasmiksauksen kohteen.",
-  "不分配（保留完整立体声）": "Poista määritys (säilytä täysi stereo)"
+  "不分配（保留完整立体声）": "Poista määritys (säilytä täysi stereo)",
+  "推流时电脑静音（实验性）": "Mykistä tietokone suoratoiston aikana (kokeellinen)",
+  "推流时把 Windows 默认输出静音，只让 HomePod 出声，断开或退出时恢复。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。": "Mykistää Windowsin oletustoistolaitteen suoratoiston aikana, jotta vain HomePod soi; tietokoneen ääni palaa, kun katkaiset yhteyden tai suljet sovelluksen. Kun tämä on päällä, \"HomePod seuraa Windowsin äänenvoimakkuutta\" toimii kuten \"Ohjaa HomePodia suoratoiston aikana\".",
+  "已打开「推流时电脑静音」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。": "\"Mykistä tietokone suoratoiston aikana\" on päällä, joten tämä toimii kuten \"Ohjaa HomePodia suoratoiston aikana\": suoratoiston aikana äänenvoimakkuuden lisäys-, vähennys- ja mykistysnäppäimet säätävät vain HomePodia. Kun suoratoisto ei ole käynnissä, ne säätävät Windowsia tavalliseen tapaan.",
+  "电脑也在出声": "Myös tietokone soittaa",
+  "HomePod 跟随 Windows 音量，所以电脑这边也在放。": "HomePod seuraa Windowsin äänenvoimakkuutta, joten myös tietokone soittaa.",
+  "推送到 HomePod 的声音，电脑这边也在放。": "HomePodiin lähetettävä ääni soi myös tällä tietokoneella.",
+  "只用 HomePod 播放": "Toista vain HomePodissa",
+  "不再提示": "Älä näytä uudelleen"
 }

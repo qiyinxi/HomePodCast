@@ -573,6 +573,9 @@ internal sealed class MainWindow : Form, ISurface
     /// <summary>The .NET runtime this copy started on was found gone: 首页's restart notice.</summary>
     public void ShowRuntimeNotice() => _home.ShowRuntimeNotice();
 
+    /// <summary>推流时电脑静音 or what the PC plays changed: 首页's 「电脑也在出声」 hint (设置's switch: ShowVolumeKeys).</summary>
+    public void ShowPcSound() => _home.ShowPcSound();
+
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
     public void Flush()
     {

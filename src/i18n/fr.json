@@ -85,7 +85,7 @@
   "仅在 Windows 静音时": "Seulement quand Windows est muet",
   "关": "Désactivé",
   "推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。": "Pendant la diffusion, volume +, volume − et muet règlent uniquement le HomePod et le volume de Windows ne change pas ; le volume du HomePod s'affiche en bas de l'écran. Hors diffusion, ces touches règlent Windows comme d'habitude.",
-  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。": "Le volume de Windows est le volume du HomePod (100 % dans Windows = volume maximal) : les touches règlent Windows comme d'habitude, et régler le HomePod dans cette appli change aussi Windows ; à la connexion, les deux côtés prennent la plus basse des deux valeurs. Couper le son de Windows coupe aussi le HomePod ; si la sortie par défaut est le haut-parleur du PC et que vous voulez écouter uniquement le HomePod, choisissez \"Régler le HomePod pendant la diffusion\".",
+  "Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开下面的「推流时电脑静音」。": "Le volume de Windows est le volume du HomePod (100 % dans Windows = volume maximal) : les touches règlent Windows comme d'habitude, et régler le HomePod dans cette appli change aussi Windows ; à la connexion, les deux côtés prennent la plus basse des deux valeurs. Couper le son de Windows coupe aussi le HomePod ; si la sortie par défaut est le haut-parleur du PC et que vous voulez écouter uniquement le HomePod, activez \"Couper le son du PC pendant la diffusion\" ci-dessous.",
   "只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。": "Uniquement quand Windows est muet ou à 0 %, les touches de volume règlent le HomePod à la place, et Windows reste muet (coupez le son plutôt que de mettre 0 %).",
   "音量键只调 Windows，不影响 HomePod。": "Les touches de volume règlent uniquement Windows, pas le HomePod.",
   "没有可用的输出设备：推流时音量键直接控制 HomePod。": "Aucun périphérique de sortie utilisable : pendant la diffusion, les touches de volume règlent directement le HomePod.",
@@ -214,7 +214,7 @@
   "按下": "Appuyer",
   "全部推送与按程序分流": "Tout diffuser ou routage par application",
   "全部推送（默认，推荐打游戏）": "Tout diffuser (par défaut, recommandé pour les jeux)",
-  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。": "Capture directement toute la sortie audio, sans latence supplémentaire. Toutes les applications vont au HomePod ; le son sur ce PC dépend du volume de Windows : coupez le son de Windows pour n'entendre que l'enceinte.",
+  "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「设置 → 推流时电脑静音」。": "Capture directement toute la sortie audio, sans latence supplémentaire. Toutes les applications vont au HomePod ; le son sur ce PC dépend du volume de Windows. Pour n'entendre que l'enceinte, activez Paramètres → \"Couper le son du PC pendant la diffusion\".",
   "按程序分流（额外延迟约 {0} ms）": "Routage par application (environ {0} ms de latence en plus)",
   "只要有程序单独设了去处，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」并把默认设为 HomePod，就回到全部推送。": "S'active dès qu'une application a sa propre destination ou que la destination par défaut est \"Ce PC\". Windows ne peut capturer les applications qu'une par une, et ce chemin est plus lent : le son envoyé au HomePod arrive environ {0} ms plus tard. L'extension du navigateur l'ajoute automatiquement au retard de l'image ; les jeux ne peuvent pas compenser. Les applications réglées sur \"HomePod\" sont muettes sur ce PC et affichent 0 % dans le mélangeur de volume de Windows ; les sons système ne sont joués que sur ce PC. Remettez toutes les applications sur \"Par défaut\", avec HomePod par défaut, pour revenir à la diffusion de tout le son.",
   "给程序单独设置去处后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？": "Donner à une application sa propre destination active le routage par application : Windows ne peut capturer les applications qu'une par une, donc le son envoyé au HomePod arrive environ {0} ms plus tard qu'en diffusant tout (l'extension du navigateur compense l'image ; les jeux ne le peuvent pas).\n\nLes applications réglées sur \"HomePod\" deviennent muettes sur ce PC (0 % dans le mélangeur de volume de Windows), et les sons système ne sont joués que sur ce PC.\n\nSi la latence compte avant tout, par exemple pour les jeux, continuez à tout diffuser. Activer le routage par application ?",
@@ -717,5 +717,13 @@
   "所选位置延迟（毫秒）": "Retard de la position choisie (ms)",
   "所选位置音量偏移": "Décalage de volume de la position",
   "点选位置后分配已添加的音箱；方向键切换位置。修改后按应用。虚线位置显示实际混音去向。": "Choisissez une position pour y affecter une enceinte ajoutée ; les flèches changent de position. Appuyez ensuite sur Appliquer. Les pointillés indiquent la destination réelle du mixage.",
-  "不分配（保留完整立体声）": "Désaffecter (garder la stéréo complète)"
+  "不分配（保留完整立体声）": "Désaffecter (garder la stéréo complète)",
+  "推流时电脑静音（实验性）": "Couper le son du PC pendant la diffusion (expérimental)",
+  "推流时把 Windows 默认输出静音，只让 HomePod 出声，断开或退出时恢复。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。": "Pendant la diffusion, coupe le son de la sortie par défaut de Windows pour que seul le HomePod joue ; le son du PC revient à la déconnexion ou en quittant. Tant que c'est activé, \"Le HomePod suit le volume de Windows\" fonctionne comme \"Régler le HomePod pendant la diffusion\".",
+  "已打开「推流时电脑静音」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。": "\"Couper le son du PC pendant la diffusion\" est activé, donc cela fonctionne comme \"Régler le HomePod pendant la diffusion\" : pendant la diffusion, volume +, volume − et muet règlent uniquement le HomePod. Hors diffusion, ces touches règlent Windows comme d'habitude.",
+  "电脑也在出声": "Le PC joue aussi",
+  "HomePod 跟随 Windows 音量，所以电脑这边也在放。": "Le HomePod suit le volume de Windows, donc le PC joue aussi.",
+  "推送到 HomePod 的声音，电脑这边也在放。": "Ce qui est envoyé au HomePod joue aussi sur ce PC.",
+  "只用 HomePod 播放": "Lire sur le HomePod uniquement",
+  "不再提示": "Ne plus afficher"
 }

@@ -225,6 +225,8 @@ public class UsageProfileTests
         [nameof(AppConfig.NightDisconnectUntil)] = "the household's night",
         [nameof(AppConfig.NightDisconnectIdleMinutes)] = "the household's night",
         [nameof(AppConfig.AppSendVolumesOff)] = "where an app's own HomePod volume starts when turned on again; the levels in use are AppSendVolumes",
+        [nameof(AppConfig.MutePcWhileStreaming)] = "about this PC's speakers, not a use; a profile's FollowWindows is handled as WhileStreaming while it is on (VolumeKeyRules.Effective)",
+        [nameof(AppConfig.PcSoundHintDismissed)] = "asked once",
     };
 
     [Fact]

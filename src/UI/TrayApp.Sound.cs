@@ -64,6 +64,7 @@ internal sealed partial class TrayApp
             Log.Warn($"Windows volume watching unavailable: {ex.Message}");
         }
         _keyHook = new VolumeKeyHook(command => _ui.Post(_ => OnVolumeKey(command), null));
+        InitPcMute(); // after the watcher: it reports the Windows volume changes that aren't ours
         UpdateVolumeKeys();
     }
 
@@ -169,6 +170,9 @@ internal sealed partial class TrayApp
     /// <summary>Windows has an output device whose volume can be followed (true until first checked).</summary>
     public bool OutputDevicePresent => _forwarder?.OutputDevicePresent ?? false;
 
+    /// <summary>The volume-key mode that applies: 推流时电脑静音 turns FollowWindows into WhileStreaming (VolumeKeyRules.Effective).</summary>
+    public VolumeKeyMode EffectiveVolumeKeys => VolumeKeyRules.Effective(Config.VolumeKeys, Config.MutePcWhileStreaming);
+
     public void SetVolumeKeyMode(VolumeKeyMode mode)
     {
         if (Config.VolumeKeys == mode) return;
@@ -184,7 +188,7 @@ internal sealed partial class TrayApp
     {
         bool streaming = Controller.State == StreamState.Streaming;
         bool device = OutputDevicePresent;
-        var mode = Config.VolumeKeys;
+        var mode = EffectiveVolumeKeys;
         var route = VolumeKeyRules.RouteFor(mode, streaming, device);
         if (route != VolumeKeyRoute.Follow) _followLink?.Stop(); // starts again from the watcher's next baseline
         if (_forwarder != null) _forwarder.Mode = VolumeKeyRules.EndpointModeFor(route);
@@ -194,7 +198,8 @@ internal sealed partial class TrayApp
             if (route == VolumeKeyRoute.Intercept) _keyHook.Install();
             else _keyHook.Uninstall();
         }
-        if (route != _route) Log.Info($"volume keys: {route} ({mode}, {(streaming ? "streaming" : "not streaming")}, " +
+        string asMode = mode == Config.VolumeKeys ? $"{mode}" : $"{Config.VolumeKeys} as {mode}, the PC muted while streaming";
+        if (route != _route) Log.Info($"volume keys: {route} ({asMode}, {(streaming ? "streaming" : "not streaming")}, " +
                                       $"{(device ? "output device present" : "no output device")})");
         _route = route;
         _form?.ShowVolumeKeys();
