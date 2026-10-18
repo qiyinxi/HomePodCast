@@ -536,8 +536,11 @@ internal sealed partial class Walker
     private void CheckSettings()
     {
         var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
-        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）", "仅 HomePod 输出" })
+        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）" })
             Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
+        // The volume-key description still names the Home switch; match the control, not that help text.
+        Expect(Find(page, n => n.Type == "CheckBox" && n.Name == T("仅 HomePod 输出")) == null, "设置",
+            "the HomePod-only output switch is duplicated on Settings");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
         var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
