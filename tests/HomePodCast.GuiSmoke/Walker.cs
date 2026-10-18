@@ -918,9 +918,6 @@ internal sealed partial class Walker
         WaitUntil(() => !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd), $"the 「{title}」 dialog to close", 5000);
         if (App.HasExited)
             throw new StepFailed($"the app exited after closing 「{title}」: 0x{App.ExitCode:X8}");
-        var remaining = Native.TopLevelWindows(App.Id, visibleOnly: false);
-        _report.Note(Where(what), "after dialog close: " + string.Join("; ", remaining.Select(w =>
-            $"{w:X} {Native.ClassName(w)} visible={Native.IsWindowVisible(w)} title=「{Native.WindowText(w)}」")));
         if (MainWindow() == IntPtr.Zero)
             throw new StepFailed($"the main window is no longer visible after closing 「{title}」");
     }

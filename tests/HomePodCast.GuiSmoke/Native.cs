@@ -84,7 +84,7 @@ internal static partial class Native
     public static long Style(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_STYLE);
     public static long ExStyle(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
-    /// <summary>Visible top-level windows of a process.</summary>
+    /// <summary>Top-level windows of a process, optionally including hidden windows for failure diagnostics.</summary>
     public static List<IntPtr> TopLevelWindows(int pid, bool visibleOnly = true)
     {
         var list = new List<IntPtr>();

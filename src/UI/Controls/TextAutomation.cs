@@ -16,20 +16,13 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
     private LayoutPanel Host => host;
     private readonly ConditionalWeakTable<TextBlock, TextProvider> _providers = new();
     private readonly IntPtr _hwnd = host.Handle;
-    private bool _released, _disconnecting, _reportedUnavailable;
+    private bool _released, _disconnecting;
     private TextBlock[] Texts => host.Controls.OfType<TextBlock>().Where(t => t.ParentPainted && t.Visible && !t.Collapsed).ToArray();
     private TextProvider Provider(TextBlock text) => _providers.GetValue(text, t => new TextProvider(this, t));
     private void CheckAvailable()
     {
         if (_released || host.IsDisposed || !host.IsHandleCreated)
-        {
-            if (!_reportedUnavailable)
-            {
-                _reportedUnavailable = true;
-                Log.Warn($"UIA: stale {host.GetType().Name} root {_hwnd:X}, released={_released}, disposed={host.IsDisposed}, window={host.IsHandleCreated}");
-            }
             throw new ElementNotAvailableException();
-        }
     }
     internal void Disconnect()
     {
@@ -136,19 +129,11 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
     {
         private static int _nextId;
         private readonly int _id = Interlocked.Increment(ref _nextId);
-        private bool _reportedUnavailable;
         private void CheckAvailable()
         {
             root.CheckAvailable();
             if (text.IsDisposed || text.Parent != root.Host)
-            {
-                if (!_reportedUnavailable)
-                {
-                    _reportedUnavailable = true;
-                    Log.Warn($"UIA: stale text {_id}, disposed={text.IsDisposed}, attached={text.Parent == root.Host}");
-                }
                 throw new ElementNotAvailableException();
-            }
         }
         public ProviderOptions ProviderOptions => ProviderOptions.ServerSideProvider;
         public IRawElementProviderSimple? HostRawElementProvider => null;
