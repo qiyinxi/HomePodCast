@@ -29,6 +29,7 @@ internal sealed partial class TrayApp
     {
         Routing.SetCaptureDevice(id, name); // the capture and the volume-key watcher pick it up from Routing
         UpdateMonitorGuard();
+        UpdatePcMute(); // captured elsewhere now: the default output is not the one to keep quiet
         _form.UpdateState();
         _form.ShowVolumeKeys();
     }
@@ -42,6 +43,7 @@ internal sealed partial class TrayApp
             Volatile.Write(ref _devicesPending, 0);
             if (_quitting) return;
             UpdateMonitorGuard();
+            UpdatePcMute(); // a new default output: ours gets its sound back, the new one is decided (and 首页's hint)
             _form.AudioDevicesChanged();
         }, null);
     }

@@ -88,6 +88,9 @@ internal sealed class HomePage : ScrollPage
     // .NET was replaced under the running app: 「立即重启」 (RuntimeRestartNotice), above everything else
     private readonly RuntimeRestartNotice _runtimeNotice;
 
+    // the pushed sound plays on the PC too: 「只用 HomePod 播放」 / 「不再提示」 (PcSoundNotice, experimental since 1.2)
+    private readonly PcSoundNotice _pcSound;
+
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
     private long _underrunsAtStart;
@@ -113,7 +116,8 @@ internal sealed class HomePage : ScrollPage
         _netHint = BuildNetworkHint();
         _updateBanner = BuildUpdateBanner();
         _runtimeNotice = new RuntimeRestartNotice(_app.RestartForRuntime);
-        Content.Controls.AddRange([_runtimeNotice.Card, _updateBanner, columns, statsHeader, tiles, _netLine, _netHint]);
+        _pcSound = new PcSoundNotice(_app.PlayOnlyOnHomePod, _app.DismissPcSoundHint);
+        Content.Controls.AddRange([_runtimeNotice.Card, _updateBanner, _pcSound.Card, columns, statsHeader, tiles, _netLine, _netHint]);
         Content.GapBefore[statsHeader] = 20;
 
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
@@ -307,6 +311,9 @@ internal sealed class HomePage : ScrollPage
 
     /// <summary>The restart notice: shown once the runtime is gone, saying so too while streaming that the sound stops briefly.</summary>
     public void ShowRuntimeNotice() => _runtimeNotice.Show(_app.RuntimeRemoved, _app.Controller.State == StreamState.Streaming);
+
+    /// <summary>「电脑也在出声」: from what the app read last (no Core Audio call), so also on the stats timer.</summary>
+    public void ShowPcSound() => _pcSound.Show(_app.PcSoundHintShown, _app.Config.VolumeKeys == VolumeKeyMode.FollowWindows);
 
     /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
     private void ApplyNetworkSuggestion()
@@ -613,6 +620,7 @@ internal sealed class HomePage : ScrollPage
         SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
+        ShowPcSound();
     }
 
     private void ShowGroupOutputStatus()
@@ -847,6 +855,7 @@ internal sealed class HomePage : ScrollPage
 
     public override void PageShown()
     {
+        _app.RefreshPcSound(); // the default output read again for 「电脑也在出声」 (Core Audio only while streaming)
         UpdateState();
         _statsTimer.Start();
     }

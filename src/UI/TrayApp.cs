@@ -481,6 +481,7 @@ internal sealed partial class TrayApp : ApplicationContext
         RememberReceiverConnection();
         UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
+        UpdatePcMute(); // after the keys' route: 推流时电脑静音 mutes once streaming, unmutes when the session is over
         _form.UpdateState();
         RaiseStateChanged();
     }
@@ -534,7 +535,8 @@ internal sealed partial class TrayApp : ApplicationContext
         _api?.Dispose();
         // A Start still running would otherwise begin a stream after the Stop below (it never faults).
         connecting.Wait(TimeSpan.FromSeconds(10));
-        Controller.Dispose();
+        try { Controller.Dispose(); } // the apps' volumes come back with the capture
+        finally { DisposePcMute(); } // and the PC's sound once the stream has stopped (not both playing meanwhile)
         DisposeTakeover(); // saves how our session ended (cleanly, by us)
         _tray.Dispose();
         ExitThread();

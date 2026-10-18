@@ -28,6 +28,7 @@ internal sealed class SettingsPage : ScrollPage
     private readonly TimerDebounce _capWait = new(250);
     private readonly FluentComboBox _volumeKeys = new();
     private readonly SettingRow _volumeKeysRow;
+    private readonly ToggleSwitch _mutePc = new();
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
     public void ShowTheme() => _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(_app.Config.Theme));
@@ -75,13 +76,17 @@ internal sealed class SettingsPage : ScrollPage
         var cap = new SettingRow(Glyph.Volume, L.T("音量上限"),
             L.T("HomePod 音量不会超过这个值（连接、重连、快捷键都一样）。100 = 不限制"), capRow);
         _volumeKeysRow = new SettingRow(Glyph.Keyboard, L.T("键盘音量键"), "", _volumeKeys);
+        // AppConfig.MutePcWhileStreaming, Audio.PcMute.
+        var mutePc = new SettingRow(Glyph.Mute, L.T("推流时电脑静音（实验性）"), // experimental since 1.2
+            L.T("推流时把 Windows 默认输出静音，只让 HomePod 出声，断开或退出时恢复。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理。"),
+            _mutePc);
         _hotkeysRow = new SettingRow(Glyph.Keyboard, L.T("全局快捷键"), "", _hotkeys);
 
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            sound, cap, _volumeKeysRow, _hotkeysRow]);
+            sound, cap, _volumeKeysRow, mutePc, _hotkeysRow]);
         foreach (var header in new Control[] { general, sound }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            cap, _volumeKeysRow, _hotkeysRow }) Content.GapBefore[row] = 4;
+            cap, _volumeKeysRow, mutePc, _hotkeysRow }) Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
         _language.SelectionChangeCommitted += (_, _) =>
@@ -138,6 +143,11 @@ internal sealed class SettingsPage : ScrollPage
         {
             if (_volumeKeys.SelectedIndex < 0) return;
             _app.SetVolumeKeyMode(VolumeKeyModes[_volumeKeys.SelectedIndex]);
+            ShowVolumeKeys();
+        };
+        _mutePc.Toggled += (_, _) =>
+        {
+            _app.SetMutePcWhileStreaming(_mutePc.Checked);
             ShowVolumeKeys();
         };
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
@@ -344,20 +354,27 @@ internal sealed class SettingsPage : ScrollPage
     {
         VolumeKeyMode.WhileStreaming => L.T("推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。"),
         VolumeKeyMode.FollowWindows => L.T("Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；" +
-                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。"),
+                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开下面的「推流时电脑静音」。"),
         VolumeKeyMode.WhenWindowsMuted => L.T("只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。"),
         _ => L.T("音量键只调 Windows，不影响 HomePod。"),
     };
 
-    /// <summary>The selected mode and what it does; without a Windows output device, that the keys go to the HomePod.</summary>
+    /// <summary>
+    /// The selected mode and what it does; without a Windows output device, that the keys go to the HomePod; with
+    /// 推流时电脑静音 on, that 「HomePod 跟随 Windows 音量」 is handled as 「推流时控制 HomePod」 (and the switch itself).
+    /// </summary>
     public void ShowVolumeKeys()
     {
         var mode = _app.Config.VolumeKeys;
+        var effective = _app.EffectiveVolumeKeys;
         if (!_volumeKeys.DroppedDown) _volumeKeys.SelectedIndex = Array.IndexOf(VolumeKeyModes, mode);
+        _mutePc.Checked = _app.Config.MutePcWhileStreaming;
         var desc = _volumeKeysRow.DescriptionText;
-        bool fallback = mode is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
-        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。") : VolumeKeyModeDescription(mode) +
-            (mode == VolumeKeyMode.FollowWindows && _app.Routing.CaptureDeviceId != null ? "\n" + L.T(MixerPage.CaptureVolumeNote) : "");
+        bool fallback = effective is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
+        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。")
+            : effective != mode ? L.T("已打开「推流时电脑静音」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。")
+            : VolumeKeyModeDescription(mode) +
+              (mode == VolumeKeyMode.FollowWindows && _app.Routing.CaptureDeviceId != null ? "\n" + L.T(MixerPage.CaptureVolumeNote) : "");
         desc.Role = fallback ? TextRole.Caution : TextRole.Secondary;
     }
 
