@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   focused-gui:
@@ -22,20 +23,44 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
           restore-keys: nuget-${{ runner.os }}-
-      - name: Publish the same single-file app
-        run: dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o diagnostic-app
+      - uses: actions/download-artifact@v7
+        with:
+          name: packages
+          run-id: 39126789136
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: diagnostic-packages
+      - name: Use the exact failing app and module
+        shell: pwsh
+        run: |
+          $app = @(Get-ChildItem diagnostic-packages -Filter '*-win-x64.zip')
+          $module = @(Get-ChildItem diagnostic-packages -Filter 'HomePodCast-video-window-*.zip')
+          if ($app.Count -ne 1 -or $module.Count -ne 1) { throw 'Expected app and module packages.' }
+          Expand-Archive $app[0].FullName -DestinationPath diagnostic-app
+          Expand-Archive $module[0].FullName -DestinationPath diagnostic-module
+      - name: Enable crash dumps on this disposable CI runner
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_ACTIONS -ne 'true') { throw 'CI only.' }
+          $folder = Join-Path $env:GITHUB_WORKSPACE 'uia-diagnostics/dumps'
+          New-Item $folder -ItemType Directory -Force | Out-Null
+          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\HomePodCast.exe'
+          New-Item $key -Force | Out-Null
+          New-ItemProperty $key -Name DumpFolder -Value $folder -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty $key -Name DumpType -Value 2 -PropertyType DWord -Force | Out-Null
+          New-ItemProperty $key -Name DumpCount -Value 1 -PropertyType DWord -Force | Out-Null
       - name: Build GUI client
         run: dotnet build tests/HomePodCast.GuiSmoke -c Release
       - name: Reproduce one language
         shell: pwsh
         run: |
-          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app diagnostic-app/HomePodCast.exe --out uia-diagnostics --only group-outputs-zh-CN-150
+          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app diagnostic-app/HomePodCast.exe --video-window diagnostic-module --out uia-diagnostics --only group-outputs-zh-CN-150
           if ($LASTEXITCODE) { throw 'Focused GUI reproduction failed; inspect the artifact.' }
       - name: Capture application events
         if: always()
         shell: pwsh
         run: |
           New-Item uia-diagnostics -ItemType Directory -Force | Out-Null
+          Start-Sleep -Seconds 3
           Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15)} -ErrorAction SilentlyContinue |
             Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error', 'Windows Error Reporting') } |
             Select-Object TimeCreated, ProviderName, Id, Message | Format-List |
