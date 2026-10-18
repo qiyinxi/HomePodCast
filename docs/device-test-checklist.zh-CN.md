@@ -233,6 +233,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 8. - [ ] 首页、托盘、弹框里**都没有**「改为推送到 Apple TV」之类的按钮，正常使用不会出现 PIN；音箱列表里 Apple TV 显示为「客厅（Apple TV，家庭影院：卧室）」，只有手动选它再点「连接」才会走 Apple TV 的配对（单元测试：HomeTheaterTests、PairingPolicyTests；仍需实机：首页、托盘、弹框里没有多余的按钮）
 9. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗（单元测试：TakeoverPolicyTests、HomeTheaterTests；仍需实机：`scan --txt` 的结果）
 10. - [ ] Apple TV 正在播放（比如在 Apple TV 上看视频）和空闲时各跑一次 `scan --txt`，两段都发我：看 Apple TV 和卧室的 flags、gid、pgid、igl 有没有区别（用来判断以后能不能做到「Apple TV 空闲时才接管」）
+11. - [ ] 接管后重连（2026-10-16 新增）：卧室被占着（日志 `statusFlags 0xA0C04`）时点「连接」→「仍然连接」：约 5 秒后日志有 `takeover: starting our session once more`，状态闪一下「正在连接…」后回到已连接，**之后一直有声音**（2026-10-16 那次没有这一步：响一声后就没声音了，会话却一直在）。stats 行里的 `ntp=` 每分钟都在涨吗（单元测试：TakeoverRestartTests，只重连一次、断开时不再重连；仍需实机：重连后有声音）。改了 `src/StreamController.cs` 里的 `RunAsync` 才需要重测
 
 #### 立体声对（等有两只 HomePod 配成立体声对时再测）
 
