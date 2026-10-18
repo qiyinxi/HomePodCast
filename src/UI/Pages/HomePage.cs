@@ -54,7 +54,8 @@ internal sealed class HomePage : ScrollPage
     // volume
     private readonly TextBlock _volumeValue = new("", TextStyle.BodyStrong) { Align = HorizontalAlignment.Right };
     private readonly FluentSlider _volume = Ui.Slider(0, 100, 1, 5);
-    private readonly ToggleSwitch _mute = new(L.T("静音"));
+    private readonly FluentButton _mute = new("", ButtonKind.Subtle, Glyph.Volume);
+    private readonly ToggleSwitch _onlyHomePod = new(L.T("仅 HomePod 输出"));
     private readonly ToggleSwitch _night = new(L.T("夜间模式"));
     private readonly TextBlock _capNote = Ui.Note();
     private readonly TimerDebounce _volumeWait = new(150);
@@ -242,13 +243,14 @@ internal sealed class HomePage : ScrollPage
         _volume.AccessibleName = L.T("音量");
         var title = Ui.Header(L.T("音量"));
         var header = Ui.Row(8, title, title, _volumeValue);
-        var icon = new GlyphLabel(Glyph.Volume);
-        var slider = Ui.Row(10, _volume, icon, _volume);
-        var toggles = Ui.Row(28, null, _mute, _night);
+        var slider = Ui.Row(10, _volume, _mute, _volume);
+        var toggles = Ui.Row(28, null, _onlyHomePod, _night);
+        toggles.Wrap = true; // Keep both labels whole at narrow widths and in translated UIs.
         var card = Ui.Card(header, slider, toggles, _capNote);
         card.Gap = 8;
 
-        _tips.SetToolTip(_mute, L.T("让 HomePod 静音，不断开连接"));
+        _onlyHomePod.AccessibleDescription = L.T("推流时只让 HomePod 出声，电脑输出静音；关闭、断开或退出后恢复，电脑音量数值不变。实验性功能。"); // experimental since 1.2
+        _tips.SetToolTip(_onlyHomePod, _onlyHomePod.AccessibleDescription);
         _tips.SetToolTip(_night, L.T("压缩动态范围：爆炸、枪声变小，对白、脚步声变大，适合夜里小音量"));
 
         _volume.Scroll += (_, _) =>
@@ -263,7 +265,12 @@ internal sealed class HomePage : ScrollPage
             _app.SetVolume(_volume.Value);
             VolumeApplied?.Invoke(_volume.Value);
         };
-        _mute.Toggled += (_, _) => _app.SetSpeakerMuted(_mute.Checked);
+        _mute.Click += (_, _) =>
+        {
+            FlushPendingVolume(); // Save the drag first: its debounce must not undo this mute.
+            _app.ToggleSpeakerMute();
+        };
+        _onlyHomePod.Toggled += (_, _) => _app.SetMutePcWhileStreaming(_onlyHomePod.Checked);
         _night.Toggled += (_, _) => _app.SetNightMode(_night.Checked);
         return card;
     }
@@ -314,7 +321,11 @@ internal sealed class HomePage : ScrollPage
     public void ShowRuntimeNotice() => _runtimeNotice.Show(_app.RuntimeRemoved, _app.Controller.State == StreamState.Streaming);
 
     /// <summary>「电脑也在出声」: from what the app read last (no Core Audio call), so also on the stats timer.</summary>
-    public void ShowPcSound() => _pcSound.Show(_app.PcSoundHintShown, _app.Config.VolumeKeys == VolumeKeyMode.FollowWindows);
+    public void ShowPcSound()
+    {
+        _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
+        _pcSound.Show(_app.PcSoundHintShown, _app.Config.VolumeKeys == VolumeKeyMode.FollowWindows);
+    }
 
     /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
     private void ApplyNetworkSuggestion()
@@ -463,13 +474,25 @@ internal sealed class HomePage : ScrollPage
         _loading = true;
         var cfg = _app.Config;
         ShowLatency();
-        _mute.Checked = _app.Controller.Muted;
+        ShowMute();
+        _onlyHomePod.Checked = cfg.MutePcWhileStreaming;
         _night.Checked = cfg.NightMode;
         int cap = cfg.VolumeCapPercent;
         _volume.Ceiling = cap;
         _volume.Mark = cap < 100 ? cap : null;
         _capNote.Text = cap < 100 ? L.F("音量上限 {0}%（在「设置」里修改）", cap) : "";
         _loading = loading;
+    }
+
+    private void ShowMute()
+    {
+        bool muted = _app.Controller.Muted;
+        _mute.Glyph = muted ? Glyph.Mute : Glyph.Volume;
+        _mute.GlyphColor = muted ? Theme.P.Critical : null;
+        _mute.Invalidate();
+        _mute.AccessibleName = muted ? L.T("取消静音") : L.T("HomePod 静音");
+        _mute.AccessibleDescription = muted ? L.T("取消静音") : L.T("让 HomePod 静音，不断开连接");
+        _tips.SetToolTip(_mute, _mute.AccessibleDescription);
     }
 
     /// <summary>Move the volume slider without sending anything (the value was already applied).</summary>
@@ -555,7 +578,8 @@ internal sealed class HomePage : ScrollPage
         _connect.Text = connect ? L.T("连接") : L.T("断开");
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
         if (c.State == StreamState.Streaming && c.Volume is { } v) ShowVolume(v);
-        _mute.Checked = c.Muted;
+        ShowMute();
+        _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
         UpdateFloor();
         ShowLatency();
         UpdateStats();
@@ -876,7 +900,7 @@ internal sealed class HomePage : ScrollPage
         base.Dispose(disposing);
     }
 
-    /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning, the update banner's).</summary>
+    /// <summary>A glyph that only decorates (the network hint's warning, the update banner's).</summary>
     internal sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));

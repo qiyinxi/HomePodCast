@@ -67,7 +67,7 @@ internal sealed class MixerPage : ScrollPage
             Ui.Header(L.T("全部推送与按程序分流")),
             Ui.Stack(4,
                 new TextBlock(L.T("全部推送（默认，推荐打游戏）"), TextStyle.BodyStrong),
-                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「设置 → 推流时电脑静音」。"))),
+                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「首页 → 仅 HomePod 输出」。"))),
             Ui.Stack(4,
                 new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
                 Ui.Note(L.F("单独设置程序去处或 HomePod 音量，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」、关闭 HomePod 独立音量，并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),

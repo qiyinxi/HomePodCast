@@ -112,7 +112,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
    - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「音画同步」页的「同步观影窗口（实验性）」一节选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
 
    防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「诊断 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
-3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开「设置 → 推流时电脑静音」，或者在首页提示电脑也在出声时点「只用 HomePod 播放」（见[键盘音量键](#键盘音量键)）。
+3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开「首页 → 仅 HomePod 输出」，或者在首页提示电脑也在出声时点「只用 HomePod 播放」（见[键盘音量键](#键盘音量键)）。
 
 界面语言跟随 Windows 显示语言（没有对应译文的语言显示英文）。想换成别的语言：在「设置」页选择「语言 / Language」，或者把 `%APPDATA%\HomePodCast\config.json` 里的 `"Language"` 设为语言代码（`"zh-CN"`，或 `src/i18n` 里的文件名，比如 `"en"`、`"de"`）或 `"auto"`。
 
@@ -126,7 +126,7 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 
 ## 全部推送与按程序分流
 
-默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定。想只在 HomePod 播放：打开「设置 → 推流时电脑静音」（见[键盘音量键](#键盘音量键)）；在默认的「HomePod 跟随 Windows 音量」下手动把 Windows 静音，HomePod 也会静音。
+默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定。想只在 HomePod 播放：打开「首页 → 仅 HomePod 输出」（见[键盘音量键](#键盘音量键)）；在默认的「HomePod 跟随 Windows 音量」下手动把 Windows 静音，HomePod 也会静音。
 
 按程序分流可以让每个程序分别送到 HomePod、本机或两者（在「混音器」页设置），比如游戏声音进 HomePod、语音聊天留在耳机里。代价是延迟：
 
@@ -163,7 +163,9 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 - **仅在 Windows 静音时**：旧版的做法。只有 Windows 静音或音量为 0 时按键才转给 HomePod，Windows 保持静音。
 - **关**：按键只调 Windows。
 
-**推流时电脑静音**（实验性，在「设置」里键盘音量键的下面，默认关）：适合默认输出是电脑扬声器（或耳机）、又只想听 HomePod 的情况。推流时 HomePodCast 把 Windows 默认输出静音；送到 HomePod 的声音是在 Windows 音量之前采集的，照常播放。会话结束时（点断开、音箱被其他设备占用、夜间自动断开）和退出 HomePodCast 时，电脑的声音会恢复；短暂断线或重连期间保持静音。HomePodCast 只取消它自己设的静音：推流前 Windows 已经静音的，保持静音；推流时你自己取消了 Windows 静音，这次连接里就不再动它。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理，因为跟随一个静音的 Windows 会让 HomePod 也静音。选了默认输出以外的采集设备时（见[按声卡分流](#按声卡分流采集设备)）不会静音：这时默认输出上的声音本来就该留在那里。如果推流时 HomePodCast 被强制结束或崩溃，电脑会保持静音，直到下次启动 HomePodCast 时自动恢复（如果你在这期间已经手动取消了静音，就不再动它）；日志里记着静音和恢复的是哪个设备。
+点击首页音量图标可以静音或取消 HomePod 静音，下方两个开关分别是「仅 HomePod 输出」和「夜间模式」。
+
+**仅 HomePod 输出**（实验性，在首页音量滑块下方，默认关）：适合默认输出是电脑扬声器（或耳机）、又只想听 HomePod 的情况。推流时 HomePodCast 把 Windows 默认输出静音；送到 HomePod 的声音是在 Windows 音量之前采集的，照常播放。电脑音量数值不变。关闭这个开关、会话结束时（点断开、音箱被其他设备占用、夜间自动断开）和退出 HomePodCast 时，电脑的声音会恢复；短暂断线或重连期间保持静音。HomePodCast 只取消它自己设的静音：推流前 Windows 已经静音的，保持静音；推流时你自己取消了 Windows 静音，这次连接里就不再动它。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理，因为跟随一个静音的 Windows 会让 HomePod 也静音。选了默认输出以外的采集设备时（见[按声卡分流](#按声卡分流采集设备)）不会静音：这时默认输出上的声音本来就该留在那里。如果推流时 HomePodCast 被强制结束或崩溃，电脑会保持静音，直到下次启动 HomePodCast 时自动恢复（如果你在这期间已经手动取消了静音，就不再动它）；日志里记着静音和恢复的是哪个设备。
 
 这个设置关着时，推流中如果声音也从电脑的扬声器或耳机里放出来（HDMI 音频、虚拟声卡不算，Windows 静音或音量为 0 时不算，按程序分流时也不算，那时每个程序的去处是你自己选的），首页会提示「电脑也在出声」。点「只用 HomePod 播放」会打开这个设置并马上把电脑静音；键盘音量键是「HomePod 跟随 Windows 音量」或「关」时，同时改成「推流时控制 HomePod」。点「不再提示」以后不再显示。
 
