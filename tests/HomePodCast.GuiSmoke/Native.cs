@@ -85,13 +85,13 @@ internal static partial class Native
     public static long ExStyle(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
     /// <summary>Visible top-level windows of a process.</summary>
-    public static List<IntPtr> TopLevelWindows(int pid)
+    public static List<IntPtr> TopLevelWindows(int pid, bool visibleOnly = true)
     {
         var list = new List<IntPtr>();
         EnumWindows((hwnd, _) =>
         {
             GetWindowThreadProcessId(hwnd, out uint owner);
-            if (owner == pid && IsWindowVisible(hwnd)) list.Add(hwnd);
+            if (owner == pid && (!visibleOnly || IsWindowVisible(hwnd))) list.Add(hwnd);
             return true;
         }, IntPtr.Zero);
         return list;

@@ -31,11 +31,13 @@ internal static class UiaProbe
             Console.WriteLine("READY"); Console.Out.Flush();
             var dialog = new IntPtr(long.Parse(Console.ReadLine()!));
             CheckOwner(dialog);
-            _ = Uia.Snapshot(dialog);
-            Native.PostMessage(dialog, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            var dialogTree = Uia.Snapshot(dialog);
+            var close = dialogTree.Descendants().First(n => n.Type == "Button" && n.Name == "关闭");
+            Uia.Invoke(close);
             var wait = Stopwatch.StartNew();
             while (Native.IsWindowVisible(dialog) && wait.ElapsedMilliseconds < 5000) Thread.Sleep(10);
             if (Native.IsWindowVisible(dialog)) throw new TimeoutException("Test dialog did not close.");
+            if (!Native.IsWindowVisible(handles[0])) throw new InvalidOperationException("Closing the dialog hid the main window.");
             _ = Uia.Snapshot(handles[0]);
             Console.WriteLine("PROGRESS: modal closed"); Console.Out.Flush();
             for (int i = 0; i < 4; i++)

@@ -58,16 +58,17 @@ public class LayoutWorkTests
         groupConfig.GroupCaptureDeviceIds = [TestApp.DeviceId, "AA:00:00:00:00:02"];
         groupConfig.GroupCapturePositions = new() { [GroupPlan.Key(TestApp.DeviceId)] = SpeakerPosition.Left,
             [GroupPlan.Key("AA:00:00:00:00:02")] = SpeakerPosition.Right };
-        using var groupHost = new Host(new GroupPage(TestApp.Create(groupConfig), inputs: []), 784);
+        using var groupHost = new MainWindow(TestApp.Create(groupConfig));
+        TestApp.Field<MixerPage>(groupHost, "_mixer").FindApps = _ => [];
+        ShowMain(groupHost);
+        Go(groupHost, AppPage.Group);
+        var groupPage = TestApp.Field<ScrollPage[]>(groupHost, "_pages")[(int)AppPage.Group];
         var groupHwnd = groupHost.Handle;
-        var groupSourceHwnd = All(groupHost.Page).OfType<FluentComboBox>().Single(c => c.AccessibleName == "音源").Handle;
+        var groupSourceHwnd = All(groupPage).OfType<FluentComboBox>().Single(c => c.AccessibleName == "音源").Handle;
         using var dialogHost = new Host(new ScrollPage("temporary dialog"), 400);
         var dialogHwnd = dialogHost.Handle;
-        using var modal = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000),
-            Opacity = 0, ShowInTaskbar = false, Size = new Size(400, 300) };
-        var modalContent = Ui.Stack(4, new TextBlock("modal title"), new TextBlock("modal description"));
-        modalContent.Dock = DockStyle.Fill;
-        modal.Controls.Add(modalContent);
+        using var modal = new GroupAlignmentForm([new("A", "A", 0), new("B", "B", 0)], canPlayTest: false)
+            { Opacity = 0, ShowInTaskbar = false };
         using var modalShown = new ManualResetEventSlim();
         using var modalClosed = new ManualResetEventSlim();
         IntPtr modalHwnd = IntPtr.Zero;

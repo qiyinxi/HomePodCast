@@ -89,11 +89,13 @@ internal sealed partial class Walker
         catch (StepFailed ex)
         {
             _report.Fail(Where(), "stopped: " + ex.Message);
+            RecordProcessState();
         }
         catch (Exception ex)
         {
             _report.Fail(Where(), $"stopped by {ex.GetType().Name}: {ex.Message}");
             File.WriteAllText(Path.Combine(_dir, "exception.txt"), ex.ToString());
+            RecordProcessState();
         }
         finally
         {
@@ -101,6 +103,18 @@ internal sealed partial class Walker
             SaveLog();
             _fake?.Dispose();
         }
+    }
+
+    private void RecordProcessState()
+    {
+        if (_app == null) return;
+        try
+        {
+            if (_app.HasExited) _report.Note(Where("process"), $"exited: 0x{_app.ExitCode:X8}");
+            else _report.Note(Where("process"), "windows: " + string.Join("; ", Native.TopLevelWindows(_app.Id, visibleOnly: false)
+                .Select(w => $"{w:X} {Native.ClassName(w)} visible={Native.IsWindowVisible(w)} title=「{Native.WindowText(w)}」")));
+        }
+        catch (Exception ex) { _report.Note(Where("process"), "diagnostics unavailable: " + ex.Message); }
     }
 
     /// <summary>The app is gone for good (also when a scenario overran its time).</summary>
@@ -902,6 +916,13 @@ internal sealed partial class Walker
             Native.PostMessage(hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
         WaitUntil(() => !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd), $"the 「{title}」 dialog to close", 5000);
+        if (App.HasExited)
+            throw new StepFailed($"the app exited after closing 「{title}」: 0x{App.ExitCode:X8}");
+        var remaining = Native.TopLevelWindows(App.Id, visibleOnly: false);
+        _report.Note(Where(what), "after dialog close: " + string.Join("; ", remaining.Select(w =>
+            $"{w:X} {Native.ClassName(w)} visible={Native.IsWindowVisible(w)} title=「{Native.WindowText(w)}」")));
+        if (MainWindow() == IntPtr.Zero)
+            throw new StepFailed($"the main window is no longer visible after closing 「{title}」");
     }
 
     // ---------------------------------------------------------------- pages

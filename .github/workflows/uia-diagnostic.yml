@@ -1,0 +1,47 @@
+name: UIA diagnostic
+
+# Temporary focused reproduction. Normal build.yml still runs its complete, unchanged matrix.
+on:
+  pull_request:
+    paths: ['.github/workflows/uia-diagnostic.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  focused-gui:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Publish the same single-file app
+        run: dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o diagnostic-app
+      - name: Build GUI client
+        run: dotnet build tests/HomePodCast.GuiSmoke -c Release
+      - name: Reproduce one language
+        shell: pwsh
+        run: |
+          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app diagnostic-app/HomePodCast.exe --out uia-diagnostics --only group-outputs-zh-CN-150
+          if ($LASTEXITCODE) { throw 'Focused GUI reproduction failed; inspect the artifact.' }
+      - name: Capture application events
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item uia-diagnostics -ItemType Directory -Force | Out-Null
+          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15)} -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in @('.NET Runtime', 'Application Error', 'Windows Error Reporting') } |
+            Select-Object TimeCreated, ProviderName, Id, Message | Format-List |
+            Out-File uia-diagnostics/application-events.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: uia-diagnostics
+          path: uia-diagnostics
