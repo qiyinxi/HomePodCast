@@ -107,8 +107,7 @@ internal static class Uia
                 Thread.Sleep(300);
             }
             catch (IndexOutOfRangeException ex) when (attempt < 4 && Native.IsWindow(hwnd)
-                && ex.TargetSite?.DeclaringType?.FullName == "MS.Internal.Automation.CacheHelper"
-                && ex.TargetSite.Name == "ParseTreeDescription")
+                && IsCacheCollectionError(ex))
             {
                 // 2026-10-18 CI: closing the common file picker while its new source rebuilt the page produced
                 // an inconsistent native bulk-cache response. Retry the same complete request, within the existing
@@ -118,6 +117,11 @@ internal static class Uia
             }
         }
     }
+
+    internal static bool IsCacheCollectionError(IndexOutOfRangeException error) =>
+        // The runtime's hidden ThrowHelpers method is TargetSite; inspect the actual parser frames instead.
+        new System.Diagnostics.StackTrace(error, false).GetFrames().Any(frame => frame.GetMethod() is
+            { Name: "ParseTreeDescription", DeclaringType: { FullName: "MS.Internal.Automation.CacheHelper" } });
 
     internal static Node SnapshotLive(IntPtr hwnd)
     {

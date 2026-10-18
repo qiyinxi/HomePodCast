@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
 using HomePodCast.UI.Controls;
 
@@ -7,6 +8,25 @@ namespace HomePodCast.Tests;
 [Collection("Layout work")]
 public class PaintedTextTests
 {
+    [Fact]
+    public void Uia_cache_retry_recognizes_the_real_framework_failure_only()
+    {
+        // Reproduce the same parser failure with a truncated native response, without opening any window.
+        var parser = typeof(System.Windows.Automation.AutomationElement).Assembly.GetType("MS.Internal.Automation.CacheHelper")!
+            .GetMethod("ParseTreeDescription", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var invocation = Assert.Throws<TargetInvocationException>(() =>
+            parser.Invoke(null, ["(", new object[0, 0], 0, 0, null, true, true]));
+        var frameworkError = Assert.IsType<IndexOutOfRangeException>(invocation.InnerException);
+        string repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        var probe = Assembly.LoadFrom(Path.Combine(repo, "tests", "HomePodCast.GuiSmoke", "bin", configuration,
+            "net10.0-windows", "HomePodCast.GuiSmoke.dll"));
+        var classify = probe.GetType("HomePodCast.GuiSmoke.Uia")!.GetMethod("IsCacheCollectionError", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(true, classify.Invoke(null, [frameworkError]));
+        var ownError = Assert.Throws<IndexOutOfRangeException>(() => { _ = Array.Empty<int>()[0]; });
+        Assert.Equal(false, classify.Invoke(null, [ownError]));
+    }
+
     [Fact]
     public void Layout_accessibility_returns_its_managed_parent_without_allocating_native_proxies() => Sta.Run(() =>
     {
