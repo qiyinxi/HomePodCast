@@ -104,7 +104,7 @@ internal static class GitHubReleases
             if (r.ValueKind != JsonValueKind.Object || Bool(r, "draft")) continue;
             var tag = Str(r, "tag_name");
             if (ReleaseVersion.Parse(tag) is not { } version) continue;
-            var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal)
+            var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal) && ReleaseNotes.CanOpen(url)
                 ? url
                 : PagePrefix + "tag/" + Uri.EscapeDataString(tag!);
             list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed.DownloadPrefix),

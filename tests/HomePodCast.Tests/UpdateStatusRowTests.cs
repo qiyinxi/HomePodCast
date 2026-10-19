@@ -16,8 +16,8 @@ public sealed class UpdateStatusRowUiCollection { }
 /// <summary>
 /// 设置 → 软件更新's one row (UpdateStatusRow) in every state, built off-screen in a page as wide as at the window's
 /// minimum and default sizes, with made-up update states: what it shows and holds, that nothing appears or goes away
-/// below it, and that its buttons stay whole and apart in Chinese and German. The GUI smoke test only ever sees the
-/// 「检查更新」 state (a release build never offers an update without GitHub), so the offered one is checked here.
+/// below it, and that its buttons stay whole and apart in Chinese and German. GUI smoke also exercises an offered
+/// update through its CI-only loopback release feed.
 /// </summary>
 [Collection("UpdateStatusRow UI")]
 public class UpdateStatusRowTests(ITestOutputHelper output)

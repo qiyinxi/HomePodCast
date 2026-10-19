@@ -609,7 +609,7 @@ internal sealed partial class Walker
         Expect(Has(page, T("许可证")), "关于", "license missing");
         // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
         // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
-        // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
+        // build has no test feed in these scenarios). The focused update-notes scenario uses a loopback feed.
         // Only in the row: German 「Aktualisieren」 is also 音箱信息's 刷新.
         var versionPattern = _t.Pattern("当前版本 {0}");
         var updateRow = Find(page, n => n.Type == "Text" && n.Shown && versionPattern.IsMatch(n.Name))?.Parent;
