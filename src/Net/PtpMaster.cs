@@ -35,6 +35,11 @@ public sealed class PtpMaster : IDisposable
     public event Action<Exception>? Failed;
     internal int PeerCount => Volatile.Read(ref _peers).Length;
     internal int CompetingClockCount { get { lock (_election) return _betterClocks.Values.Count(t => t > Stopwatch.GetTimestamp()); } }
+    /// <summary>
+    /// How long one announce from a better clock holds us off: PTP's announce receipt timeout, three announce intervals
+    /// of 1 s. Tests lengthen it so that only the clock's withdrawal ends the hold, however long the test process stalls.
+    /// </summary>
+    internal TimeSpan BetterClockHold { get; init; } = TimeSpan.FromSeconds(3);
     internal ulong SessionNanoseconds => TimeAt(MediaClock.Now);
     internal ulong TimeAt(long qpcTicks)
     {
@@ -182,7 +187,7 @@ public sealed class PtpMaster : IDisposable
                         long now = Stopwatch.GetTimestamp();
                         var candidate = (peer, identity);
                         if (PtpPackets.CompareGrandmasters(datagram.Buffer, _ownAnnounce) < 0)
-                            _betterClocks[candidate] = now + Stopwatch.Frequency * 3;
+                            _betterClocks[candidate] = now + (long)(BetterClockHold.TotalSeconds * Stopwatch.Frequency);
                         // 2026-10-14: nqptp 1.2.4 wakes a master with a better announce, then a worse
                         // one 150 ms later. That same clock withdrawing its candidacy ends the hold now,
                         // which is when the wait for a stable master starts counting again.
