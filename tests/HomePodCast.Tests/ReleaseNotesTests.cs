@@ -92,6 +92,15 @@ public class ReleaseNotesTests
     }
 
     [Fact]
+    public void Wrapped_bullet_lines_stay_in_the_same_list_item()
+    {
+        var blocks = ReleaseNotes.Parse("- First line\n  continued with **details**.\n- Next item");
+        Assert.Equal(2, blocks.Count);
+        Assert.All(blocks, block => Assert.Equal(0, block.ListDepth));
+        Assert.Equal("First line continued with details.", string.Concat(blocks[0].Runs.Select(r => r.Text)));
+    }
+
+    [Fact]
     public void Only_a_manual_new_version_opens_the_window()
     {
         foreach (var outcome in Enum.GetValues<CheckOutcome>())

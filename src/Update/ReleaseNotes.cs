@@ -65,11 +65,13 @@ internal static class ReleaseNotes
     {
         var blocks = new List<NotesBlock>();
         var paragraph = new StringBuilder();
+        int listDepth = -1;
         void Flush()
         {
             if (paragraph.Length == 0) return;
-            blocks.Add(new(Inline(paragraph.ToString())));
+            blocks.Add(new(Inline(paragraph.ToString()), ListDepth: listDepth));
             paragraph.Clear();
+            listDepth = -1;
         }
         foreach (var raw in markdown.Replace("\r\n", "\n").Split('\n'))
         {
@@ -84,7 +86,8 @@ internal static class ReleaseNotes
             else if (line.StartsWith("- "))
             {
                 Flush();
-                blocks.Add(new(Inline(line[2..]), ListDepth: Math.Min(3, (raw.Length - raw.TrimStart().Length) / 2)));
+                listDepth = Math.Min(3, (raw.Length - raw.TrimStart().Length) / 2);
+                paragraph.Append(line[2..]);
             }
             else
             {
