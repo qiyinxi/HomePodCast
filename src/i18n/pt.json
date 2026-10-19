@@ -308,9 +308,6 @@
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Versão portátil: \"Atualizar\" abre a página da versão. Transfira o novo zip, extraia-o e substitua os ficheiros antigos.",
   "便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。": "A versão portátil não instala atualizações sozinha: transfira o novo zip da página da versão que acabou de abrir, extraia-o e substitua os ficheiros antigos.",
   "GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。": "O GitHub não indica o SHA-256 deste instalador, por isso não pode ser verificado e não será instalado automaticamente. Transfira-o a partir da página da versão.",
-  "更新 HomePodCast": "Atualizar o HomePodCast",
-  "下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；HomePodCast 会先退出，装好后自动重新启动。": "Transferir e instalar o HomePodCast {0}?\n\nO instalador é primeiro verificado com o SHA-256 indicado pelo GitHub. O Windows pede permissão de administrador para o instalar; o HomePodCast fecha-se antes e volta a abrir automaticamente quando a instalação terminar.",
-  "正在推流：推送会停止大约一分钟。": "Está a transmitir: a transmissão para durante cerca de um minuto.",
   "正在下载 {0}… {1}%": "A transferir {0}… {1}%",
   "已取消下载": "Transferência cancelada",
   "下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。": "O instalador transferido falhou a verificação SHA-256. Foi eliminado e não será instalado. Transfira-o a partir da página da versão.",
@@ -728,5 +725,12 @@
   "本次连接的缓冲和网络统计，不代表实际听到的中断。": "As contagens do buffer e da rede desta ligação não confirmam interrupções audíveis.",
   "电脑端音频缓冲供数不足的次数，不等于音箱实际中断的次数。": "Número de faltas de dados no buffer de áudio do PC, não interrupções confirmadas na coluna.",
   "根据网络延迟、丢包和重传估计，不代表实际播放中断；未监测时不显示数值。": "Estimativa baseada no atraso de rede, perda de pacotes e retransmissões, não interrupções confirmadas. Sem monitorização não é apresentado um valor.",
-  "已推送 {0} · {1}": "A transmitir {0} · {1}"
+  "已推送 {0} · {1}": "A transmitir {0} · {1}",
+  "新版本 {0}": "Nova versão {0}",
+  "稍后": "Mais tarde",
+  "发布日期：{0}": "Publicado em: {0}",
+  "此版本没有提供更新说明。": "Não foram fornecidas notas para esta versão.",
+  "更早的变化见发布页。": "Veja as alterações anteriores na página de versões.",
+  "在 GitHub 上查看": "Ver no GitHub",
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "O instalador é verificado primeiro com SHA-256. O Windows pedirá permissões de administrador e a aplicação reiniciará após a instalação. A transmissão será interrompida durante cerca de um minuto."
 }

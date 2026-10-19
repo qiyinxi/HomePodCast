@@ -27,6 +27,15 @@ internal sealed class ReleaseFeed
     /// <summary>The repository's releases on GitHub: what the app checks.</summary>
     public static ReleaseFeed GitHub { get; } = new(GitHubReleases.ApiUrl, GitHubReleases.DownloadPrefix, followRedirects: true);
 
+    /// <summary>Only CI can substitute a loopback list for GUI smoke. No persistent feed setting.</summary>
+    internal static ReleaseFeed ForGuiSmoke(string[] args, bool ci)
+    {
+        var option = args.SingleOrDefault(a => a.StartsWith("--gui-update-feed=", StringComparison.Ordinal));
+        if (option == null) return GitHub;
+        if (!ci) throw new ArgumentException("--gui-update-feed is only for GitHub Actions GUI smoke tests");
+        return Loopback(option["--gui-update-feed=".Length..]);
+    }
+
     /// <summary>
     /// A release list served on this PC: <paramref name="url"/> must be http://127.0.0.1[:port]/… or
     /// http://localhost[:port]/… (no user name, no https, no other host). Its MSIs must be on the same scheme, host and

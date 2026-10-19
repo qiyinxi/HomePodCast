@@ -46,7 +46,7 @@ The script:
 - waits for the tag build, checks that the release is a prerelease with the `.msi` and the `-win-x64.zip`, and applies the notes (`gh release edit --notes-file`);
 - deletes the snapshot branch. The tag keeps the commit, and the snapshot's run stays in the Actions list, where the tag build's release checks found it.
 
-It warns when `main` is not an ancestor of the commit: such a beta can't be promoted (see below). Without `-NotesFile` the release keeps GitHub's generated notes; apply real ones later with `gh release edit vX.Y.Z-beta.N --notes-file <notes.md>`.
+It warns when `main` is not an ancestor of the commit: such a beta can't be promoted (see below). A validated bilingual `-NotesFile` is required before any release step.
 
 **When it stops** (a failed or cancelled run, the network, Ctrl+C), the snapshot branch stays. Running the same command again from the same checkout continues that beta: the snapshot's commit (even if `dev` has moved on since), the same number, and the snapshot's run (a re-run of its jobs is the same run). Its messages say what to do:
 
@@ -142,7 +142,7 @@ Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and
 4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
 5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
 
-Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person (`docs/device-test-checklist.zh-CN.md`: the per-release regression, 「软件更新」 and 「安装包（MSI）」): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
+Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. GUI smoke checks the notes window in Chinese and English using a loopback feed. Still for a person (`docs/device-test-checklist.zh-CN.md`: the per-release regression, 「软件更新」 and 「安装包（MSI）」): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the tray notice, and a check against the real GitHub API.
 
 `update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
@@ -158,13 +158,16 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 
 ### Release notes
 
-- English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
+- Every beta and promotion requires `-NotesFile`. Use exactly one line `## 简体中文`, outside code fences: English before it and Simplified Chinese after it, with the same content. Missing or duplicate boundaries and empty language sections stop the script before any release step. Chinese subsections use `###`.
 - A beta: what changed since the previous beta, what to test, known problems.
-- A stable release: everything since the previous stable release, what was verified on the real HomePod, known problems.
+- A stable release: edit a fresh summary of the final behavior since the previous stable release; never concatenate beta announcements. Combine repeated changes to a feature. Keep experimental labels and hardware limitations.
+- Start with one or two sentences, then New features, Fixes and Known issues. Verification is one or two sentences about what was checked on a real HomePod, without CI job names or unit-test counts. Put download-only advice such as SmartScreen last. Software tests do not establish hardware verification.
 - Mention updates when they matter: the MSI updates itself from 关于 → 软件更新; the portable zip and the Store version don't.
 
 ```markdown
-## Highlights
+HomePodCast X.Y.Z improves … Changes since X.Y.W.
+
+## New features
 - …
 
 ## Fixes
@@ -173,9 +176,17 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 ## Known issues
 - …
 
+## Verification
+Verified … on a real HomePod.
+
+## Installation
+…
+
 ## 简体中文
 
-### 亮点
+HomePodCast X.Y.Z 改进了……以下是 X.Y.W 以来的变化。
+
+### 新功能
 - …
 
 ### 修复
@@ -183,7 +194,15 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 
 ### 已知问题
 - …
+
+### 验证情况
+在真实 HomePod 上验证了……
+
+### 安装
+……
 ```
+
+Published notes can be corrected with `gh release edit <tag> --notes-file <file>` without changing a tag or binary. Save the old body first. For older unstructured notes the app shows the full text when a language cannot be selected reliably.
 
 ### When a tag build fails
 
@@ -238,7 +257,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 - 等标签构建完成，检查发布是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明（`gh release edit --notes-file`）；
 - 删掉快照分支。标签留住了这个提交，快照的那次运行也留在 Actions 列表里，标签构建的发布检查就是在那里找到它的。
 
-如果 `main` 不是这个提交的祖先，脚本会警告：这样的测试版不能转正（见下文）。不给 `-NotesFile` 时，发布页保留 GitHub 自动生成的说明，之后用 `gh release edit vX.Y.Z-beta.N --notes-file <说明.md>` 换成正式的。
+如果 `main` 不是这个提交的祖先，脚本会警告：这样的测试版不能转正（见下文）。任何发布步骤开始前，都必须提供已通过双语格式校验的 `-NotesFile`。
 
 **脚本中途停下时**（运行失败或被取消、网络问题、Ctrl+C），快照分支会留着。在同一个检出里再运行一次同样的命令，就会接着做这个测试版：用快照的提交（即使 `dev` 之后又前进了）、同一个编号、快照已有的那次运行（重跑它的作业还是同一次运行）。它的提示会说明该怎么做：
 
@@ -328,7 +347,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
 5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
 
-它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 的「每版回归」「软件更新」和「安装包（MSI）」）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
+它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。GUI 冒烟通过回环假 feed 检查中英文说明窗口。仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 的「每版回归」「软件更新」和「安装包（MSI）」）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、托盘提示、对真实 GitHub API 的检查。
 
 `update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
 
@@ -344,12 +363,15 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 ### 发布说明
 
-- 先英文，然后在 `## 简体中文` 标题下写同样内容的中文。说明文件里没有中文或以中文开头时，`release.ps1` 会警告。
+- 每次测试版和转正都必须传 `-NotesFile`。用恰好一行 `## 简体中文` 分界，不能放在代码块里：前面是英文，后面是相同内容的简体中文。缺少或重复分界、任一语言为空时，脚本会在任何发布步骤前拒绝。中文小标题用 `###`。
 - 测试版：和上一个测试版相比改了什么、要测什么、已知问题。
-- 正式版：上一个正式版以来的全部变化、在真实 HomePod 上验证了什么、已知问题。
+- 正式版：重新整理成「上一个正式版以来」最终行为的总结，不拼接各个测试版公告。同一个功能多次改动只写最后结果，保留实验性标注和硬件限制。
+- 开头用一两句概括，再依次写「新功能」「修复」「已知问题」。「验证情况」用一两句写明在真实 HomePod 上验证了什么，不列 CI 作业名和单元测试数。SmartScreen 等仅与发布页下载有关的安装提示放最后。软件测试不等于硬件验证。
 - 需要时说明更新方式：MSI 安装版可以在 关于 → 软件更新 里自己更新；便携版 zip 和商店版不会。
 
 模板见英文部分。
+
+已发布的说明可用 `gh release edit <tag> --notes-file <file>` 修改，不动标签或二进制；改前保存旧正文。旧格式无法可靠切分语言时，程序显示全文。
 
 ### 标签构建失败时
 

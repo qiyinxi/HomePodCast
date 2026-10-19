@@ -286,7 +286,7 @@ public class UpdateSelfTestRunTests
     }
 
     /// <summary>A minimal HTTP/1.1 server on 127.0.0.1 (one request per connection), like tools/ci/fake-release-feed.ps1.</summary>
-    private sealed class FakeFeed : IAsyncDisposable
+    internal sealed class FakeFeed : IAsyncDisposable
     {
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource _stop = new();

@@ -18,7 +18,7 @@ internal sealed record DownloadedUpdate(string Folder, string Msi);
 /// The steps of 设置 → 软件更新 without any UI, shared by the buttons (TrayApp.Update.cs: 「检查更新」 and 「更新」) and
 /// the update-selftest command (<see cref="UpdateSelfTest"/>, which CI runs from an installed older MSI): which kind of
 /// install this is, the check, what 「更新」 does with the release found, the download with its SHA-256 check, and the
-/// start of the installer helper. The UI adds the confirmation, the status line and quitting.
+/// start of the installer helper. The notes window adds consent; the UI owns shared progress and quitting.
 /// </summary>
 internal static class UpdateFlow
 {

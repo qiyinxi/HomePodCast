@@ -308,9 +308,6 @@
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Draagbare versie: \"Bijwerken\" opent de releasepagina. Download de nieuwe zip, pak hem uit en vervang de oude bestanden.",
   "便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。": "De draagbare versie installeert updates niet zelf: download de nieuwe zip van de releasepagina die zojuist is geopend, pak hem uit en vervang de oude bestanden.",
   "GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。": "GitHub geeft geen SHA-256 voor dit installatiepakket. Het kan dus niet worden gecontroleerd en wordt niet automatisch geïnstalleerd. Download het van de releasepagina.",
-  "更新 HomePodCast": "HomePodCast bijwerken",
-  "下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；HomePodCast 会先退出，装好后自动重新启动。": "HomePodCast {0} downloaden en installeren?\n\nHet installatiepakket wordt eerst gecontroleerd met de SHA-256 die GitHub ervoor geeft. Windows vraagt om beheerdersrechten voor de installatie; HomePodCast sluit eerst af en start na de installatie automatisch opnieuw.",
-  "正在推流：推送会停止大约一分钟。": "Er wordt gestreamd: het streamen stopt ongeveer een minuut.",
   "正在下载 {0}… {1}%": "{0} downloaden… {1}%",
   "已取消下载": "Downloaden geannuleerd",
   "下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。": "Het gedownloade installatiepakket kwam niet door de SHA-256-controle. Het is verwijderd en wordt niet geïnstalleerd. Download het van de releasepagina.",
@@ -728,5 +725,12 @@
   "本次连接的缓冲和网络统计，不代表实际听到的中断。": "Buffer- en netwerktellers voor deze verbinding bevestigen geen hoorbare onderbrekingen.",
   "电脑端音频缓冲供数不足的次数，不等于音箱实际中断的次数。": "Hoe vaak de audiobuffer van de pc te weinig gegevens had, geen bevestigde onderbrekingen bij de luidspreker.",
   "根据网络延迟、丢包和重传估计，不代表实际播放中断；未监测时不显示数值。": "Geschat op basis van netwerkvertraging, pakketverlies en hertransmissies, geen bevestigde onderbrekingen. Zonder bewaking wordt geen waarde getoond.",
-  "已推送 {0} · {1}": "Streamt {0} · {1}"
+  "已推送 {0} · {1}": "Streamt {0} · {1}",
+  "新版本 {0}": "Nieuwe versie {0}",
+  "稍后": "Later",
+  "发布日期：{0}": "Gepubliceerd: {0}",
+  "此版本没有提供更新说明。": "Er zijn geen releaseopmerkingen voor deze versie.",
+  "更早的变化见发布页。": "Zie de releasepagina voor eerdere wijzigingen.",
+  "在 GitHub 上查看": "Bekijken op GitHub",
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Het installatiebestand wordt eerst met SHA-256 gecontroleerd. Windows vraagt om beheerdersrechten en de app start na installatie opnieuw. De stream wordt ongeveer een minuut onderbroken."
 }

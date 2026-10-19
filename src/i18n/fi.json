@@ -308,9 +308,6 @@
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Siirrettävä versio: \"Päivitä\" avaa julkaisusivun. Lataa uusi zip, pura se ja korvaa vanhat tiedostot.",
   "便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。": "Siirrettävä versio ei asenna päivityksiä itse: lataa uusi zip juuri avautuneelta julkaisusivulta, pura se ja korvaa vanhat tiedostot.",
   "GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。": "GitHub ei ilmoita tämän asennuspaketin SHA-256-tiivistettä, joten sitä ei voi tarkistaa eikä sitä asenneta automaattisesti. Lataa se julkaisusivulta.",
-  "更新 HomePodCast": "Päivitä HomePodCast",
-  "下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；HomePodCast 会先退出，装好后自动重新启动。": "Ladataanko ja asennetaanko HomePodCast {0}?\n\nAsennuspaketti tarkistetaan ensin GitHubin ilmoittamalla SHA-256-tiivisteellä. Windows pyytää asennukseen järjestelmänvalvojan oikeudet; HomePodCast suljetaan ensin ja käynnistyy automaattisesti uudelleen, kun asennus on valmis.",
-  "正在推流：推送会停止大约一分钟。": "Suoratoisto on käynnissä: se katkeaa noin minuutiksi.",
   "正在下载 {0}… {1}%": "Ladataan {0}… {1} %",
   "已取消下载": "Lataus peruutettiin",
   "下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。": "Ladattu asennuspaketti ei läpäissyt SHA-256-tarkistusta. Se poistettiin, eikä sitä asenneta. Lataa se julkaisusivulta.",
@@ -728,5 +725,12 @@
   "本次连接的缓冲和网络统计，不代表实际听到的中断。": "Tämän yhteyden puskuri- ja verkkolaskurit eivät vahvista kuultavia katkoksia.",
   "电脑端音频缓冲供数不足的次数，不等于音箱实际中断的次数。": "Kerrat, jolloin tietokoneen äänipuskurista puuttui dataa, eivät vahvistettuja kaiuttimen katkoksia.",
   "根据网络延迟、丢包和重传估计，不代表实际播放中断；未监测时不显示数值。": "Arvio verkkoviiveestä, pakettihävikistä ja uudelleenlähetyksistä, ei vahvistettuja toistokatkoksia. Arvoa ei näytetä ilman seurantaa.",
-  "已推送 {0} · {1}": "Lähetetty {0} · {1}"
+  "已推送 {0} · {1}": "Lähetetty {0} · {1}",
+  "新版本 {0}": "Uusi versio {0}",
+  "稍后": "Myöhemmin",
+  "发布日期：{0}": "Julkaistu: {0}",
+  "此版本没有提供更新说明。": "Tälle versiolle ei ole julkaisutietoja.",
+  "更早的变化见发布页。": "Aiemmat muutokset ovat julkaisusivulla.",
+  "在 GitHub 上查看": "Näytä GitHubissa",
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Asennuspaketti tarkistetaan ensin SHA-256:lla. Windows pyytää järjestelmänvalvojan oikeuksia, ja sovellus käynnistyy uudelleen asennuksen jälkeen. Suoratoisto keskeytyy noin minuutiksi."
 }

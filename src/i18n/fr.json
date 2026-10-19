@@ -308,9 +308,6 @@
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Version portable : \"Mettre à jour\" ouvre la page de la version. Téléchargez le nouveau zip, décompressez-le et remplacez les anciens fichiers.",
   "便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。": "La version portable n'installe pas les mises à jour elle-même : téléchargez le nouveau zip sur la page de la version qui vient de s'ouvrir, décompressez-le et remplacez les anciens fichiers.",
   "GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。": "GitHub ne fournit pas de SHA-256 pour ce programme d'installation : il ne peut pas être vérifié et ne sera donc pas installé automatiquement. Téléchargez-le depuis la page de la version.",
-  "更新 HomePodCast": "Mettre à jour HomePodCast",
-  "下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；HomePodCast 会先退出，装好后自动重新启动。": "Télécharger et installer HomePodCast {0} ?\n\nLe programme d'installation est d'abord vérifié avec le SHA-256 fourni par GitHub. Windows demande l'autorisation d'administrateur pour l'installer ; HomePodCast se ferme avant et redémarre automatiquement une fois l'installation terminée.",
-  "正在推流：推送会停止大约一分钟。": "Une diffusion est en cours : elle s'interrompt pendant environ une minute.",
   "正在下载 {0}… {1}%": "Téléchargement de {0}… {1} %",
   "已取消下载": "Téléchargement annulé",
   "下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。": "Le programme d'installation téléchargé n'a pas passé la vérification SHA-256. Il a été supprimé et ne sera pas installé. Téléchargez-le depuis la page de la version.",
@@ -728,5 +725,12 @@
   "本次连接的缓冲和网络统计，不代表实际听到的中断。": "Les compteurs du tampon et du réseau de cette connexion ne confirment pas des coupures audibles.",
   "电脑端音频缓冲供数不足的次数，不等于音箱实际中断的次数。": "Nombre de manques de données dans le tampon audio du PC, pas de coupures confirmées sur l’enceinte.",
   "根据网络延迟、丢包和重传估计，不代表实际播放中断；未监测时不显示数值。": "Estimation selon la latence réseau, les pertes de paquets et les retransmissions, pas de coupures confirmées. Aucune valeur sans surveillance.",
-  "已推送 {0} · {1}": "Diffusion {0} · {1}"
+  "已推送 {0} · {1}": "Diffusion {0} · {1}",
+  "新版本 {0}": "Nouvelle version {0}",
+  "稍后": "Plus tard",
+  "发布日期：{0}": "Publié le : {0}",
+  "此版本没有提供更新说明。": "Aucune note de version fournie pour cette version.",
+  "更早的变化见发布页。": "Les changements plus anciens figurent sur la page des versions.",
+  "在 GitHub 上查看": "Voir sur GitHub",
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Le programme d’installation est vérifié avec SHA-256. Windows demandera les droits administrateur, puis l’application redémarrera après l’installation. La diffusion sera interrompue environ une minute."
 }

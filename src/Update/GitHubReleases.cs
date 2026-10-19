@@ -17,7 +17,8 @@ public enum UpdateChannel
 /// <summary>A published release as the GitHub API lists it, with its MSI if it has one.</summary>
 /// <param name="PageUrl">The release's page on github.com (its notes; the portable zip is there too).</param>
 /// <param name="Prerelease">Marked as a prerelease on GitHub, or a prerelease version.</param>
-internal sealed record Release(ReleaseVersion Version, string Tag, string PageUrl, bool Prerelease, ReleaseAsset? Msi);
+internal sealed record Release(ReleaseVersion Version, string Tag, string PageUrl, bool Prerelease, ReleaseAsset? Msi,
+    string Body = "", DateTimeOffset? PublishedAt = null);
 
 /// <param name="Sha256">The SHA-256 GitHub computed when the file was uploaded (the asset's "digest"), lower-case hex; null if none.</param>
 internal sealed record ReleaseAsset(string Name, string Url, long Size, string? Sha256);
@@ -103,10 +104,12 @@ internal static class GitHubReleases
             if (r.ValueKind != JsonValueKind.Object || Bool(r, "draft")) continue;
             var tag = Str(r, "tag_name");
             if (ReleaseVersion.Parse(tag) is not { } version) continue;
-            var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal)
+            var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal) && ReleaseNotes.CanOpen(url)
                 ? url
                 : PagePrefix + "tag/" + Uri.EscapeDataString(tag!);
-            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed.DownloadPrefix)));
+            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed.DownloadPrefix),
+                Str(r, "body") ?? "", DateTimeOffset.TryParse(Str(r, "published_at"), System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal, out var published) ? published : null));
         }
         return list;
     }
