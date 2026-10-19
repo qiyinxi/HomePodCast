@@ -64,7 +64,6 @@ internal sealed class HomePage : ScrollPage
     private readonly MetricTile _buffer = new(L.T("缓冲"), "ms");
     private readonly MetricTile _speakerDelay = new(L.T("音箱处理"), "ms");
     private readonly MetricTile _effective = new(L.T("实际延迟"), "ms");
-    private readonly MetricTile _dropouts = new(L.T("断音"));
     private readonly MetricTile _resent = new(L.T("重传"));
 
     // network: a status line while streaming; instead of it, a hint when the jitter eats the latency's margin
@@ -77,7 +76,6 @@ internal sealed class HomePage : ScrollPage
     private int? _suggestedMs;
     private int _appliedSession = -1; // Health.Session whose suggestion was applied: no hint again until it reconnects
     private bool _hintLogged;
-    private string? _dropoutTip;
 
     // update: a banner above the cards when an automatic check found a new version (a manual one answers in 设置)
     private readonly TextBlock _updateText = new("", TextStyle.Body, TextRole.Accent, wrap: true);
@@ -94,7 +92,6 @@ internal sealed class HomePage : ScrollPage
 
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
-    private long _underrunsAtStart;
     private bool _loading;
 
     public HomePage(TrayApp app) : base(L.T("首页"))
@@ -110,7 +107,7 @@ internal sealed class HomePage : ScrollPage
         left.FillLast = true; // the volume card ends where the scene card does
         var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330, EqualHeights = true };
         var tiles = new TileGrid { MinTileWidth = 112 };
-        tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
+        tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _resent]);
         // Diagnostics live in 设置 → 工具, marking a stutter on a hotkey (unset by default): neither is for every day.
         var statsHeader = Ui.Section(L.T("推流状态"));
         _netLine = Ui.Row(8, _netStatus, new GlyphLabel(Glyph.Wifi), _netStatus);
@@ -125,7 +122,6 @@ internal sealed class HomePage : ScrollPage
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
         _tips.SetToolTip(_speakerDelay, L.T("音箱从收到声音到播放需要的时间（音箱自己报告）"));
         _tips.SetToolTip(_effective, L.T("这次连接实际使用的延迟"));
-        SetDropoutTip(DropoutTip(0, null));
         _tips.SetToolTip(_resent, L.T("音箱要求重发的包：已重发 / 请求"));
         _tips.SetToolTip(_netStatus, L.T("最近 10 分钟里 Wi-Fi 延迟突增、丢包或音箱要求重发的次数"));
 
@@ -568,7 +564,6 @@ internal sealed class HomePage : ScrollPage
         if (c.State == StreamState.Streaming && _lastState != StreamState.Streaming)
         {
             _streamingSince = DateTime.UtcNow;
-            _underrunsAtStart = c.Fifo.Underruns;
         }
         _lastState = c.State;
 
@@ -604,9 +599,6 @@ internal sealed class HomePage : ScrollPage
         var verdict = live
             ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
             : DemoVerdict(arrivalToRender);
-        long pcDropouts = streaming ? c.Fifo.Underruns - _underrunsAtStart : 0;
-        int? networkDropouts = live ? verdict!.ConnectionThreats : null;
-        string dropouts = DropoutValue(pcDropouts, networkDropouts ?? 0);
         var cfg = _app.Config;
         var source = c.Capture?.DeviceName is { } name ? L.F("音源：{0}", name)
             : cfg.CaptureDeviceId != null ? L.F("音源：{0}", cfg.CaptureDeviceName ?? cfg.CaptureDeviceId)
@@ -629,7 +621,7 @@ internal sealed class HomePage : ScrollPage
         {
             var t = DateTime.UtcNow - _streamingSince;
             string duration = t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes}:{t.Seconds:00}";
-            _streamStats.Text = L.F("已推送 {0} · 断音 {1} 次 · {2}", duration, dropouts, source);
+            _streamStats.Text = L.F("已推送 {0} · {1}", duration, source);
         }
         else
         {
@@ -641,8 +633,6 @@ internal sealed class HomePage : ScrollPage
         // floor and the estimates, but shown while disconnected it looked like a live reading.
         _speakerDelay.SetValue(streaming ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString() : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
-        _dropouts.SetValue(streaming ? dropouts : null);
-        SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
         ShowPcSound();
@@ -673,26 +663,6 @@ internal sealed class HomePage : ScrollPage
         _groupStatus.Text = string.Join("\n", lines);
         if (_app.Controller.State == StreamState.Streaming)
             _groupStatus.Text += "\n" + L.F("当前整组延迟：{0} ms", _app.Controller.EffectiveLatencyMs);
-    }
-
-    /// <summary>
-    /// 断音: this connection's dropouts, the ones measured on the PC (the FIFO ran dry) plus the network's likely ones
-    /// (<see cref="NetworkVerdict.ConnectionThreats"/>). The speaker never reports a late packet, so on 2026-10-10 the tile
-    /// said 0 through stutters heard at 200 and 500 ms; the network's share is an estimate, so the number gets "≈".
-    /// </summary>
-    internal static string DropoutValue(long pc, int network) => network > 0 ? $"≈{pc + network}" : pc.ToString();
-
-    /// <summary>断音's tooltip: the two shares, or only the PC's while the network is not watched (a group).</summary>
-    internal static string DropoutTip(long pc, int? network) => network is { } n
-        ? L.F("这次连接里的断音：电脑这边 {0} 次（实测），网络 {1} 次（估计）\n" +
-              "Wi-Fi 抖动超出延迟余量时，HomePod 可能断一下音；HomePod 不报告晚到的包，所以网络一项只能估计", pc, n)
-        : L.T("这次连接中电脑这边断音的次数");
-
-    private void SetDropoutTip(string tip)
-    {
-        if (tip == _dropoutTip) return; // every tick: only when it changes
-        _dropoutTip = tip;
-        _tips.SetToolTip(_dropouts, tip);
     }
 
     /// <summary>
@@ -821,7 +791,7 @@ internal sealed class HomePage : ScrollPage
     /// <summary>
     /// Debug builds with HOMEPODCAST_DEMO_NETHINT set (for screenshots): the status as if the HomePod's Wi-Fi had spiked
     /// three times in 10 minutes (the hint with the band advice), or with "stable", as if nothing happened. While not
-    /// streaming, or with HOMEPODCAST_DEMO_STREAMING (then 断音 counts the three as the network's: ≈3). Release builds
+    /// streaming, or with HOMEPODCAST_DEMO_STREAMING. Release builds
     /// have no such path.
     /// </summary>
     private NetworkVerdict? DemoVerdict(int arrivalToRender)
@@ -850,20 +820,16 @@ internal sealed class HomePage : ScrollPage
         var cfg = _app.Config;
         var t = DateTime.UtcNow - DemoSince;
         var v = DemoVerdict(_app.Controller.SafeLatency(0) - StreamController.SafetyMarginMs);
-        int network = v?.ConnectionThreats ?? 0;
-        string dropouts = DropoutValue(0, network);
         _dot.DotColor = Icons.Streaming;
         _status.Text = L.F("已连接 · {0}", cfg.DeviceName ?? "HomePod");
         _connect.Text = L.T("断开");
         _connect.Kind = ButtonKind.Secondary;
         if (_volumeValue.Text == "--") ShowVolume(cfg.Volume ?? 30);
         _streamStats.Role = TextRole.Secondary;
-        _streamStats.Text = L.F("已推送 {0} · 断音 {1} 次 · {2}", $"{t.Minutes}:{t.Seconds:00}", dropouts, L.T("音源：默认输出设备"));
+        _streamStats.Text = L.F("已推送 {0} · {1}", $"{t.Minutes}:{t.Seconds:00}", L.T("音源：默认输出设备"));
         _effective.SetValue(_app.Controller.SafeLatency(cfg.LatencyMs).ToString());
         _buffer.SetValue((15 + t.Seconds % 3).ToString()); // the FIFO's depth wanders around its 16 ms target
         _speakerDelay.SetValue("85");
-        _dropouts.SetValue(dropouts);
-        SetDropoutTip(DropoutTip(0, network));
         _resent.SetValue("0/0");
         if (v != null)
         {

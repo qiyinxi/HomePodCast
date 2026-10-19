@@ -25,6 +25,7 @@ internal sealed class MainWindow : Form, ISurface
     private readonly SpeakersPage _speakers;
     private readonly GroupPage _group;
     private readonly ViewingPage _viewing;
+    private readonly DiagnosticsPage _diagnostics;
     private readonly ScrollPage[] _pages;
     private readonly ThemeTransition _transition = new();
     private readonly System.Windows.Forms.Timer _dpiSettle = new() { Interval = DpiSettleMs };
@@ -72,7 +73,8 @@ internal sealed class MainWindow : Form, ISurface
         _speakers = new SpeakersPage(app);
         _group = new GroupPage(app);
         _viewing = new ViewingPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, new DiagnosticsPage(app), _profiles, _settings, _about];
+        _diagnostics = new DiagnosticsPage(app);
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, _diagnostics, _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
@@ -539,6 +541,7 @@ internal sealed class MainWindow : Form, ISurface
     public void UpdateState()
     {
         _home.UpdateState();
+        _diagnostics.UpdateState();
         _mixer.UpdateState();
         _speakers.RefreshDevices();
     }

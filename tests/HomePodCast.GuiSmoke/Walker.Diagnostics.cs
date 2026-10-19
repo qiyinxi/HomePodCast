@@ -2,11 +2,11 @@ namespace HomePodCast.GuiSmoke;
 
 internal sealed partial class Walker
 {
-    /// <summary>All three troubleshooting sections remain reachable; none of their actions is invoked by browsing.</summary>
+    /// <summary>Counters and troubleshooting sections remain reachable; browsing invokes none of their actions.</summary>
     private void CheckDiagnostics(Node tree)
     {
         var pane = PagePane(tree, "诊断").Hwnd;
-        string[] sections = [T("音画同步测试"), T("日志"), T("诊断报告")];
+        string[] sections = [T("播放统计"), T("缓冲欠载"), T("网络波动"), T("音画同步测试"), T("日志"), T("诊断报告")];
         string[] actions = [T("开始"), T("打开日志文件夹"), T("导出诊断")];
         var seen = new HashSet<string>();
         var buttons = new HashSet<string>();
