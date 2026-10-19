@@ -73,6 +73,7 @@ internal sealed partial class Walker
 
     public void Run()
     {
+        Uia.Noted = text => _report.Note(Where("ui automation"), text); // this scenario's thread
         try
         {
             switch (_s.Kind)
@@ -103,6 +104,7 @@ internal sealed partial class Walker
             StopApp();
             SaveLog();
             _fake?.Dispose();
+            Uia.Noted = null;
         }
     }
 
