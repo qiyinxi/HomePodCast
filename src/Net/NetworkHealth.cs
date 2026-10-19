@@ -26,8 +26,8 @@ public enum NetworkHop
 /// <param name="MarginMs">What the latency leaves for the network: latency − speaker processing − <see cref="NetworkHealth.ReserveMs"/>.</param>
 /// <param name="SuggestedMs">The latency to suggest; null when not threatened or the cap is reached.</param>
 /// <param name="ConnectionThreats">Threats since the connection started (<see cref="NetworkHealth.Reset"/>), not only in the
-/// window: the network's likely audible gaps, which the speaker never reports (it only asks for lost packets, never
-/// for late ones). An estimate, for 首页's 断音.</param>
+/// window: network events exceeding the estimated playback margin. Diagnostics shows these separately from FIFO
+/// underruns; the speaker does not confirm audible gaps (it only asks for lost packets, never for late ones).</param>
 public sealed record NetworkVerdict(int Episodes, int Threats, bool Threatened, NetworkHop Hop, int MarginMs, int? SuggestedMs,
     int ConnectionThreats);
 

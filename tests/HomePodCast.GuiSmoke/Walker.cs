@@ -276,7 +276,7 @@ internal sealed partial class Walker
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
-            if (page == "诊断") CheckDiagnostics(tree);
+            if (page == "诊断") CheckDiagnostics(tree, connected);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
@@ -472,6 +472,9 @@ internal sealed partial class Walker
     private void CheckHome(Node tree, bool connected)
     {
         var page = PagePane(tree, "首页");
+        Expect(page.Descendants().Count(n => n.Type == "Text" && n.Hwnd != IntPtr.Zero
+            && new[] { T("实际延迟"), T("缓冲"), T("音箱处理"), T("重传") }.Contains(n.Name)) == 4,
+            "首页", "the four playback metric tiles are missing or duplicated");
         foreach (var caption in new[] { "首页", "推流状态" })
             Expect(page.Descendants().Any(n => n.Type == "Text" && n.Says(T(caption)) && n.Hwnd == IntPtr.Zero && n.HasSize),
                 "首页", $"parent-painted 「{T(caption)}」 has no UI Automation text node/bounds, or created a window");
@@ -498,7 +501,7 @@ internal sealed partial class Walker
 
         // The tiles show this connection's values (MetricTile: the caption is the name, the value the description).
         var deadline = DateTime.UtcNow.AddSeconds(8);
-        foreach (var caption in new[] { "实际延迟", "缓冲", "音箱处理", "断音", "重传" })
+        foreach (var caption in new[] { "实际延迟", "缓冲", "音箱处理", "重传" })
         {
             string? value = null;
             do
