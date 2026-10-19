@@ -50,6 +50,7 @@ public class DiagnosticsPageTests
         var session = new object();
         var counters = new PlaybackCounters(session, 10, 0);
         using var page = new DiagnosticsPage(_ => { }, () => { }, _ => { }, () => counters);
+        Assert.All(All<MetricTile>(page), tile => Assert.Equal("—", tile.AccessibleDescription));
         page.UpdateState();
         counters = counters with { BufferUnderruns = 13, NetworkFluctuations = 5 };
         page.UpdateState();

@@ -62,6 +62,7 @@ internal sealed class MetricTile : FluentControl
         _caption = caption;
         _unit = unit;
         AccessibleName = caption;
+        AccessibleDescription = _value;
     }
 
     public string Caption => _caption;
