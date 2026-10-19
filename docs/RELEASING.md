@@ -46,7 +46,7 @@ The script:
 - waits for the tag build, checks that the release is a prerelease with the `.msi` and the `-win-x64.zip`, and applies the notes (`gh release edit --notes-file`);
 - deletes the snapshot branch. The tag keeps the commit, and the snapshot's run stays in the Actions list, where the tag build's release checks found it.
 
-It warns when `main` is not an ancestor of the commit: such a beta can't be promoted (see below). Without `-NotesFile` the release keeps GitHub's generated notes; apply real ones later with `gh release edit vX.Y.Z-beta.N --notes-file <notes.md>`.
+It warns when `main` is not an ancestor of the commit: such a beta can't be promoted (see below). A validated bilingual `-NotesFile` is required before any release step.
 
 **When it stops** (a failed or cancelled run, the network, Ctrl+C), the snapshot branch stays. Running the same command again from the same checkout continues that beta: the snapshot's commit (even if `dev` has moved on since), the same number, and the snapshot's run (a re-run of its jobs is the same run). Its messages say what to do:
 
@@ -158,13 +158,16 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 
 ### Release notes
 
-- English first, then 简体中文 under a `## 简体中文` heading, with the same content. `release.ps1` warns when the notes file has no Chinese or starts with it.
+- Every beta and promotion requires `-NotesFile`. Use exactly one line `## 简体中文`, outside code fences: English before it and Simplified Chinese after it, with the same content. Missing or duplicate boundaries and empty language sections stop the script before any release step. Chinese subsections use `###`.
 - A beta: what changed since the previous beta, what to test, known problems.
-- A stable release: everything since the previous stable release, what was verified on the real HomePod, known problems.
+- A stable release: edit a fresh summary of the final behavior since the previous stable release; never concatenate beta announcements. Combine repeated changes to a feature. Keep experimental labels and hardware limitations.
+- Start with one or two sentences, then New features, Fixes and Known issues. Verification is one or two sentences about what was checked on a real HomePod, without CI job names or unit-test counts. Put download-only advice such as SmartScreen last. Software tests do not establish hardware verification.
 - Mention updates when they matter: the MSI updates itself from 关于 → 软件更新; the portable zip and the Store version don't.
 
 ```markdown
-## Highlights
+HomePodCast X.Y.Z improves … Changes since X.Y.W.
+
+## New features
 - …
 
 ## Fixes
@@ -173,9 +176,17 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 ## Known issues
 - …
 
+## Verification
+Verified … on a real HomePod.
+
+## Installation
+…
+
 ## 简体中文
 
-### 亮点
+HomePodCast X.Y.Z 改进了……以下是 X.Y.W 以来的变化。
+
+### 新功能
 - …
 
 ### 修复
@@ -183,7 +194,15 @@ Every build (push, PR and tag) also runs the job `msix-e2e` after `build`, and t
 
 ### 已知问题
 - …
+
+### 验证情况
+在真实 HomePod 上验证了……
+
+### 安装
+……
 ```
+
+Published notes can be corrected with `gh release edit <tag> --notes-file <file>` without changing a tag or binary. Save the old body first. For older unstructured notes the app shows the full text when a language cannot be selected reliably.
 
 ### When a tag build fails
 
@@ -344,12 +363,15 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 
 ### 发布说明
 
-- 先英文，然后在 `## 简体中文` 标题下写同样内容的中文。说明文件里没有中文或以中文开头时，`release.ps1` 会警告。
+- 每次测试版和转正都必须传 `-NotesFile`。用恰好一行 `## 简体中文` 分界，不能放在代码块里：前面是英文，后面是相同内容的简体中文。缺少或重复分界、任一语言为空时，脚本会在任何发布步骤前拒绝。中文小标题用 `###`。
 - 测试版：和上一个测试版相比改了什么、要测什么、已知问题。
-- 正式版：上一个正式版以来的全部变化、在真实 HomePod 上验证了什么、已知问题。
+- 正式版：重新整理成「上一个正式版以来」最终行为的总结，不拼接各个测试版公告。同一个功能多次改动只写最后结果，保留实验性标注和硬件限制。
+- 开头用一两句概括，再依次写「新功能」「修复」「已知问题」。「验证情况」用一两句写明在真实 HomePod 上验证了什么，不列 CI 作业名和单元测试数。SmartScreen 等仅与发布页下载有关的安装提示放最后。软件测试不等于硬件验证。
 - 需要时说明更新方式：MSI 安装版可以在 关于 → 软件更新 里自己更新；便携版 zip 和商店版不会。
 
 模板见英文部分。
+
+已发布的说明可用 `gh release edit <tag> --notes-file <file>` 修改，不动标签或二进制；改前保存旧正文。旧格式无法可靠切分语言时，程序显示全文。
 
 ### 标签构建失败时
 
