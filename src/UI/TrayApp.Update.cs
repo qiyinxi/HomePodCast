@@ -10,7 +10,7 @@ namespace HomePodCast.UI;
 /// <param name="MsiInstall">An MSI install (更新 installs), a portable copy (更新 opens the release page), or not known yet.</param>
 /// <param name="Store">The Microsoft Store version: the Store updates it, the app never checks.</param>
 internal sealed record UpdateView(string Status, TextRole Role, Release? Available, bool Checking, bool Downloading, bool Banner, bool? MsiInstall,
-    bool Store, double Progress = 0);
+    bool Store, double Progress = 0, string? ErrorDetail = null);
 
 // Updates: a check of the GitHub releases (the only request outside the LAN: on 「检查更新」, or automatically when
 // turned on), the notice, and installing a newer MSI through the helper (Update/*). Nothing is installed without a click.
@@ -32,15 +32,16 @@ internal sealed partial class TrayApp
     private bool _store, _checking, _updateBanner, _installing;
     private CancellationTokenSource? _download;
     private Release? _update;
-    private IReadOnlyList<Release> _releaseList = [];
+    private NotesRange _updateNotes = new([], false);
     private ReleaseNotesWindow? _releaseNotes;
     private double _updateProgress;
+    private string? _updateErrorDetail;
     private string _updateStatus = "";
     private TextRole _updateRole = TextRole.Secondary;
     private Action? _balloonClick;
 
     public UpdateView UpdateState => new(_updateStatus, _updateRole, _update, _checking, _download != null, _updateBanner && _update != null,
-        _msiInstall is { IsCompletedSuccessfully: true } t ? t.Result : null, _store, _updateProgress);
+        _msiInstall is { IsCompletedSuccessfully: true } t ? t.Result : null, _store, _updateProgress, _updateErrorDetail);
 
     /// <summary>正式版 or 测试版, as chosen, else by the running version.</summary>
     public UpdateChannel UpdateChannel => GitHubReleases.EffectiveChannel(Config.UpdateChannel, CurrentVersion);
@@ -89,10 +90,11 @@ internal sealed partial class TrayApp
     private string LastCheckText() =>
         Config.UpdateLastCheck is { } last ? L.F("上次检查：{0}", last.ToLocalTime().ToString("yyyy-MM-dd HH:mm")) : "";
 
-    private void SetUpdateStatus(string text, TextRole role)
+    private void SetUpdateStatus(string text, TextRole role, string? errorDetail = null)
     {
         _updateStatus = text;
         _updateRole = role;
+        _updateErrorDetail = errorDetail;
         RaiseUpdateChanged();
     }
 
@@ -178,7 +180,9 @@ internal sealed partial class TrayApp
             if (_quitting) return;
             Config.UpdateLastCheck = DateTime.UtcNow;
             Config.Save();
-            _releaseList = releases;
+            // Keep the offered range while downloading, even if the channel changes before the window is reopened.
+            _updateNotes = result is { Outcome: CheckOutcome.UpdateAvailable, Release: { } offered }
+                ? ReleaseNotes.Collect(releases, CurrentVersion, offered, channel) : new([], false);
             ShowCheckResult(result, automatic);
         }
         catch (Exception ex)
@@ -299,7 +303,7 @@ internal sealed partial class TrayApp
             existing.Show(); existing.Activate(); return;
         }
         _releaseNotes?.Close();
-        var notes = new ReleaseNotesWindow(release, ReleaseNotes.Collect(_releaseList, CurrentVersion, release, UpdateChannel), L.Language,
+        var notes = new ReleaseNotesWindow(release, _updateNotes, L.Language,
             () => InstallUpdate(_releaseNotes, confirmed: true), CancelUpdateDownload, SkipUpdate, OpenReleaseUrl);
         _releaseNotes = notes;
         notes.FormClosed += (_, _) => { if (_releaseNotes == notes) _releaseNotes = null; notes.Dispose(); };
@@ -395,14 +399,15 @@ internal sealed partial class TrayApp
         {
             Log.Warn($"update: {asset.Name}: {ex.Message}; deleted, not installed");
             UpdatePackage.TryDelete(folder);
-            SetUpdateStatus(L.T("下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。"), TextRole.Critical);
+            SetUpdateStatus(L.T("下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。"), TextRole.Critical,
+                UpdateFlow.Describe(ex));
         }
         catch (Exception ex)
         {
             var (note, status) = UpdateFlow.RuntimeNote(AppEnvironment.RuntimeRemoved, AppEnvironment.RuntimeFolder);
             Log.Warn($"update: download or start of the installer failed: {UpdateFlow.Describe(ex)}{note}");
             UpdatePackage.TryDelete(folder);
-            SetUpdateStatus(status ?? L.T("下载或启动安装失败，请稍后再试，或在发布页手动下载。"), TextRole.Critical);
+            SetUpdateStatus(status ?? L.T("下载或启动安装失败，请稍后再试，或在发布页手动下载。"), TextRole.Critical, UpdateFlow.Describe(ex));
         }
         finally
         {

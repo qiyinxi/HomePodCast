@@ -41,8 +41,11 @@ public class ReleaseNotesWindowTests
                 window.InstallButton.PerformClick(); Assert.Equal(1, cancels);
                 foreach (var error in new[] { "Download failed", "SHA-256 mismatch", "Download cancelled" })
                 {
-                    window.ShowState(View(status: error));
+                    var state = View(status: error) with { ErrorDetail = error == "Download cancelled" ? null : "HttpRequestException: HTTP 404 Not Found" };
+                    window.ShowState(state);
                     Assert.Equal(error, window.StatusText.Text);
+                    Assert.Equal(state.ErrorDetail ?? "", window.ErrorText.Text);
+                    Assert.Equal(state.ErrorDetail == null, window.ErrorText.Collapsed);
                     Assert.Equal("Update", window.InstallButton.Text); Assert.True(window.SkipButton.Enabled);
                     window.InstallButton.PerformClick();
                 }

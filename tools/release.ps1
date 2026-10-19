@@ -8,7 +8,7 @@
       The version on dev, the latest tags, whether dev's CI is green, snapshot branches still around and which betas
       can be promoted. Read-only.
 
-  -Beta [-NotesFile <md>] [-Continue] [-WhatIf]
+  -Beta -NotesFile <md> [-Continue] [-WhatIf]
       Releases a snapshot of origin/dev: its current commit (after git fetch) becomes the next vX.Y.Z-beta.N (X.Y.Z is
       <Version> in src/HomePodCast.csproj at that commit; N follows the highest vX.Y.Z-beta.N tag here or on origin,
       also one whose build failed). Everything is read from that commit, not from the working tree, so it runs from any
@@ -24,7 +24,7 @@
       snapshot pushed from another checkout counts as another release going on, unless -Continue takes it over.
       It also refuses while a PR to main is open or another tag build is running (one release at a time).
 
-  -Promote vX.Y.Z-beta.N [-NotesFile <md>] [-WhatIf]
+  -Promote vX.Y.Z-beta.N -NotesFile <md> [-WhatIf]
       Makes vX.Y.Z from exactly that beta's source. Checks that the beta was published as a prerelease by a passing
       tag build, that vX.Y.Z doesn't exist, that <Version> at the beta is X.Y.Z and that main is an ancestor of the
       beta (so merging it into main adds nothing else). Then: pushes release/X.Y.Z at the beta's commit and waits for

@@ -9,6 +9,7 @@ internal sealed class ReleaseNotesWindow : Form, ISurface
     private readonly ScrollPage _notes = new() { Dock = DockStyle.Fill };
     private readonly StackPanel _footer = new() { Dock = DockStyle.Bottom, Inset = new Padding(24, 12, 24, 20), Gap = 8 };
     private readonly TextBlock _status = new(wrap: true);
+    private readonly TextBlock _error = new(wrap: true, role: TextRole.Critical) { Collapsed = true };
     private readonly TextBlock _consent = new(wrap: true, role: TextRole.Secondary);
     private readonly DownloadProgress _progress = new();
     private readonly FluentButton _install = new(L.T("更新"), ButtonKind.Primary) { AlternateTexts = [L.T("更新"), L.T("取消")] };
@@ -25,6 +26,7 @@ internal sealed class ReleaseNotesWindow : Form, ISurface
     internal DownloadProgress ProgressBar => _progress;
     internal TextBlock StatusText => _status;
     internal TextBlock ConsentText => _consent;
+    internal TextBlock ErrorText => _error;
 
     public ReleaseNotesWindow(Release release, NotesRange notes, string language, Action update, Action cancel, Action skip, Action<string> open)
     {
@@ -37,7 +39,7 @@ internal sealed class ReleaseNotesWindow : Form, ISurface
         Font = Theme.Font(TextStyle.Body, DeviceDpi);
         ClientSize = new Size(Theme.Dp(700, DeviceDpi), Theme.Dp(680, DeviceDpi));
         MinimumSize = new Size(Theme.Dp(480, DeviceDpi), Theme.Dp(420, DeviceDpi));
-        _notes.Content.Controls.Add(new TextBlock(Text, TextStyle.Title));
+        _notes.Content.Controls.AddRange([_error, new TextBlock(Text, TextStyle.Title)]);
         foreach (var item in notes.Releases)
         {
             _notes.Content.Controls.Add(new TextBlock(item.Version.ToString(), TextStyle.Subtitle));
@@ -70,8 +72,12 @@ internal sealed class ReleaseNotesWindow : Form, ISurface
 
     internal void ShowState(UpdateView view)
     {
+        bool newError = view.ErrorDetail != null && view.ErrorDetail != _view?.ErrorDetail;
         _view = view;
         _status.Text = view.Status; _status.Role = view.Role;
+        // Keep details in the scroll area: a nested exception must never push actions off-screen.
+        _error.Text = view.ErrorDetail ?? ""; _error.Collapsed = view.ErrorDetail == null;
+        if (newError) _notes.AutoScrollPosition = Point.Empty;
         _progress.Collapsed = !view.Downloading; _progress.Value = view.Progress;
         _install.Text = view.Downloading ? L.T("取消") : L.T("更新");
         _install.Kind = view.Downloading ? ButtonKind.Secondary : ButtonKind.Primary;

@@ -29,8 +29,8 @@ internal static class Program
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
         new("runtime", "zh-CN", 100),
-        new("update-notes", "zh-CN", 100),
-        new("update-notes", "en", 150),
+        new("update-notes", "zh-CN", 100, RequiredScale: true),
+        new("update-notes", "en", 150, RequiredScale: true),
         new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),
@@ -136,6 +136,8 @@ internal static class Program
                 }
                 if (scenario.Kind == "group-outputs" && !report.Shots.Any(shot => shot.Scenario == scenario.Id))
                     report.Fail(scenario.Id, "the required group-output scenario produced no screenshot");
+                if (scenario.Kind == "update-notes" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 2)
+                    report.Fail(scenario.Id, "the required update-notes scenario did not capture both the top and bottom");
                 int failed = report.Failures.Count - failuresBefore;
                 report.Scenarios.Add((scenario.Id, (failed == 0 ? "passed" : $"**{failed} failure(s)**") + $" ({watch.Elapsed.TotalSeconds:F0} s)"));
             }
@@ -169,7 +171,8 @@ internal static class Program
 
     private static List<Scenario> SelectScenarios(string[]? only, (int Index, int Count)? shard = null)
     {
-        var filtered = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal)));
+        var filtered = Matrix.Where(s => only == null || only.Any(o => o == "baseline"
+            ? s.Kind != "group-outputs" : s.Id.StartsWith(o, StringComparison.Ordinal)));
         return filtered.Where((_, index) => shard == null || index % shard.Value.Count == shard.Value.Index).ToList();
     }
 
@@ -210,6 +213,12 @@ internal static class Program
             if (!ok) failures++;
         }
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
+        var baseline = SelectScenarios(["baseline"]);
+        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind != "group-outputs").Select(s => s.Id)),
+            "baseline automatically includes every non-group scenario");
+        Check(baseline.Where(s => s.Kind == "update-notes").Select(s => (s.Language, s.Scale, s.RequiredScale))
+            .SequenceEqual(new[] { ("zh-CN", 100, true), ("en", 150, true) }),
+            "baseline requires Chinese and English release-notes screenshots at their specified scales");
         Check(groupScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()),
             "group-output scenarios cover every supported language exactly once");
         Check(groupScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every group-output scenario requires 150 % scale");
