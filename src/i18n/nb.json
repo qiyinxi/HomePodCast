@@ -308,9 +308,6 @@
   "便携版：「更新」会打开发布页，请下载新的 zip 解压后替换。": "Portabel versjon: \"Oppdater\" åpner utgivelsessiden. Last ned den nye zip-filen, pakk den ut og erstatt de gamle filene.",
   "便携版不会自动安装：请在打开的发布页下载新的 zip，解压后替换旧文件。": "Den portable versjonen installerer ikke oppdateringer selv: last ned den nye zip-filen fra utgivelsessiden som nettopp ble åpnet, pakk den ut og erstatt de gamle filene.",
   "GitHub 没有提供这个安装包的 SHA-256，无法校验，所以不会自动安装。请在发布页手动下载。": "GitHub oppgir ingen SHA-256 for denne installasjonspakken, så den kan ikke kontrolleres og installeres ikke automatisk. Last den ned fra utgivelsessiden.",
-  "更新 HomePodCast": "Oppdater HomePodCast",
-  "下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；HomePodCast 会先退出，装好后自动重新启动。": "Laste ned og installere HomePodCast {0}?\n\nInstallasjonspakken kontrolleres først mot SHA-256-verdien GitHub oppgir. Windows ber om administratortillatelse for installasjonen; HomePodCast avsluttes først og starter automatisk igjen når installasjonen er ferdig.",
-  "正在推流：推送会停止大约一分钟。": "Det strømmes nå: strømmingen stopper i omtrent ett minutt.",
   "正在下载 {0}… {1}%": "Laster ned {0}… {1} %",
   "已取消下载": "Nedlastingen ble avbrutt",
   "下载的安装包没有通过 SHA-256 校验，已删除，不会安装。请在发布页手动下载。": "Den nedlastede installasjonspakken besto ikke SHA-256-kontrollen. Den er slettet og blir ikke installert. Last den ned fra utgivelsessiden.",
@@ -728,5 +725,12 @@
   "本次连接的缓冲和网络统计，不代表实际听到的中断。": "Buffer- og nettverkstall for denne tilkoblingen bekrefter ikke hørbare avbrudd.",
   "电脑端音频缓冲供数不足的次数，不等于音箱实际中断的次数。": "Antall ganger PC-ens lydbuffer manglet data, ikke bekreftede avbrudd i høyttaleren.",
   "根据网络延迟、丢包和重传估计，不代表实际播放中断；未监测时不显示数值。": "Anslått fra nettverksforsinkelse, pakketap og nye sendinger, ikke bekreftede avbrudd. Ingen verdi vises uten overvåking.",
-  "已推送 {0} · {1}": "Sender {0} · {1}"
+  "已推送 {0} · {1}": "Sender {0} · {1}",
+  "新版本 {0}": "Ny versjon {0}",
+  "稍后": "Senere",
+  "发布日期：{0}": "Publisert: {0}",
+  "此版本没有提供更新说明。": "Det finnes ingen versjonsmerknader for denne versjonen.",
+  "更早的变化见发布页。": "Se tidligere endringer på utgivelsessiden.",
+  "在 GitHub 上查看": "Vis på GitHub",
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Installasjonspakken kontrolleres først med SHA-256. Windows ber om administratorrettigheter, og appen starter på nytt etter installasjonen. Strømmingen avbrytes i omtrent ett minutt."
 }

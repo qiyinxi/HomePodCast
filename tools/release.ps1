@@ -8,7 +8,7 @@
       The version on dev, the latest tags, whether dev's CI is green, snapshot branches still around and which betas
       can be promoted. Read-only.
 
-  -Beta [-NotesFile <md>] [-Continue] [-WhatIf]
+  -Beta -NotesFile <md> [-Continue] [-WhatIf]
       Releases a snapshot of origin/dev: its current commit (after git fetch) becomes the next vX.Y.Z-beta.N (X.Y.Z is
       <Version> in src/HomePodCast.csproj at that commit; N follows the highest vX.Y.Z-beta.N tag here or on origin,
       also one whose build failed). Everything is read from that commit, not from the working tree, so it runs from any
@@ -24,7 +24,7 @@
       snapshot pushed from another checkout counts as another release going on, unless -Continue takes it over.
       It also refuses while a PR to main is open or another tag build is running (one release at a time).
 
-  -Promote vX.Y.Z-beta.N [-NotesFile <md>] [-WhatIf]
+  -Promote vX.Y.Z-beta.N -NotesFile <md> [-WhatIf]
       Makes vX.Y.Z from exactly that beta's source. Checks that the beta was published as a prerelease by a passing
       tag build, that vX.Y.Z doesn't exist, that <Version> at the beta is X.Y.Z and that main is an ancestor of the
       beta (so merging it into main adds nothing else). Then: pushes release/X.Y.Z at the beta's commit and waits for
@@ -434,15 +434,32 @@ function Wait-PrCheck([int] $number) {
     Write-Info 'the PR checks passed and GitHub says it can be merged'
 }
 
-# The notes file: there, not empty, and English first (a warning only).
+# Shared with the in-app notes reader: one exact language boundary, outside fenced code.
+function Assert-ReleaseNotes([string] $text) {
+    $markers = [regex]::Matches($text, '(?m)^## 简体中文\r?$')
+    if ($markers.Count -ne 1) { throw "release notes need exactly one '## 简体中文' line (English first, then Simplified Chinese)" }
+    $english = $text.Substring(0, $markers[0].Index).Trim()
+    $chinese = $text.Substring($markers[0].Index + $markers[0].Length).Trim()
+    if ($english -notmatch '[A-Za-z]{3,}\W+[A-Za-z]{3,}' -or $chinese -notmatch '\p{IsCJKUnifiedIdeographs}') {
+        throw 'release notes need non-empty English and Simplified Chinese sections'
+    }
+    $fenceType = ''; $fenceLength = 0
+    foreach ($line in ($english -split '\r?\n')) {
+        if ($line -match '^ {0,3}(?<fence>`{3,}|~{3,})(?<tail>.*)$') {
+            $run = $Matches['fence']; $tail = $Matches['tail']
+            if (-not $fenceType) { $fenceType = $run.Substring(0, 1); $fenceLength = $run.Length }
+            elseif ($run.StartsWith($fenceType) -and $run.Length -ge $fenceLength -and -not $tail.Trim()) { $fenceType = ''; $fenceLength = 0 }
+        }
+    }
+    if ($fenceType) { throw 'the language boundary must not be inside a fenced code block' }
+}
+
 function Resolve-NotesFile([string] $path) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "notes file '$path' not found" }
     $full = (Resolve-Path -LiteralPath $path).Path
     $text = Get-Content -LiteralPath $full -Raw -Encoding utf8
     if (-not $text -or -not $text.Trim()) { throw "notes file '$full' is empty" }
-    $cjk = [regex]::Match($text, '\p{IsCJKUnifiedIdeographs}')
-    if (-not $cjk.Success) { Write-Caution "$full has no Chinese: the notes are English first, then 简体中文" }
-    elseif ($text.Substring(0, $cjk.Index) -notmatch '[A-Za-z]{3,}\W+[A-Za-z]{3,}') { Write-Caution "$full seems to start in Chinese: the notes are English first, then 简体中文" }
+    Assert-ReleaseNotes $text
     $full
 }
 
@@ -895,6 +912,17 @@ function Invoke-SelfTest {
     }
     function Snap([string] $branch, [string] $sha) { [pscustomobject]@{ Branch = $branch; Tag = ConvertFrom-SnapshotBranch $branch; Sha = $sha } }
 
+    Write-Host 'Bilingual notes'
+    Test-Case 'English first, one exact Chinese boundary' { Assert-ReleaseNotes "New features`n`n## 简体中文`n新功能"; $true }
+    Test-Case 'CRLF notes' { Assert-ReleaseNotes "New features`r`n## 简体中文`r`n新功能"; $true }
+    Test-Throws 'missing boundary is refused' 'exactly one' { Assert-ReleaseNotes "New features`n新功能" }
+    Test-Throws 'duplicate boundary is refused' 'exactly one' { Assert-ReleaseNotes "New features`n## 简体中文`n新功能`n## 简体中文`n重复" }
+    Test-Throws 'empty Chinese is refused' 'non-empty' { Assert-ReleaseNotes "New features`n## 简体中文`n" }
+    Test-Throws 'empty English is refused' 'non-empty' { Assert-ReleaseNotes "## 简体中文`n新功能" }
+    Test-Throws 'boundary in code is refused' 'fenced code' { Assert-ReleaseNotes ('New features' + "`n" + '```markdown' + "`n## 简体中文`n新功能`n" + '```') }
+    Test-Throws 'boundary in tilde code is refused' 'fenced code' { Assert-ReleaseNotes "New features`n~~~markdown`n## 简体中文`n新功能`n~~~" }
+    Test-Throws 'shorter fence does not close code' 'fenced code' { Assert-ReleaseNotes ('New features' + "`n" + '````markdown' + "`n" + '```' + "`n## 简体中文`n新功能") }
+
     $dev = 'd' * 40
     $snapSha = 'a' * 40
     $other = 'b' * 40
@@ -982,7 +1010,10 @@ if ($LASTEXITCODE -or -not $root) { Write-Host 'release.ps1: run it inside a clo
 if (-not (Test-Path (Join-Path $root $Csproj))) { Write-Host "release.ps1: $root is not HomePodCast (no $Csproj)" -ForegroundColor Red; exit 1 }
 
 try {
-    if ($NotesFile) { $NotesFile = Resolve-NotesFile $NotesFile }
+    if ($PSCmdlet.ParameterSetName -ne 'Status') {
+        if (-not $NotesFile) { throw 'a release needs -NotesFile with English notes followed by ## 简体中文' }
+        $NotesFile = Resolve-NotesFile $NotesFile
+    }
     Push-Location $root
     try {
         $url = "$(Invoke-Git remote get-url $Remote)"

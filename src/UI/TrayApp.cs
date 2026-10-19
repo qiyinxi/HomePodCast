@@ -30,8 +30,9 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <param name="resume">Started again by 「立即重启」 (<c>--resume=</c>, AppRestart): connect as the copy before was (true) or
     /// not (false), whatever 启动后自动连接 says; null for an ordinary start.</param>
     public TrayApp(bool startHidden, EventWaitHandle showSignal, bool openMixer = false, bool openFlyout = false, string? testOsd = null,
-        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null, bool? resume = null)
+        string? updatedFrom = null, EventWaitHandle? flyoutSignal = null, bool? resume = null, Update.ReleaseFeed? updateFeed = null)
     {
+        _updateFeed = updateFeed ?? Update.ReleaseFeed.GitHub;
         Config = AppConfig.Load();
         Controller = new StreamController(Config.FifoTargetMs);
         SetUpRouting();
