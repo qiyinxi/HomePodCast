@@ -87,7 +87,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
     /// </summary>
     public Task<bool> Opened => _opened.Task;
 
-    /// <summary>Where the decoder is and since when, e.g. "opening the file: MFCreateSourceReaderFromURL for 10.0 s".</summary>
+    /// <summary>Where the decoder is and since when, e.g. "opening the file: MFCreateSourceReaderFromURL for 10.0 s" or
+    /// "closing the file: MFShutdown for 3.0 s".</summary>
     public string Progress => _progress.ToString();
 
     /// <summary>The file opened and its layout fits the speakers; false with <see cref="Error"/> set otherwise, or on timeout
@@ -105,7 +106,9 @@ public sealed class CinemaFileSource : IGroupPacketSource
         try
         {
             _progress.Step("opening the file");
-            using var reader = open(path, step => _progress.Step("opening the file: " + step));
+            string stage = "opening the file";
+            using var reader = open(path, step => _progress.Step(stage + ": " + step));
+            stage = "closing the file"; // what the reader reports from now on is its cleanup
             Channels = reader.Channels; SourceRate = reader.Rate; Mask = reader.Mask;
             _matrix = new CinemaMatrix(reader.Channels, reader.Mask, _speakers);
             reader.MaskChanged += mask =>
