@@ -101,6 +101,17 @@ public class ReleaseNotesTests
     }
 
     [Fact]
+    public void Bold_link_labels_keep_both_their_emphasis_and_their_safe_link()
+    {
+        const string url = "https://github.com/qiyinxi/HomePodCast/releases";
+        foreach (var source in new[] { $"**[guide]({url})**", $"[**guide**]({url})" })
+        {
+            var run = Assert.Single(Assert.Single(ReleaseNotes.Parse(source)).Runs);
+            Assert.Equal("guide", run.Text); Assert.True(run.Bold); Assert.Equal(url, run.Url);
+        }
+    }
+
+    [Fact]
     public void Only_a_manual_new_version_opens_the_window()
     {
         foreach (var outcome in Enum.GetValues<CheckOutcome>())

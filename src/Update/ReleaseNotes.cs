@@ -112,7 +112,7 @@ internal static class ReleaseNotes
                 var url = match.Groups[2].Value;
                 foreach (var run in Inline(match.Groups[1].Value, bold)) result.Add(run with { Url = CanOpen(url) ? url : null });
             }
-            else result.Add(new(match.Groups[3].Value, true));
+            else result.AddRange(Inline(match.Groups[3].Value, true));
             at = match.Index + match.Length;
         }
         if (at < text.Length) result.Add(new(text[at..], bold));

@@ -122,7 +122,7 @@ internal sealed class NotesParagraph : FluentControl
         public override Rectangle Bounds => owner.RectangleToScreen(owner._pieces.Where(p => p.Url == Url).Select(p => p.Bounds).Aggregate(Rectangle.Empty,
             (a, b) => a.IsEmpty ? b : Rectangle.Union(a, b)));
         public override void DoDefaultAction() { if (ReleaseNotes.CanOpen(Url)) owner._open(Url); }
-        public override string? DefaultAction => "Open";
+        public override string? DefaultAction => L.T("打开");
     }
 }
 
