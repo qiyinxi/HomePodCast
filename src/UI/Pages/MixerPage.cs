@@ -67,7 +67,7 @@ internal sealed class MixerPage : ScrollPage
             Ui.Header(L.T("全部推送与按程序分流")),
             Ui.Stack(4,
                 new TextBlock(L.T("全部推送（默认，推荐打游戏）"), TextStyle.BodyStrong),
-                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，把 Windows 设为静音就只在音箱播放。"))),
+                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「首页 → 仅 HomePod 输出」。"))),
             Ui.Stack(4,
                 new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
                 Ui.Note(L.F("单独设置程序去处或 HomePod 音量，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」、关闭 HomePod 独立音量，并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),
@@ -175,7 +175,7 @@ internal sealed class MixerPage : ScrollPage
         desc.Text = chosen == null ? L.T("推送 Windows 默认输出上的所有声音；默认输出改变时自动跟随。")
             : missing ? L.F("「{0}」现在不可用（已拔出、停用或卸载）：不会改用默认输出，设备恢复后自动继续。", ChosenName())
             : L.F("只推送「{0}」上的声音；其他设备上的程序（比如耳机里的语音聊天）不会被推送。", ChosenName()) +
-              (_app.Config.VolumeKeys == VolumeKeyMode.FollowWindows ? "\n" + L.T(CaptureVolumeNote) : "");
+              (_app.EffectiveVolumeKeys == VolumeKeyMode.FollowWindows ? "\n" + L.T(CaptureVolumeNote) : "");
         desc.Role = missing ? TextRole.Caution : TextRole.Secondary;
     }
 

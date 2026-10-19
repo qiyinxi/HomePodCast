@@ -65,6 +65,39 @@ public sealed class AppConfig
     /// <summary>Per-speaker volume offset in percentage points, keyed by GroupPlan.Key(deviceId).</summary>
     public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
 
+    /// <summary>Shared speaker positions, acoustic delay trims and volume offsets; null imports older layouts.</summary>
+    public List<GroupSpeakerSettings>? GroupSpeakers { get; set; }
+
+    /// <summary>Explicit live-capture members. Null preserves the older primary + MultiRoom selection; saved files never activate a group.</summary>
+    public List<string>? GroupCaptureDeviceIds { get; set; }
+
+    /// <summary>Positions last applied to live capture; file edits never change the next automatic connection's channels.</summary>
+    public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
+
+    /// <summary>DLNA preference bank. Saving a device here does not select or connect it.</summary>
+    public List<DlnaOutputSettings> GroupDlnaOutputs { get; set; } = [];
+
+    /// <summary>Explicit live-capture DLNA selection, independent of the file layout and AirPlay's primary speaker.</summary>
+    public List<string>? GroupCaptureDlnaUdns { get; set; }
+
+    /// <summary>Windows endpoint preference bank. Remembering an endpoint never selects it.</summary>
+    public List<Audio.LocalOutputOptions> GroupLocalOutputs { get; set; } = [];
+
+    /// <summary>Explicit live Windows endpoints; null and empty both select none.</summary>
+    public List<string>? GroupCaptureLocalDeviceIds { get; set; }
+
+    /// <summary>Live AirPlay delay trims, separate from the file player's 0–500 ms speaker delays.</summary>
+    public Dictionary<string, int> GroupCaptureDelayTrims { get; set; } = [];
+
+    /// <summary>Explicit required/optional choices. Missing flags use each output protocol's default.</summary>
+    public Dictionary<string, bool> GroupRequiredOutputs { get; set; } = [];
+
+    /// <summary>Null chooses the automatic group delay; manual values are 100–30000 ms.</summary>
+    public int? GroupDelayMs { get; set; }
+
+    public List<OutputGroupPreset> SavedOutputGroups { get; set; } = [];
+    public string? SelectedOutputGroupId { get; set; }
+
     /// <summary>A second speaker that plays in sync with the selected one (multi-room).</summary>
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
@@ -101,6 +134,24 @@ public sealed class AppConfig
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ForwardVolumeKeys { get; set; }
+
+    /// <summary>
+    /// 推流时电脑静音 (experimental since 1.2): while the pushed sound is what plays on the Windows default output, that
+    /// output is muted, so only the HomePod is heard; unmuted again when the session ends or the app quits (Audio.PcMute).
+    /// <see cref="VolumeKeyMode.FollowWindows"/> then acts as WhileStreaming (VolumeKeyRules.Effective). About this PC's
+    /// speakers, so it is not part of a usage profile.
+    /// </summary>
+    public bool MutePcWhileStreaming { get; set; }
+
+    /// <summary>首页's 「电脑也在出声」 hint was closed with 不再提示: never shown again.</summary>
+    public bool PcSoundHintDismissed { get; set; }
+
+    /// <summary>
+    /// The render endpoint 推流时电脑静音 keeps muted right now (saved as soon as it mutes, cleared once the mute is no
+    /// longer ours). Still set at startup: the last run was killed or crashed with the PC muted, and the next start gives
+    /// the sound back (PcMute.RestoreLeftover).
+    /// </summary>
+    public string? PcMutedEndpointId { get; set; }
 
     /// <summary>
     /// 「影视场景自动调整播放器」: while the 影视 scene streams, mpv and VLC get an audio delay of −videoDelayMs
@@ -239,6 +290,8 @@ public sealed class AppConfig
                 cfg.Effects ??= new();
                 cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
                 AvCalibrations.Normalize(cfg);
+                GroupSettings.Normalize(cfg);
+                OutputGroups.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);
                 return cfg;
             }

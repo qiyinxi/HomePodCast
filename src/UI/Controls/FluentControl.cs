@@ -448,9 +448,16 @@ internal class StackPanel : LayoutPanel
     /// <summary>Extra space above particular children (e.g. a section header), in 96-DPI units.</summary>
     public Dictionary<Control, int> GapBefore { get; } = new();
 
+    /// <summary>
+    /// Placed taller than its children (<see cref="Columns.EqualHeights"/>), the last child takes the height left, so a
+    /// column of cards ends where the column beside it does.
+    /// </summary>
+    public bool FillLast { get; set; }
+
     protected override int Arrange(int width, bool apply)
     {
         int x = Dp(Inset.Left), y = Dp(Inset.Top), w = Math.Max(0, width - Dp(Inset.Horizontal));
+        var last = apply && FillLast ? Controls.Cast<Control>().LastOrDefault(c => !IsCollapsed(c)) : null;
         bool first = true;
         foreach (Control c in Controls)
         {
@@ -461,11 +468,11 @@ internal class StackPanel : LayoutPanel
                 continue;
             }
             if (!first) y += Dp(GapBefore.TryGetValue(c, out var g) ? g : Gap);
-            if (apply) Place(c, x, y, w, h);
+            if (apply) Place(c, x, y, w, c == last ? Math.Max(h, Height - Dp(Inset.Bottom) - y) : h);
             y += h;
             first = false;
         }
-        return y + Dp(Inset.Bottom);
+        return y + Dp(Inset.Bottom); // what the children need: the extra height is only given, never asked for
     }
 }
 
@@ -686,6 +693,15 @@ internal class ScrollPage : Panel, ISurface
     {
         if (Visible) ApplyFont();
         base.OnVisibleChanged(e);
+    }
+
+    /// <summary>
+    /// The hidden page's windows destroyed (its controls stay, built and with what they hold): MainWindow before a move to a
+    /// monitor with another scale, and its idle preparation creates them again at the new DPI.
+    /// </summary>
+    internal void ReleaseWindows()
+    {
+        if (!Visible && IsHandleCreated) DestroyHandle();
     }
 
     /// <summary>The font change the hidden page left for later (<see cref="OnParentFontChanged"/>), with one layout.</summary>

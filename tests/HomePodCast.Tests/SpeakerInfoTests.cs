@@ -446,12 +446,39 @@ public class SpeakerInfoTests
 
         panel.PageShown();
         var texts = Texts(panel);
-        Assert.Contains(ReceiverKinds.Label(ReceiverKind.ThirdPartyAirPlay1), texts); // as 连接方式 shows it
+        Assert.Contains(ReceiverKinds.Label(ReceiverKind.ThirdPartyAirPlay1), texts); // the saved kind, as 连接方式 classifies it
         Assert.DoesNotContain(ReceiverKinds.Label(ReceiverKind.Unknown), texts);
         Assert.Contains("ShairportSync", texts);
         Assert.True(port.Task.Wait(TimeSpan.FromSeconds(5)));
         Assert.Equal(7001, port.Task.Result);
         Assert.Equal(ReceiverKind.ThirdPartyAirPlay1, cfg.ReceiverSettings[RaopPassword.Key(cfg.DeviceId!)].Device(cfg.DeviceId!)!.Kind);
+    });
+
+    [Fact]
+    public void The_card_shows_the_protocol_this_PC_streams_with_except_for_a_HomePod() => OnSta(() =>
+    {
+        // Until 2026-10-15 a note above the card said it, and 「未连接；连接后显示实际协议。」 while not connected.
+        var cache = new SpeakerInfoCache((_, _) => throw new IOException("connection refused"));
+        var tv = HomeTheaterTests.AppleTv("书房电视");
+        List<SelectedSpeaker> speakers = [new(tv.DeviceId, tv.Name, tv.Address, tv.Txt) { Model = tv.Model }];
+        ReceiverProtocol? protocol = null;
+        using var panel = new UI.Pages.SpeakerInfoPanel(cache, () => speakers, () => protocol != null, () => null, () => [], _ => protocol);
+        string realtime = ReceiverProtocols.Label(ReceiverProtocol.AirPlay2Realtime);
+
+        panel.PageShown();
+        var texts = Texts(panel);
+        Assert.Single(texts, t => t.Contains(ReceiverKinds.Label(ReceiverKind.AppleTv)));
+        Assert.DoesNotContain(realtime, texts); // not connected: no 连接协议 line, and no line saying so
+
+        protocol = ReceiverProtocol.AirPlay2Realtime;
+        panel.PageShown();
+        texts = Texts(panel);
+        Assert.Contains("这台电脑正在推送", texts);
+        Assert.Single(texts, t => t == realtime);
+
+        speakers = [new("02:DC:8E:68:21:FB", "卧室", Bedroom, null) { Model = "AudioAccessory6,1" }];
+        panel.PageShown();
+        Assert.DoesNotContain(realtime, Texts(panel)); // a HomePod connects one way only
     });
 
     [Fact]

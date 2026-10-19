@@ -4,7 +4,7 @@ using HomePodCast.UI.Pages;
 
 namespace HomePodCast.UI;
 
-internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Cinema, Viewing, Sync, Profiles, Settings, About }
+internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Viewing, Sync, Profiles, Settings, About }
 
 /// <summary>
 /// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
@@ -23,7 +23,8 @@ internal sealed class MainWindow : Form, ISurface
     private readonly AboutPage _about;
     private readonly ProfilesPage _profiles;
     private readonly SpeakersPage _speakers;
-    private readonly CinemaPage _cinema;
+    private readonly GroupPage _group;
+    private readonly ViewingPage _viewing;
     private readonly ScrollPage[] _pages;
     private readonly ThemeTransition _transition = new();
     private readonly System.Windows.Forms.Timer _dpiSettle = new() { Interval = DpiSettleMs };
@@ -53,9 +54,8 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Equalizer, L.T("均衡"));
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Channels, L.T("多声道（5.1 / 7.1，实验性）"), label: L.T("多声道")); // experimental since 1.1; hardware untested
-        _rail.Add(Glyph.Screen, L.T("同步观影窗口（实验性）"), label: L.T("同步观影窗口")).Collapsed = !Players.VideoWindowModule.Offered; // experimental since 1.1
-        _rail.Add(Glyph.Gauge, L.T("音画同步测试"));
+        _rail.Add(Glyph.Screen, L.T("音画同步"));
+        _rail.Add(Glyph.Gauge, L.T("诊断"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
         _rail.Add(Glyph.Info, L.T("关于"), bottom: true);
@@ -70,8 +70,9 @@ internal sealed class MainWindow : Form, ISurface
         _about = new AboutPage(app);
         _profiles = new ProfilesPage(app);
         _speakers = new SpeakersPage(app);
-        _cinema = new CinemaPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, new GroupPage(app), _cinema, new ViewingPage(app), new SyncPage(app), _profiles, _settings, _about];
+        _group = new GroupPage(app);
+        _viewing = new ViewingPage(app);
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, new DiagnosticsPage(app), _profiles, _settings, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;
@@ -121,6 +122,7 @@ internal sealed class MainWindow : Form, ISurface
 
     public void ShowPage(AppPage page)
     {
+        if (!_sizeMove) FinishDpiChange(); // shown right after a move to another monitor: laid out at its DPI first
         using var layout = LayoutPanel.BatchLayout(this);
         _transition.Stop();
         SelectPage(page);
@@ -221,7 +223,8 @@ internal sealed class MainWindow : Form, ISurface
     private void PrepareSome()
     {
         if (_prepare.Interval != PrepareStepMs) _prepare.Interval = PrepareStepMs;
-        if (!Visible || WindowState == FormWindowState.Minimized)
+        // Also turned off while the timer still ran: the step that finished the last page leaves one more tick.
+        if (!PrepareAhead || !Visible || WindowState == FormWindowState.Minimized)
         {
             StopPreparing(); // UpdateShownPage starts it again
             return;
@@ -287,7 +290,17 @@ internal sealed class MainWindow : Form, ISurface
                 if (!LayoutPanel.CreateWindows(page, yield)) return false;
             }
             page.ApplyFont();
-            // Windows created first (their DPI is known once they exist), or the window changed size or DPI meanwhile.
+            if (page.LayoutDpi != DeviceDpi && page.DeviceDpi == DeviceDpi)
+            {
+                // Its controls were at another DPI (made at the main monitor's, or left at the last one by a DPI change): their
+                // windows came first, to learn this one. Laid out with them, the page moved every window in it, in one step that
+                // can't yield: 15–45 ms a page on the maintainer's PC (2026-10-16, window at 150 %, controls at 100 %), 75 ms while
+                // it was busy. Now that the controls know the DPI, their windows go (1–7 ms) and the next steps build the page again
+                // laid out first, above: less work in all (480 instead of 520 ms for all the pages), in steps of the usual size.
+                page.ReleaseWindows();
+                return false;
+            }
+            // The window changed size meanwhile, or the windows didn't get its DPI (a DPI change simulated in a test).
             if (page.Bounds != area || page.LayoutDpi != DeviceDpi) LayoutPanel.Place(page, area.X, area.Y, area.Width, area.Height);
             return true;
         }
@@ -375,16 +388,48 @@ internal sealed class MainWindow : Form, ISurface
     /// </summary>
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
-        _transition.Stop();
+        BeginDpiChange();
         using (LayoutPanel.SuspendLayouts(this))
         {
             base.OnDpiChanged(e);
             Font = Theme.Font(TextStyle.Body, e.DeviceDpiNew);
             MinimumSize = new Size(Theme.Dp(600, e.DeviceDpiNew), Theme.Dp(460, e.DeviceDpiNew));
         }
+    }
+
+    /// <summary>
+    /// Every layout in the window held from the start of a DPI change to <see cref="FinishDpiChange"/>. Windows asks the window
+    /// for its size at the new DPI (WM_GETDPISCALEDSIZE) before it tells the child windows (WM_DPICHANGED_BEFOREPARENT), and it
+    /// moves each child window as it tells it: each page and container moved laid itself out, and the window too, once per
+    /// page, at the old DPI; then the window's frame changed at the new DPI and its client area with it, another layout.
+    /// 2026-10-15, the maintainer's monitors (150 % and 100 %): 1.1–2.3 s for a move across, 0.9 s more with 混音器 shown.
+    /// </summary>
+    private void BeginDpiChange()
+    {
+        _transition.Stop();
+        if (_dpiHold == null)
+        {
+            ReleaseHiddenPages();
+            _dpiHold = LayoutPanel.SuspendLayouts(this);
+        }
         _dpiLayoutPending = true;
         _dpiSettle.Stop();
         _dpiSettle.Start();
+    }
+
+    private IDisposable? _dpiHold;
+
+    /// <summary>
+    /// Windows tells every child window of a DPI change and moves it, about 2.2 ms per window on the maintainer's PC, hidden
+    /// or not: with the pages built ahead (445 windows) a move across took 0.8–1.1 s even with every layout held, 0.2 s with
+    /// only the rail and 首页 (70). The hidden pages' windows go first (20 ms for all of them) and are built again at idle,
+    /// at the new DPI (<see cref="StartPreparing"/> after <see cref="FinishDpiChange"/>).
+    /// </summary>
+    private void ReleaseHiddenPages()
+    {
+        foreach (var page in _pages)
+            if (page != _pages[_current]) page.ReleaseWindows();
+        _prepareNext = 0;
     }
 
     /// <summary>Quiet time after a DPI change before the window is laid out at it (outside a drag).</summary>
@@ -393,19 +438,44 @@ internal sealed class MainWindow : Form, ISurface
     /// <summary>A DPI change waits for its layout (<see cref="OnDpiChanged"/>).</summary>
     internal bool DpiLayoutPending => _dpiLayoutPending;
 
-    /// <summary>The layout a DPI change left for later, now (also by any other layout of the window meanwhile).</summary>
+    /// <summary>The layout a DPI change left for later, now (also before another page is shown meanwhile).</summary>
     internal void FinishDpiChange()
     {
         _dpiSettle.Stop();
         if (!_dpiLayoutPending || IsDisposed) return;
-        using (LayoutPanel.BatchLayout(this)) { } // OnLayout, which repaints
+        _dpiHold?.Dispose();
+        _dpiHold = null;
+        // The rail's and the page's windows moved without drawing each one, then drawn once. 2026-10-16, on the maintainer's
+        // monitors: the layout after a move across took 130–550 ms with each window drawn as it moved, 100–330 ms without.
+        Control[] shown = [.. new Control[] { _rail, _pages[_current] }.Where(c => c.IsHandleCreated)];
+        foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 0, 0);
+        try
+        {
+            using (LayoutPanel.BatchLayout(this)) { } // OnLayout
+        }
+        finally
+        {
+            foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 1, 0);
+            if (IsHandleCreated) RedrawWindow(Handle, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
         if (_dpiLayoutPending) _dpiSettle.Start(); // the window's layout was held (a batch in progress): again later
+        else if (Visible) StartPreparing(); // the hidden pages again, at this DPI
     }
+
+    private const int WM_SETREDRAW = 0x000B;
+    private const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004, RDW_ALLCHILDREN = 0x0080, RDW_FRAME = 0x0400;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hwnd, int msg, nint wParam, nint lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr region, uint flags);
 
     protected override void WndProc(ref Message m)
     {
-        const int WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232;
+        const int WM_ENTERSIZEMOVE = 0x0231, WM_EXITSIZEMOVE = 0x0232, WM_GETDPISCALEDSIZE = 0x02E4;
         if (m.Msg == WM_ENTERSIZEMOVE) _sizeMove = true;
+        if (m.Msg == WM_GETDPISCALEDSIZE) BeginDpiChange();
         base.WndProc(ref m);
         if (m.Msg == WM_EXITSIZEMOVE)
         {
@@ -445,7 +515,7 @@ internal sealed class MainWindow : Form, ISurface
 
     // ---------------------------------------------------------------- what TrayApp tells the window
 
-    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Cinema) _cinema.RefreshSpeakers(); }
+    public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Group) _group.RefreshSpeakers(); }
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
@@ -453,7 +523,7 @@ internal sealed class MainWindow : Form, ISurface
     public void ShowPlayers()
     {
         _home.ShowPlayers();
-        _settings.ShowPlayers();
+        _viewing.ShowPlayers();
     }
 
     /// <summary>The latency 首页 shows (the scene's, or the slider's while it waits to reconnect).</summary>
@@ -503,6 +573,9 @@ internal sealed class MainWindow : Form, ISurface
     /// <summary>The .NET runtime this copy started on was found gone: 首页's restart notice.</summary>
     public void ShowRuntimeNotice() => _home.ShowRuntimeNotice();
 
+    /// <summary>PC mute or what the PC plays changed: 首页's output switch and 「电脑也在出声」 hint.</summary>
+    public void ShowPcSound() => _home.ShowPcSound();
+
     /// <summary>Save what is still waiting for a debounce (before the app quits).</summary>
     public void Flush()
     {
@@ -511,7 +584,7 @@ internal sealed class MainWindow : Form, ISurface
         _effects.Flush();
         _equalizer.Flush();
         _settings.FlushPendingSettings();
-        _cinema.Flush();
+        _group.Flush();
     }
 
     public void FlushLatency() => _home.FlushLatency();
@@ -525,6 +598,7 @@ internal sealed class MainWindow : Form, ISurface
         _effects.ReloadConfiguration();
         _equalizer.ReloadConfiguration();
         _settings.ReloadConfiguration();
+        _viewing.ReloadConfiguration();
         _profiles.Reload();
         _speakers.RefreshDevices();
         ShowSoundOptions();

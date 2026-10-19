@@ -8,6 +8,28 @@ namespace HomePodCast.Tests;
 /// </summary>
 public class CinemaTests
 {
+    [Fact]
+    public void Full_stereo_targets_keep_left_and_right_and_share_the_existing_downmix()
+    {
+        var speakers = new[] { new CinemaSpeaker { DeviceId = "AA:01", Role = CinemaRole.Stereo },
+            new CinemaSpeaker { DeviceId = "AA:02", Role = CinemaRole.Stereo } };
+        var stereo = new CinemaMatrix(2, Stereo, speakers);
+        Assert.Equal((0.25f, -0.5f), stereo.StereoSample(0, [0.25f, -0.5f]));
+        Assert.Equal((0.25f, -0.5f), stereo.StereoSample(1, [0.25f, -0.5f]));
+        foreach (var mask in new[] { Rear51, Side51, Surround71 })
+        {
+            int channels = System.Numerics.BitOperations.PopCount(mask);
+            var full = new CinemaMatrix(channels, mask, speakers);
+            var fronts = new CinemaMatrix(channels, mask, Layout(L2));
+            Assert.Equal(fronts.Scale, full.Scale);
+            for (int c = 0; c < channels; c++)
+            {
+                var frame = new float[channels]; frame[c] = 1;
+                Assert.Equal((fronts.Sample(0, frame), fronts.Sample(1, frame)), full.StereoSample(0, frame));
+            }
+        }
+    }
+
     private static readonly Dictionary<string, CinemaRole> Roles = new()
     {
         ["FL"] = CinemaRole.FrontLeft, ["FR"] = CinemaRole.FrontRight, ["C"] = CinemaRole.Center, ["Sub"] = CinemaRole.Subwoofer,
@@ -165,9 +187,9 @@ public class CinemaTests
     [Fact]
     public void Invalid_speaker_layouts_are_refused_with_a_message_in_the_ui_language()
     {
-        Assert.Equal("至少要给前左和前右各选一台音箱。",
+        Assert.Equal("至少选择完整立体声，或给左和右各选一台音箱。",
             Assert.Throws<CinemaException>(() => CinemaMatrix.Validate(Layout("FL C"))).Message);
-        Assert.Equal("至少要给前左和前右各选一台音箱。",
+        Assert.Equal("至少选择完整立体声，或给左和右各选一台音箱。",
             Assert.Throws<CinemaException>(() => CinemaMatrix.Validate(Layout("FL"))).Message);
         var duplicate = Layout(L5);
         duplicate[1].DeviceId = duplicate[0].DeviceId;
@@ -281,6 +303,26 @@ public class CinemaTests
             });
         }
         finally { File.Delete(garbage); }
+    }
+
+    [Fact]
+    public async Task A_file_is_inspected_on_an_MTA_thread_of_its_own_not_on_the_thread_pool()
+    {
+        string file = TempWave(16, 6, Rear51, 48000);
+        try
+        {
+            var threads = new List<(bool Pool, ApartmentState Apartment)>();
+            var (channels, mask) = await CinemaMediaReader.InspectAsync(file, _ =>
+            {
+                lock (threads) threads.Add((Thread.CurrentThread.IsThreadPoolThread, Thread.CurrentThread.GetApartmentState()));
+            });
+            Assert.Equal(6, channels);
+            Assert.Equal(Rear51, CinemaChannels.Resolve(channels, mask));
+            Assert.NotEmpty(threads);
+            Assert.All(threads, t => Assert.Equal((false, ApartmentState.MTA), t));
+            Assert.Equal("选的文件不存在或打不开。", (await Assert.ThrowsAsync<CinemaException>(() => CinemaMediaReader.InspectAsync(file + ".missing"))).Message);
+        }
+        finally { File.Delete(file); }
     }
 
     /// <summary>The level each channel of a generated file has: 0.02, 0.04, … (channel order).</summary>

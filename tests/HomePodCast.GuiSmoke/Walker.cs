@@ -10,11 +10,13 @@ namespace HomePodCast.GuiSmoke;
 /// <summary>
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
 /// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
-/// or <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), in a UI
-/// language, at a display scale, in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
+/// <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), or
+/// <c>group-outputs</c> (offline saved output settings, without starting audio), in a UI language, at a display scale,
+/// in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
 /// <see cref="DpiChange"/> changes the display scale to 100 % and back while the app runs (as a move to another monitor).
 /// </summary>
-internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false)
+internal sealed record Scenario(string Kind, string Language, int Scale, string Theme = "auto", bool Narrow = false, bool DpiChange = false,
+    bool RequiredScale = false)
 {
     public string Id => $"{Kind}-{Language}-{Scale}" + (Theme == "auto" ? "" : "-" + Theme);
 }
@@ -41,7 +43,7 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
-    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "多声道（5.1 / 7.1，实验性）", "同步观影窗口（实验性）", "音画同步测试", "使用配置", "设置", "关于"];
+    private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "诊断", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
     private readonly Texts _t;
@@ -80,6 +82,7 @@ internal sealed partial class Walker
                 case "streaming": RunStreaming(); break;
                 case "compatibility": RunCompatibility(); break;
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
+                case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -160,6 +163,8 @@ internal sealed partial class Walker
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "设置") CheckSettings();
+            if (page == "音画同步") CheckAvSync(tree);
+            if (page == "诊断") CheckDiagnostics(tree);
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
         }
@@ -256,10 +261,12 @@ internal sealed partial class Walker
             var tree = Uia.Snapshot(MainWindow());
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
+            if (page == "音画同步") CheckAvSync(tree);
+            if (page == "诊断") CheckDiagnostics(tree);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
-            if (page == "多声道（5.1 / 7.1，实验性）") CheckCinema(tree, page);
+            if (page == "多音箱（实验性）") tree = CheckCinema(tree, page);
             CheckNavigation(tree);
             Layout(tree, page);
             ShootPage(page, "");
@@ -456,6 +463,16 @@ internal sealed partial class Walker
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
         foreach (var gone in new[] { "刚才卡了", "导出诊断" }) // moved: 设置 → 工具, and a hotkey
             Expect(buttons.All(b => !b.Says(T(gone))), "首页", $"「{T(gone)}」 is on 首页 again");
+        Expect(buttons.Any(b => b.Says(T("HomePod 静音")) && b.Enabled), "首页",
+            "the clickable HomePod mute icon is missing or disabled");
+        // The output switch moved here from 设置. Only inspect it: switching it on would mute the runner's output.
+        string onlyHomePodTitle = T("仅 HomePod 输出");
+        var onlyHomePod = Find(page, n => n.Name == onlyHomePodTitle && n.Type == "CheckBox" && n.Hwnd != IntPtr.Zero);
+        var onlyHomePodState = onlyHomePod == null ? null : Native.MsaaState(onlyHomePod.Hwnd);
+        Expect(onlyHomePodState is { } os && (os & Native.STATE_SYSTEM_CHECKED) == 0, "首页",
+            $"「{onlyHomePodTitle}」 is not off on a fresh config (state {onlyHomePodState?.ToString("X") ?? "not found"})");
+        Expect(Find(page, n => n.Name == T("夜间模式") && n.Type == "CheckBox") != null, "首页",
+            "the night-mode switch beside HomePod only is missing");
         if (!connected)
         {
             Expect(Has(page, T("未连接")), "首页", $"the status doesn't say 「{T("未连接")}」");
@@ -501,7 +518,12 @@ internal sealed partial class Walker
             Expect(Has(page, "CI compatibility receiver"), "设置", "音箱信息 doesn't name the selected receiver");
             Expect(!Has(page, T("还没有选择音箱")), "设置", "音箱信息 lost the selected receiver");
             Expect(Has(page, T("连接方式（实验性）")), "设置", "connection override is missing"); // experimental since 1.1
-            Expect(Has(page, T("未连接；连接后显示实际协议。")), "设置", "disconnected protocol status is missing");
+            // The kind only in the card's 设备类型 line (named after its caption): until 2026-10-15 a note above the card
+            // repeated it.
+            string kind = T("AirPlay 1 · 兼容模式（实验性）"); // experimental since 1.1
+            int kinds = page.Descendants().Count(n => n.Type == "Text" && n.Shown && (n.Name.Contains(kind, StringComparison.Ordinal)
+                || n.Text.Contains(kind, StringComparison.Ordinal)));
+            Expect(kinds == 1, "设置", $"the receiver's kind 「{kind}」 is shown {kinds} times, not once");
         }
         else
         {
@@ -514,22 +536,55 @@ internal sealed partial class Walker
     private void CheckSettings()
     {
         var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
-        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）" })
+        foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）" })
             Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
+        // The volume-key description still names the Home switch; match the control, not that help text.
+        Expect(Find(page, n => n.Type == "CheckBox" && n.Name == T("仅 HomePod 输出")) == null, "设置",
+            "the HomePod-only output switch is duplicated on Settings");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
         var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+    }
 
+    private void CheckAvSync(Node tree)
+    {
+        var pane = PagePane(tree, "音画同步").Hwnd;
+        string[] texts = [T("本地播放器"), T("影视场景自动调整播放器"), T("VLC 网页接口密码（自动读取失败时填写）"),
+            T("同步观影窗口（实验性）"), "mpv", "VLC", "PotPlayer · MPC-HC · MPC-BE"];
+        string[] actions = [T("选择模块…"), T("打开")];
+        var seen = new HashSet<string>();
+        var buttons = new HashSet<string>();
+        Scroll(pane, Native.SB_TOP);
+        try
+        {
+            for (int i = 0; i < 12; i++)
+            {
+                // The title scrolls out of view: keep the pane handle rather than locating it again by its title.
+                var page = Find(Uia.Snapshot(MainWindow()), node => node.Hwnd == pane)
+                    ?? throw new StepFailed("the A/V sync scroll pane disappeared");
+                foreach (string text in texts) if (Has(page, text)) seen.Add(text);
+                foreach (string action in actions)
+                    if (Find(page, node => node.Shown && node.Type == "Button" && node.Says(action)) != null) buttons.Add(action);
+                var info = Native.VerticalScroll(pane);
+                if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } position || position.nPos + position.nPage > position.nMax) break;
+                Scroll(pane, Native.SB_PAGEDOWN);
+                if (Native.VerticalScroll(pane) is { } after && after.nPos == position.nPos) break;
+            }
+        }
+        finally { Scroll(pane, Native.SB_TOP); }
+        foreach (string text in texts) Expect(seen.Contains(text), "音画同步", $"section or row was never shown: {text}");
+        foreach (string action in actions) Expect(buttons.Contains(action), "音画同步", $"module action was never shown: {action}");
     }
 
     private Node CheckAbout()
     {
         var tree = Uia.Snapshot(MainWindow());
         var page = PagePane(tree, "关于");
-        Expect(page.Descendants().Any(n => n.Type == "Button" && n.Says(T("导出诊断"))), "关于", "diagnostic export missing");
+        foreach (var moved in new[] { "日志", "诊断报告", "导出诊断", "打开日志文件夹" })
+            Expect(!page.Descendants().Any(n => n.Says(T(moved))), "关于", $"moved diagnostic feature remains: {T(moved)}");
         Expect(Has(page, T("许可证")), "关于", "license missing");
         // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
         // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
@@ -571,24 +626,38 @@ internal sealed partial class Walker
         Expect(row != null && Has(row, T("未设置")), where, $"「{T("标记刚才的卡顿")}」 is not 「{T("未设置")}」 by default");
     }
 
-    /// <summary>无线影院: every speaker position, nothing playable before a file is chosen, no measurement without playback.</summary>
-    private void CheckCinema(Node tree, string where)
+    /// <summary>The unified page: source switching, shared per-device rows, no file playback or measurement on opening.</summary>
+    private Node CheckCinema(Node tree, string where)
     {
-        foreach (var role in new[] { "前左", "前右", "中置", "低音声道", "后左", "后右", "侧左", "侧右" })
-            Expect(tree.Descendants().Any(n => n.Type == "Text" && n.Name == T(role)), where, $"no speaker row 「{T(role)}」");
+        Expect(Find(tree, n => n.Type == "ComboBox" && n.Name == T("音源")) != null, where, "no shared source selector");
+        Expect(tree.Descendants().All(n => !n.Says(T("电脑端分声道")) && !n.Says(T("交换左右"))), where, "legacy split/swap controls remain");
         foreach (var disabled in new[] { "播放", "暂停", "停止", "测量音箱延迟" })
         {
             var button = Find(tree, n => n.Type == "Button" && n.Says(T(disabled)));
             Expect(button is { Enabled: false }, where,
                 button == null ? $"no 「{T(disabled)}」 button" : $"「{T(disabled)}」 is enabled before a file plays");
         }
-        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true }, where, $"「{T("选择影音文件")}」 is not enabled");
+        Expect(Find(tree, n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: false }, where, $"「{T("选择影音文件")}」 is enabled for live capture");
+        var source = Find(tree, n => n.Type == "ComboBox" && n.Name == T("音源"));
+        if (source != null)
+        {
+            Native.Msaa(source.Hwnd)?.set_accValue(0, T("本地影音文件"));
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: true },
+                "file source enables its picker", 5000);
+            tree = Uia.Snapshot(MainWindow());
+            Layout(tree, where + " / file source");
+            ShootPage(where, "file-source");
+            Native.Msaa(source.Hwnd)?.set_accValue(0, T("电脑实时声音"));
+            WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" && n.Says(T("选择影音文件"))) is { Enabled: false },
+                "live source disables its picker", 5000);
+        }
+        return Uia.Snapshot(MainWindow());
     }
 
     // ---------------------------------------------------------------- 同步观影窗口 (modules/VideoWindow)
 
     /// <summary>
-    /// 设置 → 工具 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
+    /// 音画同步 →「同步观影窗口（实验性）」→ 打开 starts the module from the folder in the config: no folder picker,
     /// no capture, the idle hint, at this scenario's DPI (per-monitor aware). Then the module on its own with generated 4K
     /// pictures (--smoke-source) against the app's local API: frames through the GPU queue and the swap chain, halved to
     /// 1080p, shown at the picture's aspect ratio, and the delay followed from the app. The window picker is never opened.
@@ -596,11 +665,11 @@ internal sealed partial class Walker
     private void ViewingWindow(bool connected)
     {
         string title = T("同步观影窗口（实验性）"); // experimental since 1.1
-        Navigate("同步观影窗口（实验性）");
+        Navigate("音画同步");
         try
         {
             Uia.Invoke(Button("打开"));
-            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 设置", 20_000);
+            var viewer = WaitWindow(() => ViewerWindow(title, null), "the viewing window started from 音画同步", 20_000);
             Thread.Sleep(1200);
             var tree = Uia.Snapshot(viewer);
             Dump(tree, "viewer");
@@ -875,7 +944,7 @@ internal sealed partial class Walker
     }
 
     /// <summary>Screenshots of the whole page, a screen at a time (it scrolls the page, then back to the top).</summary>
-    private void ShootPage(string page, string label)
+    private void ShootPage(string page, string label, bool checkEachScroll = false)
     {
         var main = MainWindow();
         var pane = PagePane(Uia.Snapshot(main), page).Hwnd;
@@ -884,6 +953,12 @@ internal sealed partial class Walker
         Dump(Uia.Snapshot(main), name);
         for (int i = 1; i <= 12; i++)
         {
+            if (checkEachScroll)
+            {
+                var tree = Uia.Snapshot(main);
+                Dump(tree, $"{name}-{i}");
+                Layout(tree, $"{page} ({label}) / scroll {i}");
+            }
             Shoot(main, $"{name}-{i}", $"{page}{(label.Length > 0 ? " (" + label + ")" : "")} {i}");
             var info = Native.VerticalScroll(pane);
             if ((Native.Style(pane) & Native.WS_VSCROLL) == 0 || info is not { } si || si.nPos + si.nPage > si.nMax) break;
@@ -902,9 +977,8 @@ internal sealed partial class Walker
         "均衡" => "equalizer",
         "音箱信息" => "speakers",
         "多音箱（实验性）" => "groups",
-        "多声道（5.1 / 7.1，实验性）" => "multichannel",
-        "同步观影窗口（实验性）" => "viewing",
-        "音画同步测试" => "sync-test",
+        "音画同步" => "av-sync",
+        "诊断" => "diagnostics",
         "使用配置" => "profiles",
         "关于" => "about",
         _ => "settings",
@@ -1031,7 +1105,10 @@ internal sealed partial class Walker
     {
         foreach (var h in Native.TopLevelWindows(App.Id))
         {
-            if (Native.ClassName(h) != "#32770") continue;
+            // A closed native picker can remain as a hidden window briefly while its owner disposes it.
+            // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
+            if (Native.ClassName(h) != "#32770" || !Native.IsWindowVisible(h)
+                || Native.WindowRect(h) is not { Width: > 0, Height: > 0 }) continue;
             string title = Native.WindowText(h);
             Node tree;
             try { tree = Uia.Snapshot(h); }
@@ -1127,14 +1204,14 @@ internal sealed partial class Walker
         }
     }
 
-    private IntPtr WaitWindow(Func<IntPtr> find, string what, int timeoutMs)
+    private IntPtr WaitWindow(Func<IntPtr> find, string what, int timeoutMs, bool handlePrompts = true)
     {
         IntPtr found = IntPtr.Zero;
-        WaitUntil(() => (found = find()) != IntPtr.Zero, what, timeoutMs);
+        WaitUntil(() => (found = find()) != IntPtr.Zero, what, timeoutMs, handlePrompts: handlePrompts);
         return found;
     }
 
-    private void WaitUntil(Func<bool> condition, string what, int timeoutMs, bool fail = true)
+    private void WaitUntil(Func<bool> condition, string what, int timeoutMs, bool fail = true, bool handlePrompts = true)
     {
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (true)
@@ -1147,7 +1224,7 @@ internal sealed partial class Walker
                 _report.Warn(Where(), $"waited {timeoutMs / 1000} s for {what}");
                 return;
             }
-            HandlePrompts();
+            if (handlePrompts) HandlePrompts();
             Thread.Sleep(200);
         }
     }

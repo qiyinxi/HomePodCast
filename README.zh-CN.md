@@ -6,11 +6,11 @@
 
 TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实现的原生 C# 版本，单个 exe 约 350 KB，不需要虚拟声卡。
 
-## 支持的接收端——实验性
+## 支持的输出——实验性
 
 第三方接收端主要用于听音乐。AirPlay 1 兼容模式和第三方 AirPlay 2 均为实验性；第三方 AirPlay 2 **没有在实机上测试过**。HomePod 原有的瞬时配对、NTP、实时 PCM 和场景设置保持原行为。
 
-| 接收端类型 | 连接方式 | 验证情况 |
+| 输出类型 | 连接方式 | 验证情况 |
 | --- | --- | --- |
 | HomePod | 原有 AirPlay 2 低延迟 | 一台 HomePod 第二代实机 |
 | Apple TV HD / 4K | PIN 配对后的 AirPlay 2 低延迟 | 假接收端；未实机验证 |
@@ -18,6 +18,9 @@ TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实
 | 第三方 AirPlay 2 | 低延迟 → 已广播的 AirPlay 1 → 缓冲；记住成功方式 | CI 中的 shairport-sync AirPlay 2 + nqptp；未实机验证 |
 | 第三方 AirPlay 1 | AirPlay 1 兼容 | CI 中的经典 shairport-sync |
 | 未知接收端 | 低延迟 → 缓冲 → AirPlay 1，记录每次拒绝 | 仅假接收端与软件接收端 |
+| Windows 本机输出 | 按完整 ID 选择 WASAPI 播放端点 | 假端点／时钟测试；混合硬件分组未验证 |
+| 蓝牙音箱或耳机 | Windows 端点，由用户明确标记为蓝牙 | 200 毫秒只是起始估计；需校准和实机测试 |
+| DLNA／UPnP MediaRenderer | SSDP 发现、HTTP 音频与 SOAP 控制 | 假设备和 CI 的 gmrender-resurrect 文件输出；未实机验证 |
 
 | 模式 | 推荐最低延迟 | 默认 | 可选范围 |
 | --- | --- | --- | --- |
@@ -31,9 +34,24 @@ TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实
 
 音箱信息可按设备指定连接方式。兼容模式用自己的延迟选择器替代 HomePod 场景按钮，不覆盖 HomePod 场景设置；音箱信息显示实际协议和设备报告的处理时间。首次连接兼容设备时会提示约两秒延迟。
 
-兼容模式适合听音乐，不适合打游戏。浏览器插件的画面延迟上限仍为 **2000 ms**，声音延迟更大时无法完全对齐；音画同步测试仍可校准实际偏移。第三方接收端不能加入多音箱分组。
+兼容模式适合听音乐，不适合打游戏。浏览器插件的画面延迟上限仍为 **2000 ms**，声音延迟更大时无法完全对齐；音画同步测试仍可校准实际偏移。第三方 AirPlay 2 实时／缓冲和 AirPlay 1 接收端可加入实时多音箱分组（实验性，尚未实机验证）。各输出共用采集时间线和整组延迟，实际同步取决于设备行为与校准；本地文件分组仍只支持 HomePod。见[分组传输说明](docs/multi-output-receivers.md)。
 
 不支持 FairPlay 加密或只接受 MFi 认证发送端的设备。极米 Z6X 仅做过握手检查，音频会话要求 FairPlay，因此**不支持**，并非验证过能播放的设备；不能凭伪装的 Apple TV 型号判断兼容性。其他设备的反馈请附上 `HomePodCast.exe scan --txt`、选择的模式、实际连接延迟和日志里被拒绝的请求。
+
+## 实时输出分组——1.2 起实验性
+
+在「多音箱」选择「电脑实时声音」和输出类型，再点「刷新输出」「添加输出」。蓝牙先在 Windows 配对，选完整端点后
+明确标记「蓝牙输出」，不会按名称判断传输。Windows 不报告蓝牙链路延迟，200 毫秒只是起始估计；输出不能与 Windows
+采集端点相同。打开编辑器不会开始发现或播放。
+
+每路可设立体声／左／右、音量偏移、必需／可选行为及 ±5000 毫秒微调。自动整组延迟覆盖最慢输出，手动仍遵守设备下限。
+保存命名分组后，在首页「已保存的分组」选择，再连接；保存离线偏好或闲置时选择分组都不会连接。可选 Apple AirPlay、
+RAOP、本机和 DLNA 输出独立恢复，不抢回其他发送端的流。
+
+「手动校准」打开时无声，不用麦克风；可选测试音必须明确点击，音量不超过 25%。分别靠近参考和待校准音箱录像，
+用两段声音相对闪光的偏移帧数相减，把结果写入编辑器草稿，再点分组页「应用」生效。AirPlay 2 目标是共用时间线的严格
+同步，AirPlay 1／蓝牙校准后基本对齐，DLNA 只适合不同房间的大致对齐；混合硬件分组仍未验证。本地文件仍只支持
+HomePod，使用独立位置和 0–500 毫秒延迟。详见[输出分组和校准](docs/multi-output-receivers.md)及[DLNA 限制](docs/dlna.md)。
 
 ## 实测
 
@@ -58,7 +76,7 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - **无线影院**（每个声道一台 HomePod）：只用模拟音箱和生成的文件测试过
 - 实体声卡和耳机、其他 Windows 版本，以及电脑走有线或无线网络的差别
 
-如果你在别的设备上试用，欢迎开 issue 反馈：设备型号、软件版本、能稳定不断音的最低延迟设置，以及日志（`homepodcast.log`：「关于 → 日志 → 打开日志文件夹」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
+如果你在别的设备上试用，欢迎开 issue 反馈：设备型号、软件版本、能稳定不断音的最低延迟设置，以及诊断报告（「诊断 → 诊断报告 → 导出诊断」：一个 ZIP，里面是脱敏后的日志和统计数据，附上前可以先检查内容）。原始日志 `homepodcast.log` 是给你自己排查用的，里面有音箱名称和 IP 地址，不要附在公开的 issue 里。「诊断 → 日志 → 打开日志文件夹」就能看到它；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`。
 
 ## 功能
 
@@ -71,17 +89,17 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 - Apple TV 家庭影院：HomePod 设为 Apple TV 的音箱时（Apple TV 闲着也一直连着它），HomePodCast 连接期间临时接管它，不需要配对码；断开后 Apple TV 下次播放时会重新连上它。也可以在「设置」里改成先询问（实验性，尚未在真实 Apple TV 上验证）
 - 右键托盘图标打开快捷面板：音量和静音、场景、夜间模式、麦克风、连接或断开
 - 混音器：每个程序单独的音量、静音和电平表，可选按程序分流（HomePod / 本机 / 两者）或按声卡分流（选择采集哪个输出设备），见下文
-- 音量上限、夜间模式（压缩动态范围 + 减弱低音）、全局快捷键；键盘音量键也能调 HomePod（跟随 Windows 音量，或推流时只调 HomePod），见下文
+- 音量上限、夜间模式（压缩动态范围 + 减弱低音）、全局快捷键；键盘音量键也能调 HomePod（跟随 Windows 音量，或推流时只调 HomePod）；推流时可以自动把电脑静音，只让 HomePod 出声（实验性），见下文
 - 麦克风监听带混响与麦克风均衡，可输出到 HomePod、本机或两者，并说明声音去向；每次启动默认关闭。独立「均衡」页调节推送到音箱的所有声音
 - 立体声对和多房间同步（实验性，尚未在真实设备上验证）
 - 无线影院（实验性，尚未在真实设备上验证）：本地 5.1 或 7.1 文件的音轨，每个声道送到一台 HomePod，最多七台再加一台放低音声道；没有分配音箱的声道混入相邻的音箱，还可以用麦克风测量各音箱的延迟（测量时音量不超过 25%）。见[无线影院](docs/WIRELESS_CINEMA.md#简体中文)
 - Apple TV：第一次点「连接」时在电视上配对一次（输入电视显示的 4 位数字）；它的家庭影院扬声器是 HomePod 时由 HomePod 出声（实验性，尚未在真实 Apple TV 上验证）
-- 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
+- 诊断 → 音画同步测试：屏幕闪光 + 「咔」声，直接看出声音比画面晚多少
 - 音箱信息：型号、系统和 AirPlay 版本、IP 地址、Wi‑Fi MAC 地址（在路由器的设备列表里按它找到 HomePod，看它连在哪个频段或给它固定 IP）、蓝牙地址、设备 ID
 - 浏览器插件（测试版）：把 YouTube、bilibili 的画面延后，和 HomePod 的声音对齐。「音乐」场景的 500 ms 是给听音乐用的，看视频用「影视」或「推荐」最流畅（画面延迟超过 300 ms 时插件弹窗会提示）
 - 同步观影窗口（实验性）：给没有音频延迟设置的播放器用。独立模块把你选的窗口（或整个屏幕）按 HomePod 的声音延迟延后显示，可以全屏、可以微调，画面全程在显卡上处理。它是可选的 `HomePodCast-video-window-<版本>.zip`，Microsoft Store 版没有。见[同步观影窗口](docs/VIDEO_WINDOW.md#简体中文)
 - 检查更新（默认不自动检查，见[更新](#更新)）；MSI 安装的版本校验 SHA-256 后一键更新
-- 界面支持英文、简体中文、繁体中文和日文
+- 界面支持 15 种语言，包括英文、简繁中文、日文和支持的欧洲语言
 
 还支持整套使用配置、按音箱与音源保存并应用实测校准、程序的 HomePod 独立音量、脱敏诊断报告，以及浏览器「同步全屏」和 ±5／±20 ms 微调。入口、操作和限制见[使用配置、校准与诊断](docs/PLAYBACK_FEATURES.md#简体中文)。浏览器插件的网站偏移是加在校准之上的：如果之前已经按网站补偿过，校准后请把这些网站偏移重置。
 
@@ -91,10 +109,10 @@ HomePodCast 是个人项目，实际只在一套设备上测试过：
 2. 从 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下载 HomePodCast，有两种包，另有一个可选模块：
    - **安装包（推荐）`HomePodCast-<版本>-x64.msi`**：可以选择安装位置（默认 `C:\Program Files\HomePodCast`），自动添加开始菜单快捷方式和所需的防火墙规则。升级时直接运行新版 MSI；卸载在「设置 → 应用」里进行，如果开启过「开机自动启动」，请先在程序里关掉。
    - **便携版 `HomePodCast-<版本>-win-x64.zip`**：解压到任意位置，运行 `HomePodCast.exe`，第一次会请求添加防火墙规则。
-   - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「同步观影窗口」页选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
+   - **可选模块 `HomePodCast-video-window-<版本>.zip`**：同步观影窗口（见「功能」）。解压到任意位置，在「音画同步」页的「同步观影窗口（实验性）」一节选择这个文件夹。更新程序时它不会跟着更新，请重新下载同一版本的模块。
 
-   防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「关于 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
-3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请在「设置 → 键盘音量键」选「推流时控制 HomePod」，再把 Windows 静音（见[键盘音量键](#键盘音量键)）。
+   防火墙规则只放行局域网、只在专用网络下生效：HomePod 需要连回电脑对时和请求重传。如果 Windows 把你的网络设成了公用网络（比如从 Wi-Fi 换成网线之后），规则就不生效：HomePodCast 会提示，并可以打开 Windows 设置，在那里把“网络配置文件类型”改成“专用网络”（只对自己信任的家庭网络这样做）。两种包的设置和日志都保存在 `%APPDATA%\HomePodCast`。Microsoft Store 版写的文件放在它自己的存储里：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，卸载时由 Windows 删除；不管哪种版本，「诊断 → 日志 → 打开日志文件夹」打开的都是对的文件夹。
+3. 程序会自动找到 HomePod 并连接。采集发生在系统音量之前，Windows 音量不会改变送出去的声音；HomePod 有自己的音量。默认 Windows 音量就是 HomePod 音量：两边保持一致（连接时对齐到较小的那个），Windows 静音时 HomePod 也会静音。如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开「首页 → 仅 HomePod 输出」，或者在首页提示电脑也在出声时点「只用 HomePod 播放」（见[键盘音量键](#键盘音量键)）。
 
 界面语言跟随 Windows 显示语言（没有对应译文的语言显示英文）。想换成别的语言：在「设置」页选择「语言 / Language」，或者把 `%APPDATA%\HomePodCast\config.json` 里的 `"Language"` 设为语言代码（`"zh-CN"`，或 `src/i18n` 里的文件名，比如 `"en"`、`"de"`）或 `"auto"`。
 
@@ -108,7 +126,7 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 
 ## 全部推送与按程序分流
 
-默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定。想只在 HomePod 播放：在「设置 → 键盘音量键」选「推流时控制 HomePod」（或「仅在 Windows 静音时」），再把 Windows 设为静音；默认的「HomePod 跟随 Windows 音量」下，Windows 静音会让 HomePod 也静音。
+默认情况下，HomePodCast 抓取电脑的整个声音输出，全部送到 HomePod。这条路本身不增加延迟，打游戏就用它。电脑自己的扬声器出不出声由 Windows 音量决定。想只在 HomePod 播放：打开「首页 → 仅 HomePod 输出」（见[键盘音量键](#键盘音量键)）；在默认的「HomePod 跟随 Windows 音量」下手动把 Windows 静音，HomePod 也会静音。
 
 按程序分流可以让每个程序分别送到 HomePod、本机或两者（在「混音器」页设置），比如游戏声音进 HomePod、语音聊天留在耳机里。代价是延迟：
 
@@ -141,9 +159,15 @@ HomePodCast.exe mutetest                     确认静音后仍能采集
 在「设置 → 键盘音量键」里选择音量 +、− 和静音键对 HomePod 起什么作用：
 
 - **HomePod 跟随 Windows 音量**（默认）：推流时 Windows 音量就是 HomePod 音量。Windows 的 0–100% 对应 HomePod 的 0 到音量上限；按键和 Windows 音量滑块会改 HomePod，在程序里调 HomePod 也会改 Windows。连接时和改音量上限时，两边对齐到较小的那个，哪边都不会自己变大。Windows 静音时 HomePod 也静音。
-- **推流时控制 HomePod**：推流时这三个键只调 HomePod（每次 2%），Windows 音量不变，屏幕下方会显示 HomePod 音量（独占全屏的游戏里不显示）；不推流时照常调 Windows。适合默认输出是电脑扬声器、又只想听 HomePod 的情况：把 Windows 静音，再用按键调 HomePod。
+- **推流时控制 HomePod**：推流时这三个键只调 HomePod（每次 2%），Windows 音量不变，屏幕下方会显示 HomePod 音量（独占全屏的游戏里不显示）；不推流时照常调 Windows。
 - **仅在 Windows 静音时**：旧版的做法。只有 Windows 静音或音量为 0 时按键才转给 HomePod，Windows 保持静音。
 - **关**：按键只调 Windows。
+
+点击首页音量图标可以静音或取消 HomePod 静音，下方两个开关分别是「仅 HomePod 输出」和「夜间模式」。
+
+**仅 HomePod 输出**（实验性，在首页音量滑块下方，默认关）：适合默认输出是电脑扬声器（或耳机）、又只想听 HomePod 的情况。推流时 HomePodCast 把 Windows 默认输出静音；送到 HomePod 的声音是在 Windows 音量之前采集的，照常播放。电脑音量数值不变。关闭这个开关、会话结束时（点断开、音箱被其他设备占用、夜间自动断开）和退出 HomePodCast 时，电脑的声音会恢复；短暂断线或重连期间保持静音。HomePodCast 只取消它自己设的静音：推流前 Windows 已经静音的，保持静音；推流时你自己取消了 Windows 静音，这次连接里就不再动它。打开后，「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理，因为跟随一个静音的 Windows 会让 HomePod 也静音。选了默认输出以外的采集设备时（见[按声卡分流](#按声卡分流采集设备)）不会静音：这时默认输出上的声音本来就该留在那里。如果推流时 HomePodCast 被强制结束或崩溃，电脑会保持静音，直到下次启动 HomePodCast 时自动恢复（如果你在这期间已经手动取消了静音，就不再动它）；日志里记着静音和恢复的是哪个设备。
+
+这个设置关着时，推流中如果声音也从电脑的扬声器或耳机里放出来（HDMI 音频、虚拟声卡不算，Windows 静音或音量为 0 时不算，按程序分流时也不算，那时每个程序的去处是你自己选的），首页会提示「电脑也在出声」。点「只用 HomePod 播放」会打开这个设置并马上把电脑静音；键盘音量键是「HomePod 跟随 Windows 音量」或「关」时，同时改成「推流时控制 HomePod」。点「不再提示」以后不再显示。
 
 电脑没有可用的输出设备时（没装声卡驱动，或设备被禁用、拔掉），「HomePod 跟随 Windows 音量」和「仅在 Windows 静音时」也会在推流时直接用按键控制 HomePod，直到设备恢复。以管理员身份运行的程序在前台时，以及遥控器、鼠标的驱动软件只发送媒体命令而不是按键时，按键仍然调 Windows；这种情况下「HomePod 跟随 Windows 音量」会跟着变。
 
@@ -172,7 +196,7 @@ HomePodCast 可以到本仓库的 GitHub Releases 查找新版本：「关于 �
 5. HomePod 的位置：放在「看得见」路由器的地方，不要放进柜子里。
 6. 把延迟加 10–15 ms：在「场景」里选「自定义」调整，或者首页出现提示时直接点「应用」。首页「推流状态」下面会显示最近 10 分钟的网络抖动次数；抖动真的吃掉余量时，提示会说明是哪一段 Wi‑Fi 的问题（电脑插网线时一定是 HomePod 那一段），并给出建议的延迟。程序不会自己改延迟。「断音」一格算的是这次连接里的断音：电脑这边实测的，加上吃掉余量的网络抖动（HomePod 很可能因此断了一下）。HomePod 从不报告晚到的包，所以后者是估计，数字前会加「≈」；鼠标停在这一格上能看到两部分各是多少。
 
-**怎么看日志**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「关于 → 日志 → 打开日志文件夹」可以直接打开）：推流时每 100 ms ping 一次 HomePod 和路由器，往返超过 30 ms 或没有回应时记一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，没有回应是 `lost`）。每分钟的 `stats:` 行里有 `rtx=已重发/请求`、`rtxMiss=`（来不及重发的包）和 `ping=中位/p99/最大 lost=丢失/总数 router=…`。
+**怎么看日志**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「诊断 → 日志 → 打开日志文件夹」可以直接打开）：推流时每 100 ms ping 一次 HomePod 和路由器，往返超过 30 ms 或没有回应时记一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，没有回应是 `lost`）。每分钟的 `stats:` 行里有 `rtx=已重发/请求`、`rtxMiss=`（来不及重发的包）和 `ping=中位/p99/最大 lost=丢失/总数 router=…`。
 
 - 只有音箱的 ping 突增、路由器正常：问题在路由器 → HomePod 这一段，见第 4、5 条。
 - 音箱和路由器同时突增：问题在电脑这一段，见第 1–3 条。电脑插网线时问题仍在 HomePod 那一段（只是路由器回自己的 ping 慢了），提示也会这样说。

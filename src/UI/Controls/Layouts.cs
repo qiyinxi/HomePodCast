@@ -18,6 +18,13 @@ internal sealed class Columns : LayoutPanel
     /// <summary>Share of the width for the left column when side by side.</summary>
     public double LeftShare { get; set; } = 0.5;
 
+    /// <summary>
+    /// Side by side, both columns get the taller one's height, so their cards end on one line: a column that is a
+    /// <see cref="StackPanel"/> with <see cref="StackPanel.FillLast"/> gives it to its last card, a single card is placed
+    /// that tall. 2026-10-18, 首页: the speaker and volume cards ended 60 px below the scene card.
+    /// </summary>
+    public bool EqualHeights { get; set; }
+
     protected override int Arrange(int width, bool apply)
     {
         int gap = Dp(Gap);
@@ -25,12 +32,13 @@ internal sealed class Columns : LayoutPanel
         {
             int lw = (int)Math.Round((width - gap) * LeftShare), rw = width - gap - lw;
             int lh = HeightFor(_left, lw), rh = HeightFor(_right, rw);
+            int height = Math.Max(lh, rh);
             if (apply)
             {
-                Place(_left, 0, 0, lw, lh);
-                Place(_right, lw + gap, 0, rw, rh);
+                Place(_left, 0, 0, lw, EqualHeights && lh > 0 ? height : lh);
+                Place(_right, lw + gap, 0, rw, EqualHeights && rh > 0 ? height : rh);
             }
-            return Math.Max(lh, rh);
+            return height;
         }
         int h1 = HeightFor(_left, width), h2 = HeightFor(_right, width);
         if (apply)

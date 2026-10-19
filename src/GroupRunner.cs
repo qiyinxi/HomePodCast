@@ -35,6 +35,7 @@ internal sealed class GroupRunner(
     /// and whether it was stopped (cancelled, so its members get a TEARDOWN).
     /// </summary>
     public event Action<string?, bool>? StreamEnded;
+    public event Action? StoppedForUserAction;
 
     /// <summary>Runs until cancelled; returns true if it gave up because another sender took a speaker over.</summary>
     public async Task<bool> RunAsync(CancellationToken ct)
@@ -44,6 +45,7 @@ internal sealed class GroupRunner(
         {
             var started = Stopwatch.StartNew();
             bool streamed = false;
+            bool stopIdle = false;
             string? lostReason = null, lostText = null;
             try
             {
@@ -58,6 +60,7 @@ internal sealed class GroupRunner(
                 using (new System.Threading.Timer(_ => group.LogStats(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1)))
                     lostText = await group.Lost.WaitAsync(ct);
                 lostReason = group.LostReason;
+                stopIdle = group.LostRequiresUserAction || lostReason == RaopClient.ClosedByReceiver;
                 group.LogStats();
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -69,14 +72,36 @@ internal sealed class GroupRunner(
                 lostText = Describe(ex);
                 Log.Warn($"group failed: {DescribeForLog(ex)}");
                 if (Find<FirewallBlockedException>(ex) != null) FirewallBlocked?.Invoke();
+                stopIdle = Find<RaopUnsupportedException>(ex) != null || Find<RaopPasswordRequiredException>(ex) != null
+                    || Find<RaopBusyException>(ex) != null || Find<RaopRefusedException>(ex) != null
+                    || Find<DlnaBusyException>(ex) != null || Find<DlnaTakenOverException>(ex) != null
+                    || Find<DlnaPolicyException>(ex) != null || Find<DlnaUnsupportedException>(ex) != null
+                    || Find<DlnaStoppedException>(ex) != null || Find<ReceiverGroupStoppedException>(ex) != null
+                    || Find<ReceiverGroupUnsupportedException>(ex) != null || Find<ReceiverGroupDelayUnavailableException>(ex) != null
+                    || Find<PairingRequiredException>(ex) != null;
             }
             finally
             {
+                // A terminal required leg wins over a simultaneous transient/AP2 event even when that event
+                // completed Lost first. Check the transports before teardown clears their live sessions.
+                if (Current?.RequiredActionFailure is { } terminal)
+                {
+                    stopIdle = true;
+                    lostReason = terminal.Error.Message;
+                    lostText = Describe(new GroupMemberException(terminal.Name, terminal.Error));
+                }
                 if (streamed) StreamEnded?.Invoke(lostReason, ct.IsCancellationRequested);
                 TearDown();
             }
 
             if (ct.IsCancellationRequested) break;
+
+            if (stopIdle)
+            {
+                StoppedForUserAction?.Invoke();
+                status(StreamState.Idle, lostReason == RaopClient.ClosedByReceiver ? L.T(StreamController.TakenOverText) : lostText ?? "");
+                return true;
+            }
 
             if (streamed && started.Elapsed > _takeoverGrace && lostReason == EventChannel.ClosedBySpeaker)
             {
@@ -99,6 +124,8 @@ internal sealed class GroupRunner(
     internal static string Describe(Exception ex) => ex switch
     {
         GroupMemberException g => L.F("{0}：{1}", g.Member, Describe(g.InnerException!)),
+        DlnaBusyException or DlnaTakenOverException or DlnaPolicyException or DlnaUnsupportedException or DlnaStoppedException
+            => StreamController.DlnaMessage(DlnaFailures.Kind(ex)),
         AirPlayException => ex.Message,
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };

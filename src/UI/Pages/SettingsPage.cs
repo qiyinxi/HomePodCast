@@ -2,7 +2,7 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume, hotkeys and local players.</summary>
+/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume and hotkeys.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     private static readonly string[] ThemeModes = [Theme.Auto, Theme.Light, Theme.Dark];
@@ -28,14 +28,8 @@ internal sealed class SettingsPage : ScrollPage
     private readonly TimerDebounce _capWait = new(250);
     private readonly FluentComboBox _volumeKeys = new();
     private readonly SettingRow _volumeKeysRow;
-    private readonly ToggleSwitch _playerSync = new();
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
-    private readonly PasswordBox _vlcPassword = new(L.T("VLC 网页接口密码（自动读取失败时填写）"));
-    private readonly FluentButton _vlcSave = new(L.T("保存"));
-    private readonly FluentButton _vlcClear = new(L.T("清除"), ButtonKind.Subtle);
-    private readonly SettingRow _vlcPasswordRow;
-
     public void ShowTheme() => _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(_app.Config.Theme));
 
     public SettingsPage(TrayApp app) : base(L.T("设置"))
@@ -83,26 +77,11 @@ internal sealed class SettingsPage : ScrollPage
         _volumeKeysRow = new SettingRow(Glyph.Keyboard, L.T("键盘音量键"), "", _volumeKeys);
         _hotkeysRow = new SettingRow(Glyph.Keyboard, L.T("全局快捷键"), "", _hotkeys);
 
-        var players = Ui.Section(L.T("本地播放器"));
-        var playerSync = new SettingRow(Glyph.Video, L.T("影视场景自动调整播放器"),
-            L.T("「影视」场景推流时，把 mpv、VLC 的声音提前，让画面对上 HomePod；换场景、断开或退出时改回原来的值。"), _playerSync);
-        var copyMpv = new FluentButton(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 mpv.conf 这一行") };
-        var mpvRow = new SettingRow(Glyph.None, "mpv",
-            L.F("在 mpv.conf（通常在 %APPDATA%\\mpv）里加这一行，然后重启 mpv：\n{0}", Players.MpvIpc.ConfigLine), copyMpv);
-        var vlcRow = new SettingRow(Glyph.None, "VLC",
-            L.T("工具 → 偏好设置 → 显示设置选「全部」→ 界面 → 主界面：勾选「Web」；再到 主界面 → Lua 设置密码，然后重启 VLC。" +
-                "HomePodCast 从 VLC 的设置里读取这个密码，只用来连接本机的 VLC。"), null);
-        // Typed only when VLC's own password cannot be read or is refused; the line under it says which one is used.
-        _vlcPasswordRow = new SettingRow(Glyph.None, L.T("VLC 网页接口密码（自动读取失败时填写）"), "",
-            Ui.Row(8, null, _vlcPassword, _vlcSave, _vlcClear));
-        var manualRow = new SettingRow(Glyph.None, "PotPlayer · MPC-HC · MPC-BE",
-            L.T("没有可用的接口，请按首页显示的数值手动设置：PotPlayer 按 Shift+< / Shift+>；MPC-HC、MPC-BE 按小键盘 + / −，或在选项里设「音频时间偏移」。"), null);
-
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            sound, cap, _volumeKeysRow, _hotkeysRow, players, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow]);
-        foreach (var header in new Control[] { general, sound, players }) Content.GapBefore[header] = 20;
+            sound, cap, _volumeKeysRow, _hotkeysRow]);
+        foreach (var header in new Control[] { general, sound }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            cap, _volumeKeysRow, _hotkeysRow, playerSync, mpvRow, vlcRow, _vlcPasswordRow, manualRow }) Content.GapBefore[row] = 4;
+            cap, _volumeKeysRow, _hotkeysRow }) Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
         _language.SelectionChangeCommitted += (_, _) =>
@@ -161,16 +140,6 @@ internal sealed class SettingsPage : ScrollPage
             _app.SetVolumeKeyMode(VolumeKeyModes[_volumeKeys.SelectedIndex]);
             ShowVolumeKeys();
         };
-        _playerSync.Toggled += (_, _) => _app.SetMoviePlayerSync(_playerSync.Checked);
-        copyMpv.Click += (_, _) =>
-        {
-            try { Clipboard.SetText(Players.MpvIpc.ConfigLine); }
-            catch (Exception ex) { Log.Warn($"clipboard: {ex.Message}"); }
-        };
-        _vlcPassword.PasswordChanged += (_, _) => ShowVlcPasswordButtons();
-        _vlcPassword.Submitted += (_, _) => SaveVlcPassword();
-        _vlcSave.Click += (_, _) => SaveVlcPassword();
-        _vlcClear.Click += (_, _) => ClearVlcPassword();
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
         Load();
     }
@@ -297,63 +266,9 @@ internal sealed class SettingsPage : ScrollPage
         _autoconnect.Checked = cfg.AutoConnect;
         ShowHomeTheater();
         ShowNight();
-        _playerSync.Checked = cfg.MoviePlayerSync;
         ShowVolumeKeys();
         ShowSoundOptions();
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
-        ShowPlayers();
-    }
-
-    /// <summary>Which VLC password is in use, or that VLC refused it (never the password); the buttons' state.</summary>
-    public void ShowPlayers()
-    {
-        var (text, problem) = Players.PlayerText.VlcPasswordStatus(_app.PlayerStatuses, _app.HasVlcPassword);
-        var desc = _vlcPasswordRow.DescriptionText;
-        desc.Text = text;
-        desc.Role = problem ? TextRole.Critical : TextRole.Secondary;
-        ShowVlcPasswordButtons();
-    }
-
-    private void ShowVlcPasswordButtons()
-    {
-        bool typed = _vlcPassword.Password.Length > 0;
-        _vlcSave.Enabled = typed;
-        _vlcClear.Enabled = typed || _app.HasVlcPassword;
-    }
-
-    /// <summary>Encrypts and saves what was typed, then empties the box (the saved password is never shown again).</summary>
-    private void SaveVlcPassword()
-    {
-        if (_vlcPassword.Password.Length == 0) return;
-        try
-        {
-            _app.SetVlcPassword(_vlcPassword.Password);
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"players: saving the VLC password failed: {ex.Message}");
-            MessageBox.Show(FindForm(), L.F("保存密码失败：{0}", ex.Message), "HomePodCast");
-            return;
-        }
-        _vlcPassword.Clear();
-        ShowPlayers();
-    }
-
-    private void ClearVlcPassword()
-    {
-        _vlcPassword.Clear();
-        if (_app.HasVlcPassword)
-        {
-            try
-            {
-                _app.SetVlcPassword(null);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"players: clearing the VLC password failed: {ex.Message}");
-            }
-        }
-        ShowPlayers();
     }
 
     public void ShowSoundOptions()
@@ -429,20 +344,26 @@ internal sealed class SettingsPage : ScrollPage
     {
         VolumeKeyMode.WhileStreaming => L.T("推流时，音量 +、− 和静音键只调 HomePod，Windows 音量不变，屏幕下方会显示 HomePod 音量；不推流时照常调 Windows。"),
         VolumeKeyMode.FollowWindows => L.T("Windows 音量就是 HomePod 音量（Windows 100% 对应音量上限）：音量键照常调 Windows，在程序里调 HomePod 也会改 Windows 音量；" +
-                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请选「推流时控制 HomePod」。"),
+                                          "连接时两边对齐到较小的那个。Windows 静音时 HomePod 也静音；如果默认输出是电脑扬声器、又只想用 HomePod 听，请打开首页的「仅 HomePod 输出」。"),
         VolumeKeyMode.WhenWindowsMuted => L.T("只在 Windows 静音或音量为 0 时，音量键改调 HomePod，Windows 保持静音（建议用静音，而不是 0%）。"),
         _ => L.T("音量键只调 Windows，不影响 HomePod。"),
     };
 
-    /// <summary>The selected mode and what it does; without a Windows output device, that the keys go to the HomePod.</summary>
+    /// <summary>
+    /// The selected mode and what it does; without a Windows output device, that the keys go to the HomePod; with
+    /// 仅 HomePod 输出 on, that 「HomePod 跟随 Windows 音量」 is handled as 「推流时控制 HomePod」.
+    /// </summary>
     public void ShowVolumeKeys()
     {
         var mode = _app.Config.VolumeKeys;
+        var effective = _app.EffectiveVolumeKeys;
         if (!_volumeKeys.DroppedDown) _volumeKeys.SelectedIndex = Array.IndexOf(VolumeKeyModes, mode);
         var desc = _volumeKeysRow.DescriptionText;
-        bool fallback = mode is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
-        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。") : VolumeKeyModeDescription(mode) +
-            (mode == VolumeKeyMode.FollowWindows && _app.Routing.CaptureDeviceId != null ? "\n" + L.T(MixerPage.CaptureVolumeNote) : "");
+        bool fallback = effective is VolumeKeyMode.FollowWindows or VolumeKeyMode.WhenWindowsMuted && !_app.OutputDevicePresent;
+        desc.Text = fallback ? L.T("没有可用的输出设备：推流时音量键直接控制 HomePod。")
+            : effective != mode ? L.T("已打开「仅 HomePod 输出」：推流时按「推流时控制 HomePod」处理，音量 +、− 和静音键只调 HomePod；不推流时照常调 Windows。")
+            : VolumeKeyModeDescription(mode) +
+              (mode == VolumeKeyMode.FollowWindows && _app.Routing.CaptureDeviceId != null ? "\n" + L.T(MixerPage.CaptureVolumeNote) : "");
         desc.Role = fallback ? TextRole.Caution : TextRole.Secondary;
     }
 
@@ -473,14 +394,6 @@ internal sealed class SettingsPage : ScrollPage
         ShowSoundOptions();
         ShowVolumeKeys(); // the capture device may have been changed on 混音器
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
-        ShowPlayers();
-    }
-
-    /// <summary>A password typed but not saved is not kept once the page is left.</summary>
-    public override void PageHidden()
-    {
-        _vlcPassword.Clear();
-        ShowVlcPasswordButtons();
     }
 
     protected override void Dispose(bool disposing)

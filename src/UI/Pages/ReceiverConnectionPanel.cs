@@ -3,25 +3,27 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>Explicit per-device connection override; separate from HomePod controls.</summary>
+/// <summary>
+/// Explicit per-device connection override; separate from HomePod controls. Only the choice: the receiver's kind, the
+/// protocol it is connected with and its processing time are in the speaker info card below it (2026-10-15: a note here
+/// repeated the card's 设备类型 above it).
+/// </summary>
 internal sealed class ReceiverConnectionPanel : StackPanel
 {
     private static readonly ReceiverProtocol[] Modes = [ReceiverProtocol.Auto, ReceiverProtocol.AirPlay2Realtime, ReceiverProtocol.AirPlay2Buffered, ReceiverProtocol.Raop];
     private readonly TrayApp _app;
     private readonly Func<string?> _deviceId;
     private readonly FluentComboBox _mode = new();
-    private readonly SettingRow _row;
-    private readonly TextBlock _details = Ui.Note();
 
     public ReceiverConnectionPanel(TrayApp app, Func<string?>? deviceId = null)
     {
         _app = app;
         _deviceId = deviceId ?? (() => app.Config.DeviceId);
         _mode.Items.AddRange(Modes.Select(ReceiverProtocols.Label));
-        _row = new SettingRow(Glyph.Devices, L.T("连接方式（实验性）"), // experimental since 1.1
+        var row = new SettingRow(Glyph.Devices, L.T("连接方式（实验性）"), // experimental since 1.1
             L.T("自动尝试接收端支持的方式；第三方 AirPlay 2 尚未在实机上测试。"), _mode);
         _mode.AccessibleName = L.T("连接方式（实验性）"); // experimental since 1.1
-        Controls.AddRange([_row, _details]);
+        Controls.Add(row);
         _mode.SelectionChangeCommitted += (_, _) =>
         {
             if (_mode.SelectedIndex < 0 || _deviceId() is not { } id) return;
@@ -35,17 +37,10 @@ internal sealed class ReceiverConnectionPanel : StackPanel
         var device = id == null ? null : _app.Controller.ReceiverLookup?.Invoke(id)
             ?? _app.LastScan.FirstOrDefault(d => d.DeviceId == id)
             ?? _app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id))?.Device(id);
-        Collapsed = device == null || device.Kind == ReceiverKind.HomePod;
+        // HomePods and Apple TVs connect one way only (ReceiverProtocols.Candidates): nothing to choose.
+        Collapsed = device == null || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv;
         if (Collapsed) return;
-        _row.Collapsed = device!.Kind == ReceiverKind.AppleTv;
         var settings = _app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id!));
-        var actual = id == _app.Config.DeviceId ? _app.Controller.ActiveProtocol : null;
-        string connection = _app.Controller.State == StreamState.Streaming && actual != null
-            ? L.F("实际连接：{0}", ReceiverProtocols.Label(actual.Value))
-            : L.T("未连接；连接后显示实际协议。");
-        int? processing = (id == _app.Config.DeviceId ? _app.Controller.ReceiverSession?.ArrivalToRenderMs ?? _app.Controller.Client?.ArrivalToRenderMs : null) ?? settings?.ArrivalToRenderMs;
-        _details.Text = ReceiverKinds.Label(device.Kind) + "\n" + connection
-            + (processing is { } ms ? "\n" + L.F("接收端处理时间：{0} ms", ms) : "");
         _mode.SelectedIndex = Array.IndexOf(Modes, settings?.ProtocolOverride ?? ReceiverProtocol.Auto);
     }
 }

@@ -6,11 +6,11 @@
 
 TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零開始實作的原生 C# 版本，單一 exe 約 350 KB，不需要虛擬音效卡。
 
-## 支援的接收端——實驗性
+## 支援的輸出——實驗性
 
 第三方接收端主要用於聽音樂。AirPlay 1 相容模式與第三方 AirPlay 2 均為實驗性；第三方 AirPlay 2 **尚未在實機測試**。HomePod 原有的暫時配對、NTP、即時 PCM 與情境設定維持原有行為。
 
-| 接收端類型 | 連線方式 | 驗證情況 |
+| 輸出類型 | 連線方式 | 驗證情況 |
 | --- | --- | --- |
 | HomePod | 原有 AirPlay 2 低延遲 | 一台 HomePod 第二代實機 |
 | Apple TV HD / 4K | PIN 配對後的 AirPlay 2 低延遲 | 模擬接收端；未實機驗證 |
@@ -18,6 +18,9 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
 | 第三方 AirPlay 2 | 低延遲 → 已廣播的 AirPlay 1 → 緩衝；記住成功方式 | CI 的 shairport-sync AirPlay 2 + nqptp；未實機驗證 |
 | 第三方 AirPlay 1 | AirPlay 1 相容 | CI 的經典 shairport-sync |
 | 未知接收端 | 低延遲 → 緩衝 → AirPlay 1，記錄每次拒絕 | 僅模擬與軟體接收端 |
+| Windows 本機輸出 | 依完整 ID 選擇 WASAPI 播放端點 | 模擬端點／時鐘測試；混合硬體分組未驗證 |
+| 藍牙揚聲器或耳機 | Windows 端點，由使用者明確標記為藍牙 | 200 毫秒僅為起始估計；需校準和實機測試 |
+| DLNA／UPnP MediaRenderer | SSDP 探索、HTTP 音訊與 SOAP 控制 | 模擬裝置及 CI 的 gmrender-resurrect 檔案輸出；未實機驗證 |
 
 | 模式 | 建議最低延遲 | 預設 | 可選範圍 |
 | --- | --- | --- | --- |
@@ -31,9 +34,24 @@ TuneBlade 在 HomePod 軟體 27 上已經發不出聲音；HomePodCast 是從零
 
 音箱資訊可按裝置指定連線方式。相容模式使用自己的延遲選擇器取代 HomePod 情境按鈕，不覆寫 HomePod 情境；設定中會顯示實際協定與回報的處理時間。首次相容連線會提示約兩秒延遲。
 
-相容模式適合音樂，不適合遊戲。瀏覽器擴充功能的畫面延遲上限仍為 **2000 ms**，聲音延遲更大時無法完全對齊；影音同步測試仍可校準實際偏移。第三方接收端無法加入多音箱群組。
+相容模式適合音樂，不適合遊戲。瀏覽器擴充功能的畫面延遲上限仍為 **2000 ms**，聲音延遲更大時無法完全對齊；影音同步測試仍可校準實際偏移。第三方 AirPlay 2 即時／緩衝和 AirPlay 1 接收端可加入即時多音箱群組（實驗性，尚未實機驗證）。各輸出共用擷取時間線和整組延遲，實際同步取決於裝置行為與校準；本機檔案群組仍只支援 HomePod。見[群組傳輸說明](docs/multi-output-receivers.md)。
 
 不支援 FairPlay 或僅接受 MFi 認證傳送端的裝置。極米 Z6X 僅經握手檢查，音訊會話要求 FairPlay，因此**不支援**，並非已驗證可播放的裝置；不可依模擬的 Apple TV 型號判斷相容性。其他裝置回報請附上 `HomePodCast.exe scan --txt`、選擇的模式、實際連線延遲與紀錄中被拒絕的請求。
+
+## 即時輸出分組——1.2 起實驗性
+
+在「多台揚聲器」選「電腦即時聲音」和輸出類型，再按「重新整理輸出」「新增輸出」。藍牙先在 Windows 配對，選完整端點後
+明確標記「藍牙輸出」，不依名稱判斷傳輸。Windows 不回報藍牙鏈路延遲，200 毫秒只是起始估計；輸出不能與 Windows
+擷取端點相同。開啟編輯器不會開始探索或播放。
+
+每路可設立體聲／左／右、音量偏移、必要／選用行為及 ±5000 毫秒微調。自動整組延遲涵蓋最慢輸出，手動仍遵守裝置下限。
+儲存命名分組後，在首頁「已儲存的分組」選擇再連線；儲存離線偏好或閒置時選分組都不會連線。選用 Apple AirPlay、
+RAOP、本機和 DLNA 輸出獨立恢復，不搶回其他傳送端的串流。
+
+「手動校準」開啟時無聲，不用麥克風；選用測試音必須明確點選，音量最高 25%。分別靠近參考和待校準揚聲器錄影，
+將兩段聲音相對閃光的偏移影格數相減，結果寫入編輯器草稿，再按分組頁「套用」生效。AirPlay 2 目標為共用時間軸的
+嚴格同步，AirPlay 1／藍牙校準後基本對齊，DLNA 僅適合不同房間的大致對齊；混合硬體分組仍未驗證。本機檔案仍只支援
+HomePod，使用獨立位置及 0–500 毫秒延遲。見[輸出分組和校準](docs/multi-output-receivers.md)及[DLNA 限制](docs/dlna.md)。
 
 ## 實測
 
@@ -58,7 +76,7 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - **無線影院**（每個聲道一台 HomePod）：只用模擬揚聲器和產生的檔案測試過
 - 實體音效卡和耳機、其他 Windows 版本，以及電腦走有線或無線網路的差別
 
-如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及記錄檔（`homepodcast.log`：「關於 → 記錄檔 → 開啟記錄檔資料夾」就能看到；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）。
+如果你在其他裝置上試用，歡迎開 issue 回報：裝置型號、軟體版本、能穩定不斷音的最低延遲設定，以及診斷報告（「診斷 → 診斷報告 → 匯出診斷」：一個 ZIP，裡面是去識別化的記錄檔和統計數據，附上前可以先檢查內容）。原始記錄檔 `homepodcast.log` 是給你自己排查用的，裡面有揚聲器名稱和 IP 位址，不要附在公開的 issue 裡。「診斷 → 記錄檔 → 開啟記錄檔資料夾」就能看到它；它在 `%APPDATA%\HomePodCast`，Microsoft Store 版在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`。
 
 ## 功能
 
@@ -76,12 +94,12 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 - 立體聲組合和多房間同步（實驗性，尚未在實際裝置上驗證）
 - 無線影院（實驗性，尚未在實際裝置上驗證）：本機 5.1 或 7.1 檔案的音軌，每個聲道送到一台 HomePod，最多七台再加一台播放低音聲道；沒有分配揚聲器的聲道混入相鄰的揚聲器，還可以用麥克風測量各揚聲器的延遲（測量時音量不超過 25%）。見[無線影院（英文／簡體中文）](docs/WIRELESS_CINEMA.md)
 - Apple TV：第一次按「連線」時在電視上配對一次（輸入電視顯示的 4 位數字）；它的家庭劇院揚聲器是 HomePod 時由 HomePod 出聲（實驗性，尚未在實際的 Apple TV 上驗證）
-- 影音同步測試：螢幕閃光加上「喀」一聲，一眼看出聲音比畫面晚多少
+- 診斷 → 影音同步測試：螢幕閃光加上「喀」一聲，一眼看出聲音比畫面晚多少
 - 設定中的揚聲器資訊：型號、系統和 AirPlay 版本、IP 位址、Wi‑Fi MAC 位址（在路由器的裝置清單裡依它找到 HomePod，看它連在哪個頻段或替它指定固定 IP）、藍牙位址、裝置 ID
 - 瀏覽器擴充功能（測試版）：把 YouTube、bilibili 的畫面延後，和 HomePod 的聲音對齊。「音樂」場景的 500 ms 是給聽音樂用的，看影片用「影視」或「推薦」最流暢（畫面延遲超過 300 ms 時擴充功能的彈出視窗會提示）
 - 同步觀影視窗（實驗性）：給沒有音訊延遲設定的播放器使用。獨立模組把你選的視窗（或整個螢幕）依 HomePod 的聲音延遲延後顯示，可以全螢幕、可以微調，畫面全程在顯示卡上處理。它是選用的 `HomePodCast-video-window-<版本>.zip`，Microsoft Store 版沒有。見[同步觀影視窗（英文／簡體中文）](docs/VIDEO_WINDOW.md)
 - 檢查更新（預設不自動檢查，見[更新](#更新)）；MSI 安裝的版本驗證 SHA-256 後一鍵更新
-- 介面支援英文、簡體中文、繁體中文和日文
+- 介面支援 15 種語言，包括英文、簡繁中文、日文和支援的歐洲語言
 
 整套使用設定檔、依音箱與音源儲存的實測校準、程式的 HomePod 獨立音量、去識別化診斷報告，以及瀏覽器「同步全螢幕」和 ±5／±20 ms 微調，詳見[使用設定檔、校準與診斷（英文／簡體中文）](docs/PLAYBACK_FEATURES.md)。瀏覽器擴充功能的網站偏移是加在校準之上的：如果之前已經依網站補償過，校準後請把這些網站偏移重設。
 
@@ -91,9 +109,9 @@ HomePodCast 是個人專案，實際只在一套裝置上測試過：
 2. 從 [Releases](https://github.com/qiyinxi/HomePodCast/releases) 下載 HomePodCast，有兩種套件，另有一個選用模組：
    - **安裝程式（建議）`HomePodCast-<版本>-x64.msi`**：可以選擇安裝位置（預設 `C:\Program Files\HomePodCast`），會自動新增開始功能表捷徑和所需的防火牆規則。升級時直接執行新版 MSI；解除安裝請到「設定 → 應用程式」，如果開啟過「開機時自動啟動」，請先在程式裡關閉。
    - **可攜版 `HomePodCast-<版本>-win-x64.zip`**：解壓縮到任意位置，執行 `HomePodCast.exe`，第一次會要求新增防火牆規則。
-   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「同步觀影視窗」頁選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
+   - **選用模組 `HomePodCast-video-window-<版本>.zip`**：同步觀影視窗（見「功能」）。解壓縮到任意位置，在「音畫同步」頁的「同步觀影視窗（實驗性）」一節選擇這個資料夾。更新程式時它不會跟著更新，請重新下載相同版本的模組。
 
-   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定和記錄檔都儲存在 `%APPDATA%\HomePodCast`。Microsoft Store 版寫入的檔案放在它自己的儲存空間：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，解除安裝時由 Windows 刪除；不論哪種版本，「關於 → 記錄檔 → 開啟記錄檔資料夾」開啟的都是正確的資料夾。
+   防火牆規則只允許區域網路、只在私人網路下生效：HomePod 需要連回電腦進行對時和要求重傳。如果 Windows 把你的網路設成公用網路（例如從 Wi-Fi 換成網路線之後），規則就不會生效：HomePodCast 會提示，並可以開啟 Windows 設定，在那裡把「網路設定檔類型」改成「私人網路」（只對自己信任的家用網路這樣做）。兩種套件的設定和記錄檔都儲存在 `%APPDATA%\HomePodCast`。Microsoft Store 版寫入的檔案放在它自己的儲存空間：`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，解除安裝時由 Windows 刪除；不論哪種版本，「診斷 → 記錄檔 → 開啟記錄檔資料夾」開啟的都是正確的資料夾。
 3. 程式會自動找到 HomePod 並連線。擷取發生在系統音量之前，Windows 音量不會改變送出去的聲音；HomePod 有自己的音量。預設 Windows 音量就是 HomePod 音量：兩邊保持一致（連線時對齊到較小的那個），Windows 靜音時 HomePod 也會靜音。如果預設輸出是電腦喇叭，又只想用 HomePod 聽，請在「設定 → 鍵盤音量鍵」選「串流時控制 HomePod」，再把 Windows 設為靜音（見[鍵盤音量鍵](#鍵盤音量鍵)）。
 
 介面語言跟隨 Windows 顯示語言（沒有對應譯文的語言顯示英文）。若要改用其他語言，在「設定」頁選擇「語言 / Language」，或把 `%APPDATA%\HomePodCast\config.json` 中的 `"Language"` 設為語言代碼（`"zh-CN"`，或 `src/i18n` 中的檔名，例如 `"zh-TW"`、`"en"`、`"de"`）或 `"auto"`。
@@ -172,7 +190,7 @@ HomePodCast 可以到本儲存庫的 GitHub Releases 尋找新版本：「設定
 5. HomePod 的位置：放在「看得見」路由器的地方，不要放進櫃子裡。
 6. 把延遲加 10–15 ms：在「場景」中選「自訂」調整，或在首頁出現提示時直接按「套用」。首頁「串流狀態」下方會顯示最近 10 分鐘的網路抖動次數；抖動真的吃掉餘裕時，提示會說明是哪一段 Wi‑Fi 的問題（電腦接網路線時一定是 HomePod 那一段），並給出建議的延遲。程式不會自己改延遲。「斷音」一格算的是這次連線中的斷音：電腦這邊實測的，加上吃掉餘裕的網路抖動（HomePod 很可能因此斷了一下）。HomePod 從不回報晚到的封包，所以後者是估計，數字前會加「≈」；滑鼠停在這一格上可以看到兩部分各是多少。
 
-**如何看記錄檔**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「關於 → 記錄檔 → 開啟記錄檔資料夾」可以直接開啟）：串流時每 100 ms ping 一次 HomePod 和路由器，往返超過 30 ms 或沒有回應時記一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，沒有回應是 `lost`）。每分鐘的 `stats:` 行裡有 `rtx=已重送/要求`、`rtxMiss=`（來不及重送的封包）和 `ping=中位數/p99/最大 lost=遺失/總數 router=…`。
+**如何看記錄檔**（`%APPDATA%\HomePodCast\homepodcast.log`，Microsoft Store 版是 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast\homepodcast.log`；「診斷 → 記錄檔 → 開啟記錄檔資料夾」可以直接開啟）：串流時每 100 ms ping 一次 HomePod 和路由器，往返超過 30 ms 或沒有回應時記一行 `network: ping to the speaker took 48 ms`（路由器是 `the router`，沒有回應是 `lost`）。每分鐘的 `stats:` 行裡有 `rtx=已重送/要求`、`rtxMiss=`（來不及重送的封包）和 `ping=中位數/p99/最大 lost=遺失/總數 router=…`。
 
 - 只有揚聲器的 ping 突增、路由器正常：問題在路由器 → HomePod 這一段，見第 4、5 點。
 - 揚聲器和路由器同時突增：問題在電腦這一段，見第 1–3 點。電腦接網路線時問題仍在 HomePod 那一段（只是路由器回自己的 ping 慢了），提示也會這樣說。

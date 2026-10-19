@@ -4,12 +4,65 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using HomePodCast.Net;
+using HomePodCast.Audio;
 using HomePodCast.Protocol;
 
 namespace HomePodCast.Tests;
 
 public class RaopTests
 {
+    [Fact]
+    public void Output_history_keeps_non_integral_QPC_packets_contiguous()
+    {
+        var timeline = new HomePodCast.Audio.TimelineBuffer(44100, 44100, 0);
+        var history = new RaopOutputSink.PacketHistory(timeline);
+        // This is the production RAOP deadline formula, at the phase that used to overlap packet four.
+        long start = (long)Math.Round(2_500_114 * (double)MediaClock.Frequency / 10_000_000);
+        long first = timeline.FrameAt(start);
+        var pcm = new short[704];
+        var actual = new float[704];
+        for (int packet = 0; packet < 1000; packet++)
+        {
+            Array.Fill(pcm, (short)(packet - 500));
+            history.Write(start + (long)(packet * 352.0 * MediaClock.Frequency / 44100), pcm);
+            Assert.True(timeline.ReadFrames(first + packet * 352L, actual));
+            Assert.All(actual, sample => Assert.Equal((packet - 500) / 32768f, sample));
+        }
+    }
+
+    [Fact]
+    public async Task Output_sink_preserves_RAOP_audio_timeline_cap_mute_and_teardown()
+    {
+        using var fake = new FakeRaop(false, false);
+        using var output = await RaopOutputSink.ConnectAsync(IPAddress.Loopback, fake.Port, new RaopOptions
+        {
+            Txt = new Dictionary<string, string> { ["et"] = "0", ["cn"] = "1" },
+            VolumePercent = 80, VolumeCapPercent = 10, EndTimeout = TimeSpan.FromSeconds(10),
+            ReadAudio = pcm => { for (int i = 0; i < pcm.Length; i++) pcm[i] = (short)(i - 352); },
+        }, CancellationToken.None);
+        IOutputSink sink = output;
+        Assert.Equal(OutputKind.Raop, sink.Kind);
+        Assert.Equal(OutputState.Streaming, sink.State);
+        Assert.Equal(2000, sink.MinLatencyMs);
+        var first = await fake.Audio.ReceiveAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        var decoded = DecodeEscape(fake.Decrypt(first.Buffer[12..]));
+        Assert.Equal(Enumerable.Range(0, 704).Select(i => (short)(i - 352)), decoded);
+        var history = new float[704];
+        Assert.True(sink.Timeline!.ReadAt(output.Client.StartedAt, 0, 0, history));
+        Assert.Equal(decoded.Select(v => v / 32768f), history);
+        Assert.Contains("volume: -27.000000", fake.LastVolume);
+        sink.SetVolume(80, mute: true);
+        Assert.Contains("volume: -144.000000", fake.LastVolume);
+        sink.SetVolume(80);
+        Assert.Contains("volume: -27.000000", fake.LastVolume);
+        sink.Dispose();
+        await fake.TornDown.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(OutputState.Stopped, sink.State);
+        Assert.True(sink.Stats.PacketsSent >= 1);
+        Assert.Contains("FLUSH", fake.Methods);
+        Assert.Equal("TEARDOWN", fake.Methods[^1]);
+    }
+
     [Fact]
     public void ALAC_escape_frame_decodes_signed_stereo_samples()
     {
@@ -248,17 +301,30 @@ public class RaopTests
     }
 
     [Fact]
-    public void Mixed_protocol_group_is_rejected_before_opening_any_session()
+    public void Cinema_group_refuses_RAOP_and_disposes_its_source_before_opening_sessions()
     {
         var legacy = new AirPlayDevice("RAOP", "legacy", IPAddress.Loopback, 1, "",
             new Dictionary<string, string>()) { HasAirPlay = false, RaopPort = 1 };
         using var controller = new StreamController { ReceiverLookup = id => id == "legacy" ? legacy : null };
         var plan = new GroupPlan(GroupKind.MultiRoom, "group", null,
             [new("legacy", "RAOP", "127.0.0.1"), new("homepod", "HomePod", "127.0.0.1")], false, false, new Dictionary<string, int>());
-        controller.StartGroup(plan, 120, 10);
+        var source = new NoAudioSource();
+        controller.StartGroup(plan, 120, 10, source: source);
         Assert.Equal(StreamState.Idle, controller.State);
         Assert.Null(controller.Capture);
-        Assert.Equal(L.T("AirPlay 1 兼容模式设备不能加入多音箱分组。"), controller.StatusText);
+        Assert.Equal(L.T("本地影音文件暂不支持 AirPlay 1、本机或 DLNA 输出分组。"), controller.StatusText);
+        Assert.Equal(1, source.Disposals);
+        controller.Stop();
+        Assert.Equal(1, source.Disposals);
+    }
+
+    private sealed class NoAudioSource : IGroupPacketSource
+    {
+        public int Disposals;
+        public bool ReadPacket(long ticks) => false;
+        public void ReadTarget(int target, Span<float> stereo) => stereo.Clear();
+        public void SkipPackets(int packets) { }
+        public void Dispose() => Disposals++;
     }
 
     private static async Task Until(Func<bool> condition)

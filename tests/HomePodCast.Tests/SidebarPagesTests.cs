@@ -47,6 +47,53 @@ public class SidebarPagesTests
     });
 
     [Fact]
+    public void Speaker_info_names_each_kind_of_receiver_and_its_processing_time_once() => Sta.Run(() =>
+    {
+        // 2026-10-15: above the card, a note of 连接方式 repeated the card's 设备类型 (「Apple TV（实验性）」 for an Apple TV
+        // not connected, then 「未连接；连接后显示实际协议。」) and the processing time under the card.
+        var config = TestApp.Config();
+        var app = TestApp.Create(config); // the scan: the HomePod 卧室
+        typeof(TrayApp).GetField("<SpeakerInfo>k__BackingField", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .SetValue(app, new SpeakerInfoCache((_, _) => throw new IOException("connection refused"))); // described by the scan
+        var tv = new AirPlayDevice("书房电视", "AA:00:00:00:00:02", System.Net.IPAddress.Parse("192.0.2.12"), 7000, "AppleTV14,1",
+            new Dictionary<string, string> { ["model"] = "AppleTV14,1" });
+        var airPlay2 = new AirPlayDevice("客厅音箱", "AA:00:00:00:00:03", System.Net.IPAddress.Parse("192.0.2.13"), 7000, "Speaker1,1",
+            new Dictionary<string, string> { ["srcvers"] = "377.40.00" });
+        var airPlay1 = new AirPlayDevice("投影仪", "AA:00:00:00:00:04", System.Net.IPAddress.Parse("192.0.2.14"), 7001, "ShairportSync",
+            new Dictionary<string, string> { ["am"] = "ShairportSync", ["srcvers"] = "105.1" }) { HasAirPlay = false, RaopPort = 7001 };
+        ((List<AirPlayDevice>)app.LastScan).AddRange([tv, airPlay2, airPlay1]);
+        // Selected, offline: described by its saved preferences, with the processing time of its last connection.
+        var offline = new AirPlayDevice("会议室", "AA:00:00:00:00:05", System.Net.IPAddress.Parse("192.0.2.15"), 7000, "Projector1,1",
+            new Dictionary<string, string>());
+        var saved = ReceiverPreferences.Of(offline);
+        saved.ArrivalToRenderMs = 137;
+        config.ReceiverSettings[RaopPassword.Key(offline.DeviceId)] = saved;
+        (config.DeviceId, config.DeviceName, config.Host) = (offline.DeviceId, offline.Name, "192.0.2.15");
+        using var page = new SpeakersPage(app);
+        using var host = Host(page);
+        page.PageShown();
+        var connection = TestApp.Field<ReceiverConnectionPanel>(page, "_receiverConnection");
+
+        foreach (var (id, kind) in new[]
+                 {
+                     (offline.DeviceId, ReceiverKind.Unknown), (TestApp.DeviceId, ReceiverKind.HomePod), (tv.DeviceId, ReceiverKind.AppleTv),
+                     (airPlay2.DeviceId, ReceiverKind.ThirdPartyAirPlay2), (airPlay1.DeviceId, ReceiverKind.ThirdPartyAirPlay1),
+                 })
+        {
+            page.Inspect(id);
+            Assert.Equal(id, TestApp.Field<string>(page, "_selected"));
+            var texts = Shown(page).ToList();
+            if (kind == ReceiverKind.HomePod) Assert.Single(texts, t => t == "HomePod");
+            else Assert.Single(texts, t => t.Contains(ReceiverKinds.Label(kind)));
+            Assert.DoesNotContain(texts, t => t.Contains("连接后显示实际协议"));
+            // 连接方式 only where there is a choice; the card says the rest.
+            Assert.Equal(kind is ReceiverKind.HomePod or ReceiverKind.AppleTv, connection.Collapsed);
+            Assert.Equal(id == offline.DeviceId ? 1 : 0, texts.Count(t => t.Contains("137 ms")));
+        }
+        page.PageHidden();
+    });
+
+    [Fact]
     public void Editing_an_inactive_receiver_protocol_does_not_reconnect_the_active_speaker() => Sta.Run(() =>
     {
         var config = TestApp.Config();
@@ -109,4 +156,8 @@ public class SidebarPagesTests
     }
     private static IEnumerable<T> All<T>(Control root) where T : Control => root.Controls.Cast<Control>()
         .SelectMany(c => (c is T t ? new[] { t } : []).Concat(All<T>(c)));
+
+    /// <summary>Every non-empty text of the text blocks not collapsed (with all that holds them).</summary>
+    private static IEnumerable<string> Shown(Control root) => root.Controls.Cast<Control>().Where(c => !LayoutPanel.IsCollapsed(c))
+        .SelectMany(c => (c is TextBlock { Text.Length: > 0 } t ? [t.Text] : Array.Empty<string>()).Concat(Shown(c)));
 }

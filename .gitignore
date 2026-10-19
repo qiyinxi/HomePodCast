@@ -10,3 +10,4 @@ extension/test/*.mp4
 .claude/worktrees/
 .worktrees/
 .claude/settings.local.json
+**/TestResults/

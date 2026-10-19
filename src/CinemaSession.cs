@@ -46,7 +46,8 @@ internal sealed class CinemaSession
 
     /// <summary>A group of the cinema's speakers (multi-room: every speaker gets the full stereo packet its source makes).</summary>
     public static GroupPlan Plan(IReadOnlyList<CinemaSpeaker> speakers) => new(GroupKind.MultiRoom, L.T("无线影院"), null,
-        speakers.Select(s => new GroupMemberRef(s.DeviceId, s.Name, s.Host)).ToArray(), false, false, new Dictionary<string, int>());
+        speakers.Select(s => new GroupMemberRef(s.DeviceId, s.Name, s.Host)).ToArray(), false, false,
+        speakers.ToDictionary(s => GroupPlan.Key(s.DeviceId), s => s.VolumeOffset));
 
     /// <summary>
     /// Queue the cinema's start, replacing whatever the controller plays. <paramref name="volume"/> is the window's slider;

@@ -5,10 +5,11 @@ namespace HomePodCast.UI.Pages;
 
 /// <summary>
 /// 设置 → 音箱信息: for the selected speaker (each member of a stereo pair or multi-room group) its model in plain words,
-/// whether someone is playing to it, system and AirPlay version, IP address, Wi-Fi MAC address (to find it in the router's
-/// client list: which band it is on, or to give it a fixed IP), Bluetooth address and device ID; and the speaker's own
-/// processing time saved from the last connection. Read from GET /info when the page is shown (unless read in the last
-/// 30 s) and on 刷新, off the UI thread with a short timeout; the TXT record of the last scan fills in until then.
+/// whether someone is playing to it, the protocol this PC streams to it with, system and AirPlay version, IP address,
+/// Wi-Fi MAC address (to find it in the router's client list: which band it is on, or to give it a fixed IP), Bluetooth
+/// address and device ID; and the speaker's own processing time saved from the last connection. Read from GET /info when
+/// the page is shown (unless read in the last 30 s) and on 刷新, off the UI thread with a short timeout; the TXT record of
+/// the last scan fills in until then.
 /// </summary>
 internal sealed class SpeakerInfoPanel : StackPanel
 {
@@ -19,6 +20,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
     private readonly Func<bool> _streaming;
     private readonly Func<int?> _processingMs;
     private readonly Func<IReadOnlyList<AirPlayDevice>> _scan;
+    private readonly Func<string, ReceiverProtocol?> _protocol;
     private readonly TextBlock _none = Ui.Note();
     private readonly StackPanel _cards = new() { Gap = 8 };
     private readonly TextBlock _processing = Ui.Note();
@@ -27,7 +29,8 @@ internal sealed class SpeakerInfoPanel : StackPanel
     private bool _shown;
 
     public SpeakerInfoPanel(TrayApp app) : this(app.SpeakerInfo, app.SelectedSpeakers,
-        () => app.Controller.State == StreamState.Streaming, () => app.Config.ArrivalToRenderMs, () => app.LastScan)
+        () => app.Controller.State == StreamState.Streaming, () => app.Config.ArrivalToRenderMs, () => app.LastScan,
+        id => app.Controller.State == StreamState.Streaming && id == app.Config.DeviceId ? app.Controller.ActiveProtocol : null)
     {
     }
 
@@ -35,11 +38,13 @@ internal sealed class SpeakerInfoPanel : StackPanel
     /// <param name="streaming">This PC streams to them now.</param>
     /// <param name="processingMs">The speaker's processing time saved from the last connection.</param>
     /// <param name="scan">The last scan as found (pairs not merged): the other devices of a speaker's group.</param>
+    /// <param name="protocol">The protocol this PC streams to that device (id) with now; null: it doesn't.</param>
     internal SpeakerInfoPanel(SpeakerInfoCache cache, Func<List<SelectedSpeaker>> speakers, Func<bool> streaming, Func<int?> processingMs,
-        Func<IReadOnlyList<AirPlayDevice>>? scan = null)
+        Func<IReadOnlyList<AirPlayDevice>>? scan = null, Func<string, ReceiverProtocol?>? protocol = null)
     {
         (_cache, _speakers, _streaming, _processingMs) = (cache, speakers, streaming, processingMs);
         _scan = scan ?? (() => []);
+        _protocol = protocol ?? (_ => null);
         Gap = 8;
         _refresh.AccessibleName = L.T("重新读取音箱信息");
         Controls.AddRange([_none, _cards, Ui.Row(12, _processing, _processing, _refresh)]);
@@ -119,7 +124,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
                 _cards.Controls.Add(card);
             }
             _cards.Controls.SetChildIndex(card, i);
-            card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming, scan);
+            card.Show(speakers[i], _cache.Get(speakers[i].DeviceId), streaming, scan, _protocol(speakers[i].DeviceId));
         }
         _processing.Text = _processingMs() is { } ms ? L.F("上次连接时的音箱处理时间：{0} ms", ms) : "";
     }
@@ -135,8 +140,8 @@ internal sealed class SpeakerInfoPanel : StackPanel
     {
         private readonly TextBlock _name = new("", TextStyle.BodyStrong);
         private readonly TextBlock _state = new("", TextStyle.Caption, TextRole.Secondary) { Align = HorizontalAlignment.Right };
-        private readonly TextBlock _kind = Value(), _model = Value(), _session = Value(), _group = Value(), _system = Value(), _airplay = Value(),
-            _address = Value(), _mac = new(), _bluetooth = Value(), _deviceId = Value();
+        private readonly TextBlock _kind = Value(), _model = Value(), _session = Value(), _protocol = Value(), _group = Value(), _system = Value(),
+            _airplay = Value(), _address = Value(), _mac = new(), _bluetooth = Value(), _deviceId = Value();
         private readonly TextBlock _macNote = Ui.Note(L.T("在路由器的设备列表里按这个地址找到 HomePod，就能看到它连在 2.4G 还是 5G，也可以给它分配固定 IP。"));
         private readonly FluentButton _copy = new(L.T("复制"), ButtonKind.Secondary, Glyph.Copy) { AccessibleName = L.T("复制 Wi-Fi MAC 地址") };
         private readonly RowPanel _macRow;
@@ -150,6 +155,7 @@ internal sealed class SpeakerInfoPanel : StackPanel
             _lines.Add(L.T("设备类型"), _kind);
             _lines.Add(L.T("型号"), _model);
             _lines.Add(L.T("状态"), _session);
+            _lines.Add(L.T("连接协议"), _protocol);
             _lines.Add(L.T("分组"), _group);
             _lines.Add(L.T("系统版本"), _system);
             _lines.Add(L.T("AirPlay 版本"), _airplay);
@@ -168,7 +174,9 @@ internal sealed class SpeakerInfoPanel : StackPanel
             };
         }
 
-        public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming, IReadOnlyList<AirPlayDevice> scan)
+        /// <param name="protocol">The protocol this PC streams to the speaker with now; null: it doesn't.</param>
+        public void Show(SelectedSpeaker speaker, SpeakerInfoEntry? entry, bool streaming, IReadOnlyList<AirPlayDevice> scan,
+            ReceiverProtocol? protocol = null)
         {
             var d = SpeakerDetails.Build(speaker.Name, speaker.Address, speaker.Txt, entry?.Info, speaker.Model);
             _name.Text = d.Name;
@@ -181,6 +189,9 @@ internal sealed class SpeakerInfoPanel : StackPanel
             var txt = TxtRecord.FromInfo(entry?.Info) ?? speaker.Txt;
             var holder = HomeTheater.IsAppleTvModel(d.Model) ? null : HomeTheater.HolderOf(GroupMembership.FromTxt(txt), scan);
             Set(_session, SessionText(d.SessionActive, streaming, holder?.Name));
+            // Only while this PC streams to it: otherwise 状态 says who does (until 2026-10-15 a note above the card, which
+            // repeated 设备类型). Not for a HomePod: it connects one way only, and the label's 实验性 is about other receivers.
+            Set(_protocol, protocol is { } p && receiverKind != ReceiverKind.HomePod ? ReceiverProtocols.Label(p) : null);
             Set(_group, GroupText(GroupRole.Of(d.Model, txt, scan)));
             Set(_system, d.SystemVersion);
             Set(_airplay, d.AirPlayVersion);

@@ -7,7 +7,7 @@ namespace HomePodCast.GuiSmoke;
 internal static partial class Native
 {
     public const int WM_CLOSE = 0x0010, WM_VSCROLL = 0x0115;
-    public const int SB_PAGEDOWN = 3, SB_TOP = 6;
+    public const int SB_LINEDOWN = 1, SB_PAGEDOWN = 3, SB_TOP = 6;
     public const int SB_VERT = 1;
     public const int GWL_STYLE = -16, GWL_EXSTYLE = -20;
     public const long WS_VSCROLL = 0x00200000, WS_DISABLED = 0x08000000;

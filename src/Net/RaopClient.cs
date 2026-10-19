@@ -9,6 +9,7 @@ using HomePodCast.Protocol;
 namespace HomePodCast.Net;
 
 public delegate void RaopPcmReader(Span<short> stereoPcm);
+internal delegate void RaopTimedPcmReader(long sourceTicks, Span<short> stereoPcm);
 public sealed record RaopOptions
 {
     public int LatencyMs { get; init; } = 2000;
@@ -18,6 +19,9 @@ public sealed record RaopOptions
     public IReadOnlyDictionary<string, string>? Txt { get; init; }
     public int? EncryptionOverride { get; init; }
     public RaopPcmReader? ReadAudio { get; init; }
+    internal RaopTimedPcmReader? ReadTimedAudio { get; init; }
+    // Group sessions RECORD muted, but must not emit audio until their shared history and current volume are bound.
+    internal Task<long>? GroupStart { get; init; }
     public Action<string>? Log { get; init; }
     internal RSA? RsaPublicKey { get; init; }
 
@@ -34,6 +38,9 @@ public sealed class RaopBusyException() : AirPlayException(L.T("这台 AirPlay �
 
 /// <summary>The receiver plays only with Apple's FairPlay encryption, which HomePodCast can't do: trying again won't help.</summary>
 public sealed class RaopUnsupportedException() : AirPlayException(L.T("这台设备要求 Apple 的加密，HomePodCast 不支持。"));
+
+/// <summary>A receiver refused this session; reconnecting without a user action cannot fix its response.</summary>
+internal sealed class RaopRefusedException(string message) : AirPlayException(message);
 
 /// <summary>Separate classic RAOP session; never uses HAP pairing or the HomePod realtime sender.</summary>
 public sealed class RaopClient : IDisposable
@@ -67,6 +74,7 @@ public sealed class RaopClient : IDisposable
     public long PacketsSent { get; private set; }
     public long StartedAt { get; private set; }
     public string? LostReason => _failureReason;
+    internal Exception? LostException { get; private set; }
     public Action<long>? OnsetSent { get; set; }
     private int _quietFrames;
     public long RetransmitRequests { get; private set; }
@@ -202,7 +210,7 @@ public sealed class RaopClient : IDisposable
     private static void Check(string method, HttpMessage response)
     {
         if (response.StatusCode == 453) throw new RaopBusyException();
-        if (!response.IsSuccess) throw new AirPlayException($"RAOP {method}: {response.StartLine}");
+        if (!response.IsSuccess) throw new RaopRefusedException($"RAOP {method}: {response.StartLine}");
     }
 
     private HttpMessage Request(string method, string? uri = null, string? contentType = null, byte[]? body = null,
@@ -251,8 +259,16 @@ public sealed class RaopClient : IDisposable
                 await Task.Delay(10, _stop.Token);
         }
         catch (OperationCanceledException) { return; }
+        long start;
+        try
+        {
+            start = _options.GroupStart is { } gate ? await gate.WaitAsync(_stop.Token) : MediaClock.Now;
+            // A late timing reply must not turn a released group gate into a burst of overdue packets.
+            if (_options.GroupStart != null) start = Math.Max(start, MediaClock.Now);
+        }
+        catch (OperationCanceledException) { return; }
         var pcm = new short[RaopAudio.FramesPerPacket * 2];
-        long start = MediaClock.Now, n = 0, nextSync = start;
+        long n = 0, nextSync = start;
         StartedAt = start;
         bool firstSync = true;
         try
@@ -269,7 +285,8 @@ public sealed class RaopClient : IDisposable
                     firstSync = false; nextSync += MediaClock.FromMs(1000);
                 }
                 pcm.AsSpan().Clear();
-                _options.ReadAudio?.Invoke(pcm);
+                if (_options.ReadTimedAudio is { } read) read(deadline, pcm);
+                else _options.ReadAudio?.Invoke(pcm);
                 int peak = 0;
                 foreach (short sample in pcm) peak = Math.Max(peak, Math.Abs((int)sample));
                 if (peak > 1311)
@@ -333,15 +350,24 @@ public sealed class RaopClient : IDisposable
 
     private void SignalLost(Exception ex)
     {
-        string reason = ex is IOException && ex.Message == "connection closed by speaker" ? ClosedByReceiver : ex.Message;
+        string reason = FailureReason(ex);
         Action<string>? handlers;
         lock (_events)
         {
             if (_failureReason != null) return;
-            _failureReason = reason; handlers = _lostHandlers;
+            _failureReason = reason; LostException = ex; handlers = _lostHandlers;
         }
         _stop.Cancel();
         handlers?.Invoke(reason);
+    }
+
+    internal static string FailureReason(Exception ex) =>
+        ex is IOException && ex.Message == "connection closed by speaker" ? ClosedByReceiver : ex.Message;
+
+    internal void StopSending()
+    {
+        try { _stop.Cancel(); }
+        catch (ObjectDisposedException) { } // a concurrent Dispose already stopped every packet loop
     }
 
     public void Dispose()

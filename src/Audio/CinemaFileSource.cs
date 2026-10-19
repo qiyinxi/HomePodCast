@@ -22,7 +22,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
     private readonly float[] _history = new float[Capacity * Stride];
     private readonly CinemaSpeaker[] _speakers;
     private readonly Thread _decoder;
-    private readonly ManualResetEventSlim _opened = new();
+    private readonly TaskCompletionSource<bool> _opened = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly CinemaMediaReader.Progress _progress = new("starting the decoder thread");
     private readonly float[] _chirp = AcousticAlignment.Chirp();
     private volatile CinemaMatrix? _matrix;
     private volatile bool _stop, _eof, _paused;
@@ -57,6 +58,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
     public bool Finished => _eof && BufferedFrames == 0 && Volatile.Read(ref _tailFrames) >= Volatile.Read(ref _longestDelayFrames);
     public double PositionSeconds => Volatile.Read(ref _taken) / (double)Rate;
     public bool Calibrating => Volatile.Read(ref _request) != 0;
+    /// <summary>The existing measurement request, for the room diagram; reading it never starts a pulse.</summary>
+    internal int CalibrationSpeakerIndex => (int)(Volatile.Read(ref _request) & 0xff) - 1;
     public long PulseStartedTicks => Volatile.Read(ref _pulseStartedTicks);
 
     /// <summary>What each speaker plays, for the log (after <see cref="WaitOpened"/>).</summary>
@@ -64,17 +67,32 @@ public sealed class CinemaFileSource : IGroupPacketSource
 
     /// <exception cref="CinemaException">The speaker layout is not usable.</exception>
     public CinemaFileSource(string path, IReadOnlyList<CinemaSpeaker> speakers)
+        : this(path, speakers, (file, step) => new CinemaMediaReader(file, step)) { }
+
+    /// <param name="open">Opens the decoder on the decoder thread (a test holds it there to be a slow open).</param>
+    internal CinemaFileSource(string path, IReadOnlyList<CinemaSpeaker> speakers, Func<string, Action<string>, CinemaMediaReader> open)
     {
         CinemaMatrix.Validate(speakers);
         _speakers = speakers.Select(s => new CinemaSpeaker { Role = s.Role, DeviceId = s.DeviceId, Name = s.Name, DelayMs = s.DelayMs }).ToArray();
         _delays = _speakers.Select(s => s.DelayMs).ToArray();
         _longestDelayFrames = _delays.Max() * Rate / 1000;
-        _decoder = new Thread(() => Decode(path)) { IsBackground = true, Name = "Cinema file decoder" };
+        _decoder = new Thread(() => Decode(path, open)) { IsBackground = true, Name = "Cinema file decoder" };
         _decoder.SetApartmentState(ApartmentState.MTA); _decoder.Start();
     }
 
-    /// <summary>The file opened and its layout fits the speakers; false with <see cref="Error"/> set otherwise (or on timeout).</summary>
-    public bool WaitOpened(TimeSpan timeout) => _opened.Wait(timeout) && _error == null && _matrix != null;
+    /// <summary>
+    /// Completes once the decoder has opened the file and its layout fits the speakers (true), or has given up (false,
+    /// <see cref="Error"/> says why). Every waiter sees it, whether it subscribed before or after; awaiting it holds no
+    /// thread (before 2026-10-17 the window kept a pool thread blocked in <see cref="WaitOpened"/> for up to 10 s).
+    /// </summary>
+    public Task<bool> Opened => _opened.Task;
+
+    /// <summary>Where the decoder is and since when, e.g. "opening the file: MFCreateSourceReaderFromURL for 10.0 s".</summary>
+    public string Progress => _progress.ToString();
+
+    /// <summary>The file opened and its layout fits the speakers; false with <see cref="Error"/> set otherwise, or on timeout
+    /// with <see cref="Progress"/> saying where the decoder waits.</summary>
+    public bool WaitOpened(TimeSpan timeout) => _opened.Task.Wait(timeout) && _opened.Task.Result && _error == null;
 
     private void Fail(CinemaException ex)
     {
@@ -82,11 +100,12 @@ public sealed class CinemaFileSource : IGroupPacketSource
         _error = ex.Message;
     }
 
-    private void Decode(string path)
+    private void Decode(string path, Func<string, Action<string>, CinemaMediaReader> open)
     {
         try
         {
-            using var reader = new CinemaMediaReader(path);
+            _progress.Step("opening the file");
+            using var reader = open(path, step => _progress.Step("opening the file: " + step));
             Channels = reader.Channels; SourceRate = reader.Rate; Mask = reader.Mask;
             _matrix = new CinemaMatrix(reader.Channels, reader.Mask, _speakers);
             reader.MaskChanged += mask =>
@@ -94,7 +113,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
                 Mask = mask;
                 _matrix = new CinemaMatrix(Channels, mask, _speakers); // what is buffered (≤ 0.5 s) plays with the new one
             };
-            _opened.Set();
+            _progress.Step("decoding");
+            _opened.TrySetResult(true);
 
             int channels = reader.Channels;
             // Stereo resamplers over channel pairs (the last one padded for an odd count); none at 44.1 kHz.
@@ -139,7 +159,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
         finally
         {
             _eof = true;
-            _opened.Set();
+            _progress.Step(_error != null ? "failed: " + _errorLog : _stop ? "stopped" : "at the end of the file");
+            _opened.TrySetResult(false); // a no-op once it opened
         }
     }
 
@@ -215,8 +236,8 @@ public sealed class CinemaFileSource : IGroupPacketSource
         int first = (_historyWrite - RtpSender.FramesPerPacket - delay + 2 * Capacity) % Capacity;
         for (int f = 0; f < stereo.Length / 2; f++)
         {
-            float value = matrix.Sample(index, _history.AsSpan((first + f) % Capacity * Stride, matrix.Channels));
-            stereo[f * 2] = stereo[f * 2 + 1] = value;
+            var (left, right) = matrix.StereoSample(index, _history.AsSpan((first + f) % Capacity * Stride, matrix.Channels));
+            stereo[f * 2] = left; stereo[f * 2 + 1] = right;
         }
     }
 

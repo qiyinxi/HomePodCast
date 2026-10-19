@@ -21,6 +21,12 @@ internal sealed class HomePage : ScrollPage
     private readonly TextBlock _model = new("", TextStyle.Caption, TextRole.Secondary, wrap: true);
     private readonly FluentButton _connect = new(L.T("连接"), ButtonKind.Primary) { MinWidth = 96 };
     private readonly FluentComboBox _device = new();
+    private readonly FluentComboBox _outputGroups = new() { AccessibleName = L.T("已保存的分组"), MinWidth = 180 };
+    private readonly FluentButton _deleteGroup = new(L.T("删除分组"), ButtonKind.Subtle);
+    private readonly TextBlock _groupStatus = Ui.Note();
+    private StackPanel _groupPicker = null!;
+    private string[] _outputGroupIds = [];
+    private string? _outputGroupSignature;
     private readonly FluentButton _refresh;
     private readonly StatusDot _dot = new();
     private readonly TextBlock _status = new("", TextStyle.Body, wrap: true);
@@ -48,7 +54,8 @@ internal sealed class HomePage : ScrollPage
     // volume
     private readonly TextBlock _volumeValue = new("", TextStyle.BodyStrong) { Align = HorizontalAlignment.Right };
     private readonly FluentSlider _volume = Ui.Slider(0, 100, 1, 5);
-    private readonly ToggleSwitch _mute = new(L.T("静音"));
+    private readonly FluentButton _mute = new("", ButtonKind.Subtle, Glyph.Volume);
+    private readonly ToggleSwitch _onlyHomePod = new(L.T("仅 HomePod 输出"));
     private readonly ToggleSwitch _night = new(L.T("夜间模式"));
     private readonly TextBlock _capNote = Ui.Note();
     private readonly TimerDebounce _volumeWait = new(150);
@@ -82,6 +89,9 @@ internal sealed class HomePage : ScrollPage
     // .NET was replaced under the running app: 「立即重启」 (RuntimeRestartNotice), above everything else
     private readonly RuntimeRestartNotice _runtimeNotice;
 
+    // the pushed sound plays on the PC too: 「只用 HomePod 播放」 / 「不再提示」 (PcSoundNotice, experimental since 1.2)
+    private readonly PcSoundNotice _pcSound;
+
     private StreamState _lastState = StreamState.Idle;
     private DateTime _streamingSince;
     private long _underrunsAtStart;
@@ -97,7 +107,8 @@ internal sealed class HomePage : ScrollPage
         };
 
         var left = Ui.Stack(12, BuildSpeakerCard(), BuildVolumeCard());
-        var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330 };
+        left.FillLast = true; // the volume card ends where the scene card does
+        var columns = new Columns(left, BuildSceneCard()) { MinColumnWidth = 330, EqualHeights = true };
         var tiles = new TileGrid { MinTileWidth = 112 };
         tiles.Controls.AddRange([_effective, _buffer, _speakerDelay, _dropouts, _resent]);
         // Diagnostics live in 设置 → 工具, marking a stutter on a hotkey (unset by default): neither is for every day.
@@ -107,7 +118,8 @@ internal sealed class HomePage : ScrollPage
         _netHint = BuildNetworkHint();
         _updateBanner = BuildUpdateBanner();
         _runtimeNotice = new RuntimeRestartNotice(_app.RestartForRuntime);
-        Content.Controls.AddRange([_runtimeNotice.Card, _updateBanner, columns, statsHeader, tiles, _netLine, _netHint]);
+        _pcSound = new PcSoundNotice(_app.PlayOnlyOnHomePod, _app.DismissPcSoundHint);
+        Content.Controls.AddRange([_runtimeNotice.Card, _updateBanner, _pcSound.Card, columns, statsHeader, tiles, _netLine, _netHint]);
         Content.GapBefore[statsHeader] = 20;
 
         _tips.SetToolTip(_buffer, L.T("电脑这边等着发出去的声音"));
@@ -138,8 +150,12 @@ internal sealed class HomePage : ScrollPage
         var head = Ui.Row(14, title, badge, title, _connect);
         _device.AccessibleName = L.T("音箱");
         var picker = Ui.Row(6, _device, _device, _refresh);
+        var groupRow = Ui.Row(6, _outputGroups, _outputGroups, _deleteGroup); groupRow.Wrap = true;
+        _groupPicker = Ui.Stack(3, new TextBlock(L.T("已保存的分组"), TextStyle.Caption, TextRole.Secondary), groupRow);
+        _groupStatus.AccessibleName = L.T("输出状态");
+        _groupStatus.Collapsed = true;
         var status = Ui.Row(8, _status, _dot, _status);
-        var card = Ui.Card(head, picker, status, _streamStats);
+        var card = Ui.Card(head, _groupPicker, picker, status, _streamStats, _groupStatus);
         card.Gap = 12;
 
         _connect.Click += (_, _) => _app.ToggleConnection();
@@ -148,11 +164,39 @@ internal sealed class HomePage : ScrollPage
         {
             if (_device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count)
             {
-                _app.SelectDevice(_devices[_device.SelectedIndex]);
+                _app.SelectSingleOutput(_devices[_device.SelectedIndex]);
                 ShowSpeaker();
             }
         };
+        _outputGroups.SelectionChangeCommitted += (_, _) =>
+        {
+            if (_outputGroups.SelectedIndex >= 0 && _outputGroups.SelectedIndex < _outputGroupIds.Length)
+                _app.SelectOutputGroup(_outputGroupIds[_outputGroups.SelectedIndex]);
+        };
+        _deleteGroup.Click += (_, _) =>
+        {
+            if (_outputGroups.SelectedIndex < 0 || _outputGroups.SelectedIndex >= _outputGroupIds.Length) return;
+            if (MessageBox.Show(this, L.T("删除选中的分组吗？当前连接不会停止。"), L.T("删除分组"),
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            OutputGroups.Remove(_app.Config, _outputGroupIds[_outputGroups.SelectedIndex]);
+            _app.Config.Save(); ShowOutputGroups(); ShowSpeaker();
+        };
         return card;
+    }
+
+    private void ShowOutputGroups()
+    {
+        var groups = _app.Config.SavedOutputGroups;
+        string signature = string.Join("|", groups.Select(g => g.Id + ":" + g.Name)) + "|" + _app.Config.SelectedOutputGroupId;
+        if (signature != _outputGroupSignature)
+        {
+            _outputGroupSignature = signature;
+            _outputGroupIds = groups.Select(g => g.Id).ToArray();
+            _outputGroups.Items.Clear(); _outputGroups.Items.AddRange(groups.Select(g => g.Name));
+            _outputGroups.SelectedIndex = Array.IndexOf(_outputGroupIds, _app.Config.SelectedOutputGroupId ?? "");
+        }
+        _groupPicker.Collapsed = groups.Count == 0;
+        _deleteGroup.Enabled = _outputGroups.SelectedIndex >= 0;
     }
 
     private Card BuildSceneCard()
@@ -199,13 +243,14 @@ internal sealed class HomePage : ScrollPage
         _volume.AccessibleName = L.T("音量");
         var title = Ui.Header(L.T("音量"));
         var header = Ui.Row(8, title, title, _volumeValue);
-        var icon = new GlyphLabel(Glyph.Volume);
-        var slider = Ui.Row(10, _volume, icon, _volume);
-        var toggles = Ui.Row(28, null, _mute, _night);
+        var slider = Ui.Row(10, _volume, _mute, _volume);
+        var toggles = Ui.Row(28, null, _onlyHomePod, _night);
+        toggles.Wrap = true; // Keep both labels whole at narrow widths and in translated UIs.
         var card = Ui.Card(header, slider, toggles, _capNote);
         card.Gap = 8;
 
-        _tips.SetToolTip(_mute, L.T("让 HomePod 静音，不断开连接"));
+        _onlyHomePod.AccessibleDescription = L.T("推流时只让 HomePod 出声，电脑输出静音；关闭、断开或退出后恢复，电脑音量数值不变。实验性功能。"); // experimental since 1.2
+        _tips.SetToolTip(_onlyHomePod, _onlyHomePod.AccessibleDescription);
         _tips.SetToolTip(_night, L.T("压缩动态范围：爆炸、枪声变小，对白、脚步声变大，适合夜里小音量"));
 
         _volume.Scroll += (_, _) =>
@@ -220,7 +265,12 @@ internal sealed class HomePage : ScrollPage
             _app.SetVolume(_volume.Value);
             VolumeApplied?.Invoke(_volume.Value);
         };
-        _mute.Toggled += (_, _) => _app.SetSpeakerMuted(_mute.Checked);
+        _mute.Click += (_, _) =>
+        {
+            FlushPendingVolume(); // Save the drag first: its debounce must not undo this mute.
+            _app.ToggleSpeakerMute();
+        };
+        _onlyHomePod.Toggled += (_, _) => _app.SetMutePcWhileStreaming(_onlyHomePod.Checked);
         _night.Toggled += (_, _) => _app.SetNightMode(_night.Checked);
         return card;
     }
@@ -269,6 +319,13 @@ internal sealed class HomePage : ScrollPage
 
     /// <summary>The restart notice: shown once the runtime is gone, saying so too while streaming that the sound stops briefly.</summary>
     public void ShowRuntimeNotice() => _runtimeNotice.Show(_app.RuntimeRemoved, _app.Controller.State == StreamState.Streaming);
+
+    /// <summary>「电脑也在出声」: from what the app read last (no Core Audio call), so also on the stats timer.</summary>
+    public void ShowPcSound()
+    {
+        _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
+        _pcSound.Show(_app.PcSoundHintShown, _app.Config.VolumeKeys == VolumeKeyMode.FollowWindows);
+    }
 
     /// <summary>The hint's 应用: the only way the network status changes the latency.</summary>
     private void ApplyNetworkSuggestion()
@@ -417,13 +474,25 @@ internal sealed class HomePage : ScrollPage
         _loading = true;
         var cfg = _app.Config;
         ShowLatency();
-        _mute.Checked = _app.Controller.Muted;
+        ShowMute();
+        _onlyHomePod.Checked = cfg.MutePcWhileStreaming;
         _night.Checked = cfg.NightMode;
         int cap = cfg.VolumeCapPercent;
         _volume.Ceiling = cap;
         _volume.Mark = cap < 100 ? cap : null;
         _capNote.Text = cap < 100 ? L.F("音量上限 {0}%（在「设置」里修改）", cap) : "";
         _loading = loading;
+    }
+
+    private void ShowMute()
+    {
+        bool muted = _app.Controller.Muted;
+        _mute.Glyph = muted ? Glyph.Mute : Glyph.Volume;
+        _mute.GlyphColor = muted ? Theme.P.Critical : null;
+        _mute.Invalidate();
+        _mute.AccessibleName = muted ? L.T("取消静音") : L.T("HomePod 静音");
+        _mute.AccessibleDescription = muted ? L.T("取消静音") : L.T("让 HomePod 静音，不断开连接");
+        _tips.SetToolTip(_mute, _mute.AccessibleDescription);
     }
 
     /// <summary>Move the volume slider without sending anything (the value was already applied).</summary>
@@ -458,10 +527,23 @@ internal sealed class HomePage : ScrollPage
     private void ShowSpeaker()
     {
         var cfg = _app.Config;
-        _name.Text = cfg.DeviceName ?? L.T("还没有选择音箱");
+        var plan = GroupPlan.FromConfig(cfg);
+        var named = cfg.SavedOutputGroups.FirstOrDefault(g => g.Id == cfg.SelectedOutputGroupId);
+        _name.Text = named?.Name ?? plan?.Name ?? cfg.DeviceName ?? L.T("还没有选择音箱");
         var device = _device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count ? _devices[_device.SelectedIndex] : null;
         _model.Text = device == null ? (cfg.DeviceId == null ? L.T("在下面选择一台 AirPlay 音箱") : "")
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
+        if (plan != null)
+            _model.Text = L.F("{0} 个输出 · {1}", plan.Kind == GroupKind.StereoPair ? (plan.PairLeaderOnly ? 1 : 2) + plan.LocalOutputs.Count + plan.DlnaOutputs.Count
+                : plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count,
+                plan.DlnaOutputs.Count > 0 ? L.T("大致同步") : plan.LocalOutputs.Count > 0
+                    || _app.Controller.GroupOutputStatuses.Any(s => s.Protocol == ReceiverProtocol.Raop)
+                    || plan.Members.Any(m => _app.Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(m.DeviceId)) is
+                        { ProtocolOverride: ReceiverProtocol.Raop } or { ProtocolOverride: ReceiverProtocol.Auto, LastSuccessfulProtocol: ReceiverProtocol.Raop }
+                        || _devices.Any(d => GroupPlan.Key(d.DeviceId) == GroupPlan.Key(m.DeviceId)
+                            && d.Kind is ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1))
+                    ? L.T("校准后同步") : L.T("AirPlay 时间线同步"));
+        ShowOutputGroups();
     }
 
     internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
@@ -481,6 +563,7 @@ internal sealed class HomePage : ScrollPage
 
     public void UpdateState()
     {
+        ShowOutputGroups(); ShowSpeaker();
         var c = _app.Controller;
         if (c.State == StreamState.Streaming && _lastState != StreamState.Streaming)
         {
@@ -495,7 +578,8 @@ internal sealed class HomePage : ScrollPage
         _connect.Text = connect ? L.T("连接") : L.T("断开");
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
         if (c.State == StreamState.Streaming && c.Volume is { } v) ShowVolume(v);
-        _mute.Checked = c.Muted;
+        ShowMute();
+        _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
         UpdateFloor();
         ShowLatency();
         UpdateStats();
@@ -512,6 +596,7 @@ internal sealed class HomePage : ScrollPage
         }
 #endif
         var c = _app.Controller;
+        ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
         bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
@@ -560,6 +645,34 @@ internal sealed class HomePage : ScrollPage
         SetDropoutTip(DropoutTip(pcDropouts, networkDropouts));
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
+        ShowPcSound();
+    }
+
+    private void ShowGroupOutputStatus()
+    {
+        var cfg = _app.Config;
+        var plan = GroupPlan.FromConfig(cfg);
+        _groupStatus.Collapsed = plan == null;
+        if (plan == null) { _groupStatus.Text = ""; return; }
+        var actual = _app.Controller.GroupOutputStatuses;
+        var names = plan.Members.Select(m => (m.DeviceId, m.Name))
+            .Concat(plan.LocalOutputs.Select(o => (o.DeviceId, o.Name)))
+            .Concat(plan.DlnaOutputs.Select(o => (o.Id, o.Name))).ToArray();
+        if (plan.Kind == GroupKind.StereoPair)
+            names = actual.Count > 0 ? actual.Select(s => (s.Id, s.Name)).ToArray()
+                : new[] { (cfg.DeviceId ?? "", cfg.DeviceName ?? plan.Name) }.Concat(names).ToArray();
+        var lines = names.Select(output =>
+        {
+            var state = actual.FirstOrDefault(s => string.Equals(s.Id, output.Item1, StringComparison.OrdinalIgnoreCase)
+                || s.Kind is OutputKind.AirPlay2 or OutputKind.Raop && GroupPlan.Key(s.Id) == GroupPlan.Key(output.Item1));
+            string status = state == null ? L.T("未连接") : state.State == OutputState.Streaming ? L.T("已连接")
+                : state.NeedsUserAction ? L.T("等待操作") : state.Retrying ? L.T("等待重连")
+                : state.State == OutputState.Preparing ? L.T("正在连接…") : L.T("未连接");
+            return L.F("{0}：{1}", output.Item2, status);
+        });
+        _groupStatus.Text = string.Join("\n", lines);
+        if (_app.Controller.State == StreamState.Streaming)
+            _groupStatus.Text += "\n" + L.F("当前整组延迟：{0} ms", _app.Controller.EffectiveLatencyMs);
     }
 
     /// <summary>
@@ -767,6 +880,7 @@ internal sealed class HomePage : ScrollPage
 
     public override void PageShown()
     {
+        _app.RefreshPcSound(); // the default output read again for 「电脑也在出声」 (Core Audio only while streaming)
         UpdateState();
         _statsTimer.Start();
     }
@@ -786,7 +900,7 @@ internal sealed class HomePage : ScrollPage
         base.Dispose(disposing);
     }
 
-    /// <summary>A glyph that only decorates (the volume icon next to the slider, the network hint's warning, the update banner's).</summary>
+    /// <summary>A glyph that only decorates (the network hint's warning, the update banner's).</summary>
     internal sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));

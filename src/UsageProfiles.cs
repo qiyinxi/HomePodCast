@@ -38,6 +38,16 @@ public sealed class UsageSettings
     public bool GroupSwapChannels { get; set; }
     public bool GroupPairLeaderOnly { get; set; }
     public Dictionary<string, int>? GroupVolumeOffsets { get; set; }
+    public List<GroupSpeakerSettings>? GroupSpeakers { get; set; }
+    public List<string>? GroupCaptureDeviceIds { get; set; }
+    public Dictionary<string, SpeakerPosition>? GroupCapturePositions { get; set; }
+    public List<DlnaOutputSettings>? GroupDlnaOutputs { get; set; }
+    public List<string>? GroupCaptureDlnaUdns { get; set; }
+    public List<LocalOutputOptions>? GroupLocalOutputs { get; set; }
+    public List<string>? GroupCaptureLocalDeviceIds { get; set; }
+    public Dictionary<string, int> GroupCaptureDelayTrims { get; set; } = [];
+    public Dictionary<string, bool> GroupRequiredOutputs { get; set; } = [];
+    public int? GroupDelayMs { get; set; }
     public string? MultiRoomDeviceId { get; set; }
     public string? MultiRoomDeviceName { get; set; }
 
@@ -62,6 +72,15 @@ public static class UsageProfiles
         Effects = Clone(c.Effects), GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
         GroupPairLeaderOnly = c.GroupPairLeaderOnly,
         GroupVolumeOffsets = c.GroupVolumeOffsets == null ? null : new(c.GroupVolumeOffsets),
+        GroupSpeakers = c.GroupSpeakers == null ? null : GroupSettings.Copy(c.GroupSpeakers),
+        GroupCaptureDeviceIds = c.GroupCaptureDeviceIds == null ? null : new(c.GroupCaptureDeviceIds),
+        GroupCapturePositions = c.GroupCapturePositions == null ? null : new(c.GroupCapturePositions),
+        GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs),
+        GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns == null ? null : new(c.GroupCaptureDlnaUdns),
+        GroupLocalOutputs = LocalGroupSettings.Copy(c.GroupLocalOutputs),
+        GroupCaptureLocalDeviceIds = c.GroupCaptureLocalDeviceIds == null ? null : new(c.GroupCaptureLocalDeviceIds),
+        GroupCaptureDelayTrims = new(c.GroupCaptureDelayTrims ?? []), GroupRequiredOutputs = new(c.GroupRequiredOutputs ?? []),
+        GroupDelayMs = c.GroupDelayMs,
         MultiRoomDeviceId = c.MultiRoomDeviceId, MultiRoomDeviceName = c.MultiRoomDeviceName, MultiRoomHost = c.MultiRoomHost,
     };
 
@@ -72,7 +91,7 @@ public static class UsageProfiles
         var s = Clone(saved);
         Normalize(s);
         // A profile saved before any speaker was chosen says nothing about speakers: the selection and its group layout stay.
-        if (s.DeviceId != null)
+        if (s.DeviceId != null || s.GroupCaptureDeviceIds != null || s.GroupCaptureDlnaUdns != null || s.GroupCaptureLocalDeviceIds != null)
         {
             bool changedSpeaker = !SameDevice(c.DeviceId, s.DeviceId);
             // Resolved from the config as it is now, before anything is overwritten.
@@ -80,7 +99,19 @@ public static class UsageProfiles
             c.DeviceId = s.DeviceId; c.DeviceName = s.DeviceName; c.Host = host;
             c.GroupSplitChannels = s.GroupSplitChannels; c.GroupSwapChannels = s.GroupSwapChannels;
             c.GroupPairLeaderOnly = s.GroupPairLeaderOnly; c.GroupVolumeOffsets = s.GroupVolumeOffsets;
+            c.GroupSpeakers = s.GroupSpeakers;
+            c.GroupCaptureDeviceIds = s.GroupCaptureDeviceIds;
+            c.GroupCapturePositions = s.GroupCapturePositions;
+            if (s.GroupDlnaOutputs != null) c.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
+            c.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns;
+            if (s.GroupLocalOutputs != null) c.GroupLocalOutputs = LocalGroupSettings.Copy(s.GroupLocalOutputs);
+            c.GroupCaptureLocalDeviceIds = s.GroupCaptureLocalDeviceIds;
+            c.GroupCaptureDelayTrims = s.GroupCaptureDelayTrims; c.GroupRequiredOutputs = s.GroupRequiredOutputs;
+            c.GroupDelayMs = s.GroupDelayMs;
             c.MultiRoomDeviceId = s.MultiRoomDeviceId; c.MultiRoomDeviceName = s.MultiRoomDeviceName; c.MultiRoomHost = extraHost;
+            if (c.GroupSpeakers != null)
+                foreach (var row in c.GroupSpeakers) row.Host = FreshHost(row.DeviceId, c, scan ?? []);
+            GroupSettings.Normalize(c);
             // Another speaker plays at its own volume, as when it is picked in the list (its processing time is kept the
             // same way: the next connection measures it again).
             if (changedSpeaker) c.Volume = null;
@@ -144,6 +175,11 @@ public static class UsageProfiles
 
     public static void Normalize(AppConfig c)
     {
+        OutputGroups.Normalize(c);
+        c.GroupDlnaOutputs = DlnaGroupSettings.Copy(c.GroupDlnaOutputs);
+        if (c.GroupCaptureDlnaUdns != null)
+            c.GroupCaptureDlnaUdns = c.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))
+                .DistinctBy(DlnaGroupSettings.Key).Take(8).ToList();
         c.UsageProfiles ??= [];
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         c.UsageProfiles = c.UsageProfiles.Where(p => p != null && p.Settings != null &&
@@ -159,6 +195,17 @@ public static class UsageProfiles
 
     public static void Normalize(UsageSettings s)
     {
+        if (s.GroupLocalOutputs != null) s.GroupLocalOutputs = LocalGroupSettings.Copy(s.GroupLocalOutputs);
+        s.GroupCaptureLocalDeviceIds = OutputGroups.Selection(s.GroupCaptureLocalDeviceIds, LocalGroupSettings.Key);
+        s.GroupCaptureDelayTrims = (s.GroupCaptureDelayTrims ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Key))
+            .GroupBy(p => GroupPlan.Key(p.Key)).ToDictionary(g => g.Key, g => Math.Clamp(g.Last().Value, -5000, 5000));
+        s.GroupRequiredOutputs = (s.GroupRequiredOutputs ?? []).Where(p => !string.IsNullOrWhiteSpace(p.Key))
+            .GroupBy(p => OutputGroups.RequiredKey(p.Key)).ToDictionary(g => g.Key, g => g.Last().Value);
+        s.GroupDelayMs = s.GroupDelayMs is { } delay ? Math.Clamp(delay, 100, 30000) : null;
+        if (s.GroupDlnaOutputs != null) s.GroupDlnaOutputs = DlnaGroupSettings.Copy(s.GroupDlnaOutputs);
+        if (s.GroupCaptureDlnaUdns != null)
+            s.GroupCaptureDlnaUdns = s.GroupCaptureDlnaUdns.Where(u => !string.IsNullOrWhiteSpace(u))
+                .DistinctBy(DlnaGroupSettings.Key).Take(8).ToList();
         if (!Enum.IsDefined(s.Scene)) s.Scene = Scene.Custom;
         // The slider's own range only: a hand-tuned value below 100 ms stays. The speaker's floor (its processing time plus
         // the margin) is applied when connecting, as for a value set on 首页.

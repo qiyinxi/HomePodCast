@@ -38,6 +38,11 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - A Debug build goes to `app\HomePodCast.exe`: a firewall rule on the maintainer's PC points at that path, so keep it.
 - The C# tests use in-process fakes (AirPlay receiver, HomePod, Apple TV, release feed, local API); they need no
   speaker and make no sound. Every change keeps them green, and new behaviour gets a test.
+- Tests listen on loopback only (`IPAddress.Loopback`, never `Any` or a LAN address), fakes and the code under test
+  alike. Anything else makes Windows ask for a firewall rule, once per test build path, so once per worktree; a prompt
+  left open at night held up the maintainer's other automation. `LoopbackOnlyTests` fails on such a listener, and on
+  a UDP socket that only `Connect` or a send bound: Windows lists it on 0.0.0.0. For the local address that reaches a
+  destination, use `Native.SourceAddressFor`, not a connected probe socket.
 - CI (`.github/workflows/build.yml`, every push and PR to dev/main/release) also runs, on its own runners:
   `update-e2e` (in-app MSI update), `msi-e2e` (installer), `msix-e2e` (Store package), `extension-e2e` (Chrome with
   the extension), `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact) and
@@ -90,8 +95,13 @@ feature, and #30 conflicted with #27, which was merged into dev while #30 was in
   to your own, never to the other agent's branch, not even a merge or a one-line fix. A problem in the other agent's
   open PR goes in a review comment on that PR, or to the maintainer.
 - **Your worktrees.** Claude works in `.claude/worktrees/<name>`, Codex in `.worktrees/<name>` or its own worktree
-  folder. Don't edit, build, commit in or remove a worktree the other agent made. Remove your own
-  (`git worktree remove`) once its PR is merged or closed. The main checkout stays on `dev` (hard rules above).
+  folder. Don't edit, build, commit in or remove a worktree the other agent made. The main checkout stays on `dev`
+  (hard rules above).
+- **Clean up after a merge** (the maintainer, 2026-10-15). As soon as your PR is merged or closed:
+  - its branch on GitHub: GitHub deletes it on merge (repository setting since 2026-10-15); for a PR closed without merging, `git push origin --delete <branch>`;
+  - remove the worktree: `git worktree remove <path>`;
+  - delete the local branch: `git branch -D <branch>`, after checking `git merge-base --is-ancestor <branch> origin/dev`, because `-d` refuses while the main checkout's `dev` is behind.
+  Only your own branches and worktrees.
 - **The board.** The work items live on the maintainer's private GitHub project board, «HomePodCast» (project 1 of
   qiyinxi: https://github.com/users/qiyinxi/projects/1, since 2026-10-15). Its items are drafts and stay drafts:
   never convert one to an issue, because the repository is public. Read the board with

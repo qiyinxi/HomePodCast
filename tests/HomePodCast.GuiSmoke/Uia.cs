@@ -25,8 +25,8 @@ internal sealed class Node
     public string Text => _text ??= Hwnd == IntPtr.Zero ? "" : Native.ControlText(Hwnd);
 
     /// <summary>
-    /// Shows or is named <paramref name="text"/>. A settings row (SettingRow) names its control after the row's title, so
-    /// its 导出诊断 button is announced as 诊断报告: such a button is found by what it says, its window text.
+    /// Shows or is named <paramref name="text"/>. A settings row (SettingRow) may name its control after the row's title;
+    /// such a button can also be found by what it says, its window text.
     /// </summary>
     public bool Says(string text) => Name == text || Text == text;
 

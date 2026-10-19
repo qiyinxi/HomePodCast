@@ -24,7 +24,7 @@
 - [x] 建立参数实验：HomePod 报告的处理时间固定 85 ms（只有 `moviePlayback` 模式会升到 112），现有参数已是最低（Claude 2026-10-08 实机测过）。改了 `src/Net/AirPlayClient.cs` 的 SETUP 参数才需要重测
 - [x] 自动连接真实的 HomePod，首页推流状态：已连接、缓冲、音箱处理 85 ms、断音 0（Claude 2026-10-08 实机测过；连假 HomePod 时的首页：CI 自动测试：gui-smoke）。改了 `src/UI/TrayApp.cs` 的自动连接才需要重测
 - [x] 30 分钟稳定性（105 ms、完整采集链路、UU 虚拟声卡）：网络侧 0 跳包 0 重传；固定 12 ms 缓冲断音 25 次 → 改成自适应缓冲后 2 次（稳定在 18 ms）。之后又加了“不退回到出过断音的大小”，见「测试记录」（Claude 2026-10-08 实机测过）。改了 `src/Audio/AudioFifo.cs` 的自适应缓冲或采集（`src/Audio/LoopbackCapture.cs`）才需要重测
-- 手机 60 帧录像测延迟（最重要）：设置 → 音画同步测试，手机离屏幕和音箱都约 50 cm，录 15 秒以上，**发原文件**（不要经微信压缩）。改了 `src/Scenes.cs`、`src/Audio/AudioFifo.cs`、`src/Net/RtpSender.cs`、`src/Net/TimingServer.cs` 或 `src/UI/SyncTestForm.cs` 才需要重测
+- 手机 60 帧录像测延迟（最重要）：诊断 → 音画同步测试 → 开始，手机离屏幕和音箱都约 50 cm，录 15 秒以上，**发原文件**（不要经微信压缩）。改了 `src/Scenes.cs`、`src/Audio/AudioFifo.cs`、`src/Net/RtpSender.cs`、`src/Net/TimingServer.cs` 或 `src/UI/SyncTestForm.cs` 才需要重测
   - [x] 场景「游戏」（105 ms）：声音比画面晚 **118 ms**（8 下，115–125；目标 ≤ 145）。手机录像本身约 ±10 ms 误差（用户 2026-10-08 录像）
   - [x] 场景「推荐」（120 ms）：**137 ms**（10 下，124–144；上次 156）。当时缓冲被误涨到 20 ms（beta.4 已修），修好后应再少约 4 ms（用户 2026-10-08 录像）
   - [ ] 混音器里给任意一个程序单独设去处（启用按程序分流），再录一段 120 ms：____ ms（预计比上一条多约 35 ms）。另外改了 `src/Audio/RoutedCapture.cs` 或 `src/Audio/ProcessLoopback.cs` 也要重测
@@ -40,7 +40,7 @@
 
 听到卡顿时：
 
-- 记下时间（精确到分钟）和当时在做什么。beta.5 起日志会记录 Wi-Fi 抖动（`network: ping ...`），能对上是不是网络的问题。日志（`%APPDATA%\HomePodCast\homepodcast.log`）请先复制到「下载」或项目文件夹再发，Claude 读不到 `AppData` 里的真实文件。「关于 → 日志 → 打开日志文件夹」会直接打开日志所在的文件夹（Microsoft Store 版的日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）
+- 记下时间（精确到分钟）和当时在做什么。beta.5 起日志会记录 Wi-Fi 抖动（`network: ping ...`），能对上是不是网络的问题。日志（`%APPDATA%\HomePodCast\homepodcast.log`）请先复制到「下载」或项目文件夹再发，Claude 读不到 `AppData` 里的真实文件。「诊断 → 日志 → 打开日志文件夹」会直接打开日志所在的文件夹（Microsoft Store 版的日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`）
 - 先确认 HomePod 连在 5G 上：路由器开着双频合一（Smart Connect）时，它可能被分到拥挤的 2.4G（2026-10-10 新家：2.4G 上 ping 中位 21 ms、丢 4%，200 和 500 ms 都卡；关掉双频合一、换到 5G 后 2 ms、0 丢包）
 
 ### 三、按键与托盘
@@ -50,7 +50,7 @@
 - [x] 「HomePod 跟随 Windows 音量」（默认）模式下进全屏游戏按音量键：游戏没被切出去，HomePod 跟着变（用户 2026-10-08 确认；台式机，Fn 键未测）。改了 `src/UI/VolumeKeyHook.cs` 或 `src/FollowWindowsLink.cs` 才需要重测
 - [x] 右键托盘图标：面板贴着图标弹出；拖音量、切场景、开关夜间模式；再右键一次能关掉（用户 2026-10-08 反馈：日常使用中没问题）。改了 `src/UI/TrayFlyout.cs` 或 `src/UI/FlyoutPlacement.cs` 才需要重测
 - [x] 左键托盘图标打开主窗口（用户 2026-10-08 反馈：日常使用中没问题）。改了 `src/UI/TrayApp.cs` 的托盘图标才需要重测
-- [ ] 主窗口在两块缩放不同的显示器（150 % 和 100 %）之间来回拖，先在几个页面之间切换过再拖：拖动时窗口一直跟手，不出现「未响应」；松开鼠标后导航、各行和按钮按新的缩放排好，没有重影、错位；再切到别的页面，也是按新缩放排好的。拖动途中跨过去时，字会先按新缩放画、排版等松手再更新，这是有意的（1.1.0-beta.5 每次跨屏约 8 秒未响应，beta.7 还有卡顿。单元测试：LayoutWorkTests 模拟 Windows 的 DPI 消息：变化时只换导航和当前页的字体，松手或停下 0.15 秒后只排一次当前页，连续几次变化也只排一次，隐藏的页面显示时再排；CI 自动测试：gui-smoke 在程序开着时把缩放 150 % → 100 % → 150 %；仍需实机：真正的跨屏拖动）。改了 `src/UI/MainWindow.cs` 或 `src/UI/Controls/FluentControl.cs` 的 DPI 处理才需要重测
+- [x] 主窗口在两块缩放不同的显示器（150 % 和 100 %）之间来回拖，先在几个页面之间切换过再拖：拖动时窗口一直跟手，不出现「未响应」；松开鼠标后导航、各行和按钮按新的缩放排好，没有重影、错位；再切到别的页面，也是按新缩放排好的。拖动途中跨过去时，字会先按新缩放画、排版等松手再更新，这是有意的。拖到 100 % 那块屏上再打开首页的音箱下拉框：列表的字和下拉框一样大（1.1.0-beta.5 每次跨屏约 8 秒未响应；1.1.0 实测每次跨屏 1.1–2.3 秒，混音器页约 3 秒，100 % 屏上下拉列表的字只有三分之二大。单元测试：LayoutWorkTests 按实测的顺序模拟 Windows：先问窗口新尺寸，再逐个通知并挪动子窗口，窗口边框变了客户区也变；缩放一变就暂停整个窗口的排版、先销毁隐藏页面的窗口，只换导航和当前页的字体，松手或停下 0.15 秒后只排一次当前页，连续几次变化也只排一次，隐藏的页面在空闲时按新缩放重建；下拉列表在主屏缩放不同时字号正确；CI 自动测试：gui-smoke 在程序开着时把缩放 150 % → 100 % → 150 %；真正的跨屏拖动：用户 2026-10-17 在 #70 之后实机确认，连同在 100 % 屏上空闲预建后切到没去过的页面）。改了 `src/UI/MainWindow.cs`、`src/UI/Controls/FluentControl.cs` 的 DPI 处理或 `FluentComboBox.cs` 的下拉列表才需要重测
 - [ ] 开关和换页的手感：设置 →「夜间自动断开」打开、关闭，在左侧页面之间来回切，都没有明显的停顿；程序刚启动、窗口出现几秒后，第一次打开每个页面也没有停顿（窗口显示后，空闲时会把其他页面提前建好；只在托盘里启动时不提前建）；打开后「时段」在「闲置多久后断开」上面（单元测试：LayoutWorkTests 按次数检查排版、文字测量和新建的窗口；仍需实机：真实窗口的手感）。改了 `src/UI/Controls/` 的布局、`src/UI/MainWindow.cs` 的提前建页或页面的 PageShown、Prepare 才需要重测
 
 ### 四、夜间模式与均衡
@@ -126,7 +126,7 @@
 - [ ] 注销再登录（或重启）：HomePodCast 在托盘里启动，不弹主窗口。日志里如果有 `started by the startup task: into the tray`，说明 Windows 没传 `--tray`、靠的是启动方式判断，告诉我。改了 `src/StartupTask.cs`、`src/Program.cs` 的启动参数或清单的 `windows.startupTask` 才需要重测
 - [ ] 在 Windows 设置 → 应用 → 启动 里关掉 HomePodCast，回到程序的设置页：开关变成关，下面写「已在 Windows 设置的“启动”页面里关闭，只能在那里重新打开。」；再在程序里打开它：弹窗问要不要打开 Windows 设置的「启动」页面。改了 `src/StartupTask.cs` 或 `src/UI/Pages/SettingsPage.cs` 的开关才需要重测
 - [ ] 切换界面语言（设置 → 语言 → English，点「是」）：程序退出后自己重新打开、界面变成英文；新进程仍是打包版（日志 `starting from the package ...`，重启前一行是 `restarting to apply the UI language: C:\WINDOWS\explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）。CI 用同一条 `explorer.exe shell:AppsFolder\...` 命令启动打包版，所以这条命令本身能用。改了 `src/Program.cs` 的语言重启、`src/AppRestart.cs` 或 `src/AppEnvironment.cs` 才需要重测
-- [ ] 「关于 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）。改了 `src/AppEnvironment.cs` 或 `src/UI/Pages/SettingsPage.cs` 的日志一栏才需要重测
+- [ ] 「诊断 → 日志」写的路径是 `C:\Users\<你>\AppData\Local\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`；「打开日志文件夹」打开资源管理器、选中 homepodcast.log。（这台电脑以前装过 MSI 版、`%APPDATA%\HomePodCast` 里已经有日志时，打包版会接着写原来那个文件，按钮打开的就是 `%APPDATA%\HomePodCast`，也对）。改了 `src/AppEnvironment.cs` 或 `src/UI/Pages/DiagnosticsPage.cs` 的日志一栏才需要重测
 - [ ] 「关于 → 软件更新」只显示「Microsoft Store 版由 Microsoft Store 负责更新。」，没有「检查更新」、更新渠道和自动检查。改了 `src/UI/Pages/SettingsPage.cs` 或 `src/UI/TrayApp.Update.cs` 才需要重测
 - 上架后第一次 Store 更新时再看：推流中被更新的话，程序会不会自己回到托盘（RegisterApplicationRestart，`src/Program.cs`）
 
@@ -145,7 +145,7 @@
 
 ### 十三、同步观影窗口（1.1 新增）
 
-设置 → 工具 →「同步观影窗口（实验性）」，模块是单独下载的 `HomePodCast-video-window-<版本>.zip`（和程序同一版本）。测之前关掉播放器自己的音频延迟、「影视场景自动调整播放器」和浏览器插件的画面延迟。音量不超过 25%。从设置打开、各语言和缩放下的布局、生成的 4K 画面经过显卡队列显示、跟随程序的延迟，已由 gui-smoke 覆盖；留哪些帧、什么时候显示、扣除多少显示延迟，由单元测试覆盖（见「已自动化」）。本节各项：改了 `modules/VideoWindow/`、`src/UI/TrayApp.VideoWindow.cs` 或 `src/Players/VideoWindowModule.cs` 才需要重测。
+音画同步 →「同步观影窗口（实验性）」，模块是单独下载的 `HomePodCast-video-window-<版本>.zip`（和程序同一版本）。测之前关掉播放器自己的音频延迟、「影视场景自动调整播放器」和浏览器插件的画面延迟。音量不超过 25%。从音画同步页打开、各语言和缩放下的布局、生成的 4K 画面经过显卡队列显示、跟随程序的延迟，已由 gui-smoke 覆盖；留哪些帧、什么时候显示、扣除多少显示延迟，由单元测试覆盖（见「已自动化」）。本节各项：改了 `modules/VideoWindow/`、`src/UI/TrayApp.VideoWindow.cs` 或 `src/Players/VideoWindowModule.cs` 才需要重测。
 
 1. - [ ] 用不能调音频延迟的播放器（比如 Windows 的「媒体播放器」）放音画同步测试那种闪光加「咔」声的视频，模块里点「选择窗口…」选它：选择器和来源窗口有黄色边框，画面出现在模块里、保持比例、没有鼠标指针。手机录像看模块里的闪光和 HomePod 的「咔」声差多少：____ ms（仍需实机：真实的采集、显示延迟和 HomePod 的声音）
 2. - [ ] 30 fps 和 60 fps 的视频各放一段，全屏看：流畅，不一顿一顿（单元测试：VideoWindowTests，30 fps 在 60.1 Hz 屏上每一帧都保留，更快的来源均匀减到 30 fps；仍需实机：看起来是否流畅）
@@ -162,6 +162,18 @@
 只有 MSI 版和便携版会遇到（它们用电脑上装的 .NET；Microsoft Store 版自带运行时，不检查也不提示）。音量不超过 25%。
 
 - [ ] HomePodCast 连着 HomePod 推流时，装一个新的 .NET 10 SDK 或运行时补丁版本，让它替换掉程序正在用的旧版本（2026-10-13 就是装 SDK 时把 10.0.12 换成了 10.0.13）。之后 5 分钟内（马上点「关于 → 软件更新 → 检查更新」更快）：首页最上面出现黄色提示「.NET 已更新，HomePodCast 需要重新启动才能继续正常工作。重启时声音会中断几秒，然后自动重新连接。」和「立即重启」按钮，托盘弹出一次「.NET 已更新，需要重新启动 HomePodCast。点这里查看。」；日志有 `runtime: the .NET runtime this copy started on (…) has been removed by a .NET update`。不点就什么都不发生。点「立即重启」：程序退出，几秒后自己重新打开（窗口还在，不是只在托盘），自动连回 HomePod、有声音，提示不再出现；日志里新的 starting 行之后有 `restarted by 「立即重启」: connecting again, as before`（单元测试：RuntimeWatchTests、AppRestartTests、RuntimeRestartNoticeTests；在私有的 .NET 副本上模拟替换、点「立即重启」后连回假 HomePod：CI 自动测试：gui-smoke 的 runtime 场景；仍需实机：真实的 .NET 安装程序、真实的 HomePod）。改了 `src/RuntimeWatch.cs`、`src/AppRestart.cs`、`src/UI/TrayApp.Runtime.cs` 或 `src/Program.cs` 的重启才需要重测
+
+### 十五、仅 HomePod 输出（1.2 新增，实验性）
+
+前提：Windows 默认输出是电脑扬声器（或耳机），「混音器 → 采集设备」跟随默认输出，首页「仅 HomePod 输出」关着、键盘音量键是默认的「HomePod 跟随 Windows 音量」。HomePod 音量不超过 25%。什么时候静音、什么时候恢复、只恢复自己设的静音、首页提示什么时候出现，已由单元测试覆盖（用模拟的默认输出，见「已自动化」）；这里看真实声卡和真实按键。本节各项：改了 `src/Audio/PcMute.cs`、`src/UI/TrayApp.PcMute.cs`、`src/UI/Pages/PcSoundNotice.cs`、`src/Audio/VolumeKeyForwarder.cs` 的通知或 `src/VolumeKeyMode.cs` 的 `Effective` 才需要重测。
+
+1. - [ ] 连接：首页出现「电脑也在出声」和「只用 HomePod 播放」「不再提示」。点「只用 HomePod 播放」：电脑马上没声，HomePod 照常放，任务栏的音量图标显示静音；设置里键盘音量键变成「推流时控制 HomePod」，首页「仅 HomePod 输出」打开；日志有 `PC mute: muted the Windows default output …`
+2. - [ ] 推流中按音量 +/−（按住连续变）和静音键：只有 HomePod 变，电脑一直没声（以前一按电脑就又响了）
+3. - [ ] 点「断开」：约 1 秒后电脑恢复出声，日志 `PC mute: unmuted … again (the session ended)`；再连接又静音。连着时在托盘里退出 HomePodCast：电脑恢复出声
+4. - [ ] 推流中在 Windows 里手动取消静音：电脑出声，之后（包括断线重连）这次连接里不再被静音，断开时也不动它；下一次连接又会静音
+5. - [ ] 推流前先把 Windows 静音再连接、断开：Windows 一直是静音
+6. - [ ] 「混音器 → 采集设备」选一个虚拟声卡（比如 VB-CABLE）再连接：电脑扬声器不被静音，首页也不提示
+7. - [ ] 推流中（电脑已被静音）在任务管理器里「结束任务」HomePodCast：电脑保持静音；再打开 HomePodCast：电脑马上恢复出声，日志有 `PC mute: unmuted … left muted by the last run`
 
 ### 实验性功能（实机测过才去掉实验性）
 
@@ -221,6 +233,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 8. - [ ] 首页、托盘、弹框里**都没有**「改为推送到 Apple TV」之类的按钮，正常使用不会出现 PIN；音箱列表里 Apple TV 显示为「客厅（Apple TV，家庭影院：卧室）」，只有手动选它再点「连接」才会走 Apple TV 的配对（单元测试：HomeTheaterTests、PairingPolicyTests；仍需实机：首页、托盘、弹框里没有多余的按钮）
 9. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗（单元测试：TakeoverPolicyTests、HomeTheaterTests；仍需实机：`scan --txt` 的结果）
 10. - [ ] Apple TV 正在播放（比如在 Apple TV 上看视频）和空闲时各跑一次 `scan --txt`，两段都发我：看 Apple TV 和卧室的 flags、gid、pgid、igl 有没有区别（用来判断以后能不能做到「Apple TV 空闲时才接管」）
+11. - [ ] 接管后重连（2026-10-16 新增）：卧室被占着（日志 `statusFlags 0xA0C04`）时点「连接」→「仍然连接」：约 5 秒后日志有 `takeover: starting our session once more`，状态闪一下「正在连接…」后回到已连接，**之后一直有声音**（2026-10-16 那次没有这一步：响一声后就没声音了，会话却一直在）。stats 行里的 `ntp=` 每分钟都在涨吗（单元测试：TakeoverRestartTests，只重连一次、断开时不再重连；仍需实机：重连后有声音）。改了 `src/StreamController.cs` 里的 `RunAsync` 才需要重测
 
 #### 立体声对（等有两只 HomePod 配成立体声对时再测）
 
@@ -238,16 +251,17 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 #### 多房间（等有第二台 AirPlay 音箱时再测）
 
-设置 → 工具 →「多音箱（实验性）」→「同时推送到」另一台 AirPlay 音箱（另一只 HomePod 或别的牌子的音箱），和当前音箱按同一时间线同步播放。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
+侧边栏 →「多音箱」→ 电脑实时声音 → 添加另一台 HomePod、第三方 AirPlay 2 或 AirPlay 1 音箱，和当前音箱按同一时间线播放。第三方分组仍为实验性、尚未实机验证，真实延迟可能需要手动或手机录像校准；缓冲模式与 AirPlay 1 会提高整组延迟。音量一律不超过 25%。本节各项：改了 `src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/UI/GroupForm.cs`、`src/StreamController.Group.cs`、`src/Net/ReceiverOutputSet.cs`、`src/Net/RaopOutputSet.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 
 1. - [ ] 选好第二台、确定后连接：两台都出声，首页是「已连接 · A + B（实验性）」；两台之间有没有回声 / 一前一后的感觉？
 2. - [ ] 音量：主滑块让两台一起变；给一台设「音量偏移」只改它
-3. - [ ] 打开「电脑端分声道」：第一台只出左声道、第二台只出右声道；打开「交换左右」后对调
+3. - [ ] 把两台的位置分别设为左、右并应用：第一台只出左声道、第二台只出右声道；把两台位置对调后声音也对调
 4. - [ ] 连续放 30 分钟：两台有没有慢慢不同步、断开、单台没声；推流时用 iPhone 抢其中一台：电脑端怎么反应、会不会来回抢（记下来）
+5. - [ ] 有第三方 AirPlay 2 设备后：分别选择低延迟和缓冲方式，与 HomePod 一起播放；用手机录像或手动微调记录两台实际偏移。必需输出被接管后整组等待操作；可选输出独立恢复，缓冲延迟变大时等待重新连接，不抢回其他设备的会话。软件中的时钟、历史帧、取消和音量限制已由 ReceiverGroupControllerTests／ReceiverOutputSetTests／ReceiverTimelineSourceTests 覆盖；真实设备是否遵守时间戳仍需验证
 
 #### 无线影院（1.1 新增，等有两台以上 HomePod 时再测）
 
-设置 → 工具 →「无线影院（实验性）」：本地 5.1／7.1 文件的每个声道送到一台 HomePod。只有一台 HomePod 时没法测（至少要前左、前右两台）。**音量一律不超过 25%**（窗口里的音量滑块就是程序的音量）。准备一个 5.1 文件（AAC 的 MP4 最常见，掩码 0x3f）和一个 7.1 文件（WAV，或者 E-AC-3 的 MKV／MP4，看 Windows 能不能解码）。声道分配、余量、窗口的音量和状态、被其他连接取代时不断开普通推流，已由单元测试覆盖（见「已自动化」）。本节各项：改了 `src/Audio/CinemaLayout.cs`、`src/Audio/CinemaFileSource.cs`、`src/Audio/CinemaMediaReader.cs`、`src/Audio/AcousticAlignment.cs`、`src/Audio/MicCapture.cs` 的校准时间戳、`src/CinemaSession.cs`、`src/UI/CinemaForm.cs`、`src/UI/TrayApp.Cinema.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
+侧边栏 →「多音箱」→ 本地影音文件：5.1／7.1 文件的每个声道送到一台 HomePod。可用一台完整立体声输出；离散声道和两台间同步仍需至少两台 HomePod。**音量一律不超过 25%**（窗口里的音量滑块就是程序的音量）。准备一个 5.1 文件（AAC 的 MP4 最常见，掩码 0x3f）和一个 7.1 文件（WAV，或者 E-AC-3 的 MKV／MP4，看 Windows 能不能解码）。声道分配、余量、窗口的音量和状态、被其他连接取代时不断开普通推流，已由单元测试覆盖（见「已自动化」）。本节各项：改了 `src/Audio/CinemaLayout.cs`、`src/Audio/CinemaFileSource.cs`、`src/Audio/CinemaMediaReader.cs`、`src/Audio/AcousticAlignment.cs`、`src/Audio/MicCapture.cs` 的校准时间戳、`src/CinemaSession.cs`、`src/UI/CinemaForm.cs`、`src/UI/TrayApp.Cinema.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 
 1. - [ ] 两台 HomePod 设为前左、前右，放 5.1 文件：两台都出声，对白（中置）两边都有、在中间；首页是「已连接 · 无线影院（实验性）」；日志有 `cinema: start 5.1 (0x3f) …` 和每台音箱放什么（仍需实机：声音、两台之间有没有回声或一前一后）
 2. - [ ] 放 7.1 文件：能放；Windows 解不了的文件，窗口里是中文原因（不是英文异常），日志有 `cinema: not started: …`
@@ -257,7 +271,43 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 6. - [ ] 三台以上：中置单独一台时对白只从它出来；有侧环绕或后环绕音箱时环绕声从对应的音箱出来；低音声道交给单独一台 HomePod 时它只放低频，不分配时低频混入前左前右（听感：会不会太轰或太弱）
 7. - [ ] 连续放 30 分钟：各台有没有慢慢不同步、断开、单台没声；放完自动停止，最后一段声音没有被截断
 
+#### DLNA 单台输出（1.2 新增，尚未实机验证）
+
+维护者在准备使用极米 Z6X 时自行测试，步骤见 `docs/dlna.md`。命令使用临时配置，先运行 `dlna --scan` 记录 UDN；所有有声测试不超过 25%。没有麦克风也能测试，分组页已有手动微调和手机录像助手。本节各项：改了 `src/Net/Dlna*.cs`、`src/DlnaCli.cs` 才需要重测。
+
+1. - [ ] 发现列表能找到 Z6X 的 DLNA 服务，和不支持的 FairPlay AirPlay 项分清；静音协议检查能够连接和停止
+2. - [ ] 指定采集端点，以不超过 25% 音量播放；记录协商格式、分块或大 Content-Length、第一次出声的等待时间。LPCM 不支持时尝试设备声明支持的 WAV，不能播放则保留日志
+3. - [ ] 连续播放 30 分钟，记录断音、设备主动停止或读取重连；音量变化和静音是否生效
+4. - [ ] 由手机接管后电脑退出本次发送，不抢回；随后退出命令不会停止手机的投屏
+
+#### 统一实时多输出分组（1.2 新增，尚未实机验证）
+
+只由维护者在准备使用设备时测试；先确认没有 iPhone、Apple TV 或其他控制器在使用，所有有声测试上限不超过 25%。设备为
+一台 HomePod 第二代、电脑内置蓝牙连接的普通 SBC 蓝牙音箱，以及极米 Z6X 的独立 DLNA 服务；Z6X 的 FairPlay AirPlay
+仍不支持。用「多音箱 → 电脑实时声音」的统一输出类型和刷新入口，见 `docs/multi-output-receivers.md`、`docs/dlna.md`。
+不需要麦克风。配置、界面和无声打开行为已移到「已自动化」，这里记录真实声音、蓝牙链路、设备断线和接管行为。
+本节各项：改了 `src/UI/GroupPanel.Outputs.cs`、`src/UI/GroupAlignmentForm.cs`、分组控制器、`src/Net/LocalOutputSet.cs`、
+`src/Net/DlnaOutputSet.cs`、`src/Audio/DlnaReadClock.cs`、`src/Audio/DlnaTimelineReader.cs` 或共同时间线才需要重测。
+
+1. - [ ] 在 Windows 配对 SBC 蓝牙音箱，在编辑器按完整端点选择，明确标记蓝牙；200 毫秒只当起始附加延迟。HomePod + 蓝牙两路都出声，完整立体声／左／右、音量偏移听感与设置一致；不把当前采集端点选为输出
+2. - [ ] HomePod + Z6X：记录 DLNA 实际协商格式、首次出声等待和估计延迟，用正负微调对齐；记录自动整组延迟，以及手动值低于下限时的实际值，只按不同房间的大致同步判断
+3. - [ ] 手机用相同帧率、相同短距离分别靠近参考和目标录闪光／声音，记下两段偏移和差值；目标更晚填正、更早填负。「应用微调」后先保留草稿，再点「应用」听结果；全过程不用麦克风。只有维护者明确点「开始测试音」才发声，测试音不超过 25%
+4. - [ ] HomePod + 普通 SBC 蓝牙音箱（电脑内置蓝牙）+ Z6X：记录三路刚开始、30 分钟／一小时后的偏移；时钟估计不可用时如实记录，不把 HTTP 时间或 CI 标记边界当作实际声音延迟
+5. - [ ] 可选蓝牙／Z6X 断开再恢复时 HomePod 继续，不重启健康输出；手机接管或停止 DLNA 后不自动抢回，退出电脑分组不停止手机的流；设为必需后失败会停止整组。其他发送端占用的 Apple AirPlay／RAOP 设备也只等待明确操作，不为测试强抢
+6. - [ ] 保存一组带名称的真实设备，重启后在首页选择再连接，确认实际去处正确；切到文件音源不会启用本机／DLNA，回到实时仍保留选择，原来单台 HomePod 的低延迟体验不变
+7. - [ ] LPCM／WAV 不可用时，只试设备声明支持的 MP3／AAC，记录启动等待和编码额外偏移；连接中静音／降低音量不会恢复旧音量。沿用现有专用网络和防火墙范围，不为本测试开放公用网络或另加规则
+
 ## 已自动化（不用手测）
+
+- **DiagnosticsPageTests / gui-smoke / gui-output-groups**：诊断页沿用原音画同步测试的导航位置，三节内容和三个按钮可达，关于页不再显示日志和诊断报告。离屏假动作分别验证测试、日志和导出按钮的事件及所属窗口；仅打开、离开或重新打开页面不触发动作，不更改配置、连接或麦克风。CI 在全部 15 种界面语言和 150% 缩放下滚动截图并检查诊断页，不点击测试、打开日志或导出。
+
+- **GroupOutputEditorTests / OutputGroupSettingsTests / GroupPlanTests**：注入本机和 DLNA 发现、假主机与调用记录，检查打开／换源／等待时发现、采集、播放、校准精确为零；按完整端点 ID 和 UDN 添加、离线偏好库不激活、必需／可选、声道／音量／±5000 毫秒微调、自动／手动下限、实时／文件草稿隔离、命名分组存取、无麦克风手机帧差和手动助手只有明确测试才调用发声入口。这些配置／界面项不再列为实机重复验证。
+- **OptionalAppleGroupTests / AppleGroupMemberSessionTests / RaopOutputSetTests / LocalOutputGroupTests / DlnaGroupControllerTests**：可选 Apple／RAOP／本机／DLNA 独立恢复、必需失败、忙碌／认证／接管等待明确操作、不抢回其他发送端，以及健康成员不被重启；仍需上方实机项验证设备实际反应。
+- **gui-output-groups 的 group-outputs 场景**：五份独立运行完整覆盖全部 15 种界面语言、必须为 150% 缩放，自检保证每种语言恰好一次；离线保存的 AirPlay、本机、明确标记的蓝牙和有效 UDN 的 DLNA 行、未选择的偏好库、保存值与类型、展开设置、添加／移除草稿、空选择类型、自动／手动延迟、实时／文件切换、无声手动助手。每次滚动截图都检查布局，实时／文件和校准截图覆盖每种语言，额外相同过渡截图只跑一次；离页再打开仍未连接，API 的 streaming=false、保存偏好不变、没有新增采集／影院／测量／推流失败日志。发现是否精确为零由注入单元测试证明，不靠日志缺失推断。
+
+- **DlnaDiscoveryTests / DlnaControlTests / DlnaStreamServerTests / DlnaClientTests / DlnaCliTests**：回环假设备覆盖 SSDP、描述和 SOAP、格式协商、HTTP 字节序与流量限制、Private 网络策略、音量上限、忙碌与接管、取消和连接清理。
+- **DlnaReadClockTests / DlnaTimelineReaderTests / DlnaOutputSetTests / DlnaGroupControllerTests / DlnaGroupSettingsTests / DlnaEncoderTests**：四组正负漂移的一小时仿真、突发／停顿／时钟置信度失效、实际 PCM 标记、整数帧连续性和无分配读取；UDN 独立解析、可选恢复／必需失败、接管优先级、连接中音量／静音、历史覆盖恢复、编解码线程与分块边界。
+- **dlna-compat-e2e / aac-fixture**：固定版本 gmrender-resurrect 使用 GStreamer 文件输出，在没有外部网络出口的 Linux 命名空间内完成 SSDP → SOAP → LPCM 分块和 WAV 大 Content-Length，比较至少 4 秒双声道 PCM；Windows 生成 MP3／AAC，Linux 独立解码并比较两种 HTTP 传输方式的设备输出，报告软件时序和编码延迟；不用真实音箱。
 
 - **airplay-compat-e2e / aac-fixture**：经典 shairport-sync 的未加密、RSA 与密码场景，以及 shairport-sync AirPlay 2 + nqptp 的实时和 1.0 / 1.5 / 2.0 秒缓冲场景；Windows Media Foundation 生成 AAC，独立解码作参考，对齐后逐样本比较至少 6 秒，检查无缺口与请求延迟 ±50 ms。
 - **ReceiverLatencySelectionTests / ThirdPartyTests / BufferedAudioTests / PtpTests**：每设备设置、HomePod 场景隔离、协议回退、接收端延迟下限、加密帧、配对、时钟选举和校准回调；**gui-smoke** 增加中英德兼容延迟与设置行的页面遍历。
@@ -265,7 +315,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 每次 CI 构建都跑，失败时构建不通过、标签不发布；作业日志里每项检查一行，失败时看作业摘要和它的工件（`gui-screenshots`、`msi-e2e-logs`、`update-e2e-logs`、`msix-e2e-logs`、`extension-e2e-screenshots`）。细节见 `docs/RELEASING.md`。「实机确认过」写的是以前在真实设备上确认的日期。
 
-- **gui-smoke**（`tests/HomePodCast.GuiSmoke`，截图在 `gui-screenshots` 工件）：这次构建的 Release 版程序，中文、English、Deutsch，100 % 和 150 % 缩放、最小窗口宽度、深色模式下，走一遍每一页（整页滚动）、托盘面板和全局快捷键、使用配置、多音箱（实验性）、无线影院（实验性：八个音箱位置都在，没选文件时「播放」「暂停」「停止」「测量音箱延迟」不可用，打开和关闭不影响连接）、音箱信息：程序不退出、日志里没有 ERROR、控件没有被裁掉或互相重叠、按钮都有文字、English / Deutsch 里没有没翻译的中文；找不到音箱、等待重试（「找不到音箱：请确认它已通电、和电脑在同一网络，N 秒后重试」）时首页和托盘面板的按钮是「连接」，点了马上开始连接；连着假 HomePod 时按钮是「断开」，缓冲、音箱处理、实际延迟、断音、重传都有数值，音箱信息读得到音箱，退出时发 TEARDOWN；首页没有「刚才卡了」「导出诊断」，关于页有「导出诊断」，全局快捷键里「标记刚才的卡顿」默认「未设置」；新装的配置「自动检查更新」是关的，「更新渠道」跟随版本（测试版、PR 和分支构建是「测试版」，正式版标签构建是「正式版」）；同步观影窗口（实验性，用这次构建的模块 zip）：从「同步观影窗口」页点「打开」直接启动模块（不弹文件夹选择、不开始采集），窗口按当前缩放显示（按显示器感知 DPI），布局和翻译同上，状态栏提示先选择窗口；再单独用生成的 4K 画面运行（`--smoke-source`，不打开窗口选择器）：画面经过显卡队列和交换链显示，缩到 1920 × 1080、按 16:9 显示，跟随程序的延迟（没推流时 0 ms，连着假 HomePod 时是它的声音延迟）；.NET 被替换（runtime 场景，只动运行器上 .NET 的私有副本）：程序在副本上启动、连着假 HomePod，副本里出现更新的补丁版本，程序用的版本没了 deps.json 和还没加载的 System.Net.Http 后点「检查更新」：软件更新一栏写「.NET 已更新，请重启 HomePodCast 后再试」，日志写明是 System.Net.Http 加载失败时发现的，首页最上面出现重启提示（推流中，带声音会中断的那句）和「立即重启」；点「立即重启」：程序退出，自己在更新的版本上重新打开窗口（不带 `--tray`），连回假 HomePod（第二次建立推流），提示消失；150 % 的中文一轮里，程序开着时把缩放改成 100 % 再改回 150 %（和拖到另一块缩放不同的显示器一样收到 WM_DPICHANGED）：窗口 5 秒内响应，导航按新 DPI 排好，布局检查通过，整窗重绘后画面不变（没有留下旧画面）
+- **gui-smoke**（`tests/HomePodCast.GuiSmoke`，截图在 `gui-screenshots` 工件）：这次构建的 Release 版程序，中文、English、Deutsch，100 % 和 150 % 缩放、最小窗口宽度、深色模式下，走一遍每一页（整页滚动）、托盘面板和全局快捷键、使用配置、多音箱（实验性）、同页本地文件区块（音源选择器、每台位置/延迟/偏移和接收端限制；切换音源并截图，没选文件时「播放」「暂停」「停止」「测量音箱延迟」不可用，打开和关闭不影响连接）、音箱信息：程序不退出、日志里没有 ERROR、控件没有被裁掉或互相重叠、按钮都有文字、English / Deutsch 里没有没翻译的中文；找不到音箱、等待重试（「找不到音箱：请确认它已通电、和电脑在同一网络，N 秒后重试」）时首页和托盘面板的按钮是「连接」，点了马上开始连接；连着假 HomePod 时按钮是「断开」，缓冲、音箱处理、实际延迟、断音、重传都有数值，音箱信息读得到音箱，退出时发 TEARDOWN；首页没有「刚才卡了」「导出诊断」，诊断页有音画同步测试、日志和诊断报告三节及「导出诊断」，关于页只保留版本、软件更新和许可证，全局快捷键里「标记刚才的卡顿」默认「未设置」；新装的配置「自动检查更新」是关的，「更新渠道」跟随版本（测试版、PR 和分支构建是「测试版」，正式版标签构建是「正式版」）；同步观影窗口（实验性，用这次构建的模块 zip）：从「同步观影窗口」页点「打开」直接启动模块（不弹文件夹选择、不开始采集），窗口按当前缩放显示（按显示器感知 DPI），布局和翻译同上，状态栏提示先选择窗口；再单独用生成的 4K 画面运行（`--smoke-source`，不打开窗口选择器）：画面经过显卡队列和交换链显示，缩到 1920 × 1080、按 16:9 显示，跟随程序的延迟（没推流时 0 ms，连着假 HomePod 时是它的声音延迟）；.NET 被替换（runtime 场景，只动运行器上 .NET 的私有副本）：程序在副本上启动、连着假 HomePod，副本里出现更新的补丁版本，程序用的版本没了 deps.json 和还没加载的 System.Net.Http 后点「检查更新」：软件更新一栏写「.NET 已更新，请重启 HomePodCast 后再试」，日志写明是 System.Net.Http 加载失败时发现的，首页最上面出现重启提示（推流中，带声音会中断的那句）和「立即重启」；点「立即重启」：程序退出，自己在更新的版本上重新打开窗口（不带 `--tray`），连回假 HomePod（第二次建立推流），提示消失；150 % 的中文一轮里，程序开着时把缩放改成 100 % 再改回 150 %（和拖到另一块缩放不同的显示器一样收到 WM_DPICHANGED）：窗口 5 秒内响应，导航按新 DPI 排好，布局检查通过，整窗重绘后画面不变（没有留下旧画面）
 - **build 作业的模块自检**（`tools/build-video-window.ps1`，同步观影窗口的 `--self-test`，在 WARP 上、不开窗口、不采集）：32 × 16 到 8K 的已知画面经过 WinRT 表面互操作和显卡缩放后读回，尺寸和左右两半的颜色都对；大于 2560 × 1600 的来源缩小一半直到放得下（4K → 1920 × 1080，3840 × 2400、5K、8K 也能处理，原来超过 4096 × 2160 就拒绝），比显卡最大纹理还大时给出翻译过的提示
 - **msi-e2e**（`tools/ci/msi-e2e.ps1`，在运行器上真的安装）：静默安装到 `C:\Program Files\HomePodCast\`，开始菜单正好一个 HomePodCast 快捷方式（没有桌面快捷方式），「设置 → 应用」里正好一个；防火墙规则只有一条、正好指向装好的 exe（入站、允许、已启用、仅专用网络、仅本地子网，和程序自己加的一样），装好的 exe 自己的启动检查（`HomePodCast.exe firewall`）确认第一次启动**不弹**防火墙提示；装到自定义目录（`INSTALLFOLDER`，路径里有空格和中文）同样成立；卸载后程序、快捷方式、规则和「应用」里的条目都没了，`%APPDATA%\HomePodCast` 里的设置（config.json、日志）原样还在；先装 v0.2.0-beta.8、v0.2.0、v0.2.1、v0.2.2、v1.0.0-beta.6、v1.0.0 和最新发布的版本再装新 MSI：旧版被替换、只有一个、是新版本、目录不变、规则仍只有一条，新旧两次安装用不同的向导语言（旧英文 → 新中文、旧中文 → 新英文交替；发布过的 MSI 从 v0.2.0-beta.2 起都是多语言的，纯英文的只在更早的 CI 构建里有过）；装着更新的版本时（比这次构建新的发布，和每次都测的、改成下一个主版本号的本 MSI 副本）新 MSI 拒绝降级、给出提示、旧版原样保留；MSI 里嵌着 `installer/build.ps1` 的全部语言转换，每种语言完成页的勾选框是它自己的文字，中文向导各页（欢迎、许可协议、安装目录、准备安装、进度、完成）都是中文、包括「启动 HomePodCast」，许可协议页是英文原文（预期），`TRANSFORMS=:2052` 真的装了中文版（msiexec 日志显示应用了内嵌的 2052 转换，快捷方式和防火墙规则的说明是中文）
 - **update-e2e**（`tools/ci/update-e2e.ps1`）：装一个用同一份源码构建的旧版 MSI（0.0.1-e2e.1），用「更新」按钮的代码从 `127.0.0.1` 上的假发布列表下载这次构建的 MSI：损坏的被拒绝（不安装、不启动助手、`%TEMP%` 里不留东西）；好的校验 SHA-256、退出，安装助手通过 msiexec（Verb runas）安装，新版带 `--updated-from=` 重新启动；只装了一个、目录不变（默认和自定义目录各一遍），`%TEMP%` 里的 `HomePodCast-update-*` 被清掉（下次启动也会清）
@@ -273,7 +323,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 - **msix-e2e**（`packaging/msix/e2e-test.ps1`，用一次性证书签名的副本）：从开始菜单的方式（`explorer.exe shell:AppsFolder\qiyinxi.HomePodCast_21rkx5qfj0b6t!HomePodCast`）启动有包标识，日志在 `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`，启动行末尾是 `starting from the package qiyinxi.HomePodCast_21rkx5qfj0b6t (Microsoft Store version)`、没有错误，真正的 `%APPDATA%\HomePodCast` 里什么都没写；安装后有两条（TCP、UDP）入站、允许、Private、已启用的规则指向包里的 exe，第一次启动没有「需要防火墙放行」、没有 UAC（日志里没有加规则的记录）、日志里没有 `no rule of the package found`；日志有 `update: Microsoft Store package: never contacts GitHub`，不安排更新检查，没有连到本机以外的 TCP 连接；开机启动任务默认关，`HomePodCast.exe autostart on|off|status`（和「设置 → 开机自动启动」开关同一段代码）打开后 Windows 记录的状态（Windows 设置 → 应用 → 启动 和任务管理器显示的就是它）是「已启用」、日志 `autostart: startup task enable requested, now Enabled`，关掉后「已禁用」、日志 `autostart: startup task disabled, now Disabled`；打包版开着、窗口关到托盘时，再从开始菜单启动它或启动 MSI 版只会叫出打包版的窗口，新进程以 0 退出、不写日志，只剩原来那个打包版进程；卸载后那两条规则、启动任务、`%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t` 都没了，没有其他名字带 HomePodCast 的开机启动项
 - **单元测试**（`tests/HomePodCast.Tests`，build 作业的 Unit tests 步骤）：
   - 页面容器调整尺寸时，每层只排列一次；批量展开、收起设置行只重排一次，后面的行和滚动高度正确；文字变长但外层尺寸不变时仍重新排版；设置固定在导航栏底部，窄窗口只显示导航图标但保留无障碍名称，拉宽后恢复文字；页面列数和留白随宽度调整，宽屏内容居中，窄窗口上下排列的设置内容不被截掉；建窗口时收起、后来才展开的行和按钮回到原来的位置（LayoutTests；真实窗口的导航位置、窄窗口和页面几何检查：gui-smoke）
-  - 排版工作量（真实的页面，不显示的窗口，按次数不按时间）：设置 →「夜间自动断开」打开、关闭时每个容器只排一次、每段文字只测量一次，再开一次不测量任何文字，两行按顺序出现在开关下面（原来「闲置多久后断开」跑到「时段」上面）；建好设置页以后才发现新版本时按钮是「更新」「查看说明」「跳过此版本」的顺序（原来「查看说明」在最前）；一次音箱信息读取只排一次音箱信息页；在所有页面之间切换只排要显示的那一页、不新建窗口，混音器的程序行离开再回来还是原来的（同样的程序时）；窗口换到另一块缩放的显示器（DPI 144 ↔ 96，模拟 Windows 发的消息）时只有导航和当前页换字体，停下后整个窗口只排一次，控件按新 DPI 排好、没有重叠，日夜切换的淡入淡出不截图（原来每次约 8 秒未响应）；连续几次变化只在最后排一次，拖动中不排、松手才排；缩放变了以后才打开的隐藏页面按新 DPI 排好；窗口显示后空闲时提前建好的页面，第一次打开不新建窗口、只排一次，当前页和导航不受影响；只在托盘里时不提前建，用户在动鼠标时也不建（LayoutWorkTests）
+  - 排版工作量（真实的页面，不显示的窗口，按次数不按时间）：设置 →「夜间自动断开」打开、关闭时每个容器只排一次、每段文字只测量一次，再开一次不测量任何文字，两行按顺序出现在开关下面（原来「闲置多久后断开」跑到「时段」上面）；建好设置页以后才发现新版本时按钮是「更新」「查看说明」「跳过此版本」的顺序（原来「查看说明」在最前）；一次音箱信息读取只排一次音箱信息页；在所有页面之间切换只排要显示的那一页、不新建窗口，混音器的程序行离开再回来还是原来的（同样的程序时）；窗口换到另一块缩放的显示器（DPI 144 ↔ 96，按实测顺序模拟 Windows：先问窗口新尺寸，再逐个通知并挪动子窗口，客户区也跟着变）时变化途中一次排版都没有，隐藏页面的窗口先销毁，只有导航和当前页换字体，停下后整个窗口只排一次，控件按新 DPI 排好、没有重叠，日夜切换的淡入淡出不截图（原来每次约 8 秒未响应，1.1.0 实测仍要 1.1–2.3 秒）；连续几次变化只在最后排一次，拖动中不排、松手才排；缩放变了以后才打开的隐藏页面新建窗口、按新 DPI 只排一次；销毁了窗口的页面在空闲时按新 DPI 重建（每步不超过 100 ms），之后打开不新建窗口，没保存的输入还在；主屏缩放和窗口所在屏不同时，下拉列表的字和下拉框一样大（原来在 100 % 屏上只有三分之二）；窗口显示后空闲时提前建好的页面，第一次打开不新建窗口、只排一次，当前页和导航不受影响；只在托盘里时不提前建，用户在动鼠标时也不建（LayoutWorkTests）
   - 校准后首页、插件和 mpv／VLC 使用同一补偿，切换场景时总延迟仍变化，恢复默认后回到估算；换音箱、采集声卡、默认设备或分流模式时原校准不会误用，测试中改变连接或路径不应用旧测试（CalibrationPathTests、AvCalibrationTests）
   - 刚拖动音量后立即应用不同音箱的使用配置：旧滑块值不会稍后写到新音箱，选择框跟随新音箱（ProfileSwitchTests）
   - 给「标记刚才的卡顿」设快捷键，推流时按一下再从 关于 导出 ZIP：时间和统计在，音箱／立体声成员名称、设备 ID、地址和路径被隐藏（尽力而为），组统计的数字（underruns、各成员 sent／rtx）保留，没有密码、配置或音频；没在推流时按快捷键不记录（GlitchMarkerTests、DiagnosticReportTests、HotkeyTests）
@@ -283,10 +333,14 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - 睡眠唤醒后自动重连；iPhone 抢占 HomePod 后电脑端不抢回、托盘显示被占用（TakeoverControllerTests、TakeoverPolicyTests、GroupRunnerTests；用户 2026-10-08 实机确认过）
   - 夜间自动断开（实验性）：默认关；时段可以跨午夜（23:00–07:00 含 23:00、不含 07:00），开始和结束相同时从不断开；键鼠和声音都闲置够了才断开，只放声音或只动键鼠都不断开，时段开始前就闲置的时间也算；时段结束时只重连它自己断开的，中间手动连接或断开过就不重连，关掉这个设置也不重连；声音在所有音效之后测（HomePod 实际播放的），门限 −60 dBFS；断开后状态写「夜间已自动断开，07:00 自动重新连接」；设置能保存，旧配置没有这一项时是关的（NightDisconnectTests）
   - 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」；在测试版上切到「正式版」再检查（最新正式版比本机旧时）显示「当前测试版比最新正式版新……」，没有「更新」按钮（ReleaseSelectionTests、UpdateViewTests）
+  - 统一多音箱页：旧 split/swap 与影院配置迁移，加载、保存、使用配置、文件播放均不意外改变实时组成员和位置，旧界面过渡期间仍能改 split/swap/offset（GroupSettingsTests）；音源限制位置、每台延迟与偏移、单台实时保留低延迟路径（GroupFormTests）；完整立体声输出保留左右并沿用环绕下混（CinemaTests）。
+  - 音箱房间图：实际绘制方向符合前置、5.1 和 7.1 角度，窄／宽布局位置不重叠；空位下混去向直接采用现有混音规则；点选／键盘／声学测量高亮不启动声音；修改共用已有草稿，清空位置回到完整立体声并保留多个输出，切换立体声音源保留环绕位置（SpeakerRoomTests）。GUI 的全部 15 种语言、150% 专用分组场景检查可见视口里的位置和编辑控件，键盘与延迟草稿联动，生成的无声 5.1／7.1 文件仅检查布局并截图，不点播放、应用或测量（Walker.SpeakerRoom.cs，gui-output-groups-0 至 -4）。
   - 无线影院（实验性）：2.0、单声道、后环绕和侧环绕两种掩码的 5.1、7.1 在 2、3、5、6、7、8 台音箱上每个声道送到哪台、多大声，侧和后环绕互相补位，低音声道没有单独音箱时以 −6 dB 混入前左前右，整体余量保证不削波（CinemaTests）；Windows 解码生成的 16 位和浮点 WAV（1、2、6、8 声道，掩码 0x3f、0x60f、0x63f），解不了、不存在的文件给中文原因（CinemaTests）；所有音箱共用一条 RTP 时间线，无锁环形缓冲里每一帧都按顺序送到，暂停和测试音保持文件位置，校准结束后文件一定继续播放（CinemaTransportTests）；窗口里的音量就是开始播放的音量并保存，排队时改的音量保留，等待时在别处「连接」会结束影院、之后影院的「停止」不断开那个连接，排队中的影院停止后不再启动，测量时音箱音量不超过 25% 且之后恢复（CinemaSessionTests、CinemaFormTests）
   - 关于 → 软件更新只有一行「当前版本 x」：下面是状态，右边是「检查更新」；有新版本时同一行里换成「更新」「查看说明」「跳过此版本」（下载时「更新」变成「取消」、「跳过此版本」不能点），跳过后换回「检查更新」，下面不会多出或少掉一行；中文在默认窗口宽度下行高不变，最小宽度和德语里按钮放到文字下面，放不下时换行，都不被挤小；商店版只有状态、没有按钮（UpdateStatusRowTests；gui-smoke 检查「检查更新」在这一行里）
   - 同步观影窗口（实验性）：30 fps 视频在 60.1 Hz 屏上每一帧都保留（原来的 33.33 ms 硬门限只剩不到 20 fps）；24–30 fps 的内容在 50–144 Hz 屏上一帧不丢，60–240 Hz 的内容均匀减到 30 fps，没有长短交替；内容暂停后重新开始不补帧；延迟太长时每秒少存几帧，不超出队列；按 60.1 Hz 刷新显示时 30 fps 的每一帧都出现，都在「采集时间 + 延迟」之后一次刷新以内；扣除的显示延迟没有帧统计时是一次刷新，有了以后用实测值，换到刷新率更低的屏幕会跟上；只跟随 HomePodCast 的本机状态，版本和模块不同时提示；启动参数按字面传递；商店版不提供这个模块（VideoWindowTests）
   - .NET 被替换后的重启提示：只检查共享的运行时（`…\shared\Microsoft.NETCore.App\<版本>`），商店版这类自带运行时的副本不检查；运行时文件夹里的 deps.json 不在了才算被替换；启动时、每 5 分钟、睡眠唤醒后、程序集加载失败时（日志写明是哪个程序集，同一个只写一次；不是程序集的文件找不到不算）各查一次，找到后停止、只通知一次；首页的提示找到之前不出现，推流时多一句声音会中断，「立即重启」只有点了才重启，中文、德语、英语在默认和最小窗口宽度下按钮不被挤小、不压住文字；重启的命令在窗口隐藏时带 `--tray`，带 `--resume=connected` 或 `--resume=idle`，商店版仍经资源管理器启动自己的包；新进程拿到这些参数和同样的环境变量（测试配置文件仍是测试配置文件），直接启动和以资源管理器为父进程（管理员运行时）都行，启动不了时说明原因（RuntimeWatchTests、AppRestartTests、RuntimeRestartNoticeTests）
+  - 仅 HomePod 输出（实验性）：默认关；推流开始时把 Windows 默认输出静音，原来就静音的不算自己的、结束时不动；重试、连接中和重连时一瞬间的闲置都保持静音，闲置 1 秒以上才算会话结束，只取消自己设的、而且仍是静音的；推流中被手动取消静音后这次会话不再静音、结束时不动，下次连接重新判断；推流中打开立即静音、关闭立即恢复；默认输出换了设备时旧的恢复、新的静音，没有默认输出时放开；采集设备选了别的声卡、无线影院、分组里有本机输出就在默认设备上时都不静音；静音失败不会在结束时去取消；退出时恢复；自己的静音一开始就记进配置，交还、被手动取消后清掉，取消静音失败时留着；下次启动时（推流之前）记录还在，就把仍静音的那个设备恢复，已经取消静音的、已经不在的不动，记录都清掉；闲置且没有自己的静音时不读声卡；自己的静音用固定的事件 GUID，「跟随 Windows」不跟随它；打开时「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理，使用配置带回「跟随 Windows」也一样，这个设置不属于使用配置。首页「电脑也在出声」只在推流、设置关、没点过「不再提示」、采集的是默认输出、没按程序分流时出现，而且默认输出是扬声器、耳机或耳麦（HDMI、S/PDIF、线路输出等不算），名字不像虚拟声卡（CABLE、VB-Audio、VoiceMeeter、Virtual、Steam Streaming、单独的 UU、虚拟），没静音、音量高于 0；「只用 HomePod 播放」打开设置、把「跟随 Windows」和「关」改成「推流时控制 HomePod」（「仅在 Windows 静音时」不变）并立即静音，「不再提示」只记下不再提示；按钮只有点了才起作用，中文、德语、英语在默认和最小窗口宽度下按钮不被挤小、不压住文字（PcMuteTests、PcMuteAppTests；全部用模拟的默认输出，不碰真实声卡）
+  - 首页音量图标点击切换 HomePod 静音、状态跟随快捷键和托盘；点击前保存拖动的音量，延迟保存不会撤销静音。「仅 HomePod 输出」开关在推流时静音或恢复模拟的电脑输出，电脑音量数值和 HomePod 静音互不影响，连接前可保存，首页提示按钮也会同步开关；中文、英语、德语在窄音量卡片内两个开关的文字完整且不重叠（HomeVolumeTests）；gui-smoke 在首页检查可用的静音按钮、「仅 HomePod 输出」默认关闭和「夜间模式」开关，并确认设置页没有重复的输出开关；自检覆盖这些控件在所有语言中的名称
   - Apple TV 家庭影院（实验性）：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
 
 ## 测试记录
