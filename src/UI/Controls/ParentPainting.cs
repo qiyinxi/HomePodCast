@@ -125,6 +125,14 @@ internal abstract class PaintedControl : FluentControl, IParentPainted
         base.OnParentChanged(e);
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        ParentPainted = false;
+        base.SetVisibleCore(_shown);
+        (Parent as LayoutPanel)?.UpdateParentPainting();
+        base.OnHandleCreated(e);
+    }
+
     protected override void SetVisibleCore(bool value)
     {
         bool changed = _shown != value;
@@ -166,7 +174,7 @@ internal abstract class PaintedControl : FluentControl, IParentPainted
     protected override AccessibleObject CreateAccessibilityInstance() => ParentPainted
         ? new PaintedAccessible(this) : base.CreateAccessibilityInstance();
 
-    private sealed class PaintedAccessible(PaintedControl owner) : AccessibleObject
+    private sealed class PaintedAccessible(PaintedControl owner) : ControlAccessibleObject(owner)
     {
         public override string? Name { get => owner.AccessibleName ?? owner.Text; set => owner.AccessibleName = value; }
         public override string? Description => owner.AccessibleDescription;

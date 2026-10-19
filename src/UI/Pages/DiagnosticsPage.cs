@@ -9,7 +9,7 @@ internal sealed class DiagnosticsPage : ScrollPage
 {
     private readonly MetricTile _underruns = new(L.T("缓冲欠载"));
     private readonly MetricTile _network = new(L.T("网络波动"));
-    private readonly ToolTip _tips = new();
+    private readonly LayoutToolTip _tips = new();
     private readonly System.Windows.Forms.Timer _statsTimer = new() { Interval = 500 };
     private readonly Func<PlaybackCounters> _readCounters;
     private object? _session;

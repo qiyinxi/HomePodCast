@@ -12,7 +12,7 @@ namespace HomePodCast.UI.Pages;
 internal sealed class HomePage : ScrollPage
 {
     private readonly TrayApp _app;
-    private readonly ToolTip _tips = new();
+    private readonly LayoutToolTip _tips = new();
     private readonly System.Windows.Forms.Timer _statsTimer = new() { Interval = 500 };
 
     // speaker

@@ -56,6 +56,7 @@ internal sealed partial class Walker
     private Process? _app;
     private FakeAirPlayReceiver? _fake;
     private int _shots;
+    private bool _checkedPaintedToolTip;
 
     public Walker(Scenario scenario, string exe, string outRoot, Report report)
     {
@@ -478,6 +479,7 @@ internal sealed partial class Walker
         foreach (var caption in new[] { "首页", "推流状态" })
             Expect(page.Descendants().Any(n => n.Type == "Text" && n.Says(T(caption)) && n.Hwnd == IntPtr.Zero && n.HasSize),
                 "首页", $"parent-painted 「{T(caption)}」 has no UI Automation text node/bounds, or created a window");
+        CheckPaintedToolTip(page);
         var buttons = page.Descendants().Where(n => n.Type == "Button" && n.Shown).ToList();
         string expected = connected ? T("断开") : T("连接");
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
@@ -514,6 +516,29 @@ internal sealed partial class Walker
             Expect(!string.IsNullOrEmpty(value) && value != "—", "首页", $"the tile 「{T(caption)}」 shows 「{value ?? "(not found)"}」 while connected");
             if (!string.IsNullOrEmpty(value) && value != "—") _report.Pass(Where("首页"), $"{T(caption)} = {value}");
         }
+    }
+
+    private void CheckPaintedToolTip(Node page)
+    {
+        if (_checkedPaintedToolTip || _s.Kind != "idle" || _s.Language != "zh-CN" || _s.Scale != 100) return;
+        var tile = Find(page, n => n.Name == T("实际延迟") && n.Type == "Text" && n.Hwnd == IntPtr.Zero);
+        if (tile == null || !page.Rect.Contains(tile.Rect)) return; // a later full-width visit can expose it
+        _checkedPaintedToolTip = true;
+        bool shown = false;
+        Native.SetForegroundWindow(MainWindow());
+        Cursor.Position = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(4);
+            while (!shown && DateTime.UtcNow < deadline)
+            {
+                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.ClassName(h) == "tooltips_class32"))
+                    if (Has(Uia.Snapshot(window), T("这次连接实际使用的延迟"))) { shown = true; break; }
+                if (!shown) Thread.Sleep(100);
+            }
+            Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
+        }
+        finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }
     }
 
     private Node CheckSpeakers(bool connected, bool compatibility = false)

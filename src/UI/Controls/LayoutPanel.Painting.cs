@@ -9,7 +9,7 @@ internal abstract partial class LayoutPanel
 
     // A native descendant still needs a native parent for WinForms focus, IME and message reflection.
     // Display-only subtrees can disappear from the HWND tree without reparenting any interactive control.
-    private void UpdateParentPainting()
+    internal void UpdateParentPainting()
     {
         bool painted = Parent is LayoutPanel && !IsHandleCreated &&
             Controls.Cast<Control>().All(ParentPainting.IsPainted);
@@ -54,6 +54,12 @@ internal abstract partial class LayoutPanel
         base.OnParentChanged(e);
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        UpdateParentPainting(); // an explicit native-service request ends parent painting as well
+        base.OnHandleCreated(e);
+    }
+
     protected override void SetVisibleCore(bool value)
     {
         bool changed = _shown != value;
@@ -88,7 +94,9 @@ internal abstract partial class LayoutPanel
 
     void IParentPainted.PaintInParent(PaintEventArgs e) { OnPaintBackground(e); OnPaint(e); }
 
-    private sealed class PaintedPanelAccessible(LayoutPanel owner) : AccessibleObject
+    // WinForms updates an existing ControlAccessibleObject when a HWND is created. A display-only panel can
+    // acquire one after a dynamic input arrives, so its cached accessible object must support that transition.
+    private sealed class PaintedPanelAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
     {
         private Control[] Children => owner.Controls.Cast<Control>()
             .Where(c => IsShown(c) && !IsCollapsed(c)).ToArray();

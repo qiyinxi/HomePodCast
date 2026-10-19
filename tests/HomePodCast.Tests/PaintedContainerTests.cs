@@ -47,6 +47,9 @@ public class PaintedContainerTests
         LayoutPanel.Place(host, 0, 0, 400, 300);
         LayoutPanel.CreateWindows(host, () => false);
         Assert.False(row.IsHandleCreated || card.IsHandleCreated);
+        var cardAccessible = card.AccessibilityObject;
+        var rowAccessible = row.AccessibilityObject;
+        Assert.False(row.IsHandleCreated || card.IsHandleCreated);
         var button = new FluentButton("action") { TabIndex = 7 };
         row.Controls.Add(button);
         LayoutPanel.CreateWindows(host, () => false);
@@ -56,6 +59,9 @@ public class PaintedContainerTests
         Assert.Equal(7, button.TabIndex);
         Assert.Same(row, button.Parent);
         Assert.Same(card, row.Parent);
+        Assert.Same(cardAccessible, card.AccessibilityObject);
+        Assert.Same(rowAccessible, row.AccessibilityObject);
+        Assert.Same(button.AccessibilityObject, rowAccessible.GetChild(1));
         Assert.Equal(row.Handle, GetParent(button.Handle));
         Assert.False(row.Controls.OfType<TextBlock>().Single().IsHandleCreated);
     });
@@ -71,6 +77,25 @@ public class PaintedContainerTests
         Assert.All(All(root), control => Assert.False(control.IsHandleCreated, control.GetType().Name));
         LayoutPanel.Place(root, 0, 0, 400, 300);
         Assert.All(All(root), control => Assert.False(control.IsHandleCreated, control.GetType().Name));
+    });
+
+    [Fact]
+    public void Explicit_native_window_requests_preserve_cached_accessibility_and_end_parent_painting() => Sta.Run(() =>
+    {
+        using var host = new StackPanel();
+        var text = new TextBlock("native service");
+        var card = Ui.Card(text);
+        host.Controls.Add(card);
+        LayoutPanel.CreateWindows(host, () => false);
+        var cardAccessible = card.AccessibilityObject;
+        var textAccessible = text.AccessibilityObject;
+        Assert.True(card.ParentPainted && text.ParentPainted);
+        _ = text.Handle;
+        Assert.True(card.IsHandleCreated && text.IsHandleCreated);
+        Assert.False(card.ParentPainted || text.ParentPainted);
+        Assert.Same(cardAccessible, card.AccessibilityObject);
+        Assert.Same(textAccessible, text.AccessibilityObject);
+        Assert.Equal(card.Handle, GetParent(text.Handle));
     });
 
     [Fact]
@@ -160,6 +185,45 @@ public class PaintedContainerTests
         Assert.Same(text.AccessibilityObject, text.AccessibilityObject.HitTest(inside.X, inside.Y));
         Assert.Null(text.AccessibilityObject.HitTest(outside.X, outside.Y));
         Assert.False(text.IsHandleCreated || row.IsHandleCreated || card.IsHandleCreated);
+    });
+
+    [Fact]
+    public void Painted_tooltip_regions_follow_layout_visibility_reparenting_and_native_promotion() => Sta.Run(() =>
+    {
+        using var tips = new LayoutToolTip();
+        using var host = new StackPanel { Size = new Size(400, 200) };
+        using var other = new StackPanel { Size = new Size(400, 200) };
+        var metric = new MetricTile("count");
+        var card = Ui.Card(metric);
+        // Registered before this subtree is attached, as in DiagnosticsPage's constructor.
+        tips.SetToolTip(metric, "explanation");
+        host.Controls.Add(card);
+        LayoutPanel.Place(card, 15, 10, 200, LayoutPanel.HeightFor(card, 200));
+        LayoutPanel.CreateWindows(host, () => false);
+        var point = metric.AccessibilityObject.Bounds.Location + new Size(1, 1);
+        Assert.Same(metric, tips.HintAt(host, point));
+        Assert.Equal("explanation", tips.GetToolTip(metric));
+        card.Visible = false;
+        Assert.Null(tips.HintAt(host, point));
+        card.Visible = true;
+        host.Controls.Remove(card);
+        other.Controls.Add(card);
+        LayoutPanel.CreateWindows(other, () => false);
+        point = metric.AccessibilityObject.Bounds.Location + new Size(1, 1);
+        Assert.Null(tips.HintAt(host, point));
+        Assert.Same(metric, tips.HintAt(other, point));
+        card.Controls.Add(new FluentButton("input"));
+        LayoutPanel.CreateWindows(other, () => false);
+        point = metric.AccessibilityObject.Bounds.Location + new Size(1, 1);
+        Assert.Null(tips.HintAt(other, point));
+        Assert.Same(metric, tips.HintAt(card, point));
+        var mouse = card.PointToClient(point);
+        typeof(Control).GetMethod("OnMouseMove", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(card, [new MouseEventArgs(MouseButtons.None, 0, mouse.X, mouse.Y, 0)]);
+        Assert.Same(metric, TestApp.Field<Control?>(tips, "_pending"));
+        tips.SetToolTip(metric, null);
+        Assert.Null(tips.HintAt(card, point));
+        Assert.False(metric.IsHandleCreated);
     });
 
     private static IEnumerable<Control> All(Control root)

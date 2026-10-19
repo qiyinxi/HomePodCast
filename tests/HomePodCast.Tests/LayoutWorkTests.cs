@@ -274,11 +274,15 @@ public class LayoutWorkTests
             Assert.Contains(node, Enumerable.Range(0, parent.GetChildCount()).Select(parent.GetChild));
             Assert.Equal(text.AccessibleName ?? text.Text, node.Name);
             Assert.Equal(AccessibleRole.StaticText, node.Role);
-            Assert.Equal(text.Parent.RectangleToScreen(text.Bounds), node.Bounds);
+            var expectedBounds = text.Bounds;
+            for (var ancestor = text.Parent; ancestor != host; ancestor = ancestor!.Parent)
+                expectedBounds.Offset(ancestor!.Location);
+            Assert.Equal(host.RectangleToScreen(expectedBounds), node.Bounds);
             Assert.Same(parent, node.Parent);
             Assert.False(node.State.HasFlag(AccessibleStates.Focusable));
-            Assert.Equal(text.Parent.DeviceDpi, text.DeviceDpi);
+            Assert.Equal(host.Page.DeviceDpi, text.DeviceDpi);
         }
+        Assert.All(painted, text => Assert.False(text.IsHandleCreated));
         var status = TestApp.Field<TextBlock>(host.Page, "_status");
         using (var work = new Work())
         {
