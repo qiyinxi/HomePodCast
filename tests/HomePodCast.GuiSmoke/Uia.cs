@@ -22,7 +22,8 @@ internal sealed class Node
     private string? _text;
 
     /// <summary>The control's own text (its window text), read when asked.</summary>
-    public string Text => _text ??= Hwnd == IntPtr.Zero ? "" : Native.ControlText(Hwnd);
+    public string Text => _text ??= Hwnd != IntPtr.Zero ? Native.ControlText(Hwnd)
+        : Element.TryGetCurrentPattern(ValuePattern.Pattern, out var value) ? ((ValuePattern)value).Current.Value : "";
 
     /// <summary>
     /// Shows or is named <paramref name="text"/>. A settings row (SettingRow) may name its control after the row's title;
@@ -105,7 +106,40 @@ internal static class Uia
             {
                 Thread.Sleep(300);
             }
+            catch (IndexOutOfRangeException ex) when (attempt < 4 && Native.IsWindow(hwnd)
+                && IsCacheCollectionError(ex))
+            {
+                // 2026-10-18 CI: closing the common file picker while its new source rebuilt the page produced
+                // an inconsistent native bulk-cache response. Retry the same complete request, within the existing
+                // four-attempt budget; a persistent response error or an array error in our own code still fails.
+                Console.WriteLine($"note  UIA cache changed during collection; retrying complete snapshot ({attempt}/4)");
+                Thread.Sleep(300);
+            }
         }
+    }
+
+    internal static bool IsCacheCollectionError(IndexOutOfRangeException error) =>
+        // The runtime's hidden ThrowHelpers method is TargetSite; inspect the actual parser frames instead.
+        new System.Diagnostics.StackTrace(error, false).GetFrames().Any(frame => frame.GetMethod() is
+            { Name: "ParseTreeDescription", DeclaringType: { FullName: "MS.Internal.Automation.CacheHelper" } });
+
+    internal static Node SnapshotLive(IntPtr hwnd)
+    {
+        Node Read(AutomationElement element, Node? parent)
+        {
+            var current = element.Current;
+            var node = new Node
+            {
+                Element = element, Parent = parent, Name = current.Name,
+                Type = current.ControlType.ProgrammaticName.Replace("ControlType.", ""),
+                Rect = ToRectangle(current.BoundingRectangle), Hwnd = new IntPtr(current.NativeWindowHandle),
+                Enabled = current.IsEnabled, ClassName = current.ClassName, AutomationId = current.AutomationId,
+            };
+            for (var child = TreeWalker.RawViewWalker.GetFirstChild(element); child != null;
+                 child = TreeWalker.RawViewWalker.GetNextSibling(child)) node.Children.Add(Read(child, node));
+            return node;
+        }
+        return Read(AutomationElement.FromHandle(hwnd), null);
     }
 
     private static Node Convert(AutomationElement e, Node? parent)

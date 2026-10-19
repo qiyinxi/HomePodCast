@@ -42,6 +42,7 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--uia-probe") return UiaProbe.Run(args[1..]);
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
         if (Opt("--fit-dumps") is { } dumps) return FitDumps(dumps);

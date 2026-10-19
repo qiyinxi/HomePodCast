@@ -623,7 +623,7 @@ internal sealed class MixerPage : ScrollPage
         {
             if (_app.IsSystemSounds || _app.ExeKey.Length == 0)
             {
-                var label = new TextBlock("—", TextStyle.Caption, TextRole.Secondary);
+                var label = new TextBlock("—", TextStyle.Caption, TextRole.Secondary, nativeWindow: true);
                 _page._tips.SetToolTip(label, _app.IsSystemSounds
                     ? L.T("系统声音不属于某一个程序，不能单独设置：按程序分流时只在本机播放。")
                     : L.T("读不到这个程序的文件名，不能单独设置。"));

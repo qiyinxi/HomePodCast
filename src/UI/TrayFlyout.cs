@@ -277,6 +277,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     {
         foreach (Control child in parent.Controls)
         {
+            if (child is TextBlock { ParentPainted: true }) continue;
             _ = child.Handle;
             CreateHandles(child);
         }

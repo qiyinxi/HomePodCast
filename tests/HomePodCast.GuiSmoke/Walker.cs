@@ -89,11 +89,13 @@ internal sealed partial class Walker
         catch (StepFailed ex)
         {
             _report.Fail(Where(), "stopped: " + ex.Message);
+            RecordProcessState();
         }
         catch (Exception ex)
         {
             _report.Fail(Where(), $"stopped by {ex.GetType().Name}: {ex.Message}");
             File.WriteAllText(Path.Combine(_dir, "exception.txt"), ex.ToString());
+            RecordProcessState();
         }
         finally
         {
@@ -101,6 +103,18 @@ internal sealed partial class Walker
             SaveLog();
             _fake?.Dispose();
         }
+    }
+
+    private void RecordProcessState()
+    {
+        if (_app == null) return;
+        try
+        {
+            if (_app.HasExited) _report.Note(Where("process"), $"exited: 0x{_app.ExitCode:X8}");
+            else _report.Note(Where("process"), "windows: " + string.Join("; ", Native.TopLevelWindows(_app.Id, visibleOnly: false)
+                .Select(w => $"{w:X} {Native.ClassName(w)} visible={Native.IsWindowVisible(w)} title=「{Native.WindowText(w)}」")));
+        }
+        catch (Exception ex) { _report.Note(Where("process"), "diagnostics unavailable: " + ex.Message); }
     }
 
     /// <summary>The app is gone for good (also when a scenario overran its time).</summary>
@@ -458,6 +472,9 @@ internal sealed partial class Walker
     private void CheckHome(Node tree, bool connected)
     {
         var page = PagePane(tree, "首页");
+        foreach (var caption in new[] { "首页", "推流状态" })
+            Expect(page.Descendants().Any(n => n.Type == "Text" && n.Says(T(caption)) && n.Hwnd == IntPtr.Zero && n.HasSize),
+                "首页", $"parent-painted 「{T(caption)}」 has no UI Automation text node/bounds, or created a window");
         var buttons = page.Descendants().Where(n => n.Type == "Button" && n.Shown).ToList();
         string expected = connected ? T("断开") : T("连接");
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
@@ -906,6 +923,10 @@ internal sealed partial class Walker
             Native.PostMessage(hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
         WaitUntil(() => !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd), $"the 「{title}」 dialog to close", 5000);
+        if (App.HasExited)
+            throw new StepFailed($"the app exited after closing 「{title}」: 0x{App.ExitCode:X8}");
+        if (MainWindow() == IntPtr.Zero)
+            throw new StepFailed($"the main window is no longer visible after closing 「{title}」");
     }
 
     // ---------------------------------------------------------------- pages

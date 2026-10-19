@@ -1,8 +1,7 @@
 namespace HomePodCast.GuiSmoke;
 
 /// <summary>
-/// Layout checks that need no knowledge of a page, on a window's UI Automation tree (every WinForms control is a window
-/// of its own, so the tree is the real control hierarchy):
+/// Layout checks that need no knowledge of a page, on a window's UI Automation tree, including parent-painted text:
 /// a control sticking out of its container (clipped: cut-off text or buttons; inside a scrolling page only sideways),
 /// two sibling controls on top of each other, a button or navigation item without a name, a text squeezed to nothing,
 /// and, in Latin-script languages, Chinese characters (a string that was never translated).
@@ -60,7 +59,7 @@ internal static class Checks
             if (!texts.Cjk && Texts.HasCjk(n.Name) && !AllowedCjk(n.Name, userData))
                 report.Fail(where, $"untranslated text in {texts.Language}: {n.Describe()}");
 
-            if (n.Type == "Text" && n.HasSize && n.Hwnd != IntPtr.Zero && TextFit.Needed(n.Name, n.Rect, dpi, !texts.Cjk) is { } needed)
+            if (n.Type == "Text" && n.HasSize && TextFit.Needed(n.Name, n.Rect, dpi, !texts.Cjk) is { } needed)
                 report.Warn(where, $"{n.Describe()} is probably cut off with an ellipsis (needs about {needed}px)");
         }
     }

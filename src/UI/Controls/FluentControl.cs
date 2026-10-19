@@ -237,6 +237,8 @@ internal static class Shapes
 internal abstract class LayoutPanel : Panel
 {
     private bool _collapsed;
+    private TextAutomation? _textAutomation;
+    private bool _releasingTextAutomation;
 
     protected LayoutPanel()
     {
@@ -295,10 +297,103 @@ internal abstract class LayoutPanel : Panel
 
     protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
 
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        foreach (var text in Controls.OfType<TextBlock>())
+            if (text.ParentPainted) text.DrawInParent(e.Graphics);
+    }
+
+    protected override void OnControlRemoved(ControlEventArgs e)
+    {
+        base.OnControlRemoved(e);
+        if (e.Control is TextBlock { ParentPainted: true })
+        {
+            Invalidate(e.Control.Bounds);
+            if (IsHandleCreated) AccessibilityNotifyClients(AccessibleEvents.Reorder, -1);
+            _textAutomation?.Notify((TextBlock)e.Control, AccessibleEvents.Reorder);
+        }
+    }
+
+    protected override void OnControlAdded(ControlEventArgs e)
+    {
+        base.OnControlAdded(e);
+        if (e.Control is TextBlock { ParentPainted: true } text && IsHandleCreated)
+        {
+            Invalidate(text.Bounds);
+            PaintedTextChanged(text, AccessibleEvents.Reorder);
+        }
+    }
+
+    protected override AccessibleObject CreateAccessibilityInstance() => new LayoutAccessible(this);
+
+    internal void PaintedTextChanged(TextBlock text, AccessibleEvents change)
+    {
+        if (!IsHandleCreated) return;
+        _textAutomation?.Notify(text, change);
+        if (change == AccessibleEvents.Reorder) AccessibilityNotifyClients(change, -1);
+        else if (AccessibilityObject is LayoutAccessible accessible)
+        {
+            int index = Array.IndexOf(accessible.Children, text);
+            if (index >= 0) AccessibilityNotifyClients(change, index);
+        }
+    }
+
+    private sealed class LayoutAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
+    {
+        // 2026-10-18: the base Parent wraps OLEACC's native proxy on every external query. Releasing thousands
+        // of those GIT entries re-entered COM's STA message pump until the published app overflowed its stack.
+        // Our parent is already a managed accessible object; return that stable identity directly.
+        public override AccessibleObject? Parent => owner.Parent?.AccessibilityObject;
+        private bool HasPaintedText => owner.Controls.OfType<TextBlock>().Any(t => t.ParentPainted);
+        // Native children keep their providers and keyboard behavior. Painted text occupies its original layout position.
+        internal Control[] Children => owner.Controls.Cast<Control>()
+            .Where(c => c is TextBlock { ParentPainted: true } t ? t.Visible && !t.Collapsed : c.IsHandleCreated).ToArray();
+        public override int GetChildCount() => HasPaintedText ? Children.Length : base.GetChildCount();
+        public override AccessibleObject? GetChild(int index)
+        {
+            if (!HasPaintedText) return base.GetChild(index);
+            var children = Children;
+            return index >= 0 && index < children.Length ? children[index].AccessibilityObject : null;
+        }
+        public override AccessibleObject? HitTest(int x, int y)
+        {
+            foreach (var text in owner.Controls.OfType<TextBlock>())
+                if (text.ParentPainted && text.Visible && text.AccessibilityObject.HitTest(x, y) is { } hit) return hit;
+            return base.HitTest(x, y);
+        }
+    }
+
     protected override void WndProc(ref Message m)
     {
+        if (m.Msg == 0x003D && unchecked((int)m.LParam.ToInt64()) == -25 && _releasingTextAutomation)
+        {
+            m.Result = IntPtr.Zero;
+            return;
+        }
+        if (m.Msg == 0x003D && unchecked((int)m.LParam.ToInt64()) == -25 && (AccessibleRole == AccessibleRole.Default
+                || _textAutomation != null || Controls.OfType<TextBlock>().Any(t => t.ParentPainted)))
+        {
+            _textAutomation ??= new TextAutomation(this);
+            m.Result = System.Windows.Automation.Provider.AutomationInteropProvider.ReturnRawElementProvider(
+                Handle, m.WParam, m.LParam, _textAutomation);
+            return;
+        }
         KeepChildOrder(ref m);
         base.WndProc(ref m);
+    }
+
+    protected override void OnHandleDestroyed(EventArgs e)
+    {
+        var provider = _textAutomation;
+        _textAutomation = null;
+        _releasingTextAutomation = true;
+        try
+        {
+            provider?.Disconnect();
+            base.OnHandleDestroyed(e);
+        }
+        finally { _releasingTextAutomation = false; }
     }
 
     /// <summary>
@@ -319,6 +414,9 @@ internal abstract class LayoutPanel : Panel
 
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
+    /// <summary>Visibility on the rendered surface, including text whose native child window is deliberately hidden.</summary>
+    public static bool IsShown(Control c) => c is TextBlock text ? text.Visible : c.Visible;
+
     /// <summary>Height a child wants at <paramref name="width"/> (0 when collapsed).</summary>
     public static int HeightFor(Control c, int width) => IsCollapsed(c) ? 0 : c.GetPreferredSize(new Size(width, 0)).Height;
 
@@ -331,6 +429,7 @@ internal abstract class LayoutPanel : Panel
     /// </summary>
     internal static bool CreateWindows(Control root, Func<bool> yield)
     {
+        if (root is TextBlock { ParentPainted: true }) return true;
         if (!root.IsHandleCreated)
         {
             _ = root.Handle;
