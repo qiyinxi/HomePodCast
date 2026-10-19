@@ -3,7 +3,7 @@ namespace HomePodCast.GuiSmoke;
 internal sealed partial class Walker
 {
     /// <summary>Counters and troubleshooting sections remain reachable; browsing invokes none of their actions.</summary>
-    private void CheckDiagnostics(Node tree)
+    private void CheckDiagnostics(Node tree, bool connected = false)
     {
         var pane = PagePane(tree, "诊断").Hwnd;
         string[] sections = [T("播放统计"), T("缓冲欠载"), T("网络波动"), T("音画同步测试"), T("日志"), T("诊断报告")];
@@ -34,5 +34,15 @@ internal sealed partial class Walker
         finally { Scroll(pane, Native.SB_TOP); }
         foreach (string section in sections) Expect(seen.Contains(section), "诊断", $"section was never shown: {section}");
         foreach (string action in actions) Expect(buttons.Contains(action), "诊断", $"action was never shown: {action}");
+        var counters = PagePane(Uia.Snapshot(MainWindow()), "诊断");
+        foreach (string caption in new[] { "缓冲欠载", "网络波动" })
+        {
+            var tile = Find(counters, node => node.Name == T(caption) && node.Type == "Text" && node.Hwnd != IntPtr.Zero);
+            Expect(tile != null, "诊断", $"missing counter: {T(caption)}");
+            if (tile == null) continue;
+            string value = Native.MsaaDescription(tile.Hwnd) ?? "";
+            Expect(connected ? long.TryParse(value, out _) : value == "—", "诊断",
+                $"{T(caption)} shows 「{value}」 while connected={connected}");
+        }
     }
 }

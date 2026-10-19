@@ -24,6 +24,8 @@ Windows session mute or zero volume still silences the HomePod. Below 1% Windows
 
 ### Report a stutter
 
+**Diagnostics → Playback statistics** shows **Buffer underruns** and **Network fluctuations** separately for the current connection. Buffer underruns count short data shortages on the PC; the network count estimates risks from delay, packet loss and retransmissions. Neither confirms audible interruptions at the speaker, so Home does not present a combined dropout count. An unavailable network count is shown as a dash. Leaving and reopening Diagnostics keeps the counts; reconnecting starts a new connection count. Browsing this section starts no test or capture.
+
 To mark a stutter when you hear one, give **Mark a stutter** a key in **Settings → Global hotkeys** (it has none by default) and press it while streaming, also in a fullscreen game. It writes a timestamp and the current counters; this is your observation, rather than confirmation from the speaker. The last 100 markers in this run appear in the report.
 
 **Diagnostics → Diagnostic report → Export diagnostics**. Choose a local ZIP file. It contains a measurement summary and recent redacted logs (at most 2 MB per log), including the previous rotated log if available; a log that can't be read is left out and the report's README says so. It excludes configuration, credentials and audio. Redaction is best effort: speaker and group member names are marked where the log writes them and removed, names in log lines from older versions are removed by the format of those lines, and the names and ids in the current settings, addresses, device ids and paths are masked; the measurements stay. Nothing is uploaded. Review the contents before sharing.
@@ -57,6 +59,8 @@ While a player is fullscreen, through Sync fullscreen or the site's own fullscre
 Windows 音频会话静音或音量为 0 时，HomePod 也没有声音。Windows 音量低于 1%，或同一程序的多个音频会话音量不一致时，暂时按 Windows 的声音缩放推送，程序行会说明原因。调整 HomePod 独立音量本身不会修改 Windows 音量。
 
 ### 记录卡顿并导出报告
+
+**诊断 → 播放统计** 分别显示本次连接的 **缓冲欠载** 和 **网络波动**：前者记录电脑端短暂供数不足，后者根据网络延迟、丢包和重传估计风险，都不等于音箱实际发生的可听中断，因此首页不再显示合并的断音次数。网络未监测时显示破折号。离开再打开诊断页不清零，重新连接后开始新一轮计数；浏览这一节不会启动测试或采集。
 
 想在听到卡顿时记下时间，先在 **设置 → 全局快捷键** 里给 **标记刚才的卡顿** 设一个组合键（默认没有），推流时按一下即可，全屏游戏里也能用。它记录时间和当前统计。这是用户听到的现象，不代表音箱确认发生了断音；报告保留本次运行最近 100 个标记。
 

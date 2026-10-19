@@ -276,7 +276,7 @@ internal sealed partial class Walker
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
-            if (page == "诊断") CheckDiagnostics(tree);
+            if (page == "诊断") CheckDiagnostics(tree, connected);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
