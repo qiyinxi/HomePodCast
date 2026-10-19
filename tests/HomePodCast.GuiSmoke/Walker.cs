@@ -73,6 +73,7 @@ internal sealed partial class Walker
 
     public void Run()
     {
+        if (UiaCacheProbe.Enabled) UiaCacheProbe.Reset(Path.Combine(_dir, "uia-probe.txt")); // TEMPORARY probe
         try
         {
             switch (_s.Kind)
@@ -102,6 +103,7 @@ internal sealed partial class Walker
             StopApp();
             SaveLog();
             _fake?.Dispose();
+            if (UiaCacheProbe.Enabled) _report.Note(Where("uia-probe"), UiaCacheProbe.Summary()); // TEMPORARY probe
         }
     }
 
