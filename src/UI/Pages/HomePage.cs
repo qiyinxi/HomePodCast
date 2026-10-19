@@ -867,7 +867,7 @@ internal sealed class HomePage : ScrollPage
     }
 
     /// <summary>A glyph that only decorates (the network hint's warning, the update banner's).</summary>
-    internal sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : FluentControl
+    internal sealed class GlyphLabel(string glyph, bool caution = false, bool accent = false) : PaintedControl
     {
         public override Size GetPreferredSize(Size proposedSize) => new(Dp(20), Dp(20));
 

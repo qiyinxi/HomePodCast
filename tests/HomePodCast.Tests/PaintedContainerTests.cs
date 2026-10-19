@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using HomePodCast.UI;
 using HomePodCast.UI.Controls;
+using HomePodCast.UI.Pages;
 
 namespace HomePodCast.Tests;
 
@@ -157,10 +158,11 @@ public class PaintedContainerTests
             var dot = new StatusDot();
             var meter = new LevelMeter();
             var metric = new MetricTile("count", "ms");
+            var glyph = new HomePage.GlyphLabel(Glyph.Warning, caution: true);
             metric.SetValue("128"); meter.SetLevel(0.6f);
             var divider = new Divider();
-            if (native) foreach (var c in new Control[] { icon, app, dot, meter, metric, divider }) _ = c.Handle;
-            var row = Ui.Row(text, icon, app, dot, text);
+            if (native) foreach (var c in new Control[] { icon, app, dot, meter, metric, divider, glyph }) _ = c.Handle;
+            var row = Ui.Row(text, icon, app, dot, glyph, text);
             var card = Ui.Card(row, divider, metric, meter);
             host.Controls.Add(card);
             LayoutPanel.Place(card, 17, 19, 360, LayoutPanel.HeightFor(card, 360));
@@ -221,6 +223,9 @@ public class PaintedContainerTests
         typeof(Control).GetMethod("OnMouseMove", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .Invoke(card, [new MouseEventArgs(MouseButtons.None, 0, mouse.X, mouse.Y, 0)]);
         Assert.Same(metric, TestApp.Field<Control?>(tips, "_pending"));
+        card.Left += 5; // scrolling or relayout must hide a pending/shown hint at its old position
+        Assert.Null(typeof(LayoutToolTip).GetField("_pending", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(tips));
         tips.SetToolTip(metric, null);
         Assert.Null(tips.HintAt(card, point));
         Assert.False(metric.IsHandleCreated);

@@ -46,6 +46,8 @@ internal sealed class LayoutToolTip : ToolTip
             control.Disposed -= TreeChanged;
             control.VisibleChanged -= TreeChanged;
             control.HandleCreated -= TreeChanged;
+            control.LocationChanged -= GeometryChanged;
+            control.SizeChanged -= GeometryChanged;
         }
         _watched.Clear();
         foreach (var host in _hosts) UnwatchHost(host);
@@ -60,6 +62,8 @@ internal sealed class LayoutToolTip : ToolTip
                     current.Disposed += TreeChanged;
                     current.VisibleChanged += TreeChanged;
                     current.HandleCreated += TreeChanged;
+                    current.LocationChanged += GeometryChanged;
+                    current.SizeChanged += GeometryChanged;
                 }
             if (HostOf(control) is { } host && _hosts.Add(host))
             {
@@ -86,6 +90,7 @@ internal sealed class LayoutToolTip : ToolTip
     }
 
     private void MouseLeft(object? sender, EventArgs e) => CancelPending();
+    private void GeometryChanged(object? sender, EventArgs e) => CancelPending();
     private void MousePressed(object? sender, MouseEventArgs e) => CancelPending();
     private void HostVisibilityChanged(object? sender, EventArgs e)
     {
@@ -131,6 +136,8 @@ internal sealed class LayoutToolTip : ToolTip
                 control.Disposed -= TreeChanged;
                 control.VisibleChanged -= TreeChanged;
                 control.HandleCreated -= TreeChanged;
+                control.LocationChanged -= GeometryChanged;
+                control.SizeChanged -= GeometryChanged;
             }
             foreach (var host in _hosts) UnwatchHost(host);
             _painted.Clear(); _watched.Clear(); _hosts.Clear();
