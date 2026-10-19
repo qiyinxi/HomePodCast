@@ -82,6 +82,7 @@ internal sealed partial class Walker
                 case "streaming": RunStreaming(); break;
                 case "compatibility": RunCompatibility(); break;
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
+                case "update-notes": RunUpdateNotes(); break;
                 case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
@@ -1024,6 +1025,7 @@ internal sealed partial class Walker
         if (Profile != null) psi.Environment["HOMEPODCAST_PROFILE"] = Profile;
         else psi.Environment.Remove("HOMEPODCAST_PROFILE");
         if (_dotnetRoot != null) psi.Environment["DOTNET_ROOT"] = psi.Environment["DOTNET_ROOT_X64"] = _dotnetRoot; // Walker.Runtime.cs
+        if (_guiUpdateFeed != null) psi.Arguments += " --gui-update-feed=" + _guiUpdateFeed;
         return psi;
     }
 

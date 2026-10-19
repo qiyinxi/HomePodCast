@@ -95,7 +95,8 @@ public static class Program
         Log.Info($"UI language {L.Language}, theme {UI.Theme.Mode} ({(UI.Theme.IsDark ? "dark" : "light")})");
         var args = Environment.GetCommandLineArgs();
         Application.Run(args.Contains("--effects") ? UI.Pages.EffectsPage.Standalone()
-            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout, AppRestart.Resume(args)));
+            : new UI.TrayApp(startHidden, show, openMixer, openFlyout, testOsd, updatedFrom, flyout, AppRestart.Resume(args),
+                Update.ReleaseFeed.ForGuiSmoke(args, Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")));
         // 「立即重启」 after a .NET update (UI/TrayApp.Runtime.cs), or a new UI language.
         if ((AppRestart.Requested ?? (UI.LanguageMenu.RestartRequested ? new AppRestart.Request("to apply the UI language") : null)) is { } restart)
         {

@@ -443,9 +443,15 @@ function Assert-ReleaseNotes([string] $text) {
     if ($english -notmatch '[A-Za-z]{3,}\W+[A-Za-z]{3,}' -or $chinese -notmatch '\p{IsCJKUnifiedIdeographs}') {
         throw 'release notes need non-empty English and Simplified Chinese sections'
     }
-    if ($english -match '(?m)^```[^\r\n]*$' -and ([regex]::Matches($english, '(?m)^```[^\r\n]*$').Count % 2)) {
-        throw 'the language boundary must not be inside a fenced code block'
+    $fenceType = ''; $fenceLength = 0
+    foreach ($line in ($english -split '\r?\n')) {
+        if ($line -match '^ {0,3}(?<fence>`{3,}|~{3,})(?<tail>.*)$') {
+            $run = $Matches['fence']; $tail = $Matches['tail']
+            if (-not $fenceType) { $fenceType = $run.Substring(0, 1); $fenceLength = $run.Length }
+            elseif ($run.StartsWith($fenceType) -and $run.Length -ge $fenceLength -and -not $tail.Trim()) { $fenceType = ''; $fenceLength = 0 }
+        }
     }
+    if ($fenceType) { throw 'the language boundary must not be inside a fenced code block' }
 }
 
 function Resolve-NotesFile([string] $path) {
@@ -914,6 +920,8 @@ function Invoke-SelfTest {
     Test-Throws 'empty Chinese is refused' 'non-empty' { Assert-ReleaseNotes "New features`n## 简体中文`n" }
     Test-Throws 'empty English is refused' 'non-empty' { Assert-ReleaseNotes "## 简体中文`n新功能" }
     Test-Throws 'boundary in code is refused' 'fenced code' { Assert-ReleaseNotes ('New features' + "`n" + '```markdown' + "`n## 简体中文`n新功能`n" + '```') }
+    Test-Throws 'boundary in tilde code is refused' 'fenced code' { Assert-ReleaseNotes "New features`n~~~markdown`n## 简体中文`n新功能`n~~~" }
+    Test-Throws 'shorter fence does not close code' 'fenced code' { Assert-ReleaseNotes ('New features' + "`n" + '````markdown' + "`n" + '```' + "`n## 简体中文`n新功能") }
 
     $dev = 'd' * 40
     $snapSha = 'a' * 40

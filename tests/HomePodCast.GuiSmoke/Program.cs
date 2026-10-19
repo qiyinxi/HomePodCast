@@ -29,6 +29,8 @@ internal static class Program
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
         new("runtime", "zh-CN", 100),
+        new("update-notes", "zh-CN", 100),
+        new("update-notes", "en", 150),
         new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),

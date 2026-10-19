@@ -10,7 +10,7 @@ namespace HomePodCast.UI;
 /// <param name="MsiInstall">An MSI install (更新 installs), a portable copy (更新 opens the release page), or not known yet.</param>
 /// <param name="Store">The Microsoft Store version: the Store updates it, the app never checks.</param>
 internal sealed record UpdateView(string Status, TextRole Role, Release? Available, bool Checking, bool Downloading, bool Banner, bool? MsiInstall,
-    bool Store);
+    bool Store, double Progress = 0);
 
 // Updates: a check of the GitHub releases (the only request outside the LAN: on 「检查更新」, or automatically when
 // turned on), the notice, and installing a newer MSI through the helper (Update/*). Nothing is installed without a click.
@@ -25,18 +25,22 @@ internal sealed partial class TrayApp
     private static readonly ReleaseVersion CurrentVersion = ReleaseVersion.Parse(ReleaseVersion.CurrentText) ?? ReleaseVersion.Parse("0.0.0")!;
 
     private readonly System.Windows.Forms.Timer _updateTimer = new();
+    private readonly ReleaseFeed _updateFeed;
     private DateTime _updateDue;
     private string? _noAutomaticUpdates;
     private Task<bool>? _msiInstall;
     private bool _store, _checking, _updateBanner, _installing;
     private CancellationTokenSource? _download;
     private Release? _update;
+    private IReadOnlyList<Release> _releaseList = [];
+    private ReleaseNotesWindow? _releaseNotes;
+    private double _updateProgress;
     private string _updateStatus = "";
     private TextRole _updateRole = TextRole.Secondary;
     private Action? _balloonClick;
 
     public UpdateView UpdateState => new(_updateStatus, _updateRole, _update, _checking, _download != null, _updateBanner && _update != null,
-        _msiInstall is { IsCompletedSuccessfully: true } t ? t.Result : null, _store);
+        _msiInstall is { IsCompletedSuccessfully: true } t ? t.Result : null, _store, _updateProgress);
 
     /// <summary>正式版 or 测试版, as chosen, else by the running version.</summary>
     public UpdateChannel UpdateChannel => GitHubReleases.EffectiveChannel(Config.UpdateChannel, CurrentVersion);
@@ -77,6 +81,7 @@ internal sealed partial class TrayApp
     private void DisposeUpdate()
     {
         _updateTimer.Dispose();
+        _releaseNotes?.Dispose();
         if (!_installing) _download?.Cancel();
     }
 
@@ -95,6 +100,11 @@ internal sealed partial class TrayApp
     {
         if (_quitting) return;
         _form.ShowUpdate();
+        if (_releaseNotes is { IsDisposed: false } notes)
+        {
+            if (_update != notes.Release && _download == null) notes.Close();
+            else notes.ShowState(UpdateState);
+        }
     }
 
     private void ShowBalloon(string text, ToolTipIcon icon, Action? click)
@@ -159,8 +169,8 @@ internal sealed partial class TrayApp
         {
             bool msi = await MsiInstall();
             Log.Info($"update: {(automatic ? "automatic" : "manual")} check (running {ReleaseVersion.CurrentText}, " +
-                     $"{(msi ? "MSI install" : "portable")}): GET {GitHubReleases.ApiUrl}");
-            var releases = await UpdateFlow.FetchReleasesAsync(ReleaseFeed.GitHub, CancellationToken.None);
+                     $"{(msi ? "MSI install" : "portable")}): GET {_updateFeed.ApiUrl}");
+            var releases = await UpdateFlow.FetchReleasesAsync(_updateFeed, CancellationToken.None);
             var channel = UpdateChannel; // now: it may have been changed while the request was out
             var result = GitHubReleases.Pick(releases, channel, CurrentVersion, Config.UpdateSkipped, needMsi: msi);
             ok = true;
@@ -168,6 +178,7 @@ internal sealed partial class TrayApp
             if (_quitting) return;
             Config.UpdateLastCheck = DateTime.UtcNow;
             Config.Save();
+            _releaseList = releases;
             ShowCheckResult(result, automatic);
         }
         catch (Exception ex)
@@ -199,9 +210,13 @@ internal sealed partial class TrayApp
         {
             Config.UpdateNotified = release.Version.ToString();
             Config.Save();
-            ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, () => ShowMain(AppPage.Home));
+            ShowBalloon(L.F("发现新版本 {0}。点这里查看。", release.Version), ToolTipIcon.Info, ShowReleaseNotes);
         }
+        if (ShouldShowNotes(result.Outcome, automatic, _store)) ShowReleaseNotes();
     }
+
+    internal static bool ShouldShowNotes(CheckOutcome outcome, bool automatic, bool store) =>
+        !store && !automatic && outcome == CheckOutcome.UpdateAvailable;
 
     /// <summary>What a check's result does to 设置 → 软件更新 and 首页 (<see cref="ShowCheckResult"/> applies it).</summary>
     /// <param name="Update">The release 「更新」 offers (null: no 更新 button, no banner).</param>
@@ -226,15 +241,6 @@ internal sealed partial class TrayApp
             CheckOutcome.PrereleaseAhead => new(null, false, L.T("当前测试版比最新正式版新，下一个正式版发布后会提示更新"), TextRole.Secondary, false),
             _ => new(null, false, L.T("已是最新版本"), TextRole.Success, false),
         };
-    }
-
-    /// <summary>「更新」's confirmation (an MSI install); while a connection is up it says the stream stops for about a minute.</summary>
-    internal static string InstallConfirmation(ReleaseVersion version, StreamState state)
-    {
-        var text = L.F("下载并安装 HomePodCast {0}？\n\n安装包会先用 GitHub 提供的 SHA-256 校验。安装时 Windows 会请求管理员权限；" +
-                       "HomePodCast 会先退出，装好后自动重新启动。", version);
-        if (state != StreamState.Idle) text += "\n\n" + L.T("正在推流：推送会停止大约一分钟。");
-        return text;
     }
 
     /// <summary>Why no automatic check is scheduled (logged as "update: …"), or null when one is.</summary>
@@ -284,8 +290,24 @@ internal sealed partial class TrayApp
         SetUpdateStatus(L.F("已跳过 {0}，有更新的版本时会再提示", release.Version), TextRole.Secondary);
     }
 
-    /// <summary>「查看说明」: the release's page on GitHub (its notes and files).</summary>
-    public void ShowReleaseNotes() => OpenUrl(_update?.PageUrl ?? GitHubReleases.ReleasesPage);
+    /// <summary>All entry points share one window and the already fetched release list.</summary>
+    public void ShowReleaseNotes()
+    {
+        if (_store || _quitting || _update is not { } release) return;
+        if (_releaseNotes is { IsDisposed: false } existing && existing.Release == release)
+        {
+            existing.Show(); existing.Activate(); return;
+        }
+        _releaseNotes?.Close();
+        var notes = new ReleaseNotesWindow(release, ReleaseNotes.Collect(_releaseList, CurrentVersion, release, UpdateChannel), L.Language,
+            () => InstallUpdate(_releaseNotes, confirmed: true), CancelUpdateDownload, SkipUpdate, OpenReleaseUrl);
+        _releaseNotes = notes;
+        notes.FormClosed += (_, _) => { if (_releaseNotes == notes) _releaseNotes = null; notes.Dispose(); };
+        notes.ShowState(UpdateState);
+        notes.Show(_form);
+    }
+
+    private static void OpenReleaseUrl(string url) { if (ReleaseNotes.CanOpen(url)) OpenUrl(url); }
 
     private static void OpenUrl(string url)
     {
@@ -305,14 +327,17 @@ internal sealed partial class TrayApp
     // ---------------------------------------------------------------- installing
 
     /// <summary>
-    /// 「更新」. A portable copy: the release page. An MSI install: after a confirmation, downloads the MSI, checks its
+    /// 「更新」 opens the notes first; its button consents to installing. A portable copy opens the release page. An MSI install downloads the MSI, checks its
     /// SHA-256 against GitHub's, starts the helper and quits the way 退出 does (streaming stopped, per-app volumes
     /// and players restored, settings saved). The helper installs through UAC and starts the app again.
     /// </summary>
-    public async void InstallUpdate(IWin32Window? owner)
+    public async void InstallUpdate(IWin32Window? owner, bool confirmed = false)
     {
-        if (_update is not { } release || _download != null || _checking || _quitting) return;
-        switch (UpdateFlow.Route(release, await MsiInstall()))
+        if (_store || _update is not { } release || _download != null || _checking || _quitting) return;
+        if (!confirmed) { ShowReleaseNotes(); return; }
+        bool msi = await MsiInstall();
+        if (_quitting || _update != release || _download != null) return;
+        switch (UpdateFlow.Route(release, msi))
         {
             case InstallRoute.ReleasePage:
                 Log.Info($"update: portable copy, so {release.Version} is not installed here: opening its release page");
@@ -326,23 +351,24 @@ internal sealed partial class TrayApp
         }
         var asset = release.Msi!;
 
-        var text = InstallConfirmation(release.Version, Controller.State);
-        var answer = owner != null
-            ? MessageBox.Show(owner, text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question)
-            : MessageBox.Show(text, L.T("更新 HomePodCast"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-        if (answer != DialogResult.Yes || _quitting || _update != release || _download != null) return;
+        if (_quitting || _update != release || _download != null) return;
 
         using var cts = _download = new CancellationTokenSource();
+        _updateProgress = 0;
         string? folder = null; // the download's folder once it matched; removed again if the helper does not start
         try
         {
             SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, 0), TextRole.Secondary);
             var progress = new Progress<double>(f =>
             {
-                if (_download == cts && !cts.IsCancellationRequested) SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, (int)(f * 100)), TextRole.Secondary);
+                if (_download == cts && !cts.IsCancellationRequested)
+                {
+                    _updateProgress = f;
+                    SetUpdateStatus(L.F("正在下载 {0}… {1}%", release.Version, (int)(f * 100)), TextRole.Secondary);
+                }
             });
             // Removes its folder itself when the download fails, does not match or is cancelled.
-            var update = await UpdateFlow.DownloadAsync(ReleaseFeed.GitHub, release, progress, cts.Token);
+            var update = await UpdateFlow.DownloadAsync(_updateFeed, release, progress, cts.Token);
             folder = update.Folder;
             if (_quitting)
             {

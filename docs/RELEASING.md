@@ -142,7 +142,7 @@ Every build (push, PR and tag) also runs the job `update-e2e` after `build`, and
 4. checks that the helper ran msiexec (Verb runas), that exactly one HomePodCast is installed and it is the new version, in the same folder, that the new exe was started again with `--updated-from=0.0.1-e2e.1 --tray`, logged "updated from … (msiexec: 0)" and removed its `%TEMP%\HomePodCast-update-*` folder, and that Windows Installer logged the install with status 0;
 5. does it for the default folder and for a custom `INSTALLFOLDER` with spaces, and before that serves a corrupted MSI, which must be refused (SHA-256 mismatch: no install, no helper, nothing left in `%TEMP%`).
 
-Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. Still for a person (`docs/device-test-checklist.zh-CN.md`: the per-release regression, 「软件更新」 and 「安装包（MSI）」): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the confirmation and the tray notice, and a check against the real GitHub API.
+Its log lines start with `update-e2e:` (each check is a `PASS` line); msiexec's logs, the feed's requests and the app's log are the `update-e2e-logs` artifact. GUI smoke checks the notes window in Chinese and English using a loopback feed. Still for a person (`docs/device-test-checklist.zh-CN.md`: the per-release regression, 「软件更新」 and 「安装包（MSI）」): the UAC dialog itself and declining it (the runner is an administrator without a UAC prompt), SmartScreen on an MSI downloaded with a browser, the portable zip opening the release page, the tray notice, and a check against the real GitHub API.
 
 `update-selftest` takes only an `http://127.0.0.1` or `http://localhost` URL, and only on its command line (no setting, environment variable or config key); downloads come only from that same address, and redirects are not followed. The script refuses to run outside GitHub Actions or where HomePodCast is installed, since it installs and uninstalls the MSI. `./tools/ci/update-e2e.ps1 -NoInstall -Exe <a portable HomePodCast.exe> -NewMsi <any file> -NewVersion 9.9.9-local.1` runs only the parts that install nothing (feed, check, download, SHA-256), anywhere.
 
@@ -257,7 +257,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 - 等标签构建完成，检查发布是预发布版本、带 `.msi` 和 `-win-x64.zip`，然后应用说明（`gh release edit --notes-file`）；
 - 删掉快照分支。标签留住了这个提交，快照的那次运行也留在 Actions 列表里，标签构建的发布检查就是在那里找到它的。
 
-如果 `main` 不是这个提交的祖先，脚本会警告：这样的测试版不能转正（见下文）。不给 `-NotesFile` 时，发布页保留 GitHub 自动生成的说明，之后用 `gh release edit vX.Y.Z-beta.N --notes-file <说明.md>` 换成正式的。
+如果 `main` 不是这个提交的祖先，脚本会警告：这样的测试版不能转正（见下文）。任何发布步骤开始前，都必须提供已通过双语格式校验的 `-NotesFile`。
 
 **脚本中途停下时**（运行失败或被取消、网络问题、Ctrl+C），快照分支会留着。在同一个检出里再运行一次同样的命令，就会接着做这个测试版：用快照的提交（即使 `dev` 之后又前进了）、同一个编号、快照已有的那次运行（重跑它的作业还是同一次运行）。它的提示会说明该怎么做：
 
@@ -347,7 +347,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 4. 检查：助手运行了 msiexec（Verb runas）；只装了一个 HomePodCast，是新版本，目录没变；新版 exe 以 `--updated-from=0.0.1-e2e.1 --tray` 重新启动，日志里有「updated from … (msiexec: 0)」，并删掉了 `%TEMP%\HomePodCast-update-*` 文件夹；Windows Installer 记录的安装结果是 0；
 5. 默认目录和一个带空格的自定义 `INSTALLFOLDER` 各测一遍；在这之前先提供一个损坏的 MSI，它必须被拒绝（SHA-256 不符：不安装、不启动助手、`%TEMP%` 里不留东西）。
 
-它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 的「每版回归」「软件更新」和「安装包（MSI）」）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、确认框和托盘提示、对真实 GitHub API 的检查。
+它的日志行以 `update-e2e:` 开头（每项检查一行 `PASS`）；msiexec 的日志、假发布列表收到的请求和程序日志在 `update-e2e-logs` 产物里。GUI 冒烟通过回环假 feed 检查中英文说明窗口。仍然需要人来测的（`docs/device-test-checklist.zh-CN.md` 的「每版回归」「软件更新」和「安装包（MSI）」）：UAC 弹窗本身以及在里面点「否」（运行器是管理员，UAC 不弹窗）、用浏览器下载的 MSI 的 SmartScreen 提示、便携版 zip 打开发布页、托盘提示、对真实 GitHub API 的检查。
 
 `update-selftest` 只接受 `http://127.0.0.1` 或 `http://localhost` 的地址，而且只能写在它自己的命令行上（没有设置项、环境变量或配置键）；只从同一个地址下载，不跟随重定向。这个脚本会安装和卸载 MSI，所以在 GitHub Actions 之外、或者本机已经装了 HomePodCast 时会拒绝运行。`./tools/ci/update-e2e.ps1 -NoInstall -Exe <便携版 HomePodCast.exe> -NewMsi <任意文件> -NewVersion 9.9.9-local.1` 只跑不安装任何东西的部分（假发布列表、检查、下载、SHA-256），在哪里都能跑。
 
