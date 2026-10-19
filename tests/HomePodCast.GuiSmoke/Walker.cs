@@ -472,7 +472,7 @@ internal sealed partial class Walker
     private void CheckHome(Node tree, bool connected)
     {
         var page = PagePane(tree, "首页");
-        Expect(page.Descendants().Count(n => n.Type == "Text" && n.Hwnd != IntPtr.Zero
+        Expect(page.Descendants().Count(n => n.Type == "Text" && n.Hwnd == IntPtr.Zero
             && new[] { T("实际延迟"), T("缓冲"), T("音箱处理"), T("重传") }.Contains(n.Name)) == 4,
             "首页", "the four playback metric tiles are missing or duplicated");
         foreach (var caption in new[] { "首页", "推流状态" })
@@ -499,15 +499,15 @@ internal sealed partial class Walker
             return;
         }
 
-        // The tiles show this connection's values (MetricTile: the caption is the name, the value the description).
+        // The tiles show this connection's values (MetricTile: the caption is the name, the read-only UIA value carries the number).
         var deadline = DateTime.UtcNow.AddSeconds(8);
         foreach (var caption in new[] { "实际延迟", "缓冲", "音箱处理", "重传" })
         {
             string? value = null;
             do
             {
-                var tile = Find(Uia.Snapshot(MainWindow()), n => n.Name == T(caption) && n.Hwnd != IntPtr.Zero && n.Shown);
-                value = tile == null ? null : Native.MsaaDescription(tile.Hwnd);
+                var tile = Find(Uia.Snapshot(MainWindow()), n => n.Name == T(caption) && n.Type == "Text" && n.Hwnd == IntPtr.Zero && n.Shown);
+                value = tile?.Text;
                 if (!string.IsNullOrEmpty(value) && value != "—") break;
                 Thread.Sleep(250);
             } while (DateTime.UtcNow < deadline);

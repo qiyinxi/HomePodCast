@@ -30,6 +30,7 @@ internal abstract class FluentControl : Control
     protected bool IsHover => _hover;
     protected bool IsPressed => _pressed;
     protected static Theme.Palette P => Theme.P;
+    public new int DeviceDpi => ParentPainting.Dpi(this);
     protected int Dp(float value) => Theme.Dp(value, DeviceDpi);
 
     /// <summary>One device pixel per 96 DPI step: hairline borders stay crisp at 125 % and 150 %.</summary>
@@ -73,7 +74,7 @@ internal abstract class FluentControl : Control
     /// <summary>Ask the page to measure again (text or size of this control changed).</summary>
     protected void RequestLayout() => LayoutPanel.Relayout(Parent);
 
-    protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(Surface);
+    protected override void OnPaintBackground(PaintEventArgs e) => Shapes.Fill(e.Graphics, Surface, ClientRectangle);
 
     protected override void WndProc(ref Message m)
     {
@@ -169,14 +170,22 @@ internal static class TextFlags
 {
     public const TextFormatFlags Measure = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
     public const TextFormatFlags Line = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine |
-                                        TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
+                                        TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+                                        TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform;
     public const TextFormatFlags Wrap = TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.WordBreak |
-                                        TextFormatFlags.TextBoxControl;
+                                        TextFormatFlags.TextBoxControl | TextFormatFlags.PreserveGraphicsClipping |
+                                        TextFormatFlags.PreserveGraphicsTranslateTransform;
 }
 
 /// <summary>Rounded rectangles that stay crisp (AA, half-pixel aligned).</summary>
 internal static class Shapes
 {
+    internal static void Fill(Graphics graphics, Color color, Rectangle bounds)
+    {
+        using var brush = new SolidBrush(color);
+        graphics.FillRectangle(brush, bounds);
+    }
+
     public static GraphicsPath Round(RectangleF r, float radius)
     {
         var path = new GraphicsPath();
@@ -226,7 +235,7 @@ internal static class Shapes
     public static void Glyph(Graphics g, string glyph, Font font, Rectangle r, Color color) =>
         TextRenderer.DrawText(g, glyph, font, r, color,
             TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding | TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
-            TextFormatFlags.SingleLine);
+            TextFormatFlags.SingleLine | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform);
 }
 
 /// <summary>
@@ -234,7 +243,7 @@ internal static class Shapes
 /// measures (apply: false) or positions (apply: true) for a width and returns the height it needs.
 /// Pages, cards and rows are built from these; nothing relies on WinForms' AutoScale.
 /// </summary>
-internal abstract class LayoutPanel : Panel
+internal abstract partial class LayoutPanel : Panel, IParentPainted
 {
     private bool _collapsed;
     private TextAutomation? _textAutomation;
@@ -248,6 +257,7 @@ internal abstract class LayoutPanel : Panel
     }
 
     protected static Theme.Palette P => Theme.P;
+    public new int DeviceDpi => ParentPainting.Dpi(this);
     protected int Dp(float value) => Theme.Dp(value, DeviceDpi);
 
     public bool Collapsed
@@ -282,7 +292,11 @@ internal abstract class LayoutPanel : Panel
         Arrange(Width, apply: true);
     }
 
-    protected virtual void OnThemeChanged() => Invalidate();
+    protected virtual void OnThemeChanged()
+    {
+        if (ParentPainted) ParentPainting.Invalidate(Parent, Bounds);
+        else Invalidate();
+    }
 
     private void ThemeChanged()
     {
@@ -295,46 +309,49 @@ internal abstract class LayoutPanel : Panel
         base.Dispose(disposing);
     }
 
-    protected override void OnPaintBackground(PaintEventArgs e) => e.Graphics.Clear(FluentControl.SurfaceOf(this));
+    protected override void OnPaintBackground(PaintEventArgs e) => Shapes.Fill(e.Graphics, FluentControl.SurfaceOf(this), ClientRectangle);
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        foreach (var text in Controls.OfType<TextBlock>())
-            if (text.ParentPainted) text.DrawInParent(e.Graphics);
+        foreach (Control child in Controls) ParentPainting.Draw(child, e.Graphics);
     }
 
     protected override void OnControlRemoved(ControlEventArgs e)
     {
         base.OnControlRemoved(e);
-        if (e.Control is TextBlock { ParentPainted: true })
+        if (e.Control != null && ParentPainting.IsPainted(e.Control))
         {
-            Invalidate(e.Control.Bounds);
-            if (IsHandleCreated) AccessibilityNotifyClients(AccessibleEvents.Reorder, -1);
-            _textAutomation?.Notify((TextBlock)e.Control, AccessibleEvents.Reorder);
+            ParentPainting.Invalidate(this, e.Control.Bounds);
+            if (ParentPainted) ParentPainting.Notify(this, AccessibleEvents.Reorder);
+            else PaintedElementChanged(e.Control, AccessibleEvents.Reorder);
         }
+        UpdateParentPainting();
     }
 
     protected override void OnControlAdded(ControlEventArgs e)
     {
+        UpdateParentPainting();
         base.OnControlAdded(e);
-        if (e.Control is TextBlock { ParentPainted: true } text && IsHandleCreated)
+        if (e.Control != null && ParentPainting.IsPainted(e.Control))
         {
-            Invalidate(text.Bounds);
-            PaintedTextChanged(text, AccessibleEvents.Reorder);
+            ParentPainting.Invalidate(this, e.Control.Bounds);
+            if (ParentPainted) ParentPainting.Notify(e.Control, AccessibleEvents.Reorder);
+            else PaintedElementChanged(e.Control, AccessibleEvents.Reorder);
         }
     }
 
-    protected override AccessibleObject CreateAccessibilityInstance() => new LayoutAccessible(this);
+    protected override AccessibleObject CreateAccessibilityInstance() => ParentPainted
+        ? new PaintedPanelAccessible(this) : new LayoutAccessible(this);
 
-    internal void PaintedTextChanged(TextBlock text, AccessibleEvents change)
+    internal void PaintedElementChanged(Control element, AccessibleEvents change)
     {
         if (!IsHandleCreated) return;
-        _textAutomation?.Notify(text, change);
+        _textAutomation?.Notify(element, change);
         if (change == AccessibleEvents.Reorder) AccessibilityNotifyClients(change, -1);
         else if (AccessibilityObject is LayoutAccessible accessible)
         {
-            int index = Array.IndexOf(accessible.Children, text);
+            int index = Array.IndexOf(accessible.Children, element);
             if (index >= 0) AccessibilityNotifyClients(change, index);
         }
     }
@@ -345,10 +362,10 @@ internal abstract class LayoutPanel : Panel
         // of those GIT entries re-entered COM's STA message pump until the published app overflowed its stack.
         // Our parent is already a managed accessible object; return that stable identity directly.
         public override AccessibleObject? Parent => owner.Parent?.AccessibilityObject;
-        private bool HasPaintedText => owner.Controls.OfType<TextBlock>().Any(t => t.ParentPainted);
+        private bool HasPaintedText => owner.Controls.Cast<Control>().Any(ParentPainting.IsPainted);
         // Native children keep their providers and keyboard behavior. Painted text occupies its original layout position.
         internal Control[] Children => owner.Controls.Cast<Control>()
-            .Where(c => c is TextBlock { ParentPainted: true } t ? t.Visible && !t.Collapsed : c.IsHandleCreated).ToArray();
+            .Where(c => ParentPainting.IsPainted(c) ? IsShown(c) && !IsCollapsed(c) : c.IsHandleCreated).ToArray();
         public override int GetChildCount() => HasPaintedText ? Children.Length : base.GetChildCount();
         public override AccessibleObject? GetChild(int index)
         {
@@ -358,8 +375,8 @@ internal abstract class LayoutPanel : Panel
         }
         public override AccessibleObject? HitTest(int x, int y)
         {
-            foreach (var text in owner.Controls.OfType<TextBlock>())
-                if (text.ParentPainted && text.Visible && text.AccessibilityObject.HitTest(x, y) is { } hit) return hit;
+            foreach (Control child in owner.Controls)
+                if (ParentPainting.IsPainted(child) && IsShown(child) && child.AccessibilityObject.HitTest(x, y) is { } hit) return hit;
             return base.HitTest(x, y);
         }
     }
@@ -372,7 +389,7 @@ internal abstract class LayoutPanel : Panel
             return;
         }
         if (m.Msg == 0x003D && unchecked((int)m.LParam.ToInt64()) == -25 && (AccessibleRole == AccessibleRole.Default
-                || _textAutomation != null || Controls.OfType<TextBlock>().Any(t => t.ParentPainted)))
+                || _textAutomation != null || Controls.Cast<Control>().Any(ParentPainting.IsPainted)))
         {
             _textAutomation ??= new TextAutomation(this);
             m.Result = System.Windows.Automation.Provider.AutomationInteropProvider.ReturnRawElementProvider(
@@ -415,7 +432,7 @@ internal abstract class LayoutPanel : Panel
     public static bool IsCollapsed(Control c) => c is FluentControl { Collapsed: true } or LayoutPanel { Collapsed: true };
 
     /// <summary>Visibility on the rendered surface, including text whose native child window is deliberately hidden.</summary>
-    public static bool IsShown(Control c) => c is TextBlock text ? text.Visible : c.Visible;
+    public static bool IsShown(Control c) => ParentPainting.IsShown(c);
 
     /// <summary>Height a child wants at <paramref name="width"/> (0 when collapsed).</summary>
     public static int HeightFor(Control c, int width) => IsCollapsed(c) ? 0 : c.GetPreferredSize(new Size(width, 0)).Height;
@@ -429,7 +446,7 @@ internal abstract class LayoutPanel : Panel
     /// </summary>
     internal static bool CreateWindows(Control root, Func<bool> yield)
     {
-        if (root is TextBlock { ParentPainted: true }) return true;
+        if (ParentPainting.IsPainted(root)) return true;
         if (!root.IsHandleCreated)
         {
             _ = root.Handle;
@@ -713,7 +730,7 @@ internal class Card : LayoutPanel, ISurface
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.Clear(FluentControl.SurfaceOf(Parent));
+        Shapes.Fill(g, FluentControl.SurfaceOf(Parent), ClientRectangle);
         int hair = Math.Max(1, DeviceDpi / 96);
         Shapes.Card(g, new Rectangle(0, 0, Width, Height), Dp(Radius), SurfaceColor, P.CardBorder, hair);
     }
