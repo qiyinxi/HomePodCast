@@ -117,6 +117,13 @@ internal static class DlnaHttp
             UseProxy = false,
             ConnectTimeout = TimeSpan.FromSeconds(3),
             MaxResponseHeadersLength = 32,
+            // One request per connection. libupnp renderers (gmrender-resurrect, many embedded ones) close every
+            // connection after one reply without sending "Connection: close", so a pooled connection can be reused
+            // just before that close arrives, and HttpClient never resends a request with a body. 2026-10-17/18 CI:
+            // GetTransportInfo right after Play or SetVolume ended with ResponseEnded this way. A fresh connection
+            // costs one LAN handshake and needs no retry that could repeat Play or SetVolume. Zero disposes each
+            // connection after its response; a request's own "Connection: close" does not stop the pooling.
+            PooledConnectionLifetime = TimeSpan.Zero,
         };
         if (localAddress is not null)
             handler.ConnectCallback = async (context, ct) =>
@@ -130,7 +137,10 @@ internal static class DlnaHttp
                 }
                 catch { socket.Dispose(); throw; }
             };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        // HTTP/1.1 requires a client without persistent connections to say so in every request (RFC 9112 9.6).
+        client.DefaultRequestHeaders.ConnectionClose = true;
+        return client;
     }
 
     internal static async Task<byte[]> ReadBoundedAsync(HttpContent content, CancellationToken ct)
