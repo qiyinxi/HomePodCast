@@ -79,11 +79,6 @@ internal sealed partial class Walker
 
     private void RunGroupOutputs()
     {
-        if (Environment.GetEnvironmentVariable("GUI_ROOM_STRESS_MINUTES") is { Length: > 0 } stress) // TEMPORARY probe
-        {
-            RunRoomStress(int.Parse(stress));
-            return;
-        }
         var config = GroupOutputsConfig();
         var preferences = JsonNode.Parse(JsonSerializer.Serialize(config))!.AsObject();
         Start(config); // Start also requires this window to report the scenario's 144 DPI.

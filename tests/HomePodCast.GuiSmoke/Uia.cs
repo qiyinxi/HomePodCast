@@ -93,27 +93,22 @@ internal static class Uia
     /// <summary>The whole tree under a window, read in one request (again if a control went away while it was read).</summary>
     public static Node Snapshot(IntPtr hwnd)
     {
-        bool probeError = false; // TEMPORARY probe
         for (int attempt = 1; ; attempt++)
         {
             try
             {
                 AutomationElement root;
-                using (Request.Activate()) root = UiaCacheProbe.Enabled ? UiaCacheProbe.Collect(Request, hwnd) : AutomationElement.FromHandle(hwnd);
-                var node = Convert(root, null);
-                if (probeError) UiaCacheProbe.Recovered(attempt);
-                return node;
+                using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
+                return Convert(root, null);
             }
             catch (Exception ex) when (attempt < 4 && ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException
                                            or InvalidOperationException && Native.IsWindow(hwnd))
             {
-                probeError |= ex.Message.StartsWith("malformed UIA cache", StringComparison.Ordinal);
                 Thread.Sleep(300);
             }
             catch (IndexOutOfRangeException ex) when (attempt < 4 && Native.IsWindow(hwnd)
                 && IsCacheCollectionError(ex))
             {
-                probeError = true;
                 // 2026-10-18 CI: closing the common file picker while its new source rebuilt the page produced
                 // an inconsistent native bulk-cache response. Retry the same complete request, within the existing
                 // four-attempt budget; a persistent response error or an array error in our own code still fails.

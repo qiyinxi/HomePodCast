@@ -115,9 +115,8 @@ internal sealed partial class Walker
         throw new StepFailed("speaker room: expected control never fit inside the visible page viewport: " + string.Join("; ", trace));
     }
 
-    private void OpenRoomFile(string path, bool dense = false)
+    private void OpenRoomFile(string path)
     {
-        UiaCacheProbe.SetPhase(_stressIteration, "picker-open"); // TEMPORARY probe
         var main = MainWindow();
         var choose = ReachRoomNode(n => n.Type == "Button" && n.Says(T("选择影音文件")));
         Uia.Invoke(choose);
@@ -163,12 +162,9 @@ internal sealed partial class Walker
             }
             throw;
         }
-        UiaCacheProbe.SetPhase(_stressIteration, "after-open"); // TEMPORARY probe
-        if (dense) Dense(2500);
         WaitUntil(() => PagePane(Uia.Snapshot(MainWindow()), GroupPageName).Descendants().Any(n => n.Type == "Text"
             && n.Name.Contains(Path.GetFileName(path), StringComparison.Ordinal) && n.Name.Contains(channelsName(path), StringComparison.Ordinal)),
             "the generated multichannel file inspection", 20_000);
-        UiaCacheProbe.SetPhase(_stressIteration, _stressIteration == 0 ? "scenario" : "settled");
         static string channelsName(string file) => file.EndsWith("51.wav", StringComparison.Ordinal) ? "5.1" : "7.1";
     }
 

@@ -38,8 +38,7 @@ internal static class Program
         .. L.Languages.Select(language => new Scenario("group-outputs", language, 150, RequiredScale: true)),
     ];
 
-    private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes( // TEMPORARY probe: GUI_SCENARIO_MINUTES
-        int.TryParse(Environment.GetEnvironmentVariable("GUI_SCENARIO_MINUTES"), out int minutes) ? minutes : 6);
+    private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
 
     public static int Main(string[] args)
     {
