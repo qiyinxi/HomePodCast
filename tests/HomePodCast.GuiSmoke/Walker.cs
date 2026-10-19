@@ -480,6 +480,16 @@ internal sealed partial class Walker
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
         foreach (var gone in new[] { "刚才卡了", "导出诊断" }) // moved: 设置 → 工具, and a hotkey
             Expect(buttons.All(b => !b.Says(T(gone))), "首页", $"「{T(gone)}」 is on 首页 again");
+        Expect(buttons.Any(b => b.Says(T("HomePod 静音")) && b.Enabled), "首页",
+            "the clickable HomePod mute icon is missing or disabled");
+        // The output switch moved here from 设置. Only inspect it: switching it on would mute the runner's output.
+        string onlyHomePodTitle = T("仅 HomePod 输出");
+        var onlyHomePod = Find(page, n => n.Name == onlyHomePodTitle && n.Type == "CheckBox" && n.Hwnd != IntPtr.Zero);
+        var onlyHomePodState = onlyHomePod == null ? null : Native.MsaaState(onlyHomePod.Hwnd);
+        Expect(onlyHomePodState is { } os && (os & Native.STATE_SYSTEM_CHECKED) == 0, "首页",
+            $"「{onlyHomePodTitle}」 is not off on a fresh config (state {onlyHomePodState?.ToString("X") ?? "not found"})");
+        Expect(Find(page, n => n.Name == T("夜间模式") && n.Type == "CheckBox") != null, "首页",
+            "the night-mode switch beside HomePod only is missing");
         if (!connected)
         {
             Expect(Has(page, T("未连接")), "首页", $"the status doesn't say 「{T("未连接")}」");
@@ -545,18 +555,15 @@ internal sealed partial class Walker
         var page = PagePane(Uia.Snapshot(MainWindow()), "设置");
         foreach (var moved in new[] { "导出诊断", "软件更新", "使用配置", "手动添加 AirPlay 设备（实验性）", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）" })
             Expect(!Has(page, T(moved)), "设置", $"moved feature still present: {T(moved)}");
+        // The volume-key description still names the Home switch; match the control, not that help text.
+        Expect(Find(page, n => n.Type == "CheckBox" && n.Name == T("仅 HomePod 输出")) == null, "设置",
+            "the HomePod-only output switch is duplicated on Settings");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
         var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
-        // 推流时电脑静音 is off on a fresh config too. Not switched on here either: it would mute the runner's default output.
-        string mutePcTitle = T("推流时电脑静音（实验性）"); // experimental since 1.2
-        var mutePc = Find(page, n => n.Name == mutePcTitle && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
-        var mutePcState = mutePc == null ? null : Native.MsaaState(mutePc.Hwnd);
-        Expect(mutePcState is { } ms && (ms & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
-            $"「{mutePcTitle}」 is not off on a fresh config (state {mutePcState?.ToString("X") ?? "not found"})");
     }
 
     private void CheckAvSync(Node tree)
