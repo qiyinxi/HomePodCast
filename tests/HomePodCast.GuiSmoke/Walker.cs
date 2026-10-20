@@ -526,7 +526,8 @@ internal sealed partial class Walker
         if (tile == null || !page.Rect.Contains(tile.Rect)) return; // a later full-width visit can expose it
         _checkedPaintedToolTip = true;
         bool shown = false;
-        Native.SetForegroundWindow(MainWindow());
+        bool activated = Native.SetForegroundWindow(MainWindow());
+        var observed = new HashSet<string>();
         Cursor.Position = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
         try
         {
@@ -534,9 +535,18 @@ internal sealed partial class Walker
             while (!shown && DateTime.UtcNow < deadline)
             {
                 foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.ClassName(h) == "tooltips_class32"))
-                    if (Has(Uia.Snapshot(window), T("这次连接实际使用的延迟"))) { shown = true; break; }
+                {
+                    var tooltip = Uia.Snapshot(window);
+                    observed.Add($"{tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
+                    // A native tooltip exposes its text as the root's Name and may have no children.
+                    if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(T("这次连接实际使用的延迟"), StringComparison.Ordinal)
+                        || Has(tooltip, T("这次连接实际使用的延迟")))) { shown = true; break; }
+                }
                 if (!shown) Thread.Sleep(100);
             }
+            if (!shown) _report.Note(Where("painted tooltip"),
+                $"activated={activated}, pointer={Cursor.Position}, tile={tile.Rect}; observed: {string.Join("; ", observed)}");
+            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation");
             Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
         }
         finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }
