@@ -33,6 +33,7 @@ internal sealed class MainWindow : Form, ISurface
     private int _current;
     private ScrollPage? _shown;
     private bool _sizeMove, _dpiLayoutPending;
+    private List<IntPtr>? _dpiRedrawSuspended;
     private int _prepareNext;
     private long _lastInput;
     private bool _watchingInput;
@@ -409,6 +410,7 @@ internal sealed class MainWindow : Form, ISurface
     private void BeginDpiChange()
     {
         _transition.Stop();
+        SuspendDpiRedraw();
         if (_dpiHold == null)
         {
             ReleaseHiddenPages();
@@ -447,18 +449,13 @@ internal sealed class MainWindow : Form, ISurface
         if (!_dpiLayoutPending || IsDisposed) return;
         _dpiHold?.Dispose();
         _dpiHold = null;
-        // The rail's and the page's windows moved without drawing each one, then drawn once. 2026-10-16, on the maintainer's
-        // monitors: the layout after a move across took 130–550 ms with each window drawn as it moved, 100–330 ms without.
-        Control[] shown = [.. new Control[] { _rail, _pages[_current] }.Where(c => c.IsHandleCreated)];
-        foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 0, 0);
         try
         {
             using (LayoutPanel.BatchLayout(this)) { } // OnLayout
         }
         finally
         {
-            foreach (var c in shown) SendMessage(c.Handle, WM_SETREDRAW, 1, 0);
-            if (IsHandleCreated) RedrawWindow(Handle, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+            ResumeDpiRedraw();
         }
         if (_dpiLayoutPending) _dpiSettle.Start(); // the window's layout was held (a batch in progress): again later
         else if (Visible) StartPreparing(); // the hidden pages again, at this DPI
@@ -466,6 +463,36 @@ internal sealed class MainWindow : Form, ISurface
 
     private const int WM_SETREDRAW = 0x000B;
     private const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004, RDW_ALLCHILDREN = 0x0080, RDW_FRAME = 0x0400;
+
+    /// <summary>
+    /// Keep every existing child window quiet from the first DPI notification until the one final layout. Windows sends
+    /// <c>WM_DPICHANGED_BEFOREPARENT</c> bottom-up, before <see cref="OnDpiChanged"/> runs on this form; suspending only
+    /// the rail and page in <see cref="FinishDpiChange"/> was therefore too late for the first crossing. The handles still
+    /// move and receive their DPI messages, but their individual paints are coalesced into the final redraw below.
+    /// </summary>
+    private void SuspendDpiRedraw()
+    {
+        if (_dpiRedrawSuspended != null || !IsHandleCreated) return;
+        var handles = new List<IntPtr>();
+        void Add(Control control)
+        {
+            if (control.IsHandleCreated) handles.Add(control.Handle);
+            foreach (Control child in control.Controls) Add(child);
+        }
+        Add(this);
+        _dpiRedrawSuspended = handles.Distinct().ToList();
+        foreach (var handle in _dpiRedrawSuspended) SendMessage(handle, WM_SETREDRAW, 0, 0);
+    }
+
+    private void ResumeDpiRedraw()
+    {
+        var handles = _dpiRedrawSuspended;
+        _dpiRedrawSuspended = null;
+        if (handles == null) return;
+        foreach (var handle in handles) SendMessage(handle, WM_SETREDRAW, 1, 0);
+        if (IsHandleCreated)
+            RedrawWindow(Handle, 0, 0, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+    }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern IntPtr SendMessage(IntPtr hwnd, int msg, nint wParam, nint lParam);
@@ -511,6 +538,7 @@ internal sealed class MainWindow : Form, ISurface
             StopPreparing();
             _prepare.Dispose();
             _dpiSettle.Dispose();
+            ResumeDpiRedraw();
         }
         base.Dispose(disposing);
     }
