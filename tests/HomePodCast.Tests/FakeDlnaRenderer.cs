@@ -12,7 +12,7 @@ namespace HomePodCast.Tests;
 /// <summary>Loopback-only renderer: records control requests without any real discovery or audio.</summary>
 internal sealed class FakeDlnaRenderer : IAsyncDisposable
 {
-    internal sealed record Request(string Method, string Path, string SoapAction, string Body);
+    internal sealed record Request(string Method, string Path, string SoapAction, string Body, bool CloseRequested = false);
     internal sealed class DescriptionRequest
     {
         private readonly TaskCompletionSource<string> _response = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -44,6 +44,12 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
     internal int Volume { get; set; } = 30;
     internal bool Muted { get; set; }
     internal string? DescriptionOverride { get; set; }
+    // libupnp (gmrender-resurrect, many embedded renderers) replies once per connection without "Connection:
+    // close" and closes it a moment later. Here that moment always comes after the client has sent its next
+    // request on the connection, which is never answered: the 2026-10-17/18 CI race, made deterministic.
+    internal bool CloseLikeLibupnp { get; init; }
+    private int _unansweredRequests;
+    internal int UnansweredRequests => Volatile.Read(ref _unansweredRequests);
     internal Func<Uri, CancellationToken, Task>? OnPlayAsync { get; set; }
     internal Func<string, CancellationToken, Task>? AfterActionAsync { get; set; }
     internal Uri DescriptionUri { get; }
@@ -84,7 +90,8 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
                 var stream = client.GetStream();
                 var (method, path, headers, body) = await ReadRequestAsync(stream, _stop.Token);
                 string soapAction = headers.GetValueOrDefault("SOAPAction", "").Trim('"');
-                Requests.Enqueue(new(method, path, soapAction, body));
+                Requests.Enqueue(new(method, path, soapAction, body,
+                    headers.GetValueOrDefault("Connection", "").Equals("close", StringComparison.OrdinalIgnoreCase)));
                 if (method == "GET" && path == "/description.xml")
                 {
                     if (GateDescriptions)
@@ -180,12 +187,18 @@ internal sealed class FakeDlnaRenderer : IAsyncDisposable
         return (start[0], start[1], headers, Encoding.UTF8.GetString(body));
     }
 
-    private static async Task ReplyAsync(NetworkStream stream, int status, string body, CancellationToken ct)
+    private async Task ReplyAsync(NetworkStream stream, int status, string body, CancellationToken ct)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(body);
         await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 {status} {(status == 200 ? "OK" : "Error")}\r\n"
-            + $"Content-Type: text/xml; charset=utf-8\r\nContent-Length: {bytes.Length}\r\nConnection: close\r\n\r\n"), ct);
+            + $"Content-Type: text/xml; charset=utf-8\r\nContent-Length: {bytes.Length}\r\n"
+            + (CloseLikeLibupnp ? "" : "Connection: close\r\n") + "\r\n"), ct);
         await stream.WriteAsync(bytes, ct);
+        if (!CloseLikeLibupnp) return;
+        // Ends with an IOException when the client closes the connection itself, as it should.
+        await ReadRequestAsync(stream, ct);
+        Interlocked.Increment(ref _unansweredRequests);
+        stream.Socket.Shutdown(SocketShutdown.Both);
     }
 
     public async ValueTask DisposeAsync()

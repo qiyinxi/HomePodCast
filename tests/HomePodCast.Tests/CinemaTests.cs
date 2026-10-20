@@ -270,12 +270,13 @@ public class CinemaTests
         string file = TempWave(bits, channels, mask, rate);
         try
         {
-            OnMta(() =>
+            OnMta(step =>
             {
-                using var decoder = new CinemaMediaReader(file);
+                using var decoder = new CinemaMediaReader(file, step);
                 Assert.Equal(channels, decoder.Channels);
                 Assert.Equal(rate, decoder.Rate);
                 Assert.Equal(mask, CinemaChannels.Resolve(decoder.Channels, decoder.Mask));
+                step("reading");
                 var samples = decoder.Read();
                 Assert.NotNull(samples);
                 Assert.True(samples.Length >= channels);
@@ -292,17 +293,58 @@ public class CinemaTests
         File.WriteAllBytes(garbage, Enumerable.Range(0, 4096).Select(i => (byte)(i * 37)).ToArray());
         try
         {
-            OnMta(() =>
+            OnMta(step =>
             {
+                step("a missing file");
                 Assert.Equal("选的文件不存在或打不开。",
                     Assert.Throws<CinemaException>(() => new CinemaMediaReader(garbage + ".missing")).Message);
+                step("a URL");
                 Assert.Equal("选的文件不存在或打不开。",
                     Assert.Throws<CinemaException>(() => new CinemaMediaReader("https://example.invalid/film.mp4")).Message);
                 Assert.Equal("这个文件在这台电脑上无法解码：Windows 没有它的解码器，或者文件已损坏。",
-                    Assert.Throws<CinemaException>(() => new CinemaMediaReader(garbage)).Message);
+                    Assert.Throws<CinemaException>(() => new CinemaMediaReader(garbage, s => step("a file without a decoder: " + s))).Message);
             });
         }
         finally { File.Delete(garbage); }
+    }
+
+    [Fact]
+    public void The_decoder_reports_its_cleanup_as_steps_too()
+    {
+        // A wait that runs out in MFShutdown or CoUninitialize says so instead of naming the open's last step.
+        string garbage = Path.Combine(Path.GetTempPath(), "hpc-cinema-" + Guid.NewGuid().ToString("N") + ".wav");
+        File.WriteAllBytes(garbage, Enumerable.Range(0, 4096).Select(i => (byte)(i * 37)).ToArray());
+        string file = TempWave(16, 2, Stereo, 48000);
+        try
+        {
+            var failed = new List<string>();
+            var opened = new List<string>();
+            OnMta(_ =>
+            {
+                Assert.Throws<CinemaException>(() => new CinemaMediaReader(garbage, failed.Add));
+                using (new CinemaMediaReader(file, opened.Add)) opened.Add("opened");
+            });
+            Assert.Equal(["CoInitializeEx", "MFStartup", "MFCreateSourceReaderFromURL", "MFShutdown", "CoUninitialize"], failed);
+            Assert.Equal(["CoInitializeEx", "MFStartup", "MFCreateSourceReaderFromURL", "the media type", "opened",
+                "IMFSourceReader::Release", "MFShutdown", "CoUninitialize"], opened);
+        }
+        finally { File.Delete(garbage); File.Delete(file); }
+    }
+
+    [Fact]
+    public void A_decoder_test_that_does_not_finish_says_where_its_thread_is_and_how_busy_the_machine_is()
+    {
+        using var held = new ManualResetEventSlim();
+        try
+        {
+            var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+                OnMta(step => { step("held by the test"); held.Wait(); }, TimeSpan.FromMilliseconds(200)));
+            Assert.Matches(@"^the decoder test did not finish within 0\.2 s: held by the test for \d+\.\d s; " +
+                @"thread \d+ waiting \(\w+\) at priority \d+, \d+ ms CPU in the last 0\.\d s, \d+ ms in all; loader lock ", failure.Message);
+            Assert.Matches(@"; this process \d+\.\d\d CPUs, \d+ hard faults, threads: \d+ ", failure.Message);
+            Assert.Matches(@"; machine \d+ % busy of \d+ CPUs, \d+ hard faults; busiest processes: ", failure.Message);
+        }
+        finally { held.Set(); }
     }
 
     [Fact]
@@ -356,18 +398,31 @@ public class CinemaTests
             }
     }
 
-    /// <summary>Media Foundation runs on an MTA thread, as the cinema's decoder thread does.</summary>
-    internal static void OnMta(Action body)
+    /// <summary>
+    /// Media Foundation runs on an MTA thread, as the cinema's decoder thread does. The body reports its steps (the
+    /// reader's too, given the callback); a wait that runs out says the last one, for how long, and what that thread,
+    /// this process and the machine were doing (2026-10-17 CI, run 39026442901: "the decoder test did not finish" alone).
+    /// </summary>
+    internal static void OnMta(Action<Action<string>> body, TimeSpan? timeout = null)
     {
+        var wait = timeout ?? TimeSpan.FromSeconds(20);
+        StallReport.Prepare();
+        var progress = new CinemaMediaReader.Progress("starting the thread");
         Exception? error = null;
+        int threadId = 0;
         var thread = new Thread(() =>
         {
-            try { body(); }
+            Volatile.Write(ref threadId, StallReport.GetCurrentThreadId());
+            progress.Step("the test");
+            try { body(progress.Step); }
             catch (Exception ex) { error = ex; }
-        });
+            progress.Step("ending the thread");
+        }) { IsBackground = true, Name = "Decoder test" }; // one that never ends must not keep the test run alive
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
-        Assert.True(thread.Join(20000), "the decoder test did not finish");
+        if (!thread.Join(wait))
+            Assert.Fail(FormattableString.Invariant($"the decoder test did not finish within {wait.TotalSeconds:0.#} s: {progress}; ")
+                + StallReport.Describe(Volatile.Read(ref threadId)));
         if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
     }
 }

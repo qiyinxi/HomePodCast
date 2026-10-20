@@ -21,10 +21,17 @@ public class PaintedTextTests
         string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var probe = Assembly.LoadFrom(Path.Combine(repo, "tests", "HomePodCast.GuiSmoke", "bin", configuration,
             "net10.0-windows", "HomePodCast.GuiSmoke.dll"));
-        var classify = probe.GetType("HomePodCast.GuiSmoke.Uia")!.GetMethod("IsCacheCollectionError", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var uia = probe.GetType("HomePodCast.GuiSmoke.Uia")!;
+        var classify = uia.GetMethod("IsCacheCollectionError", BindingFlags.NonPublic | BindingFlags.Static)!;
         Assert.Equal(true, classify.Invoke(null, [frameworkError]));
         var ownError = Assert.Throws<IndexOutOfRangeException>(() => { _ = Array.Empty<int>()[0]; });
         Assert.Equal(false, classify.Invoke(null, [ownError]));
+        // Four reads in all: the first three may be read again, the fourth fails the step. The note names the step.
+        var retries = uia.GetMethod("RetriesTruncatedRead", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal([true, true, true, false], Enumerable.Range(1, 4).Select(attempt => (bool)retries.Invoke(null, [frameworkError, attempt])!));
+        Assert.Equal(false, retries.Invoke(null, [ownError, 1]));
+        var note = uia.GetMethod("TruncatedReadNote", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal("Windows returned a cut-off UI Automation tree in OpenRoomFile; reading it again (2/4)", note.Invoke(null, [1, "OpenRoomFile"]));
     }
 
     [Fact]

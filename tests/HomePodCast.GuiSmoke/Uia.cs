@@ -90,6 +90,11 @@ internal static class Uia
         return request;
     }
 
+    private const int Attempts = 4;
+
+    /// <summary>Where a second read after a truncated tree is noted: the running scenario's report (the console without one).</summary>
+    [ThreadStatic] internal static Action<string>? Noted;
+
     /// <summary>The whole tree under a window, read in one request (again if a control went away while it was read).</summary>
     public static Node Snapshot(IntPtr hwnd)
     {
@@ -101,21 +106,51 @@ internal static class Uia
                 using (Request.Activate()) root = AutomationElement.FromHandle(hwnd);
                 return Convert(root, null);
             }
-            catch (Exception ex) when (attempt < 4 && ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException
+            catch (Exception ex) when (attempt < Attempts && ex is ElementNotAvailableException or System.Runtime.InteropServices.COMException
                                            or InvalidOperationException && Native.IsWindow(hwnd))
             {
                 Thread.Sleep(300);
             }
-            catch (IndexOutOfRangeException ex) when (attempt < 4 && Native.IsWindow(hwnd)
-                && IsCacheCollectionError(ex))
+            catch (IndexOutOfRangeException ex) when (Native.IsWindow(hwnd) && RetriesTruncatedRead(ex, attempt))
             {
-                // 2026-10-18 CI: closing the common file picker while its new source rebuilt the page produced
-                // an inconsistent native bulk-cache response. Retry the same complete request, within the existing
-                // four-attempt budget; a persistent response error or an array error in our own code still fails.
-                Console.WriteLine($"note  UIA cache changed during collection; retrying complete snapshot ({attempt}/4)");
+                string note = TruncatedReadNote(attempt, WalkerStep());
+                if (Noted is { } noted) noted(note);
+                else Console.WriteLine("note  " + note);
                 Thread.Sleep(300);
             }
         }
+    }
+
+    /// <summary>
+    /// A tree that Windows cut off while windows under it were destroyed: read it again, within the same budget. Only
+    /// the framework's parser of that response qualifies; a persistent truncation or an array error of our own still fails.
+    /// </summary>
+    /// <remarks>
+    /// 2026-10-20: UIAutomationCore stops a bulk read when windows it is walking are destroyed and still returns what it
+    /// has: every property row is complete, but the open nodes are never closed, so CacheHelper.ParseTreeDescription
+    /// indexes past the end of the description. In CI (run 39339538389) it happened only on the first app start of a fresh
+    /// runner, about 300 ms after the room-file picker closed, inside the speaker rows that the file's source rebuilds
+    /// (dev: 4 of 10 first starts, 1.2.0: 0 of 10; none in 267 later starts). A local cross-process stress test
+    /// (rebuilding those rows during back-to-back reads) cut reads off just as often with WinForms' own providers in
+    /// place of the parent-painted text provider, so the app's tree is not malformed. The next read was always complete.
+    /// </remarks>
+    internal static bool RetriesTruncatedRead(IndexOutOfRangeException error, int attempt) =>
+        attempt < Attempts && IsCacheCollectionError(error);
+
+    internal static string TruncatedReadNote(int attempt, string? step) =>
+        $"Windows returned a cut-off UI Automation tree{(step != null ? " in " + step : "")}; reading it again ({attempt + 1}/{Attempts})";
+
+    /// <summary>The walker step that read the tree: its method, or the method a wait condition belongs to.</summary>
+    private static string? WalkerStep()
+    {
+        foreach (var frame in new System.Diagnostics.StackTrace(1, false).GetFrames())
+        {
+            var method = frame.GetMethod();
+            if (method?.DeclaringType is not { } type || type != typeof(Walker) && type.DeclaringType != typeof(Walker)) continue;
+            string name = method.Name; // a lambda is named <OpenRoomFile>b__5
+            return name.StartsWith('<') && name.IndexOf('>') is > 1 and var end ? name[1..end] : name;
+        }
+        return null;
     }
 
     internal static bool IsCacheCollectionError(IndexOutOfRangeException error) =>

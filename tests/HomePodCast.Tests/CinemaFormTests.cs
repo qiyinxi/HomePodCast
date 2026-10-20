@@ -262,6 +262,7 @@ public class CinemaFormTests
     /// <summary>The window's message loop until <paramref name="task"/> completes; a timeout says what the window waited for.</summary>
     private static void Pump(Control window, Task task, [CallerArgumentExpression(nameof(task))] string what = "")
     {
+        StallReport.Prepare();
         var deadline = DateTime.UtcNow.AddSeconds(20);
         while (!task.IsCompleted && DateTime.UtcNow < deadline)
         {
@@ -269,8 +270,11 @@ public class CinemaFormTests
             Thread.Sleep(5);
         }
         // 2026-10-16 (CI run 38970600060): "Play did not finish", for a UseFile whose file inspection took more than 20 s.
-        string opening = window switch { CinemaPage page => page.OpeningState, CinemaForm form => form.OpeningState, _ => "" };
-        Assert.True(task.IsCompleted, $"{what} did not finish within 20 s: {opening}; status \"{Status(window)}\"");
+        if (!task.IsCompleted)
+        {
+            string opening = window switch { CinemaPage page => page.OpeningState, CinemaForm form => form.OpeningState, _ => "" };
+            Assert.Fail($"{what} did not finish within 20 s: {opening}; status \"{Status(window)}\"; {StallReport.Describe()}");
+        }
         task.GetAwaiter().GetResult();
     }
 

@@ -42,6 +42,25 @@ public class DlnaControlTests
         Assert.Equal(didl, action.Elements().ElementAt(2).Value);
     }
 
+    [Fact]
+    public async Task Every_action_opens_a_fresh_connection_for_renderers_that_close_after_one_reply()
+    {
+        // 2026-10-17/18 CI: gmrender-resurrect closed the pooled connection that the request after Play or
+        // SetVolume had already been sent on, and a POST is never resent by HttpClient.
+        await using var fake = new FakeDlnaRenderer { CloseLikeLibupnp = true };
+        using var control = new DlnaControl(fake.Device);
+        await control.SetAvTransportUriAsync(new Uri("http://127.0.0.1:23456/audio"), "<DIDL-Lite/>");
+        await control.PlayAsync();
+        Assert.Equal("PLAYING", await control.GetTransportInfoAsync());
+        await control.SetVolumeAsync(20);
+        Assert.Equal("PLAYING", await control.GetTransportInfoAsync());
+        await control.StopAsync();
+        Assert.Equal(6, fake.Requests.Count);
+        Assert.All(fake.Requests, request => Assert.True(request.CloseRequested));
+        Assert.Equal(0, fake.UnansweredRequests);
+        Assert.Equal(("STOPPED", 20), (fake.TransportState, fake.Volume));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(25)]
