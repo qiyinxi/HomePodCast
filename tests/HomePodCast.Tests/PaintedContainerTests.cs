@@ -1,5 +1,7 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Text;
 using System.Windows.Forms;
 using HomePodCast.UI;
 using HomePodCast.UI.Controls;
@@ -10,6 +12,26 @@ namespace HomePodCast.Tests;
 [Collection("Layout work")]
 public class PaintedContainerTests
 {
+    [Fact]
+    public void Gui_checker_recognizes_the_real_WinForms_tooltip_class_without_showing_it() => Sta.Run(() =>
+    {
+        using var tooltip = new ToolTip();
+        var handle = (IntPtr)typeof(ToolTip).GetProperty("Handle", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(tooltip)!;
+        var name = new StringBuilder(256);
+        Assert.True(GetClassName(handle, name, name.Capacity) > 0);
+        Assert.False(IsWindowVisible(handle)); // creating the native tooltip does not display a GUI
+        string repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        var checker = Assembly.LoadFrom(Path.Combine(repo, "tests", "HomePodCast.GuiSmoke", "bin", configuration,
+            "net10.0-windows", "HomePodCast.GuiSmoke.dll"));
+        var match = checker.GetType("HomePodCast.GuiSmoke.Native")!
+            .GetMethod("IsToolTipClass", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(true, match.Invoke(null, [name.ToString()]));
+        Assert.Equal(true, match.Invoke(null, ["tooltips_class32"]));
+        Assert.Equal(false, match.Invoke(null, ["WindowsForms10.Window.8.app.0.1_r3_ad1"]));
+    });
+
     [Fact]
     public void Display_only_subtrees_have_no_windows_and_keep_accessible_hierarchy_and_screen_bounds() => Sta.Run(() =>
     {
@@ -238,6 +260,10 @@ public class PaintedContainerTests
             foreach (var descendant in All(child)) yield return descendant;
     }
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr handle, StringBuilder name, int maxCount);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr handle);
     [DllImport("user32.dll")]
     private static extern IntPtr GetParent(IntPtr hwnd);
 

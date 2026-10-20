@@ -81,6 +81,11 @@ internal static partial class Native
         return sb.ToString();
     }
 
+    // NativeWindow registers a framework-prefixed subclass of common controls (including ToolTip).
+    internal static bool IsToolTipClass(string name) =>
+        name.Equals("tooltips_class32", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("WindowsForms10.tooltips_class32.", StringComparison.OrdinalIgnoreCase);
+
     public static long Style(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_STYLE);
     public static long ExStyle(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 

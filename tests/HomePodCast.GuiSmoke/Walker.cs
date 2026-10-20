@@ -536,10 +536,10 @@ internal sealed partial class Walker
             var deadline = DateTime.UtcNow.AddSeconds(4);
             while (!shown && DateTime.UtcNow < deadline)
             {
-                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.ClassName(h) == "tooltips_class32"))
+                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.IsToolTipClass(Native.ClassName(h))))
                 {
                     var tooltip = Uia.Snapshot(window);
-                    observed.Add($"{tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
+                    observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
                     // A native tooltip exposes its text as the root's Name and may have no children.
                     if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(T("这次连接实际使用的延迟"), StringComparison.Ordinal)
                         || Has(tooltip, T("这次连接实际使用的延迟")))) { shown = true; break; }
@@ -548,7 +548,7 @@ internal sealed partial class Walker
             }
             if (!shown) _report.Note(Where("painted tooltip"),
                 $"activated={activated}, pointer={Cursor.Position}, tile={tile.Rect}; observed: {string.Join("; ", observed)}");
-            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation");
+            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation: " + string.Join("; ", observed));
             Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
         }
         finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }

@@ -9,11 +9,6 @@ internal sealed class LayoutToolTip : ToolTip
     private Control? _pending, _pendingHost;
     private bool _disposed;
 
-    private static void Trace(string message)
-    {
-        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true") Log.Info("painted hint: " + message);
-    }
-
     internal LayoutToolTip() => _delay.Tick += ShowPending;
 
     public new void SetToolTip(Control control, string? caption)
@@ -39,7 +34,7 @@ internal sealed class LayoutToolTip : ToolTip
         !control.IsDisposed && ParentPainting.IsPainted(control) && HostOf(control) == host &&
         ParentPainting.ScreenBounds(control, clipped: true).Contains(screen));
 
-    private void TreeChanged(object? sender, EventArgs e) { Trace($"tree {sender?.GetType().Name}"); Rebind(); }
+    private void TreeChanged(object? sender, EventArgs e) => Rebind();
 
     private void Rebind()
     {
@@ -85,7 +80,6 @@ internal sealed class LayoutToolTip : ToolTip
     {
         if (sender is not Control host || !host.IsHandleCreated) return;
         var hint = HintAt(host, host.PointToScreen(e.Location));
-        Trace($"move {host.GetType().Name} {host.Handle:X} {e.Location} hint={hint?.AccessibleName ?? hint?.Text} focus={host.FindForm()?.ContainsFocus}");
         if (hint == _pending && host == _pendingHost) return;
         CancelPending();
         if (hint == null) return;
@@ -96,7 +90,7 @@ internal sealed class LayoutToolTip : ToolTip
     }
 
     private void MouseLeft(object? sender, EventArgs e) => CancelPending();
-    private void GeometryChanged(object? sender, EventArgs e) { if (_pending != null) Trace($"geometry {sender?.GetType().Name}"); CancelPending(); }
+    private void GeometryChanged(object? sender, EventArgs e) => CancelPending();
     private void MousePressed(object? sender, MouseEventArgs e) => CancelPending();
     private void HostVisibilityChanged(object? sender, EventArgs e)
     {
@@ -106,18 +100,15 @@ internal sealed class LayoutToolTip : ToolTip
     private void ShowPending(object? sender, EventArgs e)
     {
         _delay.Stop();
-        Trace($"tick active={Active} pending={_pending?.AccessibleName ?? _pending?.Text} host={_pendingHost?.GetType().Name} focus={_pendingHost?.FindForm()?.ContainsFocus} hit={(_pendingHost == null ? null : HintAt(_pendingHost, Cursor.Position))?.Text}");
         if (!Active || _pending is not { } control || _pendingHost is not { IsHandleCreated: true } host
             || host.FindForm() is { ContainsFocus: false } || HintAt(host, Cursor.Position) != control) return;
         var point = host.PointToClient(Cursor.Position);
         point.Offset(Theme.Dp(12, host.DeviceDpi), Theme.Dp(20, host.DeviceDpi));
-        Trace($"show {GetToolTip(control)} on {host.Handle:X} at {point}");
         Show(GetToolTip(control), host, point, AutoPopDelay);
     }
 
-    private void CancelPending([System.Runtime.CompilerServices.CallerMemberName] string reason = "")
+    private void CancelPending()
     {
-        if (_pending != null) Trace($"cancel {reason}");
         _delay.Stop();
         if (_pendingHost is { IsDisposed: false, IsHandleCreated: true } host) Hide(host);
         _pending = _pendingHost = null;
