@@ -58,6 +58,8 @@ internal sealed partial class TrayApp
         string? defaultId = AudioEndpoints.DefaultOutputId();
         // From "connecting" on: the capture starts right after, and nothing should leak in its first moments.
         bool capturing = Controller.State != StreamState.Idle || Controller.Capture != null;
+        Stems.SetCaptured(capturing ? CaptureEndpoint.Captured(Routing.CaptureDeviceId, defaultId) : null);
+        Stems.MonitorDelayMs = Controller.EffectiveLatencyMs;
         _fx.SetCaptured(capturing ? CaptureEndpoint.Captured(Routing.CaptureDeviceId, defaultId) : null, defaultId);
     }
 }

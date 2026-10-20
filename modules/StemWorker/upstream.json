@@ -1,0 +1,24 @@
+{
+  "about": "The StemgenRT files the music separation module is built from (tools/build-stem-module.ps1). Pinned to one commit and checked by SHA-256; CI caches them by that commit (build.yml, job stem-module). The model is in Git LFS, so it comes from media.githubusercontent.com.",
+  "name": "StemgenRT",
+  "version": "0.7.0",
+  "repository": "sweetspotsoundsystem/stemgen-rt",
+  "commit": "85e715f1a1982b29204e11595d6fa3f0bde9810a",
+  "model": {
+    "path": "model/model.onnx",
+    "size": 31946241,
+    "sha256": "0A49388DD2A47986AB9A161C8764C22853B4D601C188AC052EB530F076D513C7"
+  },
+  "fixture": {
+    "path": "test/fixtures/independent-pytorch.bin",
+    "sha256": "C50A65C6E11D12C8CC475A2C13B4E5F7B26BE03247A600B3619724CBE15778F8"
+  },
+  "license": {
+    "path": "LICENSE.md",
+    "contains": "MIT License"
+  },
+  "vocals": {
+    "about": "The vocal branch that tools/extract-vocal-model.py cuts out of the model, weights unchanged; the worker checks this hash too.",
+    "sha256": "235E795229ECFBB453A295302CAD34D608D520F7FB336E2ED6E1DFD7F0A0E857"
+  }
+}

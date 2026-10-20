@@ -316,9 +316,9 @@ internal sealed partial class TrayApp : ApplicationContext
 
     public void RunSyncTest(IWin32Window owner)
     {
-        if (Controller.State != StreamState.Streaming)
+        if (SyncTestRefusal(Stems.Enabled, Controller.State) is { } refusal)
         {
-            MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
+            MessageBox.Show(owner, refusal, L.T("音画同步测试"));
             return;
         }
         if (!TryGetCalibrationSnapshot(out var snapshot))
@@ -468,6 +468,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
         if (c.State != _lastIconState)
         {
+            if (EndsStems(_lastIconState, c.State)) EndStemsWithConnection();
             var old = _tray.Icon;
             _tray.Icon = Icons.Tray(c.State);
             old?.Dispose();
