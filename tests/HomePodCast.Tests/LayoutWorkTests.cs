@@ -45,7 +45,13 @@ public class LayoutWorkTests
         var button = new FluentButton("push");
         var combo = new FluentComboBox { AccessibleName = "source" };
         combo.Items.AddRange(["live", "file"]); combo.SelectedIndex = 0;
-        page.Content.Controls.AddRange([status, button, new FieldRow("source", combo)]);
+        var nestedStatus = new TextBlock("nested value") { AccessibleName = "nested status" };
+        var nestedMetric = new MetricTile("nested count");
+        nestedMetric.SetValue("42");
+        var nestedRow = Ui.Row(nestedStatus, new GlyphBadge(Glyph.Speaker), nestedStatus);
+        var nestedCard = Ui.Card(nestedRow, nestedMetric);
+        nestedCard.AccessibleName = "painted card";
+        page.Content.Controls.AddRange([status, button, new FieldRow("source", combo), nestedCard]);
         using var host = new Host(page, 784);
         Assert.True(host.Page.TitleText!.Visible);
         var hwnd = host.Handle;
@@ -112,6 +118,17 @@ public class LayoutWorkTests
                 Assert.Contains(nodes, n => n.Name == "status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
                 Assert.Contains(nodes, n => n.Name == "push" && n.ControlType == System.Windows.Automation.ControlType.Button && n.NativeWindowHandle != 0);
                 Assert.Equal(buttonHwnd.ToInt32(), nodes.Single(n => n.Name == "push").NativeWindowHandle);
+                Assert.Contains(nodes, n => n.Name == "painted card" && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "nested status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                var nestedNode = System.Windows.Automation.AutomationElement.FromHandle(contentHwnd)
+                    .FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "nested count"));
+                Assert.NotNull(nestedNode);
+                Assert.Equal(0, nestedNode.Current.NativeWindowHandle);
+                var metricValue = (System.Windows.Automation.ValuePattern)nestedNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
+                Assert.Equal("42", metricValue.Current.Value);
+                host.BeginInvoke(() => nestedMetric.SetValue("43"));
+                Assert.True(SpinWait.SpinUntil(() => metricValue.Current.Value == "43", TimeSpan.FromSeconds(3)));
                 var sourceNode = nodes.Single(n => n.Name == "source" && n.ControlType == System.Windows.Automation.ControlType.ComboBox);
                 Assert.Equal(comboHwnd.ToInt32(), sourceNode.NativeWindowHandle);
                 Assert.Equal(0, AccessibleObjectFromWindow(new IntPtr(sourceNode.NativeWindowHandle), 0xFFFFFFFC, ref iid, out var sourceMsaa));
@@ -219,18 +236,23 @@ public class LayoutWorkTests
         var mixer = TestApp.Field<MixerPage>(window, "_mixer");
         mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" }];
         ShowMain(window);
-        int saved = 0;
+        int saved = 0, savedVisuals = 0;
         foreach (var page in Enum.GetValues<AppPage>())
         {
             Go(window, page);
             var shown = TestApp.Field<ScrollPage[]>(window, "_pages")[(int)page];
             var texts = All(shown).OfType<TextBlock>().Where(t => t.ParentPainted).ToArray();
             saved += texts.Length;
-            output.WriteLine($"{page}: {texts.Length} windowless texts, {Handles(shown)} windows");
+            var visuals = All(shown).Where(ParentPainting.IsPainted).ToArray();
+            savedVisuals += visuals.Length - texts.Length;
+            output.WriteLine($"{page}: {texts.Length} windowless texts, {visuals.Length - texts.Length} other windowless visuals/containers, {Handles(shown)} windows");
+            Assert.All(visuals, visual => Assert.False(visual.IsHandleCreated, visual.GetType().Name));
             Assert.NotEmpty(texts);
             Assert.All(texts, text => Assert.False(text.IsHandleCreated, $"{page}: 「{text.Text}」 created a window"));
         }
         Assert.True(saved >= 140, $"only {saved} text windows removed");
+        output.WriteLine($"Additional windowless visuals/containers: {savedVisuals}");
+        Assert.True(savedVisuals >= 25, $"only {savedVisuals} additional windows removed");
         window.Hide();
     });
 
@@ -252,11 +274,15 @@ public class LayoutWorkTests
             Assert.Contains(node, Enumerable.Range(0, parent.GetChildCount()).Select(parent.GetChild));
             Assert.Equal(text.AccessibleName ?? text.Text, node.Name);
             Assert.Equal(AccessibleRole.StaticText, node.Role);
-            Assert.Equal(text.Parent.RectangleToScreen(text.Bounds), node.Bounds);
+            var expectedBounds = text.Bounds;
+            for (var ancestor = text.Parent; ancestor != host; ancestor = ancestor!.Parent)
+                expectedBounds.Offset(ancestor!.Location);
+            Assert.Equal(host.RectangleToScreen(expectedBounds), node.Bounds);
             Assert.Same(parent, node.Parent);
             Assert.False(node.State.HasFlag(AccessibleStates.Focusable));
-            Assert.Equal(text.Parent.DeviceDpi, text.DeviceDpi);
+            Assert.Equal(host.Page.DeviceDpi, text.DeviceDpi);
         }
+        Assert.All(painted, text => Assert.False(text.IsHandleCreated));
         var status = TestApp.Field<TextBlock>(host.Page, "_status");
         using (var work = new Work())
         {

@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 namespace HomePodCast.UI.Controls;
 
 /// <summary>Horizontal peak meter: fast attack, slow release, perceptual (square-root) scale; red near clipping.</summary>
-internal sealed class LevelMeter : FluentControl
+internal sealed class LevelMeter : PaintedControl
 {
     private float _shown;
 
@@ -24,7 +24,7 @@ internal sealed class LevelMeter : FluentControl
         if (shown < 0.002f) shown = 0;
         if (Math.Abs(shown - _shown) < 0.001f) return;
         _shown = shown;
-        Invalidate();
+        Repaint();
     }
 
     /// <summary>Back to silence at once (no release), e.g. for a row that is shown again later.</summary>
@@ -32,7 +32,7 @@ internal sealed class LevelMeter : FluentControl
     {
         if (_shown == 0) return;
         _shown = 0;
-        Invalidate();
+        Repaint();
     }
 
     public override Size GetPreferredSize(Size proposedSize) => new(Dp(120), Dp(Thickness + 4));
@@ -50,7 +50,7 @@ internal sealed class LevelMeter : FluentControl
 }
 
 /// <summary>A small labelled number (stream statistics). Shows "—" when there is no value.</summary>
-internal sealed class MetricTile : FluentControl
+internal sealed class MetricTile : PaintedControl
 {
     private string _caption = "", _value = "—", _unit = "";
 
@@ -73,7 +73,8 @@ internal sealed class MetricTile : FluentControl
         if (value == _value) return;
         _value = value;
         AccessibleDescription = value == "—" ? value : $"{value} {_unit}".Trim();
-        Invalidate();
+        if (ParentPainted) ParentPainting.Notify(this, AccessibleEvents.NameChange);
+        Repaint();
     }
 
     public string ValueText => _value;
@@ -109,7 +110,7 @@ internal sealed class MetricTile : FluentControl
 }
 
 /// <summary>A coloured dot for the stream state (green streaming, amber connecting, red retrying, grey idle).</summary>
-internal sealed class StatusDot : FluentControl
+internal sealed class StatusDot : PaintedControl
 {
     private Color _color = Icons.Idle;
 
@@ -122,7 +123,7 @@ internal sealed class StatusDot : FluentControl
     public Color DotColor
     {
         get => _color;
-        set { if (_color != value) { _color = value; Invalidate(); } }
+        set { if (_color != value) { _color = value; Repaint(); } }
     }
 
     public override Size GetPreferredSize(Size proposedSize) => new(Dp(10), Dp(10));
@@ -137,7 +138,7 @@ internal sealed class StatusDot : FluentControl
 }
 
 /// <summary>A round badge with an icon-font glyph (the speaker on 首页).</summary>
-internal sealed class GlyphBadge : FluentControl
+internal sealed class GlyphBadge : PaintedControl
 {
     public GlyphBadge(string glyph, int size = 48)
     {
@@ -165,7 +166,7 @@ internal sealed class GlyphBadge : FluentControl
 }
 
 /// <summary>An app icon (from the executable), drawn smoothly at the control's size.</summary>
-internal sealed class AppIconBox : FluentControl
+internal sealed class AppIconBox : PaintedControl
 {
     private Bitmap? _image;
 
@@ -206,7 +207,7 @@ internal sealed class AppIconBox : FluentControl
 }
 
 /// <summary>A hairline across the width.</summary>
-internal sealed class Divider : FluentControl
+internal sealed class Divider : PaintedControl
 {
     public Divider()
     {
@@ -216,5 +217,5 @@ internal sealed class Divider : FluentControl
 
     public override Size GetPreferredSize(Size proposedSize) => new(proposedSize.Width, Hairline);
 
-    protected override void OnPaint(PaintEventArgs e) => e.Graphics.Clear(P.Divider);
+    protected override void OnPaint(PaintEventArgs e) => Shapes.Fill(e.Graphics, P.Divider, ClientRectangle);
 }

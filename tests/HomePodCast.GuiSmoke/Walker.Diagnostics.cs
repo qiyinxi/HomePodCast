@@ -37,10 +37,10 @@ internal sealed partial class Walker
         var counters = PagePane(Uia.Snapshot(MainWindow()), "诊断");
         foreach (string caption in new[] { "缓冲欠载", "网络波动" })
         {
-            var tile = Find(counters, node => node.Name == T(caption) && node.Type == "Text" && node.Hwnd != IntPtr.Zero);
+            var tile = Find(counters, node => node.Name == T(caption) && node.Type == "Text" && node.Hwnd == IntPtr.Zero);
             Expect(tile != null, "诊断", $"missing counter: {T(caption)}");
             if (tile == null) continue;
-            string value = Native.MsaaDescription(tile.Hwnd) ?? "";
+            string value = tile.Text;
             Expect(connected ? long.TryParse(value, out _) : value == "—", "诊断",
                 $"{T(caption)} shows 「{value}」 while connected={connected}");
         }
