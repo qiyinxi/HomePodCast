@@ -102,11 +102,11 @@ internal sealed class LogicalLayout
         // A moved input is a physical child of the host, but belongs to its original row.
         if (childNode.Parent != null && Nodes.TryGetValue(childNode.Parent, out var logicalParent))
             logicalParent.Children.Remove(child);
-        node.Tree.Detach(child, disposeInputs: child.Disposing || child.IsDisposed);
+        node.Tree.Detach(child, disposeInputs: child.Disposing || child.IsDisposed, restoreInputs: !childNode.Input);
         node.Tree.Refresh();
     }
 
-    private void Detach(Control control, bool disposeInputs)
+    private void Detach(Control control, bool disposeInputs, bool restoreInputs = true)
     {
         if (!Nodes.TryGetValue(control, out var node)) return;
         _host.SuspendLayout();
@@ -114,13 +114,13 @@ internal sealed class LogicalLayout
         try
         {
             if (node.Parent != null && Nodes.TryGetValue(node.Parent, out var parent)) parent.Children.Remove(control);
-            foreach (var child in node.Children.ToArray()) Detach(child, disposeInputs);
+            foreach (var child in node.Children.ToArray()) Detach(child, disposeInputs, restoreInputs);
             control.TabIndexChanged -= InputTabIndexChanged;
             Nodes.Remove(control);
             if (node.Input && !control.IsDisposed && !control.Disposing)
             {
                 if (disposeInputs) control.Dispose();
-                else
+                else if (restoreInputs)
                 {
                     control.Parent = node.Parent;
                     control.Bounds = node.Bounds;

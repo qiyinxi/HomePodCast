@@ -68,6 +68,22 @@ public class LogicalLayoutTests
     });
 
     [Fact]
+    public void Removing_a_native_input_releases_logical_ownership_without_reattaching_it_to_the_row() => Sta.Run(() =>
+    {
+        using var host = new StackPanel();
+        using var button = new FluentButton("removed");
+        var row = Ui.Card(new TextBlock("caption"), button);
+        host.Controls.Add(row);
+        LogicalLayout.Enable(host);
+        LayoutPanel.CreateWindows(host, () => false);
+        host.Controls.Remove(button);
+        Assert.Null(button.Parent);
+        Assert.Null(LogicalLayout.Host(button));
+        Assert.DoesNotContain(button, LogicalLayout.Children(row));
+        Assert.False(row.IsHandleCreated);
+    });
+
+    [Fact]
     public void Dynamic_rows_use_the_same_tree_without_recreating_the_surface_or_existing_inputs() => Sta.Run(() =>
     {
         using var host = new StackPanel();
