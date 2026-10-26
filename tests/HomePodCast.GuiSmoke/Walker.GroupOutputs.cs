@@ -91,6 +91,10 @@ internal sealed partial class Walker
         File.WriteAllLines(Path.Combine(_dir, "group-idle-baseline.log"), baseline);
         CheckGroupIdle(preferences, 0, "startup");
 
+        Navigate("混音器");
+        CheckMixerHelp();
+        CheckGroupIdle(preferences, baseline.Count, "mixer-help");
+
         // Exercise the always-available player page in every UI language at the required 150% scale, without opening
         // the optional viewing module, a player connection or a sync test.
         Navigate("音画同步");

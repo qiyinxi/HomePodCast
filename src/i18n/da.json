@@ -732,5 +732,10 @@
   "此版本没有提供更新说明。": "Der er ingen udgivelsesnoter til denne version.",
   "更早的变化见发布页。": "Se tidligere ændringer på udgivelsessiden.",
   "在 GitHub 上查看": "Vis på GitHub",
-  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Installationspakken kontrolleres først med SHA-256. Windows beder om administratorrettigheder, og appen genstarter efter installationen. Streaming afbrydes i cirka et minut."
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Installationspakken kontrolleres først med SHA-256. Windows beder om administratorrettigheder, og appen genstarter efter installationen. Streaming afbrydes i cirka et minut.",
+  "了解更多": "Læs mere",
+  "收起详细说明": "Skjul detaljer",
+  "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Optager hele outputenheden på én gang med lavest forsinkelse. Alle apps sendes til den aktuelle højttaler eller højttalergruppe.",
+  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Vælg HomePod, denne pc eller begge for hver app; streamet lyd får cirka {0} ms ekstra forsinkelse. Brug optagelse af hele outputtet for lavest forsinkelse i spil.",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Send i Windows de apps, du vil streame, til én ledig lydenhed, og vælg den derefter som optageenhed. Dette bruger optagelse af hele outputtet."
 }

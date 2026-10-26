@@ -287,9 +287,9 @@ public class LayoutWorkTests
         var panels = All(mixer).OfType<LayoutPanel>().Where(panel => panel != mixer.Content).ToArray();
         var inputs = All(mixer).Where(control => !ParentPainting.IsPainted(control) && control is FluentControl).ToArray();
         output.WriteLine($"Mixer: {panels.Length} windowless layout nodes, {inputs.Length} native inputs, {Handles(mixer)} HWNDs");
-        Assert.Equal(11, panels.Length);
+        Assert.Equal(16, panels.Length); // short summaries, help actions and the collapsed details are all windowless
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
-        Assert.Equal(9, inputs.Length);
+        Assert.Equal(10, inputs.Length); // the help toggle adds one native input
         Assert.All(inputs, input =>
         {
             Assert.True(input.IsHandleCreated);
@@ -309,7 +309,7 @@ public class LayoutWorkTests
             work.AssertOnce("mixer sessions changed", output);
             Assert.Equal(1, work.Pages);
         }
-        Assert.Equal(16, Handles(mixer)); // a second app adds its five input HWNDs, no row window
+        Assert.Equal(17, Handles(mixer)); // a second app adds its five input HWNDs, no row window
         window.Hide();
     });
 

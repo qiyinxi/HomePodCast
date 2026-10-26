@@ -14,9 +14,6 @@ internal sealed class MixerPage : ScrollPage
 {
     private static readonly AudioRoute[] Routes = [AudioRoute.HomePod, AudioRoute.Local, AudioRoute.Both];
 
-    /// <summary>Windows Settings → 应用音量和设备首选项, where each app's output device is chosen.</summary>
-    private const string AppVolumeSettings = "ms-settings:apps-volume";
-
     /// <summary>
     /// With a chosen capture device, 「HomePod 跟随 Windows 音量」 follows that device's volume (VolumeKeyForwarder watches
     /// it), while the keyboard keys change the default output. Shown here and under 键盘音量键 in 设置 (L.T).
@@ -62,19 +59,7 @@ internal sealed class MixerPage : ScrollPage
         _routeRow = new SettingRow(Glyph.Devices, L.T("默认输出到"), L.T("适用于未单独设置输出目标的应用。"), _routeDefault);
         _routeRow.DescriptionText.Wrap = true;
 
-        var appVolume = new FluentButton(L.T("打开 Windows 应用音量设置"), ButtonKind.Link, Glyph.OpenInNew);
-        var modes = Ui.Card(
-            Ui.Header(L.T("全部推送与按程序分流")),
-            Ui.Stack(4,
-                new TextBlock(L.T("全部推送（默认，推荐打游戏）"), TextStyle.BodyStrong),
-                Ui.Note(L.T("直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「首页 → 仅 HomePod 输出」。"))),
-            Ui.Stack(4,
-                new TextBlock(L.F("按程序分流（额外延迟约 {0} ms）", RoutedCapture.RoutedExtraLatencyMs), TextStyle.BodyStrong),
-                Ui.Note(L.F("单独设置程序去处或 HomePod 音量，或默认去处是「本机」，就会启用。Windows 只能逐个抓取程序的声音，这条路更慢：推到 HomePod 的声音会多约 {0} ms。浏览器插件会把这部分自动算进画面延迟，游戏没法补偿。设为「HomePod」的程序在本机静音，Windows 音量合成器里显示为 0%；系统提示音只在本机播放。全部改回「默认」、关闭 HomePod 独立音量，并把默认设为 HomePod，就回到全部推送。", RoutedCapture.RoutedExtraLatencyMs))),
-            Ui.Stack(4,
-                new TextBlock(L.T("按声卡分流（没有额外延迟）"), TextStyle.BodyStrong),
-                Ui.Note(L.F("在 Windows 的应用音量设置（或程序自己的设置）里，把要推送的程序的输出设为一个你不用来听的设备，再在上面的「采集设备」里选它；语音聊天等其他程序照常在耳机里播放。整个设备一次抓取，不像按程序分流那样多约 {0} ms。需要一个空闲的或虚拟的声卡，比如 VB-CABLE、网易 UU 加速器的虚拟声卡、Steam Streaming Speakers，或不带喇叭的 HDMI 显示器；HomePodCast 没法自己装虚拟声卡（那是要微软签名的内核驱动）。有些游戏只在启动时选择输出设备，改完要重启游戏。", RoutedCapture.RoutedExtraLatencyMs)),
-                Ui.Row(0, null, appVolume)));
+        var modes = new MixerModeHelp();
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
         var note = Ui.Note(L.F("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，音箱音量由 HomePod 滑块决定；开启时不会超过它现在的 Windows 音量，音箱不会突然变响。送到「两者」的程序可以分别调节音箱和本机；送到「HomePod」的程序本机已静音，Windows 音量不再改变音箱音量；送到「本机」的程序不推送。独立音量会启用按程序分流，推送的声音多约 {0} ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × HomePod 音量。关闭独立音量可恢复跟随 Windows。", RoutedCapture.RoutedExtraLatencyMs));
@@ -109,7 +94,6 @@ internal sealed class MixerPage : ScrollPage
             SyncRoutes();
         };
         _captureDevice.SelectionChangeCommitted += (_, _) => OnCaptureDeviceChosen();
-        appVolume.Click += (_, _) => OpenAppVolumeSettings();
         _meterTimer.Tick += (_, _) => UpdateMeters();
         _refreshTimer.Tick += (_, _) =>
         {
@@ -186,12 +170,6 @@ internal sealed class MixerPage : ScrollPage
         if (!_active) return; // PageShown lists them afresh
         LoadCaptureDevices();
         RefreshApps();
-    }
-
-    private void OpenAppVolumeSettings()
-    {
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(AppVolumeSettings) { UseShellExecute = true }); }
-        catch (Exception ex) { Log.Warn($"open {AppVolumeSettings}: {ex.Message}"); }
     }
 
     /// <summary>The volume was changed here (首页 follows).</summary>
