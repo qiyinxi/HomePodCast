@@ -367,6 +367,40 @@ public class CinemaTests
         finally { File.Delete(file); }
     }
 
+    [Fact]
+    public async Task An_inspection_completes_only_after_its_reader_is_closed()
+    {
+        // 2026-10-26 CI (run 40250728437): the result came before the reader's cleanup, so the test above read its step
+        // list while the inspection thread was still adding the cleanup's steps to it ("Collection was modified").
+        string file = TempWave(16, 2, Stereo, 48000);
+        var cleanup = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim(); // not disposed: the inspection thread may still be leaving its Wait
+        var steps = new List<string>();
+        try
+        {
+            var inspection = CinemaMediaReader.InspectAsync(file, step =>
+            {
+                lock (steps) steps.Add(step);
+                if (step != "IMFSourceReader::Release") return;
+                cleanup.Set();
+                release.Wait(TimeSpan.FromSeconds(20)); // held in the cleanup, with the file still open
+            });
+            try
+            {
+                Assert.True(cleanup.Wait(TimeSpan.FromSeconds(20)), "the inspection never reached its cleanup");
+                Assert.False(inspection.IsCompleted, "the inspection reported its result before it closed the file");
+            }
+            finally { release.Set(); }
+            var (channels, mask) = await inspection;
+            Assert.Equal(2, channels);
+            Assert.Equal(Stereo, CinemaChannels.Resolve(channels, mask));
+            lock (steps)
+                Assert.Equal(["CoInitializeEx", "MFStartup", "MFCreateSourceReaderFromURL", "the media type",
+                    "IMFSourceReader::Release", "MFShutdown", "CoUninitialize"], steps);
+        }
+        finally { release.Set(); File.Delete(file); }
+    }
+
     /// <summary>The level each channel of a generated file has: 0.02, 0.04, … (channel order).</summary>
     internal static float Level(int channel) => (channel + 1) * 0.02f;
 
