@@ -602,6 +602,11 @@ public class TakeoverControllerTests : IDisposable
             reader.HeldBy = Tv;
             reader.Set("卧室");
         }
+        bool? releasedAtIdle = null; // Changed runs inside Set: the capture as Idle was published
+        c.Changed += () =>
+        {
+            if (c.State == StreamState.Idle && c.StatusText == "已断开（音箱可能被其他设备占用）") releasedAtIdle ??= c.Capture == null;
+        };
         c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
         await Until(() => c.State == StreamState.Streaming, "streaming");
         Assert.Equal(appleTv ? "电视" : null, c.TakenFromAppleTv);
@@ -620,6 +625,7 @@ public class TakeoverControllerTests : IDisposable
         Assert.Equal(2, Members().Count);
         Assert.All(Members(), m => Assert.True(m.Disposed));
         Assert.Null(c.Capture);                                    // nothing captured or sent any more
+        Assert.True(releasedAtIdle);                               // already when Idle was published, not just later
         Assert.False(c.OwnSession.IsRecent(OwnSession.KeyOf(Plan), DateTime.UtcNow)); // the flag is the other sender's
     }
 
