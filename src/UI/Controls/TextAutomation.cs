@@ -11,22 +11,25 @@ namespace HomePodCast.UI.Controls;
 /// The standard COM marshaler keeps callbacks on the UI thread that owns the layout and these provider objects.
 /// </summary>
 [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObject, IRawElementProviderFragmentRoot
+internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObject, IRawElementProviderFragmentRoot, IRawElementProviderHwndOverride
 {
     private LayoutPanel Host => host;
-    private readonly ConditionalWeakTable<Control, TextProvider> _providers = new();
+    private readonly ConditionalWeakTable<Control, IRawElementProviderFragment> _providers = new();
     private readonly IntPtr _hwnd = host.Handle;
     private bool _released, _disconnecting;
-    private static Control[] Children(Control parent) => parent.Controls.Cast<Control>()
-        .Where(c => ParentPainting.IsPainted(c) && LayoutPanel.IsShown(c) && !LayoutPanel.IsCollapsed(c)).ToArray();
+    private Control[] Children(Control parent) => LogicalLayout.Children(parent)
+        .Where(c => (ParentPainting.IsPainted(c) || LogicalLayout.IsHost(host) && c.IsHandleCreated)
+            && LayoutPanel.IsShown(c) && !LayoutPanel.IsCollapsed(c)).ToArray();
     private Control[] Texts => Children(host);
     private bool Contains(Control element)
     {
-        for (var c = element; c != null && ParentPainting.IsPainted(c); c = c.Parent)
-            if (c.Parent == host) return true;
+        if (element != host && LogicalLayout.Host(element) == host) return true;
+        for (var c = element; c != null && ParentPainting.IsPainted(c); c = LogicalLayout.Parent(c))
+            if (LogicalLayout.Parent(c) == host) return true;
         return false;
     }
-    private TextProvider Provider(Control text) => _providers.GetValue(text, t => new TextProvider(this, t));
+    private IRawElementProviderFragment Provider(Control text) => _providers.GetValue(text,
+        t => LogicalLayout.IsInput(t) ? new NativePlacement(this, t) : new TextProvider(this, t));
     private void CheckAvailable()
     {
         if (_released || host.IsDisposed || !host.IsHandleCreated)
@@ -136,7 +139,51 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
         return Hit(host) is { } element ? Provider(element) : null;
     }
     public IRawElementProviderFragment? GetFocus() => null; // ordinary child HWNDs keep their focus providers
+    public IRawElementProviderSimple? GetOverrideProviderForHwnd(IntPtr hwnd)
+    {
+        CheckAvailable();
+        return Control.FromHandle(hwnd) is { } control && LogicalLayout.IsInput(control) && LogicalLayout.Host(control) == host
+            ? Provider(control) : null;
+    }
     private static System.Windows.Rect ToRect(Rectangle bounds) => new(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+
+    /// <summary>
+    /// UIA's HWND placement override: supply only logical navigation. The HWND retains its WinForms provider, patterns,
+    /// properties, children and runtime identity. This is the same interop mechanism WPF uses for a hosted native control.
+    /// </summary>
+    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+    private sealed class NativePlacement(TextAutomation root, Control control) : StandardOleMarshalObject, IRawElementProviderFragmentRoot
+    {
+        private void CheckAvailable()
+        {
+            root.CheckAvailable();
+            if (control.IsDisposed || !control.IsHandleCreated || !root.Contains(control)) throw new ElementNotAvailableException();
+        }
+        public ProviderOptions ProviderOptions => ProviderOptions.ServerSideProvider | ProviderOptions.OverrideProvider;
+        public IRawElementProviderSimple HostRawElementProvider
+        {
+            get { CheckAvailable(); return AutomationInteropProvider.HostProviderFromHandle(control.Handle); }
+        }
+        public object? GetPatternProvider(int patternId) => null;
+        public object? GetPropertyValue(int propertyId) => null;
+        public IRawElementProviderFragment? Navigate(NavigateDirection direction)
+        {
+            CheckAvailable();
+            var parent = LogicalLayout.Parent(control)!;
+            if (direction == NavigateDirection.Parent) return parent == root.Host ? root : root.Provider(parent);
+            var siblings = root.Children(parent);
+            int index = Array.IndexOf(siblings, control);
+            int next = direction == NavigateDirection.NextSibling ? index + 1 : direction == NavigateDirection.PreviousSibling ? index - 1 : -1;
+            return index >= 0 && next >= 0 && next < siblings.Length ? root.Provider(siblings[next]) : null;
+        }
+        public int[]? GetRuntimeId() => null;
+        public System.Windows.Rect BoundingRectangle => System.Windows.Rect.Empty;
+        public IRawElementProviderSimple[]? GetEmbeddedFragmentRoots() => null;
+        public void SetFocus() => throw new NotSupportedException();
+        public IRawElementProviderFragmentRoot FragmentRoot => null!; // the input's own provider supplies its fragment
+        public IRawElementProviderFragment? ElementProviderFromPoint(double x, double y) => null;
+        public IRawElementProviderFragment? GetFocus() => null;
+    }
 
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
     private sealed class TextProvider(TextAutomation root, Control text) : StandardOleMarshalObject, IRawElementProviderFragment, IValueProvider
@@ -187,11 +234,11 @@ internal sealed class TextAutomation(LayoutPanel host) : StandardOleMarshalObjec
         {
             CheckAvailable();
             if (direction == NavigateDirection.Parent)
-                return text.Parent == root.Host ? root : root.Provider(text.Parent!);
-            var children = Children(text);
+                return LogicalLayout.Parent(text) == root.Host ? root : root.Provider(LogicalLayout.Parent(text)!);
+            var children = root.Children(text);
             if (direction == NavigateDirection.FirstChild) return children.Length == 0 ? null : root.Provider(children[0]);
             if (direction == NavigateDirection.LastChild) return children.Length == 0 ? null : root.Provider(children[^1]);
-            var siblings = Children(text.Parent!);
+            var siblings = root.Children(LogicalLayout.Parent(text)!);
             int i = Array.IndexOf(siblings, text);
             int next = direction == NavigateDirection.NextSibling ? i + 1 : direction == NavigateDirection.PreviousSibling ? i - 1 : -1;
             return i >= 0 && next >= 0 && next < siblings.Length ? root.Provider(siblings[next]) : null;

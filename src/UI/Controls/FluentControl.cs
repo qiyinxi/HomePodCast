@@ -19,6 +19,7 @@ internal abstract class FluentControl : Control
     private bool _hover, _pressed, _collapsed;
     internal bool RequestedVisible { get; private set; } = true;
     internal bool RequestedEnabled { get; private set; } = true;
+    private bool? _logicalShown, _logicalEnabled;
 
     public new bool Enabled
     {
@@ -38,8 +39,15 @@ internal abstract class FluentControl : Control
 
     internal void ApplyLogicalState(bool shown, bool enabled)
     {
-        base.SetVisibleCore(shown);
-        base.Enabled = enabled;
+        if (_logicalShown != shown) { base.SetVisibleCore(shown); _logicalShown = shown; }
+        if (_logicalEnabled != enabled) { base.Enabled = enabled; _logicalEnabled = enabled; }
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        // AssignParent raises VisibleChanged when an input leaves a painted row. WinForms creates the input and all
+        // its native ancestors there, even on a detached page. The normal preparation/show path creates them later.
+        if (!LogicalLayout.BuildingDetached(this)) base.OnVisibleChanged(e);
     }
 
     protected FluentControl()
@@ -161,10 +169,11 @@ internal abstract class FluentControl : Control
 
     protected class FluentAccessible(FluentControl owner) : ControlAccessibleObject(owner)
     {
-        public override AccessibleObject? Parent => LogicalLayout.Parent(owner)?.AccessibilityObject;
+        public override AccessibleObject? Parent => LogicalLayout.IsInput(owner) ? LogicalLayout.Parent(owner)?.AccessibilityObject : base.Parent;
         public override AccessibleObject? Navigate(AccessibleNavigation direction)
         {
-            if (!LogicalLayout.IsInput(owner)) return base.Navigate(direction);
+            if (!LogicalLayout.IsInput(owner) || direction is not (AccessibleNavigation.Next or AccessibleNavigation.Previous))
+                return base.Navigate(direction);
             var siblings = LogicalLayout.Children(LogicalLayout.Parent(owner)!).Where(LayoutPanel.IsShown).ToArray();
             int index = Array.IndexOf(siblings, owner);
             int next = direction == AccessibleNavigation.Next ? index + 1 : direction == AccessibleNavigation.Previous ? index - 1 : -1;
@@ -407,6 +416,17 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
 
     private sealed class LayoutAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
     {
+        public override Rectangle Bounds => owner.ParentPainted ? ParentPainting.ScreenBounds(owner) : base.Bounds;
+        public override AccessibleRole Role => owner.ParentPainted && owner.AccessibleRole == AccessibleRole.Default ? AccessibleRole.Pane : base.Role;
+        public override string? Name { get => owner.ParentPainted ? owner.AccessibleName ?? owner.Text : base.Name; set => base.Name = value; }
+        public override AccessibleStates State => owner.ParentPainted
+            ? (owner.Enabled ? AccessibleStates.None : AccessibleStates.Unavailable)
+                | (IsShown(owner) && !owner.Collapsed ? AccessibleStates.None : AccessibleStates.Invisible)
+                | (ParentPainting.ScreenBounds(owner, clipped: true).IsEmpty ? AccessibleStates.Offscreen : AccessibleStates.None)
+            : base.State;
+        public override AccessibleObject? Navigate(AccessibleNavigation direction) => owner.ParentPainted
+            ? NavigatePainted(owner, direction) : base.Navigate(direction);
+        public override AccessibleObject? GetFocused() => owner.ParentPainted ? FocusedPainted(owner) : base.GetFocused();
         // 2026-10-18: the base Parent wraps OLEACC's native proxy on every external query. Releasing thousands
         // of those GIT entries re-entered COM's STA message pump until the published app overflowed its stack.
         // Our parent is already a managed accessible object; return that stable identity directly.
@@ -509,20 +529,28 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
     public static void Place(Control c, int x, int y, int w, int h)
     {
         if (LogicalLayout.PlaceInput(c, new Rectangle(x, y, Math.Max(0, w), Math.Max(0, h)))) return;
-        bool container = c is LayoutPanel or ScrollPage;
-        if (container) c.SuspendLayout();
+        _placementDepth++;
         try
         {
-            if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+            bool container = c is LayoutPanel or ScrollPage;
+            if (container) c.SuspendLayout();
+            try
+            {
+                if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+            }
+            finally
+            {
+                // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
+                // doing both multiplies the work at each level of the page's nested cards and rows.
+                if (container) c.ResumeLayout(false);
+            }
+            if (container) c.PerformLayout();
         }
-        finally
-        {
-            // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
-            // doing both multiplies the work at each level of the page's nested cards and rows.
-            if (container) c.ResumeLayout(false);
-        }
-        if (container) c.PerformLayout();
+        finally { _placementDepth--; }
     }
+
+    [ThreadStatic] private static int _placementDepth;
+    internal static bool Placing => _placementDepth != 0;
 
     /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
     public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);

@@ -82,6 +82,7 @@ internal abstract partial class LayoutPanel
         {
             ParentPainting.Invalidate(Parent, Rectangle.Union(old, Bounds));
             ParentPainting.Notify(this, AccessibleEvents.LocationChange);
+            if (!Placing) LogicalLayout.Changed(this);
         }
     }
 
@@ -95,6 +96,24 @@ internal abstract partial class LayoutPanel
     }
 
     void IParentPainted.PaintInParent(PaintEventArgs e) { OnPaintBackground(e); OnPaint(e); }
+
+    private static AccessibleObject? FocusedPainted(Control owner)
+    {
+        var focused = LogicalLayout.Children(owner).FirstOrDefault(child => child.ContainsFocus);
+        return focused?.AccessibilityObject.GetFocused() ?? focused?.AccessibilityObject;
+    }
+
+    private static AccessibleObject? NavigatePainted(Control owner, AccessibleNavigation direction)
+    {
+        var children = LogicalLayout.Children(owner).Where(child => IsShown(child) && !IsCollapsed(child)).ToArray();
+        if (direction == AccessibleNavigation.FirstChild) return children.FirstOrDefault()?.AccessibilityObject;
+        if (direction == AccessibleNavigation.LastChild) return children.LastOrDefault()?.AccessibilityObject;
+        if (LogicalLayout.Parent(owner) is not { } parent) return null;
+        var siblings = LogicalLayout.Children(parent).Where(child => IsShown(child) && !IsCollapsed(child)).ToArray();
+        int index = Array.IndexOf(siblings, owner);
+        int next = direction == AccessibleNavigation.Next ? index + 1 : direction == AccessibleNavigation.Previous ? index - 1 : -1;
+        return index >= 0 && next >= 0 && next < siblings.Length ? siblings[next].AccessibilityObject : null;
+    }
 
     // WinForms updates an existing ControlAccessibleObject when a HWND is created. A display-only panel can
     // acquire one after a dynamic input arrives, so its cached accessible object must support that transition.
@@ -111,6 +130,8 @@ internal abstract partial class LayoutPanel
             | (IsShown(owner) && !owner.Collapsed ? AccessibleStates.None : AccessibleStates.Invisible)
             | (ParentPainting.ScreenBounds(owner, clipped: true).IsEmpty ? AccessibleStates.Offscreen : AccessibleStates.None);
         public override int GetChildCount() => Children.Length;
+        public override AccessibleObject? GetFocused() => FocusedPainted(owner);
+        public override AccessibleObject? Navigate(AccessibleNavigation direction) => NavigatePainted(owner, direction);
         public override AccessibleObject? GetChild(int index)
         {
             var children = Children;

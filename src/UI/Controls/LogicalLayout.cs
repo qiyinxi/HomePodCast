@@ -16,7 +16,6 @@ internal sealed class LogicalLayout
     private sealed class Node(LogicalLayout tree, Control control, Control? parent)
     {
         internal readonly LogicalLayout Tree = tree;
-        internal readonly Control Control = control;
         internal readonly Control? Parent = parent;
         internal readonly List<Control> Children = [];
         internal Rectangle Bounds = control.Bounds;
@@ -29,9 +28,10 @@ internal sealed class LogicalLayout
     private LogicalLayout(LayoutPanel host)
     {
         _host = host;
+        _host.SuspendLayout();
         _changing++;
         try { Attach(host, null); }
-        finally { _changing--; }
+        finally { _changing--; _host.ResumeLayout(false); }
         Refresh();
     }
 
@@ -39,21 +39,35 @@ internal sealed class LogicalLayout
     {
         if (Nodes.TryGetValue(host, out _)) return;
         if (host.IsHandleCreated) throw new InvalidOperationException("Enable logical layout before creating the surface HWND.");
+        Validate(host);
         _ = new LogicalLayout(host);
     }
 
+    private static void Validate(Control control)
+    {
+        if (control is LayoutPanel)
+        {
+            foreach (Control child in control.Controls) Validate(child);
+        }
+        else if (!ParentPainting.IsPainted(control) && control is not FluentControl)
+            throw new InvalidOperationException($"{control.GetType().Name} needs a native host; do not flatten that subtree.");
+    }
+
     internal static Control? Parent(Control control) => Nodes.TryGetValue(control, out var node) ? node.Parent ?? control.Parent : control.Parent;
-    internal static IEnumerable<Control> Children(Control control) => Nodes.TryGetValue(control, out var node)
+    internal static IEnumerable<Control> Children(Control control) => Nodes.TryGetValue(control, out var node) && !node.Input
         ? node.Children.ToArray() : control.Controls.Cast<Control>();
     internal static Rectangle Bounds(Control control) => Nodes.TryGetValue(control, out var node) && node.Input ? node.Bounds : control.Bounds;
     internal static bool IsHost(Control control) => Nodes.TryGetValue(control, out var node) && node.Tree._host == control;
     internal static bool IsInput(Control control) => Nodes.TryGetValue(control, out var node) && node.Input;
     internal static LayoutPanel? Host(Control control) => Nodes.TryGetValue(control, out var node) ? node.Tree._host : null;
+    internal static bool BuildingDetached(Control control) => Nodes.TryGetValue(control, out var node)
+        && node.Tree._changing != 0 && !node.Tree._host.IsHandleCreated;
 
     private void Attach(Control control, Control? parent)
     {
         var node = new Node(this, control, parent);
         Nodes.Add(control, node);
+        control.TabIndexChanged += InputTabIndexChanged;
         if (control is LayoutPanel)
         {
             var children = control.Controls.Cast<Control>().ToArray();
@@ -66,17 +80,18 @@ internal sealed class LogicalLayout
                 throw new InvalidOperationException($"{control.GetType().Name} needs a native host; do not flatten that subtree.");
             node.Input = true;
             control.Parent = _host;
-            control.TabIndexChanged += InputTabIndexChanged;
         }
     }
 
     internal static void Added(LayoutPanel parent, Control child)
     {
         if (!Nodes.TryGetValue(parent, out var node) || node.Tree._changing != 0) return;
+        Validate(child);
         var tree = node.Tree;
+        tree._host.SuspendLayout();
         tree._changing++;
         try { node.Children.Add(child); tree.Attach(child, parent); }
-        finally { tree._changing--; }
+        finally { tree._changing--; tree._host.ResumeLayout(false); }
         tree.Refresh();
     }
 
@@ -94,6 +109,7 @@ internal sealed class LogicalLayout
     private void Detach(Control control, bool disposeInputs)
     {
         if (!Nodes.TryGetValue(control, out var node)) return;
+        _host.SuspendLayout();
         _changing++;
         try
         {
@@ -113,7 +129,7 @@ internal sealed class LogicalLayout
                 }
             }
         }
-        finally { _changing--; }
+        finally { _changing--; _host.ResumeLayout(false); }
     }
 
     internal static void Disposing(Control panel)
@@ -137,8 +153,16 @@ internal sealed class LogicalLayout
         if (!Nodes.TryGetValue(control, out var node) || !node.Input) return false;
         node.Bounds = bounds;
         bounds.Offset(node.Tree.Offset(node.Parent));
-        if (control.Bounds != bounds) control.Bounds = bounds;
+        node.Tree.PlaceNative(control, bounds);
         return true;
+    }
+
+    private void PlaceNative(Control control, Rectangle bounds)
+    {
+        if (control.Bounds == bounds) return;
+        _host.SuspendLayout();
+        try { control.Bounds = bounds; }
+        finally { _host.ResumeLayout(false); }
     }
 
     internal static bool SetVisible(FluentControl control, bool value)
@@ -186,12 +210,12 @@ internal sealed class LogicalLayout
                     input.TabIndex = tabIndex++;
                     var bounds = node.Bounds;
                     bounds.Offset(Offset(node.Parent));
-                    if (input.Bounds != bounds) input.Bounds = bounds;
+                    PlaceNative(input, bounds);
                     return;
                 }
                 shown &= LayoutPanel.IsShown(control) && !LayoutPanel.IsCollapsed(control);
                 enabled &= control.Enabled;
-                foreach (var child in node.Children.OrderBy(child => Nodes.GetValue(child, _ => throw new InvalidOperationException()).TabIndex))
+                foreach (var child in node.Children.OrderBy(child => Nodes.TryGetValue(child, out var entry) ? entry.TabIndex : child.TabIndex))
                     Visit(child, shown, enabled);
             }
             Visit(_host, true, true);

@@ -46,7 +46,7 @@ internal sealed class MixerPage : ScrollPage
     private List<AppAudio> _apps = [];
     private bool _active;
 
-    public MixerPage(TrayApp app) : base(L.T("混音器"))
+    public MixerPage(TrayApp app, bool logicalLayout = true) : base(L.T("混音器"))
     {
         _app = app;
         _master.AccessibleName = L.T("音量");
@@ -117,6 +117,7 @@ internal sealed class MixerPage : ScrollPage
             SyncRoutes();
         };
         ShowMaster();
+        if (logicalLayout) LogicalLayout.Enable(Content); // tests compare both hierarchies on the same fake page
     }
 
     // ---------------------------------------------------------------- capture device
