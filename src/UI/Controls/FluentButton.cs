@@ -161,7 +161,7 @@ internal sealed class FluentButton : FluentControl, IButtonControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new ButtonAccessible(this);
 
-    private sealed class ButtonAccessible(FluentButton owner) : ControlAccessibleObject(owner)
+    private sealed class ButtonAccessible(FluentButton owner) : FluentAccessible(owner)
     {
         public override string DefaultAction => L.T("按下");
 

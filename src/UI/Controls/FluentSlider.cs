@@ -241,7 +241,7 @@ internal sealed class FluentSlider : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new SliderAccessible(this);
 
-    private sealed class SliderAccessible(FluentSlider owner) : ControlAccessibleObject(owner)
+    private sealed class SliderAccessible(FluentSlider owner) : FluentAccessible(owner)
     {
         public override string? Value
         {

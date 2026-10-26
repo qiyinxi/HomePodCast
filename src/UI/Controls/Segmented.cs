@@ -195,7 +195,7 @@ internal sealed class Segmented : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new SegmentedAccessible(this);
 
-    private sealed class SegmentedAccessible(Segmented owner) : ControlAccessibleObject(owner)
+    private sealed class SegmentedAccessible(Segmented owner) : FluentAccessible(owner)
     {
         public override string? Value => owner.SelectedText;
         public override int GetChildCount() => owner._items.Length;

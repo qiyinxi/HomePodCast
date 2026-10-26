@@ -7,8 +7,8 @@ internal abstract partial class LayoutPanel
     bool IParentPainted.ParentPainted => ParentPainted;
     bool IParentPainted.Shown => _shown;
 
-    // A native descendant still needs a native parent for WinForms focus, IME and message reflection.
-    // Display-only subtrees can disappear from the HWND tree without reparenting any interactive control.
+    // By default an input keeps its native ancestors. An opted-in LogicalLayout instead parents the inputs to its
+    // surface; the physical children left in these rows/cards are painted, while their logical children stay intact.
     internal void UpdateParentPainting()
     {
         bool painted = Parent is LayoutPanel && !IsHandleCreated &&
@@ -36,6 +36,7 @@ internal abstract partial class LayoutPanel
             if (!parentHasWindow) return;
         }
         base.OnVisibleChanged(e);
+        LogicalLayout.Changed(this);
     }
 
     public new bool Visible { get => ParentPainting.IsShown(this); set => SetVisibleCore(value); }
@@ -87,6 +88,7 @@ internal abstract partial class LayoutPanel
     protected override void OnEnabledChanged(EventArgs e)
     {
         base.OnEnabledChanged(e);
+        LogicalLayout.Changed(this);
         if (!ParentPainted) return;
         ParentPainting.Invalidate(Parent, Bounds);
         ParentPainting.Notify(this, AccessibleEvents.StateChange);
@@ -98,7 +100,7 @@ internal abstract partial class LayoutPanel
     // acquire one after a dynamic input arrives, so its cached accessible object must support that transition.
     private sealed class PaintedPanelAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
     {
-        private Control[] Children => owner.Controls.Cast<Control>()
+        private Control[] Children => LogicalLayout.Children(owner)
             .Where(c => IsShown(c) && !IsCollapsed(c)).ToArray();
         public override string? Name { get => owner.AccessibleName ?? owner.Text; set => owner.AccessibleName = value; }
         public override string? Description => owner.AccessibleDescription;
