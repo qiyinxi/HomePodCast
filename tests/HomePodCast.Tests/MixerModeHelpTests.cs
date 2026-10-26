@@ -1,5 +1,5 @@
 using System.Drawing;
-using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Windows.Forms;
 using HomePodCast.Audio;
 using HomePodCast.UI.Controls;
@@ -76,10 +76,10 @@ public class MixerModeHelpTests
         var settings = All(help).OfType<FluentButton>().Single(b => b.Text == "打开 Windows 应用音量设置");
         Assert.True(more.Focus());
         var handle = more.Handle;
-        SendMessage(handle, 0x0100, (IntPtr)Keys.Space, IntPtr.Zero);
+        Key(more, Keys.Space);
         Assert.Equal("收起详细说明", more.Text);
         Assert.True(more.Focused);
-        SendMessage(handle, 0x0100, (IntPtr)Keys.Enter, IntPtr.Zero);
+        Key(more, Keys.Enter);
         Assert.Equal("了解更多", more.Text);
         Assert.True(more.Focused);
         Assert.Equal(handle, more.Handle);
@@ -99,5 +99,12 @@ public class MixerModeHelpTests
         protected override bool ShowWithoutActivation => true;
     }
 
-    [DllImport("user32.dll")] private static extern IntPtr SendMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam);
+    private static void Key(FluentButton button, Keys key)
+    {
+        // WM_KEYDOWN builds modifiers from this PC's live keyboard state. Supply the complete event here;
+        // GUI CI separately sends native messages on its isolated runner.
+        var args = new KeyEventArgs(key);
+        typeof(FluentButton).GetMethod("OnKeyDown", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(button, [args]);
+        Assert.True(args.Handled && args.SuppressKeyPress);
+    }
 }
