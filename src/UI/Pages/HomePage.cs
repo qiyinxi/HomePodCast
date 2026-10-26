@@ -584,7 +584,7 @@ internal sealed class HomePage : ScrollPage
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;
         bool connect = TrayApp.ShowsConnect(c.State);
-        _connect.Text = connect ? L.T("连接") : L.T("断开");
+        _connect.Text = _app.ConnectionActionText;
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
         _connect.Collapsed = _app.NativeMixerOnly;
         _volume.Enabled = _mute.Enabled = !_app.NativeMixerView;

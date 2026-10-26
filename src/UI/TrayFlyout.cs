@@ -165,7 +165,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
             _ => TextRole.Secondary,
         };
         bool connect = TrayApp.ShowsConnect(c.State);
-        _connect.Text = connect ? L.T("连接") : L.T("断开");
+        _connect.Text = _app.ConnectionActionText;
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
         _connect.Collapsed = _app.NativeMixerOnly;
         _volume.Enabled = !_app.NativeMixerView;

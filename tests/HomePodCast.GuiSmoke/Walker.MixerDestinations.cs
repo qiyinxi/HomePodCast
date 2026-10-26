@@ -26,7 +26,7 @@ internal sealed partial class Walker
         ShootPage("混音器", "destinations-connected", checkEachScroll: true);
         Expect(Has(Uia.Snapshot(MainWindow()), T("多去处混音（实验性）")), "mixer", "missing 1.3 experimental heading");
         CheckMixerHelp();
-        Uia.Invoke(MixerControl(T("打开 Windows 应用音量设置"), "Button"));
+        Uia.Invoke(MixerControl(T("打开 Windows 应用音量设置"), "Hyperlink"));
         MixerWait(() => MixerAudit(a => a.GetProperty("settingsUris").GetArrayLength() == 1), "intercepted Windows settings link");
         Expect(MixerAudit(a => a.GetProperty("settingsUris")[0].GetString() == "ms-settings:apps-volume"), "mixer", "wrong intercepted settings URI");
 
@@ -76,7 +76,7 @@ internal sealed partial class Walker
         ShootPage("混音器", "destinations-independent", checkEachScroll: true);
 
         int beforeIdentities = MixerRead(a => a.GetProperty("saves").GetInt32());
-        Uia.Invoke(MixerControl(T("确认设备身份"), "Button"));
+        Uia.Invoke(MixerControl(T("确认设备身份"), "Hyperlink"));
         IntPtr identities = IntPtr.Zero;
         MixerWait(() => (identities = MixerWindow(T("确认设备身份"))) != IntPtr.Zero, "device identity dialog");
         Shoot(identities, "destination-identities", "physical device aliases");

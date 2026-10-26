@@ -193,6 +193,8 @@ internal sealed partial class TrayApp
         }
     }
     internal string? SelectedMixerKey => Mixer?.SelectedKey;
+    internal string ConnectionActionText => ShowsConnect(Controller.State) ? L.T("连接") :
+        Mixer?.HasMultipleDestinations == true ? L.T("断开全部") : L.T("断开");
     internal string? SelectedOutputName => Mixer?.Statuses.FirstOrDefault(s => s.Key == SelectedMixerKey)?.Name ??
         (NativeMixerView ? L.T("本机") : null);
     internal bool NativeMixerView => Mixer?.IsConnected == true && Mixer.SelectedConfig == null &&

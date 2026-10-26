@@ -715,7 +715,8 @@ internal sealed partial class MixerPage : ScrollPage
                 y += rh + small;
             }
             int line = Dp(32);
-            int labelW = Math.Min(Dp(120), Math.Max(Dp(80), inner / 4));
+            int labelW = Math.Min(Math.Max(Dp(120), Math.Max(WidthFor(_localLabel), WidthFor(_sendLabel))),
+                Math.Max(Dp(80), inner / 3));
             int toggleW = Dp(44);
             int sliderX = padX + labelW + small;
             int valueX = padX + inner - valueW;

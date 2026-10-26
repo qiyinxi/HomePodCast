@@ -9,6 +9,31 @@ namespace HomePodCast.Tests;
 public sealed class MixerBoundaryTests
 {
     [Fact]
+    public void Volume_keys_end_a_global_mute_but_alignment_preserves_it() => Sta.Run(() =>
+    {
+        var config = MixerCoordinatorTests.Config(); MixerCoordinatorTests.Routes(config);
+        var app = TestApp.Create(config); using var original = app.Controller;
+        var coordinator = new MixerOutputCoordinator(new(), (_, _) => new GuardSession(),
+            (_, _) => new MixerCoordinatorTests.FakeCapture(), () => new DormantHost());
+        try
+        {
+            coordinator.RefreshRootsAsync([new(2, "music", false)]).GetAwaiter().GetResult();
+            coordinator.ConnectAsync(config, ConnectTrigger.Manual).GetAwaiter().GetResult();
+            Set("<Mixer>k__BackingField", coordinator); Set("<Controller>k__BackingField", coordinator.SelectedController!);
+            using var form = new MainWindow(app); Set("_form", form);
+            app.SetSpeakerMuted(true);
+            var setVolume = typeof(TrayApp).GetMethod("SetVolumeLive", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            setVolume.Invoke(app, [12d, true, false]);
+            Assert.All(coordinator.Controllers, c => Assert.True(c.Muted));
+            setVolume.Invoke(app, [13d, false, true]);
+            Assert.All(coordinator.Controllers, c => Assert.False(c.Muted));
+            Assert.False(TestApp.Field<bool>(app, "_mixerMuted"));
+        }
+        finally { coordinator.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        void Set(string name, object value) => typeof(TrayApp).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, value);
+    });
+
+    [Fact]
     public async Task Changing_Current_cannot_reuse_a_controller_still_owned_by_the_old_named_destination()
     {
         var config = MixerRoutingV2Tests.Speaker();

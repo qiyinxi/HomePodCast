@@ -138,6 +138,7 @@ internal sealed partial class TrayApp
     /// <param name="unmute">False only for lowering at alignment: a muted HomePod stays muted.</param>
     private void SetVolumeLive(double percent, bool fromWindows = false, bool unmute = true)
     {
+        if (unmute && _mixerMuted) SetSpeakerMuted(false);
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Controller.SetVolume(percent, unmute);
         if (!fromWindows) _followLink?.HomePodChanged();
