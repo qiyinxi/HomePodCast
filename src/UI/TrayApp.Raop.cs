@@ -8,7 +8,7 @@ internal sealed partial class TrayApp
     private bool _raopDialog;
     private void InitRaop()
     {
-        // Explicit addresses are user choices; discovered receivers still resolve fresh on every group reconnect.
+        // Explicit addresses are user choices; discovered receivers still resolve fresh on every reconnect, alone or in a group.
         Controller.ManualGroupReceiverDevice = id => Config.ManualDevices.Select(d => d.ToDevice())
             .FirstOrDefault(d => d != null && RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id));
         Controller.ReceiverLookup = id => LastScan.FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id))
