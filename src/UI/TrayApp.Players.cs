@@ -41,6 +41,8 @@ internal sealed partial class TrayApp
                 var destination = mixer.DestinationForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
                 var controller = mixer.ControllerForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
                 if (endpoint.ProcessKey == null || destination?.Config is not { } config || controller == null) return null;
+                config.SyncCalibrations = Config.SyncCalibrations;
+                config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
                 var context = MixerCalibrationContext(config, controller, destination.Key);
                 return PlayerInputFor(config, controller.State, VideoDelayFor(config, controller.State,
                     controller.EffectiveLatencyMs, controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context));
@@ -48,16 +50,22 @@ internal sealed partial class TrayApp
         }
         : PlayerInputFor(Config, Controller.State, VideoDelayMs);
 
-    private object ApiStatusForApp(string? app)
+    private object ApiStatusForApp(string? app, uint? pid)
     {
         if (Mixer is not { IsConnected: true } mixer)
             return ApiStatus(Controller.State == StreamState.Streaming, Config.DeviceName, Controller.EffectiveLatencyMs, VideoDelayMs, HasCurrentCalibration);
-        var destination = mixer.DestinationForApp(app);
+        if (app == null && pid is { } process && Audio.ProcessTree.Snapshot().TryGetValue(process, out var caller) &&
+            MixerRoutes.Read(Config).Settings?.For(caller.Key).Output.Kind == MixerOutputKind.Local) app = caller.Key;
+        var destination = mixer.DestinationForApp(app, pid);
         if (destination == null) return new { app = "HomePodCast", streaming = false, destinationRequired = true,
+            message = L.T("无法确定此程序的声音去处，同步暂不可用。"),
             destinations = mixer.Statuses.Select(s => new { s.Key, s.Name, s.State }) };
-        var controller = mixer.ControllerForApp(app);
+        var controller = mixer.ControllerForApp(app, pid);
         if (destination.Config is not { } config || controller == null)
-            return new { app = "HomePodCast", streaming = false, destination = destination.Key, local = destination.IsLocal };
+            return new { app = "HomePodCast", streaming = false, destination = destination.Key, local = destination.IsLocal,
+                message = destination.IsLocal ? L.T("此程序在本机播放，不使用音箱画面延迟。") : L.T("无法确定此程序的声音去处，同步暂不可用。") };
+        config.SyncCalibrations = Config.SyncCalibrations;
+        config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
         var context = MixerCalibrationContext(config, controller, destination.Key);
         int delay = VideoDelayFor(config, controller.State, controller.EffectiveLatencyMs,
             controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context);

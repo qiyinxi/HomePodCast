@@ -24,6 +24,8 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentComboBox _outputGroups = new() { AccessibleName = L.T("已保存的分组"), MinWidth = 180 };
     private readonly FluentButton _deleteGroup = new(L.T("删除分组"), ButtonKind.Subtle);
     private readonly TextBlock _groupStatus = Ui.Note();
+    private readonly TextBlock _compatibilityOutput = Ui.Note();
+    private readonly TextBlock _destinationLatency = Ui.Note();
     private StackPanel _groupPicker = null!;
     private string[] _outputGroupIds = [];
     private string? _outputGroupSignature;
@@ -152,7 +154,7 @@ internal sealed class HomePage : ScrollPage
         _groupStatus.AccessibleName = L.T("输出状态");
         _groupStatus.Collapsed = true;
         var status = Ui.Row(8, _status, _dot, _status);
-        var card = Ui.Card(head, _groupPicker, picker, status, _streamStats, _groupStatus);
+        var card = Ui.Card(head, _groupPicker, picker, _compatibilityOutput, status, _streamStats, _groupStatus);
         card.Gap = 12;
 
         _connect.Click += (_, _) => _app.ToggleConnection();
@@ -213,7 +215,7 @@ internal sealed class HomePage : ScrollPage
         _homePodLatency = Ui.Stack(10, _scenes, profiles, number, _lag, slider, _movieHint);
         _receiverLatency = new ReceiverLatencyPanel(_app);
         _receiverLatency.LatencyChanged += () => { ShowLatency(); LatencyChanged?.Invoke(); _app.KickPlayers(); };
-        var card = Ui.Card(head, _homePodLatency, _receiverLatency);
+        var card = Ui.Card(head, _homePodLatency, _receiverLatency, _destinationLatency);
         manage.Click += (_, _) => _app.ShowProfiles(FindForm()!);
         _profileApply.Click += (_, _) =>
         {
@@ -431,10 +433,18 @@ internal sealed class HomePage : ScrollPage
         _loading = true;
         var cfg = _app.PlaybackConfig;
         var selection = _app.ReceiverSelection;
-        _homePodLatency.Collapsed = selection != null;
+        bool scopedGroup = _app.Mixer?.IsConnected == true && GroupPlan.FromConfig(cfg) != null;
+        _homePodLatency.Collapsed = selection != null || scopedGroup || _app.NativeMixerView;
+        _destinationLatency.Collapsed = !scopedGroup && !_app.NativeMixerView;
+        _destinationLatency.Text = _app.NativeMixerView ? L.T("本机播放由 Windows 决定；不创建播放副本，也不提供网络延迟设置。") : scopedGroup
+            ? L.F("请求 {0} ms · 实际 {1} ms", cfg.LatencyMs, _app.Controller.EffectiveLatencyMs) + "\n" +
+                L.F("此去处的延迟可在「{0}」逐个调整。", L.T("混音器")) : "";
+        if (scopedGroup && _app.Controller.Capture?.ExtraLatencyMs is > 0)
+            _destinationLatency.Text += "\n" + L.F("按程序采集额外延迟约 {0} ms。", Audio.RoutedCapture.RoutedExtraLatencyMs);
         _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        if (scopedGroup) _sceneHeader.Text = L.T("各去处状态（实验性）"); // experimental since 1.3
         _sceneHeader.Wrap = selection != null; // Long receiver labels share the header with 管理配置.
-        int ms = selection?.Value ?? _tuner.Value;
+        int ms = selection?.Value ?? (scopedGroup ? cfg.LatencyMs : _tuner.Value);
         _latency.Value = _tuner.Value;
         _scenes.SelectedIndex = Array.IndexOf(Scenes.All, cfg.Scene);
         _latencyValue.Text = $"{ms} ms";
@@ -524,10 +534,12 @@ internal sealed class HomePage : ScrollPage
 
     private void ShowSpeaker()
     {
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
         var plan = GroupPlan.FromConfig(cfg);
         var named = cfg.SavedOutputGroups.FirstOrDefault(g => g.Id == cfg.SelectedOutputGroupId);
-        _name.Text = named?.Name ?? plan?.Name ?? cfg.DeviceName ?? L.T("还没有选择音箱");
+        _name.Text = _app.SelectedOutputName ?? named?.Name ?? plan?.Name ?? cfg.DeviceName ?? L.T("还没有选择音箱");
+        _compatibilityOutput.Collapsed = _app.Config.MixerRouting == null;
+        _compatibilityOutput.Text = L.F("这里的选择会改变「{0}」；具名去处的程序不会跟着切换。", MixerDestinationOptions.Name(_app.Config, MixerRoute.Current, _app.LastScan));
         var device = _device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count ? _devices[_device.SelectedIndex] : null;
         _model.Text = device == null ? (cfg.DeviceId == null ? L.T("在下面选择一台 AirPlay 音箱") : "")
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
@@ -574,6 +586,8 @@ internal sealed class HomePage : ScrollPage
         bool connect = TrayApp.ShowsConnect(c.State);
         _connect.Text = connect ? L.T("连接") : L.T("断开");
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
+        _connect.Collapsed = _app.NativeMixerOnly;
+        _volume.Enabled = _mute.Enabled = !_app.NativeMixerView;
         if (c.State == StreamState.Streaming && c.Volume is { } v) ShowVolume(v);
         ShowMute();
         _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
@@ -642,7 +656,7 @@ internal sealed class HomePage : ScrollPage
 
     private void ShowGroupOutputStatus()
     {
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
         var plan = GroupPlan.FromConfig(cfg);
         _groupStatus.Collapsed = plan == null;
         if (plan == null) { _groupStatus.Text = ""; return; }

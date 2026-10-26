@@ -10,9 +10,10 @@ internal sealed partial class TrayApp
     {
         get
         {
-            if (Config.DeviceId is not { } id) return null;
+            var config = PlaybackConfig;
+            if (config.DeviceId is not { } id) return null;
             var device = Controller.ReceiverLookup?.Invoke(id);
-            if (GroupPlan.FromConfig(Config) != null && (device == null || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv)) return null;
+            if (GroupPlan.FromConfig(config) != null) return null;
             var settings = Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id));
             bool live = Controller.State == StreamState.Streaming;
             return ReceiverLatencySelection.Create(device, settings, live ? Controller.ActiveProtocol : null,
@@ -20,9 +21,14 @@ internal sealed partial class TrayApp
         }
     }
 
-    internal void SetReceiverLatency(int milliseconds)
+    internal async void SetReceiverLatency(int milliseconds)
     {
         if (ReceiverSelection is not { } selection || selection.Policy.MinimumMs > selection.Policy.MaximumMs) return;
+        if (Mixer != null && SelectedMixerKey is { } destination)
+        {
+            await ApplyMixerDelayAsync(destination, new(PlaybackConfig.Scene, milliseconds, PlaybackConfig.FifoTargetMs, PlaybackConfig.Volume));
+            _form.UpdateState(); RaiseStateChanged(); return;
+        }
         string key = RaopPassword.Key(selection.Device.DeviceId);
         if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
             Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(selection.Device);

@@ -89,6 +89,7 @@ internal sealed partial class Walker
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
                 case "update-notes": RunUpdateNotes(); break;
                 case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
+                case "mixer-destinations": RunMixerDestinations(); break;
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -106,7 +107,7 @@ internal sealed partial class Walker
         finally
         {
             StopApp();
-            SaveLog();
+            if (_s.Kind != "mixer-destinations") SaveLog();
             _fake?.Dispose();
             Uia.Noted = null;
         }

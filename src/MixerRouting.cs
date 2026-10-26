@@ -204,11 +204,13 @@ public static class MixerDestinationResolver
         c.MultiRoomHost = UsageProfiles.FreshHost(c.MultiRoomDeviceId, source, scan);
         if (c.GroupSpeakers != null) foreach (var member in c.GroupSpeakers)
             member.Host = UsageProfiles.FreshHost(member.DeviceId, source, scan);
-        if (route.AlsoLocal && LocalGroupSettings.Selected(c).Count > 0)
-            return new(key, name, null, MixerRoutingError.DuplicateLocal);
         var settings = MixerRoutes.Read(source).Settings;
         if (route.Output.Kind != MixerOutputKind.Current && settings?.DestinationSettings.GetValueOrDefault(key) is { } delay)
-        { c.Scene = delay.Scene; c.LatencyMs = delay.LatencyMs; c.FifoTargetMs = delay.FifoTargetMs; c.Volume = delay.Volume; }
+        {
+            c.Scene = delay.Scene; c.LatencyMs = delay.LatencyMs; c.FifoTargetMs = delay.FifoTargetMs; c.Volume = delay.Volume;
+            // This is a detached manual presentation-delay request, not a mutation of the saved group's settings.
+            if (GroupPlan.FromConfig(c) != null) c.GroupDelayMs = Math.Max(c.GroupDelayMs ?? 0, delay.LatencyMs);
+        }
         c.MixerRouting = null;
         return new(key, name, c, MixerRoutingError.None);
     }

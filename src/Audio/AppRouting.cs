@@ -80,7 +80,7 @@ public sealed class AppRouting
             if (_config.AppRoutes.TryGetValue(key, out var old) && old == r) return;
             _config.AppRoutes[key] = r;
         }
-        else if (!_config.AppRoutes.Remove(key)) return;
+        else if (!_config.AppRoutes.Remove(key) && MixerRoutes.Read(_config).Settings?.Apps.ContainsKey(key) != true) return;
         if (MixerRoutes.Read(_config).Settings is { } routing)
         {
             if (route is { } selected) routing.Apps[key] = MixerRoutes.FromLegacy(selected);

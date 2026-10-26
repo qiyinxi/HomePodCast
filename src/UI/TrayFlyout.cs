@@ -154,7 +154,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
         var c = _app.Controller;
         var cfg = _app.PlaybackConfig;
 
-        _name.Text = cfg.DeviceName ?? L.T("还没有选择音箱");
+        _name.Text = _app.SelectedOutputName ?? cfg.DeviceName ?? L.T("还没有选择音箱");
         _dot.DotColor = Icons.For(c.State);
         _status.Text = c.StatusText;
         _status.Role = c.State switch
@@ -167,6 +167,8 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
         bool connect = TrayApp.ShowsConnect(c.State);
         _connect.Text = connect ? L.T("连接") : L.T("断开");
         _connect.Kind = connect ? ButtonKind.Primary : ButtonKind.Secondary;
+        _connect.Collapsed = _app.NativeMixerOnly;
+        _volume.Enabled = !_app.NativeMixerView;
 
         int cap = cfg.VolumeCapPercent;
         _volume.Ceiling = cap;

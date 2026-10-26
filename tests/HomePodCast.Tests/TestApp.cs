@@ -40,6 +40,9 @@ internal static class TestApp
         var app = (TrayApp)RuntimeHelpers.GetUninitializedObject(typeof(TrayApp));
         Set(app, "<Config>k__BackingField", config);
         Set(app, "<Controller>k__BackingField", new StreamController(config.FifoTargetMs));
+        Set(app, "_legacyController", app.Controller);
+        Set(app, "_legacyDestinationKey", MixerDestinationResolver.Resolve(config, MixerRoute.Current).Key);
+        Set(app, "_mixerEqualizers", new System.Collections.Concurrent.ConcurrentDictionary<StreamController, Equalizer>());
         Set(app, "<Routing>k__BackingField", new AppRouting(config, () => { }));
         Set(app, "<MixSources>k__BackingField", new MixSources());
         Set(app, "<UnavailableHotkeys>k__BackingField", new HashSet<HotkeyAction>());

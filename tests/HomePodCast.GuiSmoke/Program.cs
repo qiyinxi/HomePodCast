@@ -38,12 +38,18 @@ internal static class Program
         new("compatibility", "en", 100),
         new("compatibility", "de", 150),
         .. L.Languages.Select(language => new Scenario("group-outputs", language, 150, RequiredScale: true)),
+        .. L.Languages.Select(language => new Scenario("mixer-destinations", language, 150, RequiredScale: true)),
     ];
 
     private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
 
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--mixer-fixture")
+        {
+            Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2);
+            return MixerUiFixture.Run(args[1], args[2]);
+        }
         if (args.FirstOrDefault() == "--uia-probe") return UiaProbe.Run(args[1..]);
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
@@ -136,6 +142,8 @@ internal static class Program
                 }
                 if (scenario.Kind == "group-outputs" && !report.Shots.Any(shot => shot.Scenario == scenario.Id))
                     report.Fail(scenario.Id, "the required group-output scenario produced no screenshot");
+                if (scenario.Kind == "mixer-destinations" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 6)
+                    report.Fail(scenario.Id, "the required mixer scenario did not capture its controls, conflict and confirmations");
                 if (scenario.Kind == "update-notes" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 2)
                     report.Fail(scenario.Id, "the required update-notes scenario did not capture both the top and bottom");
                 int failed = report.Failures.Count - failuresBefore;

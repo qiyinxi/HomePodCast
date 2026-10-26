@@ -45,6 +45,7 @@ public sealed class MixerCaptureHub : IDisposable
     private readonly MixerPacketGain _gain;
     private readonly MixSources _sources;
     private readonly int _rate, _outRate;
+    private readonly bool _steerClock;
     private readonly List<float> _drained = new(MaxPacketFrames * 2);
     private float[] _sourceScratch = new float[MaxPacketFrames * 2];
     private readonly float[] _extras = new float[MaxPacketFrames * 2];
@@ -53,14 +54,16 @@ public sealed class MixerCaptureHub : IDisposable
     public long DroppedInputFrames { get; private set; }
     public int InputCount { get { lock (_gate) return _inputs.Count; } }
     public int BusCount { get { lock (_gate) return _buses.Count; } }
-    public bool IsCapturing(uint pid) { lock (_gate) return _inputs.ContainsKey(pid); }
+    public bool IsCapturing(uint pid)
+    { lock (_gate) return _inputs.TryGetValue(pid, out var input) && _buses.TryGetValue(input.Root.Destination, out var bus) && bus.Started; }
     private sealed class Input(MixerRoot root, IMixerProcessInput capture)
     { public MixerRoot Root = root; public IMixerProcessInput Capture = capture; }
 
     public MixerCaptureHub(int rate, Func<RouteTarget, IMixerProcessInput> open, MixSources? sources = null,
-        MixerPacketGain? gain = null, int outRate = 44100)
+        MixerPacketGain? gain = null, int outRate = 44100, bool steerClock = true)
     {
         _rate = rate; _outRate = outRate; _open = open; _sources = sources ?? new();
+        _steerClock = steerClock;
         _gain = gain ?? ((_, _) => new PacketGain(1, 1));
     }
 
@@ -70,7 +73,7 @@ public sealed class MixerCaptureHub : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_buses.ContainsKey(destination)) throw new InvalidOperationException("A destination already owns its capture bus");
-            var bus = new Bus(destination, fifo, _rate, _outRate, () => Unsubscribe(destination));
+            var bus = new Bus(destination, fifo, _rate, _outRate, _steerClock, () => Unsubscribe(destination));
             _buses.Add(destination, bus);
             foreach (var input in _inputs.Values.Where(i => i.Root.Destination == destination)) bus.Add(input.Root.Target.RootPid);
             return bus;
@@ -100,11 +103,11 @@ public sealed class MixerCaptureHub : IDisposable
             foreach (var (pid, input) in _inputs.ToArray())
             {
                 var next = plan.Roots.FirstOrDefault(r => r.Target.RootPid == pid && r.ProcessIdentity == input.Root.ProcessIdentity);
-                if (next == null || !_buses.ContainsKey(next.Destination)) { Remove(pid); continue; }
+                if (next == null) { Remove(pid); continue; }
                 if (next.Destination != input.Root.Destination || !next.Target.SameCapture(input.Root.Target))
                 {
                     if (_buses.TryGetValue(input.Root.Destination, out var old)) old.Remove(pid);
-                    _buses[next.Destination].Add(pid);
+                    if (_buses.TryGetValue(next.Destination, out var nextBus)) nextBus.Add(pid);
                 }
                 input.Root = next;
             }
@@ -120,6 +123,24 @@ public sealed class MixerCaptureHub : IDisposable
                 catch (Exception ex) { Log.Warn($"mixer capture {root.Target.RootPid}: {ex.Message}"); }
             }
             Generation = plan.Generation;
+        }
+    }
+
+    /// <summary>Move existing capture ownership before old sessions stop; opening the replacement bus may await a connection.</summary>
+    internal void Retarget(IReadOnlyDictionary<string, string?> destinations)
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            foreach (var (pid, input) in _inputs.ToArray())
+            {
+                if (!destinations.TryGetValue(input.Root.Target.Key, out var next)) continue;
+                if (next == null) { Remove(pid); continue; }
+                if (next == input.Root.Destination) continue;
+                if (_buses.TryGetValue(input.Root.Destination, out var previous)) previous.Remove(pid);
+                input.Root = input.Root with { Destination = next };
+                if (_buses.TryGetValue(next, out var bus)) bus.Add(pid);
+            }
         }
     }
 
@@ -150,7 +171,8 @@ public sealed class MixerCaptureHub : IDisposable
                 }
                 var samples = CollectionsMarshal.AsSpan(_drained);
                 // The capture list's storage is reused; no packet-sized array is allocated here.
-                _buses[input.Root.Destination].Push(pid, samples, _gain(input.Root.Target, samples));
+                if (_buses.TryGetValue(input.Root.Destination, out var destination))
+                    destination.Push(pid, samples, _gain(input.Root.Target, samples));
             }
             if (broken is { } failed) Remove(failed);
             int extraFrames = Math.Min(MaxPacketFrames, _outRate / 100);
@@ -185,16 +207,20 @@ public sealed class MixerCaptureHub : IDisposable
         private readonly Action _release;
         private readonly Action<int, float[], int, int> _observe;
         private readonly int _rate, _outRate;
+        private readonly bool _steerClock;
+        private double _averageDepth;
         private int _frames;
         private bool _started, _disposed;
-        public Bus(string name, AudioFifo fifo, int rate, int outRate, Action release)
+        internal bool Started => _started && !_disposed;
+        public Bus(string name, AudioFifo fifo, int rate, int outRate, bool steerClock, Action release)
         {
             DeviceName = name; _fifo = fifo; _rate = rate; _outRate = outRate; _release = release;
+            _steerClock = steerClock; _averageDepth = fifo.TargetFrames;
             _mixer = new(rate * 30 / 1000); _observe = Observe;
             _padded = new float[(MaxPacketFrames + rate * 30 / 1000) * 2];
         }
         public string? DeviceName { get; }
-        public double DriftPpm => 0;
+        public double DriftPpm { get; private set; }
         public float Peak { get; private set; }
         public int ExtraLatencyMs => RoutedCapture.RoutedExtraLatencyMs;
         public event Action<string>? DeviceChanged { add { } remove { } }
@@ -256,6 +282,15 @@ public sealed class MixerCaptureHub : IDisposable
             }
             else _contributions.Remove(0);
             _fifo.WriteMixer(_contributions, _frames);
+            if (_steerClock)
+            {
+                // Same depth controller as RoutedCapture, independently per destination; receiver backlog never
+                // steers the resamplers of another destination or changes anyone else's FIFO target.
+                _averageDepth += .02 * (_fifo.Depth - _averageDepth);
+                double adjust = Math.Clamp((_averageDepth - _fifo.TargetFrames) / _outRate * .02, -500e-6, 500e-6);
+                foreach (var resampler in _resamplers.Values) resampler.Adjust = adjust;
+                DriftPpm = adjust * 1e6;
+            }
             float peak = 0;
             foreach (var samples in _contributions.Values)
                 for (int i = 0; i < _frames * 2; i++) peak = Math.Max(peak, Math.Abs(samples[i]));

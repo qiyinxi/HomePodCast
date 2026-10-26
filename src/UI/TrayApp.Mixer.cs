@@ -6,6 +6,7 @@ namespace HomePodCast.UI;
 internal sealed partial class TrayApp
 {
     private StreamController? _legacyController;
+    private string? _legacyDestinationKey;
     internal MixerOutputCoordinator? Mixer { get; private set; }
     internal AppConfig PlaybackConfig
     {
@@ -13,6 +14,11 @@ internal sealed partial class TrayApp
         {
             var selected = Mixer?.SelectedConfig ?? Config;
             selected.SyncCalibrations = Config.SyncCalibrations;
+            selected.ReceiverSettings = Config.ReceiverSettings;
+            selected.VideoDelayExtraMs = Config.VideoDelayExtraMs;
+            selected.VolumeCapPercent = Config.VolumeCapPercent;
+            selected.NightMode = Config.NightMode;
+            selected.CaptureDeviceId = Routing.CaptureDeviceId;
             return selected;
         }
     }
@@ -23,12 +29,15 @@ internal sealed partial class TrayApp
 
     private void InitMixer()
     {
+        _legacyDestinationKey = MixerDestinationResolver.Resolve(Config, MixerRoute.Current, LastScan).Key;
         Mixer = new(new MixerDeviceLeaseTable(), CreateMixerSession, LegacyMixerCapture,
-            () => new MixerProcessCaptureHost(new CombinedSources(MixSources, Fx.HomePodSource).Sources, () => Routing.Rules.SendVolumes, Routing), () => LastScan);
+            () => new MixerProcessCaptureHost(new CombinedSources(MixSources, Fx.HomePodSource).Sources, () => Routing.Rules.SendVolumes, Routing), () => LastScan,
+            () => _knownDefaultOutputId);
         _legacyMicMix = _legacyController!.Effects.Effects.OfType<MixIn>().FirstOrDefault();
         Mixer.Changed += () => _ui.Post(_ =>
         {
             if (_quitting) return;
+            _wantConnected = Mixer.IsConnected;
             var previous = Controller;
             if (_cinemaSession?.Holding != true) Controller = Mixer.SelectedController ?? _legacyController!;
             var projection = Mixer.SelectedConfig;
@@ -44,24 +53,23 @@ internal sealed partial class TrayApp
 
     private ICaptureSource LegacyMixerCapture(ResolvedMixerDestination destination, AudioFifo fifo)
     {
-        if (ReferenceEquals(Mixer?.SelectedController, _legacyController) ||
-            MixerDestinationResolver.Resolve(Config, MixerRoute.Current, LastScan).Key == destination.Key)
-            return new RoutedCapture(fifo, RtpSender.SampleRate, Routing, MixSources);
-        var projection = destination.Config!;
-        var routing = MixerRoutes.Read(Config).Settings!;
-        AudioRoute Legacy(MixerRoute route) => route.Output.Kind == MixerOutputKind.Local ? AudioRoute.Local : route.AlsoLocal ? AudioRoute.Both : AudioRoute.HomePod;
-        projection.RouteDefault = Legacy(routing.Default);
-        projection.AppRoutes = routing.Apps.ToDictionary(p => p.Key, p => Legacy(p.Value));
-        return new RoutedCapture(fifo, RtpSender.SampleRate, new AppRouting(projection, () => { }), MixSources);
+        // A bypass has one remote bus. Its capture policy is still the live global routing policy, even when
+        // that bus is a named speaker: copying it would freeze later Local/Both and independent-volume edits.
+        return new RoutedCapture(fifo, RtpSender.SampleRate, Routing, MixSources);
     }
+
+    internal Action? SaveMixerConfiguration { get; set; }
+    internal void SaveMixerConfig() => (SaveMixerConfiguration ?? Config.Save)();
 
     private IMixerDestinationSession CreateMixerSession(ResolvedMixerDestination destination, Func<AudioFifo, ICaptureSource> capture)
     {
         var config = destination.Config!;
         bool current = destination.Key == MixerDestinationResolver.Resolve(Config, MixerRoute.Current, LastScan).Key;
-        var controller = current ? _legacyController! : new StreamController(config.FifoTargetMs);
+        bool useLegacy = destination.Key == _legacyDestinationKey &&
+            (Mixer?.KeyForController(_legacyController!) is not { } owner || owner == destination.Key);
+        var controller = useLegacy ? _legacyController! : new StreamController(config.FifoTargetMs);
         controller.CaptureFactory = capture;
-        controller.ArrivalToRenderMs = current ? Config.ArrivalToRenderMs : config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(config.DeviceId ?? ""))?.ArrivalToRenderMs;
+        controller.ArrivalToRenderMs = current && useLegacy ? Config.ArrivalToRenderMs : config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(config.DeviceId ?? ""))?.ArrivalToRenderMs;
         controller.SetVolumeCap(Config.VolumeCapPercent); controller.NightMode.Enabled = Config.NightMode;
         controller.SetMuted(_mixerMuted);
         controller.Pairings = Pairings;
@@ -72,23 +80,42 @@ internal sealed partial class TrayApp
         controller.ReceiverLookup = id => LastScan.FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id))
             ?? Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id))?.Device(id)
             ?? controller.ManualGroupReceiverDevice(id);
-        controller.ReceiverSettings = id => Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id));
-        controller.CompatibilityLatency = id => Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id))?.CompatibilityLatencyMs ?? 2000;
+        bool individualDelay = GroupPlan.FromConfig(config) == null &&
+            MixerRoutes.Read(Config).Settings?.DestinationSettings.ContainsKey(destination.Key) == true;
+        controller.ReceiverSettings = id =>
+        {
+            var preferences = Config.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id));
+            if (!individualDelay) return preferences;
+            var device = controller.ReceiverLookup?.Invoke(id);
+            if (device == null) return preferences;
+            preferences ??= ReceiverPreferences.Of(device);
+            return preferences with { RealtimeLatencyMs = config.LatencyMs,
+                CompatibilityLatencyMs = ReceiverLatencies.CompatibilityChoices.FirstOrDefault(ms => ms >= config.LatencyMs, 2000) };
+        };
+        controller.CompatibilityLatency = id => controller.ReceiverSettings(id)?.CompatibilityLatencyMs ?? 2000;
         controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
-        controller.CapturedOutputId = () => CaptureEndpoint.Captured(Routing.CaptureDeviceId, AudioEndpoints.DefaultOutputId());
-        if (current && _legacyMicMix != null)
+        controller.CapturedOutputId = () => CaptureEndpoint.Captured(Routing.CaptureDeviceId, _knownDefaultOutputId);
+        if (useLegacy && _legacyMicMix != null)
         {
             controller.Effects.Remove(_legacyMicMix);
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, _legacyMicMix);
         }
-        if (!current)
+        if (!useLegacy)
         {
             var eq = new Equalizer(44100); eq.Set(Config.Effects.OutputEq.Preset, Config.Effects.OutputEq.Gains);
             controller.Effects.Insert(0, eq); _mixerEqualizers[controller] = eq;
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
             controller.Changed += () => _ui.Post(_ => { if (!_quitting) RememberMixerSession(destination.Key, config, controller); }, null);
-            controller.HostResolved += host => config.Host = host;
+            controller.HostResolved += host =>
+            {
+                config.Host = host;
+                _ui.Post(_ =>
+                {
+                    if (!_quitting && config.DeviceId != null && GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(config.DeviceId))
+                    { Config.Host = host; Config.Save(); }
+                }, null);
+            };
             controller.ArrivalToRenderChanged += ms => config.ArrivalToRenderMs = ms;
             controller.ReceiverProtocolConnected += (id, protocol, processing) => _ui.Post(_ =>
             {
@@ -157,7 +184,7 @@ internal sealed partial class TrayApp
     internal void SaveSelectedDestinationSettings()
     {
         if (Mixer?.SelectedConfig is not { } selected || Mixer.Statuses.FirstOrDefault(s => s.Key == Mixer.SelectedKey) is not { } status) return;
-        if (ReferenceEquals(Controller, _legacyController))
+        if (UsesCompatibilitySettings(status.Key))
         { Config.Scene = selected.Scene; Config.LatencyMs = selected.LatencyMs; Config.CustomLatencyMs = selected.CustomLatencyMs; Config.Save(); }
         else if (MixerRoutes.Read(Config).Settings is { } settings)
         {
@@ -166,12 +193,19 @@ internal sealed partial class TrayApp
         }
     }
     internal string? SelectedMixerKey => Mixer?.SelectedKey;
+    internal string? SelectedOutputName => Mixer?.Statuses.FirstOrDefault(s => s.Key == SelectedMixerKey)?.Name ??
+        (NativeMixerView ? L.T("本机") : null);
+    internal bool NativeMixerView => Mixer?.IsConnected == true && Mixer.SelectedConfig == null &&
+        MixerRoutes.Read(Config).Settings?.Default.Output.Kind == MixerOutputKind.Local;
+    internal bool NativeMixerOnly => NativeMixerView && MixerRoutes.Read(Config).Settings is { } routes &&
+        routes.Apps.Values.All(route => route.Output.Kind == MixerOutputKind.Local);
 
     private void SaveSelectedVolume(double percent)
     {
-        if (Mixer?.SelectedConfig is { } selected && !ReferenceEquals(Controller, _legacyController) &&
+        if (Mixer?.SelectedConfig is { } selected &&
             SelectedMixerKey is { } key && MixerRoutes.Read(Config).Settings is { } settings)
         {
+            if (UsesCompatibilitySettings(key)) { Config.Volume = percent; Config.Save(); return; }
             selected.Volume = percent;
             var saved = settings.DestinationSettings.GetValueOrDefault(key) ?? new(selected.Scene, selected.LatencyMs, selected.FifoTargetMs);
             settings.DestinationSettings[key] = saved with { Volume = percent };
@@ -180,12 +214,50 @@ internal sealed partial class TrayApp
         else { Config.Volume = percent; Config.Save(); }
     }
 
+    private bool UsesCompatibilitySettings(string key)
+    {
+        var settings = MixerRoutes.Read(Config).Settings;
+        if (settings == null) return false;
+        string current = MixerDestinationResolver.Resolve(Config, MixerRoute.Current, LastScan).Key;
+        string defaultKey = MixerDestinationResolver.Resolve(Config, settings.Default, LastScan).Key;
+        return key == current && (settings.Default.Output.Kind == MixerOutputKind.Current || defaultKey != key &&
+            settings.Apps.Values.Any(r => r.Output.Kind == MixerOutputKind.Current));
+    }
+
     internal async Task<MixerEditOutcome> ApplyMixerSettingsAsync(MixerRoutingSettings settings)
     {
-        if (Mixer == null) { MixerRoutes.Write(Config, settings); Config.Save(); Routing.Reload(); return new(MixerEditResult.Applied); }
-        var result = await Mixer.EditAsync(Config, settings, Config.Save);
+        if (Mixer == null) { MixerRoutes.Write(Config, settings); SaveMixerConfig(); Routing.Reload(); return new(MixerEditResult.Applied); }
+        var result = await Mixer.EditAsync(Config, settings, SaveMixerConfig);
         if (result.Result == MixerEditResult.Applied) { Routing.Reload(); RaiseStateChanged(); }
         return result;
+    }
+
+    internal async Task<MixerEditOutcome> ApplyMixerDelayAsync(string key, MixerDestinationSettings delay)
+    {
+        var settings = MixerRoutes.Read(Config).Settings;
+        if (settings == null) return new(MixerEditResult.InvalidConfig);
+        bool compatibility = UsesCompatibilitySettings(key);
+        if (!compatibility) { settings.DestinationSettings[key] = delay; return await ApplyMixerSettingsAsync(settings); }
+        if (Mixer?.ControllerForKey(key) is { } receiverController && PlaybackConfig.DeviceId is { } receiverId &&
+            ReceiverLatencySelection.Create(receiverController.ReceiverLookup?.Invoke(receiverId), receiverController.ReceiverSettings?.Invoke(receiverId)) is { } selection)
+        {
+            string receiverKey = RaopPassword.Key(receiverId);
+            var old = Config.ReceiverSettings.GetValueOrDefault(receiverKey);
+            var next = old == null ? ReceiverPreferences.Of(selection.Device) : old with { };
+            selection.Save(next, delay.LatencyMs); Config.ReceiverSettings[receiverKey] = next;
+            try { SaveMixerConfig(); }
+            catch { if (old == null) Config.ReceiverSettings.Remove(receiverKey); else Config.ReceiverSettings[receiverKey] = old; return new(MixerEditResult.SaveFailed); }
+            if (Mixer.IsConnected) await Mixer.ReconnectAsync(key, ConnectTrigger.Reconnect);
+            return new(MixerEditResult.Applied);
+        }
+        var projection = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(Config))!;
+        projection.Scene = delay.Scene; projection.LatencyMs = delay.LatencyMs;
+        if (Mixer?.ValidateConfiguration(projection) is { Result: not MixerEditResult.Applied } rejected) return rejected;
+        var oldScene = Config.Scene; int oldLatency = Config.LatencyMs;
+        Config.Scene = delay.Scene; Config.LatencyMs = delay.LatencyMs;
+        try { SaveMixerConfig(); }
+        catch { Config.Scene = oldScene; Config.LatencyMs = oldLatency; return new(MixerEditResult.SaveFailed); }
+        return Mixer?.IsConnected == true ? await Mixer.ConnectAsync(Config, ConnectTrigger.Reconnect) : new(MixerEditResult.Applied);
     }
 
     private sealed class CombinedSources
@@ -219,7 +291,7 @@ internal sealed partial class TrayApp
         foreach (var controller in Mixer.Controllers)
         {
             controller.NightMode.Enabled = Config.NightMode;
-            controller.SetVolumeCap(Config.VolumeCapPercent);
+            if (controller.VolumeCapPercent != Config.VolumeCapPercent) controller.SetVolumeCap(Config.VolumeCapPercent);
             if (_mixerEqualizers.TryGetValue(controller, out var eq))
             {
                 if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);

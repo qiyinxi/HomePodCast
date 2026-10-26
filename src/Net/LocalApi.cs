@@ -23,7 +23,8 @@ public sealed class LocalApi : IDisposable
     internal TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
     private readonly TcpListener _listener;
-    private readonly Func<string?, object> _status;
+    private readonly Func<string?, uint?, object> _status;
+    private readonly Func<IPEndPoint, int, uint?>? _caller;
     private readonly CancellationTokenSource _cts = new();
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -35,9 +36,12 @@ public sealed class LocalApi : IDisposable
 
     public LocalApi(int port, Func<object> status) : this(port, _ => status()) { }
 
-    public LocalApi(int port, Func<string?, object> status)
+    public LocalApi(int port, Func<string?, object> status) : this(port, (app, _) => status(app)) { }
+
+    public LocalApi(int port, Func<string?, uint?, object> status, Func<IPEndPoint, int, uint?>? caller = null)
     {
         _status = status;
+        _caller = caller;
         _listener = new TcpListener(IPAddress.Loopback, port);
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -84,7 +88,9 @@ public sealed class LocalApi : IDisposable
                 byte[] body;
                 try
                 {
-                    body = code == 200 ? JsonSerializer.SerializeToUtf8Bytes(_status(AppKeyFromHead(head)), Json) : ErrorBody(code);
+                    string? app = AppKeyFromHead(head);
+                    uint? pid = code == 200 && app == null && client.Client.RemoteEndPoint is IPEndPoint endpoint ? _caller?.Invoke(endpoint, Port) : null;
+                    body = code == 200 ? JsonSerializer.SerializeToUtf8Bytes(_status(app, pid), Json) : ErrorBody(code);
                 }
                 catch (Exception ex)
                 {

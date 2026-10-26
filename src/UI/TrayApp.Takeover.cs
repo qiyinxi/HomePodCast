@@ -81,6 +81,7 @@ internal sealed partial class TrayApp
     /// </summary>
     private async void ConnectManual(IWin32Window? owner)
     {
+        if (Mixer != null) { await ConnectMixerManually(Mixer.SelectedKey, owner); return; }
         if (!HasOutputSelection)
         {
             ShowMain();
@@ -129,5 +130,39 @@ internal sealed partial class TrayApp
         {
             _checkingClick = false;
         }
+    }
+
+    internal async Task ConnectMixerManually(string? key, IWin32Window? owner)
+    {
+        if (Mixer == null || _checkingClick) return;
+        var destination = key == null ? MixerDestinationResolver.Resolve(Config,
+            MixerRoutes.Read(Config).Settings?.Default ?? MixerRoute.Current, LastScan) : Mixer.DestinationForKey(key);
+        if (destination?.Config is not { } config) { ShowMain(); return; }
+        key = destination.Key;
+        var controller = Mixer.ControllerForKey(key) ?? _legacyController!;
+        _checkingClick = true;
+        try
+        {
+            var targets = SpeakerSelection.Of(config, LastScan)
+                .Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address, s.Port)).ToList();
+            var reader = controller.BusyReader ?? new InfoBusyReader(SpeakerInfo, () => LastScan);
+            var reading = await reader.ReadAsync(targets, CancellationToken.None);
+            if (_quitting) return;
+            var trigger = ConnectTrigger.Manual;
+            bool ours = controller.OwnSession.IsRecent(OwnSession.KeyOf(config), DateTime.UtcNow);
+            if (TakeoverPolicy.Decide(trigger, reading.State, ours, reading.Holder, Config.HomeTheaterTakeover) == TakeoverAction.Ask)
+            {
+                if (!TakeoverDialog.Confirm(owner, string.Join(" / ", reading.BusyNames), reading.HomeTheater?.Name) || _quitting) return;
+                trigger = ConnectTrigger.TakeOver;
+            }
+            if (Mixer.DestinationForKey(key) != null) await Mixer.ReconnectAsync(key, trigger);
+            else if (MixerDestinationResolver.Resolve(Config, MixerRoutes.Read(Config).Settings?.Default ?? MixerRoute.Current, LastScan).Key == key)
+            {
+                _wantConnected = true; _nightDisconnected = false;
+                await Mixer.ConnectAsync(Config, trigger, key);
+            }
+        }
+        catch (Exception ex) { Log.Warn($"mixer manual connect {key}: {ex.Message}"); }
+        finally { _checkingClick = false; }
     }
 }

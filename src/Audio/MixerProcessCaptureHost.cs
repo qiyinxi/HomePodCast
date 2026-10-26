@@ -40,12 +40,18 @@ public sealed class MixerProcessCaptureHost : IMixerCaptureHost
     }
 
     public IReadOnlyList<RouteTarget> Roots => _roots;
-    public string? OwnerKeyFor(uint pid) => _router.OwnerKeyFor(pid);
+    public string? OwnerKeyFor(uint pid)
+    {
+        string? key = _router.OwnerKeyFor(pid);
+        return key != null && _router.Plan.Targets.Any(t => t.Key == key && _hub.IsCapturing(t.RootPid)) ? key : null;
+    }
     public event Action? RootsChanged;
     public void Update(AppConfig config, MixerRoutingSettings routing)
     {
         var snapshot = JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(config))!;
         lock (_settingsGate) { _config = snapshot; _routing = routing; _generation++; }
+        _hub.Retarget(Roots.Select(t => t.Key).Distinct().ToDictionary(key => key,
+            key => routing.For(key).Output.Kind == MixerOutputKind.Local ? null : MixerDestinationResolver.Resolve(snapshot, routing.For(key)).Key));
         _wake.Set();
     }
     public ICaptureSource Subscribe(string key, AudioFifo fifo)
@@ -91,7 +97,8 @@ public sealed class MixerProcessCaptureHost : IMixerCaptureHost
             while (!_stop)
             {
                 long now = Stopwatch.GetTimestamp();
-                bool refreshing = now >= nextRefresh;
+                long requested; lock (_settingsGate) requested = _generation;
+                bool refreshing = now >= nextRefresh || requested != applied;
                 if (refreshing)
                 {
                     nextRefresh = now + Stopwatch.Frequency;

@@ -78,6 +78,19 @@ public sealed class MixerCoordinatorTests
     }
 
     [Fact]
+    public async Task Explicit_takeover_authorization_is_scoped_to_one_destination()
+    {
+        var harness = new Harness(); await using var coordinator = harness.Coordinator;
+        var config = Config(); Routes(config);
+        await coordinator.RefreshRootsAsync([new(2, "music", false)]);
+        await coordinator.ConnectAsync(config, ConnectTrigger.TakeOver, "group:music");
+        Assert.Equal(ConnectTrigger.TakeOver, harness.Sessions["group:music"].LastTrigger);
+        Assert.Equal(ConnectTrigger.Manual, harness.Sessions["speaker:airplay:AABBCCDDEEFF"].LastTrigger);
+        await coordinator.ReconnectAsync("group:music", ConnectTrigger.Manual);
+        Assert.Equal(1, harness.Sessions["speaker:airplay:AABBCCDDEEFF"].Starts);
+    }
+
+    [Fact]
     public async Task Native_Local_never_starts_capture_or_connections()
     {
         var harness = new Harness(); await using var coordinator = harness.Coordinator;
@@ -221,13 +234,14 @@ public sealed class MixerCoordinatorTests
         public AppConfig Config => config;
         public ICaptureSource? Capture;
         public int Starts, Stops;
+        public ConnectTrigger LastTrigger;
         public TaskCompletionSource? StopGate;
         public StreamController? Controller => null;
         public StreamState State { get; private set; }
         public string Status { get; private set; } = "";
         public int EffectiveLatencyMs => config.LatencyMs;
         public event Action? Changed;
-        public void Start(ConnectTrigger trigger) { Starts++; Capture ??= capture(new(44100, 16, 58)); Capture.Start(); State = StreamState.Streaming; Changed?.Invoke(); }
+        public void Start(ConnectTrigger trigger) { Starts++; LastTrigger = trigger; Capture ??= capture(new(44100, 16, 58)); Capture.Start(); State = StreamState.Streaming; Changed?.Invoke(); }
         public async Task StopAsync(string? reason = null)
         { Stops++; if (StopGate != null) await StopGate.Task; Capture?.Dispose(); Capture = null; State = StreamState.Idle; }
         public void Fail(StreamState state, string status) { State = state; Status = status; Changed?.Invoke(); }

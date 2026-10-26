@@ -76,7 +76,7 @@ public sealed class MixerCaptureBusTests
     [Fact]
     public void Slow_destination_cannot_grow_queues_or_change_the_game_samples()
     {
-        using var hub = new MixerCaptureHub(44100, t => new FakeInput(t.RootPid * .1f));
+        using var hub = new MixerCaptureHub(44100, t => new FakeInput(t.RootPid * .1f), steerClock: false);
         var game = Fifo(); var slow = Fifo();
         using var cg = hub.Subscribe("game", game); using var cs = hub.Subscribe("slow", slow); cg.Start(); cs.Start();
         hub.Apply(new(1, [Root(1, "game"), Root(2, "slow")]));
@@ -87,6 +87,44 @@ public sealed class MixerCaptureBusTests
             Assert.InRange(slow.Depth, 0, slow.CapFrames);
         }
         Assert.True(slow.DroppedFrames > 0);
+    }
+
+    [Fact]
+    public void Retarget_keeps_the_input_alive_while_the_replacement_bus_is_connecting()
+    {
+        var input = new FakeInput(.1f); int opens = 0;
+        using var hub = new MixerCaptureHub(44100, _ => { opens++; return input; });
+        var old = hub.Subscribe("old", Fifo()); old.Start();
+        hub.Apply(new(1, [Root(1, "old")])); hub.Cycle();
+        hub.Retarget(new Dictionary<string, string?> { ["app1"] = "next" });
+        old.Dispose(); hub.Cycle();
+        Assert.Equal(1, hub.InputCount); Assert.Equal(0, input.Disposals); Assert.False(hub.IsCapturing(1));
+        var fifo = Fifo(); using var next = hub.Subscribe("next", fifo); next.Start();
+        hub.Apply(new(2, [Root(1, "next")])); hub.Cycle();
+        Assert.True(hub.IsCapturing(1)); Assert.Equal(1, opens); AssertConstant(Read(fifo, 200), .1f);
+    }
+
+    [Fact]
+    public void Clock_steering_of_a_backlogged_destination_does_not_steer_its_neighbor()
+    {
+        using var hub = new MixerCaptureHub(44100, _ => new FakeInput(.1f));
+        using var reference = new MixerCaptureHub(44100, _ => new FakeInput(.1f));
+        var a = Fifo(); var b = Fifo();
+        var referenceFifo = Fifo(); using var referenceBus = reference.Subscribe("game", referenceFifo); referenceBus.Start();
+        reference.Apply(new(1, [Root(1, "game")]));
+        using var game = hub.Subscribe("game", a); using var slow = hub.Subscribe("slow", b); game.Start(); slow.Start();
+        hub.Apply(new(1, [Root(1, "game"), Root(2, "slow")]));
+        var scratch = new float[882];
+        for (int cycle = 0; cycle < 1000; cycle++)
+        {
+            hub.Cycle();
+            reference.Cycle(); referenceFifo.Read(scratch);
+            a.Read(scratch);
+        }
+        Assert.InRange(slow.DriftPpm, 400, 500);
+        Assert.Equal(referenceBus.DriftPpm, game.DriftPpm); Assert.Equal(referenceFifo.Depth, a.Depth);
+        Assert.Equal(44, a.TargetFrames); Assert.Equal(44, b.TargetFrames);
+        Assert.InRange(a.Depth, 0, a.CapFrames); Assert.True(b.DroppedFrames > 0);
     }
 
     [Fact]

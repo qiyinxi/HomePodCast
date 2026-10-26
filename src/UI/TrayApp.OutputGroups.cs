@@ -11,6 +11,9 @@ internal sealed partial class TrayApp
 
     private static bool HasConfiguredOutputs(AppConfig config)
     {
+        if (config.MixerRouting != null && MixerRoutes.Read(config).Settings is { } routing &&
+            new[] { routing.Default }.Concat(routing.Apps.Values).Any(r => r.Output.Kind is MixerOutputKind.Speaker or MixerOutputKind.Group &&
+                MixerDestinationResolver.Resolve(config, r).Available)) return true;
         var plan = GroupPlan.FromConfig(config);
         return plan == null ? config.DeviceId != null : plan.Kind == GroupKind.StereoPair
             || plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count > 0;

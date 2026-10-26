@@ -57,22 +57,30 @@ internal sealed partial class TrayApp : ApplicationContext
         InitCapture();
 
         Controller.Changed += () => _ui.Post(_ => OnControllerChanged(), null);
+        string? legacyDevice = Config.DeviceId;
         Controller.HostResolved += host => _ui.Post(_ =>
         {
-            if (Config.Host != host) { Config.Host = host; Config.Save(); }
+            if (GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(legacyDevice ?? "") && Config.Host != host)
+            { Config.Host = host; Config.Save(); }
         }, null);
         InitFirewall();
         InitUpdate(updatedFrom);
         try
         {
-            _api = new LocalApi(Config.LocalApiPort, ApiStatusForApp);
+            _api = new LocalApi(Config.LocalApiPort, ApiStatusForApp, Players.PlayerWin32.ApiCaller);
         }
         catch (System.Net.Sockets.SocketException ex)
         {
             Log.Warn($"local API not started (port {Config.LocalApiPort}): {ex.Message}");
         }
         Controller.ArrivalToRenderMs = Config.ArrivalToRenderMs;
-        Controller.ArrivalToRenderChanged += ms => _ui.Post(_ => { Config.ArrivalToRenderMs = ms; Config.Save(); }, null);
+        Controller.ArrivalToRenderChanged += ms => _ui.Post(_ =>
+        {
+            if (GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(legacyDevice ?? ""))
+            { Config.ArrivalToRenderMs = ms; Config.Save(); }
+            else if (legacyDevice != null && Config.ReceiverSettings.TryGetValue(RaopPassword.Key(legacyDevice), out var preferences))
+            { preferences.ArrivalToRenderMs = ms; Config.Save(); }
+        }, null);
         InitTakeover(); // before the first connect: a busy speaker is checked (TrayApp.Takeover.cs)
         InitRaop();
         InitializeGroupInteractions();
@@ -258,6 +266,7 @@ internal sealed partial class TrayApp : ApplicationContext
     /// <summary>A volume chosen in the app (a page slider's debounce, the tray flyout): saved, sent, and Windows follows (跟随 Windows).</summary>
     public void SetVolume(double percent)
     {
+        if (_mixerMuted) SetSpeakerMuted(false);
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         SaveSelectedVolume(percent);
         if (Controller.Volume != percent || Controller.Muted) Controller.SetVolume(percent); // PreviewVolume may have sent it
@@ -270,6 +279,7 @@ internal sealed partial class TrayApp : ApplicationContext
     /// </summary>
     public void PreviewVolume(double percent)
     {
+        if (_mixerMuted) SetSpeakerMuted(false);
         Controller.SetVolume(VolumeLimit.Clamp(percent, Config.VolumeCapPercent));
         _followLink?.HomePodChanged();
     }
@@ -303,7 +313,7 @@ internal sealed partial class TrayApp : ApplicationContext
                     L.T("未发现"), new Dictionary<string, string>()));
             }
             _form.SetDevices(found);
-            if (Config.DeviceId == null && GroupPlan.FromConfig(Config) == null && FirstHomePod(found, scan) is { } homepod)
+            if (Config.MixerRouting == null && Config.DeviceId == null && GroupPlan.FromConfig(Config) == null && FirstHomePod(found, scan) is { } homepod)
             {
                 SelectDevice(homepod);
                 // A home theater's HomePod: taken over (临时接管), or the status names its Apple TV at once (先询问).
@@ -481,7 +491,8 @@ internal sealed partial class TrayApp : ApplicationContext
         // machine as a NullReferenceException in NotifyIcon.UpdateIcon on every quit.
         if (_quitting) return;
         var c = Controller;
-        if (_wantConnected && GivesUp(c.State, c.StatusText)) _wantConnected = false;
+        if (_wantConnected && Mixer == null && GivesUp(c.State, c.StatusText))
+            _wantConnected = false;
 
         var tip = $"{L.T("HomePod 音响")} · {c.StatusText}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;

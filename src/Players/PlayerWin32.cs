@@ -125,20 +125,45 @@ internal static partial class PlayerWin32
     /// <summary>The process listening on a TCP port on any address; 0 if none.</summary>
     public static int ListenerOwner(int port) => TcpListeners().FirstOrDefault(l => l.EndPoint.Port == port).Pid;
 
+    internal readonly record struct ConnectionRow(int State, uint LocalAddress, int LocalPort, uint RemoteAddress, int RemotePort, int Pid);
+
+    internal static bool MatchesCaller(ConnectionRow row, IPEndPoint client, int serverPort) => row.State == 5 && row.Pid > 0 &&
+        row.LocalPort == client.Port && row.RemotePort == serverPort && new IPAddress(row.LocalAddress).Equals(client.Address) &&
+        new IPAddress(row.RemoteAddress).Equals(IPAddress.Loopback);
+
+    /// <summary>Read the client side of an established loopback connection; listener or stale TIME_WAIT rows never identify an app.</summary>
+    internal static uint? ApiCaller(IPEndPoint client, int serverPort)
+    {
+        if (!IPAddress.IsLoopback(client.Address) || client.Address.AddressFamily != AddressFamily.InterNetwork) return null;
+        uint? result = null; bool ambiguous = false;
+        // TCP_TABLE_OWNER_PID_CONNECTIONS = 4, documented by TCP_TABLE_CLASS in the Windows SDK.
+        // https://learn.microsoft.com/windows/win32/api/iprtrmib/ne-iprtrmib-tcp_table_class
+        ReadTable(AfInet, (row, _) =>
+        {
+            var entry = new ConnectionRow(Marshal.ReadInt32(row), (uint)Marshal.ReadInt32(row, 4), PortOf(Marshal.ReadInt32(row, 8)),
+                (uint)Marshal.ReadInt32(row, 12), PortOf(Marshal.ReadInt32(row, 16)), Marshal.ReadInt32(row, 20));
+            if (!MatchesCaller(entry, client, serverPort)) return;
+            uint pid = (uint)entry.Pid;
+            if (result != null && result != pid) ambiguous = true;
+            result = pid;
+        }, 24, 4);
+        return ambiguous ? null : result;
+    }
+
     private static int PortOf(int raw) => ((raw & 0xFF) << 8) | ((raw >> 8) & 0xFF); // network byte order in the low 16 bits
 
     private const int AfInet = 2, AfInet6 = 23, TcpTableOwnerPidListener = 3;
 
-    private static void ReadTable(int family, Action<IntPtr, int> row, int rowSize)
+    private static void ReadTable(int family, Action<IntPtr, int> row, int rowSize, int tableClass = TcpTableOwnerPidListener)
     {
         int size = 0;
-        GetExtendedTcpTable(IntPtr.Zero, ref size, false, family, TcpTableOwnerPidListener, 0);
+        GetExtendedTcpTable(IntPtr.Zero, ref size, false, family, tableClass, 0);
         for (int attempt = 0; attempt < 3 && size > 0; attempt++)
         {
             var buffer = Marshal.AllocHGlobal(size);
             try
             {
-                uint status = GetExtendedTcpTable(buffer, ref size, false, family, TcpTableOwnerPidListener, 0);
+                uint status = GetExtendedTcpTable(buffer, ref size, false, family, tableClass, 0);
                 if (status == 122) continue; // ERROR_INSUFFICIENT_BUFFER: the table grew, size is updated
                 if (status != 0) return;
                 int count = Marshal.ReadInt32(buffer);

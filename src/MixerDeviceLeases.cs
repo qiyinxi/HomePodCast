@@ -59,6 +59,9 @@ public sealed class MixerDeviceLeaseTable
     private MixerLeaseConflict? ValidateLocked(IReadOnlyDictionary<string, IReadOnlyList<string>> desired,
         IReadOnlyDictionary<string, string> identities, IReadOnlySet<string>? replacing)
     {
+        var knownIdentities = _owners.Values.SelectMany(e => e.Identities).GroupBy(p => p.Key)
+            .ToDictionary(g => g.Key, g => g.Last().Value);
+        foreach (var identity in Normalize(identities)) knownIdentities[identity.Key] = identity.Value;
         var entries = _owners.Values.Where(e => replacing?.Contains(e.Owner) != true)
             .Concat(desired.Select(p => new Entry(p.Key, p.Value.Select(MixerDeviceIdentities.Canonical).ToArray(),
                 Normalize(identities)))).ToArray();
@@ -67,7 +70,7 @@ public sealed class MixerDeviceLeaseTable
         foreach (var e in entries)
         foreach (var output in e.Outputs)
         {
-            bool confirmed = e.Identities.TryGetValue(output, out string? physical);
+            bool confirmed = knownIdentities.TryGetValue(output, out string? physical) || e.Identities.TryGetValue(output, out physical);
             string key = confirmed ? "physical:" + physical : output;
             if (used.TryGetValue(key, out string? owner))
                 return new(owner == e.Owner ? MixerLeaseError.DuplicatePhysicalDevice : MixerLeaseError.Occupied, output, owner);

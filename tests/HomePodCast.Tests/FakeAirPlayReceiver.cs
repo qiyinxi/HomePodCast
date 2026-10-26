@@ -52,7 +52,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public long StatusFlags { get; set; }
 
     public string Pin { get; set; } = "0482";
-    public string DeviceId { get; } = "3E:B7:8E:9F:64:72";
+    public string DeviceId { get; init; } = "3E:B7:8E:9F:64:72";
     public string? ModelOverride { get; init; }
     public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
@@ -102,6 +102,15 @@ internal sealed class FakeAirPlayReceiver : IDisposable
 
     /// <summary>The TV drops every pairing (this PC removed in its settings) but keeps its identity.</summary>
     public void ForgetControllers() => _controllers.Clear();
+
+    internal void EndSessions()
+    {
+        lock (_connections)
+        {
+            foreach (var connection in _connections) connection.Dispose();
+            _connections.Clear();
+        }
+    }
 
     /// <summary>A factory reset: a new identity and no pairings.</summary>
     public void Reset()

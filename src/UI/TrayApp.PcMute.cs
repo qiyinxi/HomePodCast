@@ -131,7 +131,7 @@ internal sealed partial class TrayApp
         else if (_idleSince == 0) _idleSince = now;
         double idleMs = _idleSince == 0 ? 0 : Stopwatch.GetElapsedTime(_idleSince, now).TotalMilliseconds;
         var phase = PcMute.PhaseFor(state, idleMs);
-        bool localIntent = Mixer?.UsesHub == true && MixerRoutes.Read(Config).Settings is { } routes &&
+        bool localIntent = Mixer != null && Routing.Active && MixerRoutes.Read(Config).Settings is { } routes &&
             new[] { routes.Default }.Concat(routes.Apps.Values).Any(r => r.Output.Kind == MixerOutputKind.Local || r.AlsoLocal);
         _pcMute.Update(phase, Config.MutePcWhileStreaming && !localIntent, PcCaptureNow());
         // Idle with our mute in place: look again once the Idle has lasted, then the session is over.

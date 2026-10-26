@@ -57,6 +57,30 @@ AirPlay 1/Bluetooth provide basic alignment after calibration; DLNA is rough ali
 hardware groups remain unverified. Local files still require HomePods, with independent positions and 0–500 ms delays.
 See [output groups and calibration](docs/multi-output-receivers.md) and [DLNA limits](docs/dlna.md).
 
+## Per-app destinations — experimental since 1.3
+
+In "Mixer", choose any saved speaker, saved speaker group, this PC, or an available speaker/group plus this PC for
+each app. The default picker affects apps without an override. "Switch all to" also replaces saved overrides for
+apps that are not running: it shows their count before confirmation and saves the complete change together.
+Independent app volumes and the Windows default output device are kept.
+
+Each active remote destination has its own mix, connection, requested/effective latency and status. A slow or lost
+destination does not restart the others. Apps selecting the same destination share it. A physical speaker cannot
+belong to two live destinations; overlapping groups are blocked, and aliases across protocols require confirmed
+device identities. Missing destinations stay visible for repair rather than silently changing to another speaker.
+
+This PC means ordinary Windows playback, with no new render copy or network-delay slider. A remote destination plus
+this PC does not promise synchronized playback. Groups containing a local endpoint cannot duplicate the same app’s
+native playback on that endpoint. Different remote destinations are independent and are not promised synchronized.
+
+Per-app capture adds about 35 ms. For the original low-latency path, keep one remote destination, make all apps follow
+it and turn off independent send volumes. Merely saving groups or browsing the mixer does not start capture or connect.
+Browser/player synchronization follows the app’s destination; an unknown destination reports synchronization unavailable.
+
+**No new combination has been verified on real hardware.** Stereo pairs, multi-room, third-party AirPlay, Bluetooth and
+DLNA retain their hardware limitations and calibration needs. Keep a pre-upgrade configuration copy before downgrading:
+older versions cannot represent named destinations. See the [hardware checklist](docs/device-test-checklist.zh-CN.md).
+
 ## Measurements
 
 | Scenario | Value |
@@ -92,7 +116,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Disconnect at night (experimental): for a PC left on with the screens off, the HomePod is let go during the hours you set once the keyboard, mouse and sound have been idle for a while (5 to 120 minutes), so other devices can use it; when the hours end it connects again like the auto-connect at startup, never cutting off a device that is playing
 - Apple TV home theater: a HomePod set up as an Apple TV's speaker (the Apple TV keeps it busy even when idle) is taken over for as long as HomePodCast is connected, with no PIN pairing; the Apple TV reconnects to it the next time it plays. Settings can make Connect ask first instead (experimental, not yet tested with a real Apple TV)
 - Right-click the tray icon for a quick panel: volume and mute, scene, night mode, microphone, connect or disconnect
-- Mixer: volume, mute and a level meter for every app, plus optional per-app routing (HomePod / this PC / both) or routing by sound card (choose which output device is captured), see below
+- Mixer: per-app volume, mute and meters; saved speaker/group destinations with independent latency and status (experimental since 1.3), or routing by sound card, see below
 - Volume limit, night mode (dynamic-range compression plus reduced bass), global hotkeys, and keyboard volume keys for the HomePod (it follows the Windows volume, or the keys control only the HomePod while streaming); the PC can be muted by itself while streaming so only the HomePod plays (experimental), see below
 - Microphone monitoring with reverb and mic EQ: choose HomePod, this PC or both, with a destination explanation; off at each start. A separate Equalizer page controls all sound streamed to the speaker
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
@@ -132,20 +156,20 @@ HomePodCast.exe mutetest                     check that capture still works whil
 
 By default HomePodCast captures the PC's whole sound output and sends all of it to the HomePod. That path adds no latency of its own, so it is the one to use for gaming. Whether the PC's own speakers also play is up to the Windows volume. To hear everything on the HomePod only, turn on Home → "HomePod only" (see [Keyboard volume keys](#keyboard-volume-keys)); muting Windows by hand with the default "HomePod follows the Windows volume" would mute the HomePod too.
 
-Per-app routing sends each app to the HomePod, this PC, or both (set on the Mixer page), for example game audio to the HomePod and voice chat on your headset. It costs latency:
+Per-app routing chooses a saved speaker/group or native local playback for each app, optionally retaining both. For example, game audio can go to a HomePod, music to a separate group, and voice chat to your headset. It costs latency:
 
 | | Stream everything (default) | Per-app routing |
 | --- | --- | --- |
-| When it's on | Whenever routing isn't | As soon as any app has its own destination, or the default is "This PC" |
+| When it's on | One effective remote destination, common local-playback behavior, independent send volumes off | Different destinations/local behavior or independent send volumes require per-app capture |
 | How sound is captured | The whole output in one piece | Each app separately (Windows process loopback) |
 | Extra latency to the HomePod | None | About 35 ms (measured from playback to send: 21 ms vs 55 ms) |
 | Web video lip-sync (browser extension) | Compensated | Compensated, extra 35 ms included |
 | Games | Lowest latency | 35 ms later, can't be compensated |
-| Apps set to "HomePod" | — | Silent on this PC; shown at 0% in the Windows volume mixer |
+| Apps sent remotely without a local copy | — | Silent on this PC; shown at 0% in the Windows volume mixer |
 | System sounds | Follow the Windows volume | Play on this PC only |
 | Requires | Windows 10/11 | Windows 10 version 2004 or later |
 
-The app asks for confirmation the first time routing turns on. Set every app back to "Default" with HomePod as the default to return to streaming everything. If HomePodCast is killed while routing, apps set to "HomePod" stay at 0% until it runs again.
+The app asks for confirmation the first time routing turns on. Keep one remote destination, have all apps follow it and turn off independent send volumes to return to "Stream everything". If HomePodCast is killed while routing, locally silenced apps stay at 0% until it runs again. When every app is local, no remote controller or process capture runs.
 
 ### Routing by sound card (capture device)
 
