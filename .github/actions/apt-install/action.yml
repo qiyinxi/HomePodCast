@@ -1,0 +1,74 @@
+# apt-get install through a cache of the package indexes and the downloaded .deb files.
+#
+# 2026-10-26: azure.archive.ubuntu.com, the first mirror in the hosted runners' apt mirror list, served packages at
+# 16-80 kB/s for hours. Three runs hit their job timeout inside apt before any test ran (dlna-compat-e2e: 97 MB,
+# extension-e2e: ffmpeg, 63 MB), and a passing re-run still spent 12 min 48 s on ffmpeg, while the Docker build's
+# archive.ubuntu.com delivered 15 MB/s on the same runner. A transfer that is slow but keeps moving never trips an apt
+# timeout, so the fix is not to need the mirror:
+# - The cache key is the runner image (ImageOS, ImageVersion: GitHub replaces the image about weekly, and ubuntu-latest
+#   moves to Ubuntu 26 from 2026-10-19) and the package list, so nothing is carried from one image to another.
+# - A miss runs apt-get update (from the image's own indexes, so only what changed is fetched), installs, and saves the
+#   indexes with the .deb files right away, also when a later test fails.
+# - A hit installs from the saved indexes without apt-get update: apt resolves exactly the versions of the first run on
+#   that image, finds every .deb in the cache and downloads nothing.
+# Retries and timeouts are the ones the x64 images set (actions/runner-images#14726): a stalled connection is given up
+# after 2 x 15 s and the file comes from the next mirror (archive.ubuntu.com). They are passed explicitly so a miss
+# keeps them on an image that doesn't; more retries or a longer timeout would only delay that failover.
+name: apt install (cached)
+description: apt-get install --no-install-recommends, with indexes and packages cached per runner image and package list.
+inputs:
+  packages:
+    description: Packages to install, separated by spaces or new lines.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: apt cache key
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        set -euo pipefail
+        : "${ImageOS:?no ImageOS: the apt cache key needs a GitHub-hosted runner image}"
+        : "${ImageVersion:?no ImageVersion: the apt cache key needs a GitHub-hosted runner image}"
+        packages="$(tr -s '[:space:]' '\n' <<<"$PACKAGES" | sed '/^$/d' | sort -u | paste -sd' ')"
+        echo "packages=$packages" >> "$GITHUB_OUTPUT"
+        echo "key=apt-v1-$ImageOS-$ImageVersion-$RUNNER_ARCH-$(sha256sum <<<"$packages" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the apt cache
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/apt-cache
+        key: ${{ steps.key.outputs.key }}
+
+    - name: apt-get install
+      shell: bash
+      env:
+        PACKAGES: ${{ steps.key.outputs.packages }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/apt-cache"
+        read -ra packages <<<"$PACKAGES"
+        apt=(sudo apt-get -q -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
+             -o Dir::State::Lists="$dir/lists" -o Dir::Cache::Archives="$dir/archives"
+             -o APT::Keep-Downloaded-Packages=true)
+        if [[ "$CACHE_HIT" != true ]]; then
+          sudo rm -rf "$dir"
+          mkdir -p "$dir/archives/partial"
+          sudo cp -a /var/lib/apt/lists "$dir/lists"
+          "${apt[@]}" update
+        fi
+        "${apt[@]}" install -y --no-install-recommends "${packages[@]}"
+        # apt wrote as root; the cache action reads the directory as the runner user.
+        sudo chown -R "$(id -u):$(id -g)" "$dir"
+        du -sh "$dir/lists" "$dir/archives"
+
+    - name: Save the apt cache
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/apt-cache
+        key: ${{ steps.key.outputs.key }}

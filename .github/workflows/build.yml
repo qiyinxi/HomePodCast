@@ -340,12 +340,21 @@ jobs:
           cache: npm
           cache-dependency-path: extension/test/e2e/package-lock.json
 
-      # ffmpeg makes the test video; Ubuntu 24.04 keeps Chromium's sandbox from user namespaces unless this is off.
+      # ffmpeg makes the test video, unless the image has one; Ubuntu 24.04 keeps Chromium's sandbox from user namespaces
+      # unless this is off.
       - name: Prepare the runner
+        id: prepare
         run: |
-          command -v ffmpeg || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg; }
+          command -v ffmpeg || echo 'packages=ffmpeg' >> "$GITHUB_OUTPUT"
           userns=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
           if [ -e "$userns" ]; then echo 0 | sudo tee "$userns"; fi
+
+      # From the apt cache (.github/actions/apt-install): the mirror once took the whole job's 20 min for ffmpeg alone.
+      - name: Install ffmpeg
+        if: steps.prepare.outputs.packages
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ${{ steps.prepare.outputs.packages }}
 
       - name: Install Puppeteer (and its Chrome for Testing)
         run: npm ci --no-audit --no-fund
@@ -500,6 +509,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      # shairport-sync's build and mDNS for airplay-compat-e2e.sh, from the apt cache (.github/actions/apt-install). The
+      # receiver image's apt-get (airplay2-receiver.Dockerfile) uses archive.ubuntu.com, not the runners' Azure mirror.
+      - name: Install build packages
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            build-essential autoconf automake libtool pkg-config
+            libpopt-dev libconfig-dev libavahi-client-dev avahi-daemon libssl-dev libsoxr-dev
       - name: AirPlay compatibility receiver test
         run: bash tools/ci/airplay-compat-e2e.sh
       - uses: actions/download-artifact@v8
@@ -541,6 +558,15 @@ jobs:
         with:
           name: dlna-codec-fixture
           path: test-results/dlna-codec-fixture
+      # gmrender-resurrect's build, GStreamer and FFmpeg for dlna-compat-e2e.sh, from the apt cache
+      # (.github/actions/apt-install): 97 MB that the mirror once couldn't deliver within the job's 15 min.
+      - name: Install build packages and GStreamer
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            build-essential autoconf automake libtool pkg-config
+            libglib2.0-dev libupnp-dev libgstreamer1.0-dev gstreamer1.0-plugins-base
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools iproute2 ffmpeg
       - name: DLNA compatibility renderer test
         run: |
           mkdir -p test-results/dlna-compat
