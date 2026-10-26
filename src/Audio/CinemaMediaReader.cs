@@ -100,8 +100,9 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
     /// <summary>
     /// The file's channels and speaker mask, read on an MTA thread of its own (Media Foundation's, as the decoder's),
     /// never on a pool thread: its native open may take long, and pool threads' COM state isn't ours to set and undo.
+    /// Completes once the reader is closed again, as a failed open does: no step is reported after that.
     /// </summary>
-    /// <param name="step">As for the constructor, on the inspection thread.</param>
+    /// <param name="step">As for the constructor, on the inspection thread; its last call comes before the task completes.</param>
     internal static Task<(int Channels, uint Mask)> InspectAsync(string path, Action<string>? step = null)
     {
         var result = new TaskCompletionSource<(int, uint)>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -109,8 +110,11 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
         {
             try
             {
-                using var reader = new CinemaMediaReader(path, step);
-                result.TrySetResult((reader.Channels, reader.Mask));
+                // The result only after Dispose. 2026-10-26 CI (run 40250728437): it came first, so the caller went on
+                // while this thread still ran the cleanup and reported its steps; the test reading them failed.
+                (int, uint) info;
+                using (var reader = new CinemaMediaReader(path, step)) info = (reader.Channels, reader.Mask);
+                result.TrySetResult(info);
             }
             catch (Exception ex) { result.TrySetException(ex); }
         }) { IsBackground = true, Name = "Cinema file inspection" };
