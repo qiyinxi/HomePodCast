@@ -37,8 +37,10 @@ public class LayoutWorkTests
         TextMeasure.Clear();
     }
 
-    [Fact]
-    public void Windows_UI_Automation_can_read_parent_painted_text_as_text_nodes() => Sta.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Windows_UI_Automation_can_read_parent_painted_text_as_text_nodes(bool logical) => Sta.Run(() =>
     {
         var page = new ScrollPage("painted title");
         var status = new TextBlock("current value") { AccessibleName = "status" };
@@ -51,13 +53,19 @@ public class LayoutWorkTests
         var nestedRow = Ui.Row(nestedStatus, new GlyphBadge(Glyph.Speaker), nestedStatus);
         var nestedCard = Ui.Card(nestedRow, nestedMetric);
         nestedCard.AccessibleName = "painted card";
-        page.Content.Controls.AddRange([status, button, new FieldRow("source", combo), nestedCard]);
+        var sourceRow = new FieldRow("source", combo) { AccessibleName = "source row" };
+        var mixedToggle = new ToggleSwitch { AccessibleName = "mixed toggle" };
+        var mixedCard = Ui.Card(new TextBlock("mixed caption"), mixedToggle);
+        mixedCard.AccessibleName = "mixed card";
+        page.Content.Controls.AddRange([status, button, sourceRow, nestedCard, mixedCard]);
+        if (logical) LogicalLayout.Enable(page.Content);
         using var host = new Host(page, 784);
         Assert.True(host.Page.TitleText!.Visible);
         var hwnd = host.Handle;
         var contentHwnd = host.Page.Content.Handle;
         var buttonHwnd = button.Handle;
         var comboHwnd = combo.Handle;
+        var toggleHwnd = mixedToggle.Handle;
         var groupConfig = TestApp.Config();
         groupConfig.GroupSpeakers = [new() { DeviceId = TestApp.DeviceId, Name = "A", Position = SpeakerPosition.Left },
             new() { DeviceId = "AA:00:00:00:00:02", Name = "B", Position = SpeakerPosition.Right }];
@@ -131,6 +139,18 @@ public class LayoutWorkTests
                 Assert.True(SpinWait.SpinUntil(() => metricValue.Current.Value == "43", TimeSpan.FromSeconds(3)));
                 var sourceNode = nodes.Single(n => n.Name == "source" && n.ControlType == System.Windows.Automation.ControlType.ComboBox);
                 Assert.Equal(comboHwnd.ToInt32(), sourceNode.NativeWindowHandle);
+                var raw = System.Windows.Automation.TreeWalker.RawViewWalker;
+                var sourceParent = raw.GetParent(System.Windows.Automation.AutomationElement.FromHandle(comboHwnd));
+                Assert.Equal("source row", sourceParent.Current.Name);
+                Assert.Equal(logical ? 0 : sourceRow.Handle.ToInt32(), sourceParent.Current.NativeWindowHandle);
+                var toggleNode = System.Windows.Automation.AutomationElement.FromHandle(toggleHwnd);
+                Assert.Equal("mixed toggle", toggleNode.Current.Name);
+                var toggleParent = raw.GetParent(toggleNode);
+                Assert.Equal("mixed card", toggleParent.Current.Name);
+                Assert.Equal(logical ? 0 : mixedCard.Handle.ToInt32(), toggleParent.Current.NativeWindowHandle);
+                Assert.Equal(1, nodes.Count(n => n.Name == "mixed toggle")); // the HWND placement override must not duplicate it
+                var identity = toggleNode.GetRuntimeId();
+                Assert.Equal(identity, System.Windows.Automation.AutomationElement.FromHandle(toggleHwnd).GetRuntimeId());
                 Assert.Equal(0, AccessibleObjectFromWindow(new IntPtr(sourceNode.NativeWindowHandle), 0xFFFFFFFC, ref iid, out var sourceMsaa));
                 ((Accessibility.IAccessible)sourceMsaa).set_accValue(0, "file");
                 Assert.Equal("file", ((Accessibility.IAccessible)sourceMsaa).get_accValue(0));
@@ -254,6 +274,74 @@ public class LayoutWorkTests
         output.WriteLine($"Additional windowless visuals/containers: {savedVisuals}");
         Assert.True(savedVisuals >= 25, $"only {savedVisuals} additional windows removed");
         window.Hide();
+    });
+
+    [Fact]
+    public void Mixer_mixed_rows_are_windowless_and_all_inputs_keep_real_windows_on_the_surface() => Sta.Run(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        var mixer = TestApp.Field<MixerPage>(window, "_mixer");
+        mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" }];
+        ShowMain(window);
+        Go(window, AppPage.Mixer);
+        var panels = All(mixer).OfType<LayoutPanel>().Where(panel => panel != mixer.Content).ToArray();
+        var inputs = All(mixer).Where(control => !ParentPainting.IsPainted(control) && control is FluentControl).ToArray();
+        output.WriteLine($"Mixer: {panels.Length} windowless layout nodes, {inputs.Length} native inputs, {Handles(mixer)} HWNDs");
+        Assert.Equal(11, panels.Length);
+        Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
+        Assert.Equal(9, inputs.Length);
+        Assert.All(inputs, input =>
+        {
+            Assert.True(input.IsHandleCreated);
+            Assert.Same(mixer.Content, input.Parent);
+            Assert.NotSame(input.Parent, LogicalLayout.Parent(input));
+        });
+        Assert.Equal(2 + inputs.Length, Handles(mixer)); // only the scrolling page, native surface and its inputs
+        var before = new MixerPage(TestApp.Create(TestApp.Config()), logicalLayout: false);
+        before.FindApps = mixer.FindApps;
+        using var beforeHost = new Host(before, 784);
+        Assert.Equal(Handles(mixer) + 8, Handles(before));
+        mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" },
+            new AppAudio(9002, false, "Browser", null) { ExeKey = "browser.exe" }];
+        using (var work = new Work())
+        {
+            typeof(MixerPage).GetMethod("RefreshApps", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(mixer, null);
+            work.AssertOnce("mixer sessions changed", output);
+            Assert.Equal(1, work.Pages);
+        }
+        Assert.Equal(16, Handles(mixer)); // a second app adds its five input HWNDs, no row window
+        window.Hide();
+    });
+
+    [Theory]
+    [InlineData(Theme.Light)]
+    [InlineData(Theme.Dark)]
+    public void Mixer_with_logical_rows_matches_the_native_page_pixel_for_pixel(string theme) => Sta.Run(() =>
+    {
+        var previous = Theme.Mode;
+        try
+        {
+            Theme.Mode = theme;
+            MixerPage Make(bool logical)
+            {
+                var page = new MixerPage(TestApp.Create(TestApp.Config()), logical);
+                page.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" }];
+                return page;
+            }
+            using var beforeHost = new Host(Make(false), 784);
+            using var afterHost = new Host(Make(true), 784);
+            var before = beforeHost.Page;
+            var after = afterHost.Page;
+            Assert.Equal(before.Size, after.Size);
+            using var expected = new Bitmap(before.Width, before.Height);
+            using var actual = new Bitmap(after.Width, after.Height);
+            before.DrawToBitmap(expected, new Rectangle(Point.Empty, expected.Size));
+            after.DrawToBitmap(actual, new Rectangle(Point.Empty, actual.Size));
+            for (int y = 0; y < expected.Height; y++)
+            for (int x = 0; x < expected.Width; x++)
+                Assert.True(expected.GetPixel(x, y) == actual.GetPixel(x, y), $"{theme}: pixel {x},{y} differs");
+        }
+        finally { Theme.Mode = previous; }
     });
 
     [Fact]
@@ -848,7 +936,7 @@ public class LayoutWorkTests
         }
     }
 
-    private static IEnumerable<Control> All(Control root) => root.Controls.Cast<Control>().SelectMany(c => All(c).Prepend(c));
+    private static IEnumerable<Control> All(Control root) => LogicalLayout.Children(root).SelectMany(c => All(c).Prepend(c));
 
     /// <summary>
     /// Font changes (Control.FontChanged) of the window's font, per control, while it is in use: the pages, cards, rows and
@@ -1011,10 +1099,11 @@ public class LayoutWorkTests
 
     private static void AssertNoOverlap(Control root)
     {
-        var shown = root.Controls.Cast<Control>().Where(c => LayoutPanel.IsShown(c) && c.Width > 0 && c.Height > 0).ToList();
+        var shown = LogicalLayout.Children(root).Where(c => LayoutPanel.IsShown(c) && c.Width > 0 && c.Height > 0).ToList();
         for (int i = 0; i < shown.Count; i++)
         for (int j = i + 1; j < shown.Count; j++)
-            Assert.False(shown[i].Bounds.IntersectsWith(shown[j].Bounds), $"{shown[i].GetType().Name} {shown[i].Bounds} and {shown[j].GetType().Name} {shown[j].Bounds} overlap");
+            Assert.False(LogicalLayout.Bounds(shown[i]).IntersectsWith(LogicalLayout.Bounds(shown[j])),
+                $"{shown[i].GetType().Name} {LogicalLayout.Bounds(shown[i])} and {shown[j].GetType().Name} {LogicalLayout.Bounds(shown[j])} overlap");
         foreach (var child in shown) AssertNoOverlap(child);
     }
 

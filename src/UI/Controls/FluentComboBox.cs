@@ -194,7 +194,7 @@ internal sealed class FluentComboBox : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new ComboAccessible(this);
 
-    private sealed class ComboAccessible(FluentComboBox owner) : ControlAccessibleObject(owner)
+    private sealed class ComboAccessible(FluentComboBox owner) : FluentAccessible(owner)
     {
         /// <summary>Setting the value picks the item with that text (as the user would).</summary>
         public override string? Value
