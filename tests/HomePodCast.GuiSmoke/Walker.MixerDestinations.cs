@@ -39,7 +39,7 @@ internal sealed partial class Walker
         MixerWait(() => (popup = MixerPopup(overlap.Label)) != IntPtr.Zero, "destination popup");
         var menu = Uia.Snapshot(popup);
         Expect(Find(menu, n => n.Type == "MenuItem" && n.Says(overlap.Label)) is { Enabled: false }, "mixer", "the disabled conflict is absent from the real menu");
-        Shoot(popup, "destinations-conflict", "overlapping destination rejected");
+        ShootMixerDialog(popup, "destinations-conflict", "overlapping destination rejected");
         Native.PostMessage(popup, 0x0100, new IntPtr(0x1B), IntPtr.Zero);
         MixerWait(() => !Native.IsWindowVisible(popup), "destination popup closed");
         string before = Native.MsaaValue(defaultPicker.Hwnd) ?? "";
@@ -79,7 +79,7 @@ internal sealed partial class Walker
         Uia.Invoke(MixerControl(T("确认设备身份"), "Hyperlink"));
         IntPtr identities = IntPtr.Zero;
         MixerWait(() => (identities = MixerWindow(T("确认设备身份"))) != IntPtr.Zero, "device identity dialog");
-        Shoot(identities, "destination-identities", "physical device aliases");
+        ShootMixerDialog(identities, "destination-identities", "physical device aliases");
         var identityCancel = Find(Uia.Snapshot(identities), n => n.Type == "Button" && n.Says(T("取消"))) ?? throw new StepFailed("no identity Cancel");
         Uia.Invoke(identityCancel); MixerWait(() => !Native.IsWindowVisible(identities), "identity dialog cancelled");
         Expect(MixerAudit(a => a.GetProperty("saves").GetInt32() == beforeIdentities), "mixer", "identity Cancel saved a partial mapping");
@@ -88,7 +88,7 @@ internal sealed partial class Walker
         var latency = MixerButtonInRow(MixerScenario.QuietName, "调整延迟"); Uia.Invoke(latency);
         IntPtr delay = IntPtr.Zero;
         MixerWait(() => (delay = MixerWindow(T("调整延迟"))) != IntPtr.Zero, "independent delay dialog");
-        Shoot(delay, "destination-delay", "per-destination latency");
+        ShootMixerDialog(delay, "destination-delay", "per-destination latency");
         Expect(Has(Uia.Snapshot(delay), _t.F("按程序采集额外延迟约 {0} ms。", RoutedCapture.RoutedExtraLatencyMs)), "mixer", "game/process capture latency hint is missing next to delay");
         var cancel = Find(Uia.Snapshot(delay), n => n.Type == "Button" && n.Says(T("取消"))) ?? throw new StepFailed("no delay Cancel");
         Uia.Invoke(cancel); MixerWait(() => !Native.IsWindowVisible(delay), "delay dialog cancelled");
@@ -105,7 +105,7 @@ internal sealed partial class Walker
         var first = WaitMixerConfirmation(rules);
         MixerCommand("external-rule");
         MixerWait(() => MixerAudit(a => a.GetProperty("externalSaves").GetInt32() == 1), "concurrent saved inactive rule");
-        Shoot(first, "replace-all-stale", "confirmation before concurrent edit");
+        ShootMixerDialog(first, "replace-all-stale", "confirmation before concurrent edit");
         ClickMixerDialog(first, 6);
         AnswerMixerConfirmation(rules + 1, true, "replace-all-recounted");
         MixerWait(() => MixerAudit(a => a.GetProperty("routing").GetProperty("Apps").EnumerateObject().Count() == 0 &&
@@ -198,12 +198,29 @@ internal sealed partial class Walker
     }
     internal static int? MixerScrollAction(Rectangle viewport, Rectangle target) => viewport.Contains(target) ? null :
         target.Top < viewport.Top ? 0 /* SB_LINEUP */ : target.Top >= viewport.Bottom ? Native.SB_PAGEDOWN : Native.SB_LINEDOWN;
+    internal static int MixerScrollOffset(Rectangle viewport, Rectangle target) => target.Top < viewport.Top
+        ? target.Top - viewport.Top : Math.Max(0, target.Bottom - viewport.Bottom);
     private static bool PositionMixerControl(IntPtr pane, Rectangle target)
     {
         var viewport = Native.WindowRect(pane);
         if (target.Left < viewport.Left || target.Right > viewport.Right) throw new StepFailed("mixer control is clipped horizontally");
         if (MixerScrollAction(viewport, target) is not { } action) return true;
-        Scroll(pane, action); return false;
+        int? before = Native.VerticalScroll(pane)?.nPos;
+        Scroll(pane, action);
+        if (action is 0 or Native.SB_LINEDOWN && before is { } previous && Native.VerticalScroll(pane) is { } after)
+        {
+            int step = Math.Abs(after.nPos - previous), distance = Math.Abs(MixerScrollOffset(viewport, target));
+            // WinForms' line increment can be a single pixel. A help/link pair can need over 100 of those,
+            // so finish the observed distance as one batch instead of exhausting the snapshot-attempt limit.
+            if (step > 0)
+            {
+                int more = Math.Clamp((distance + step - 1) / step - 1, 0, 2000);
+                for (int i = 0; i < more; i++)
+                    Native.SendMessageTimeout(pane, Native.WM_VSCROLL, new IntPtr(action), IntPtr.Zero, 0x2, 5000, out _);
+                if (more > 0) Thread.Sleep(100);
+            }
+        }
+        return false;
     }
     private void SetMixerChoice(string controlName, string value, bool confirmLatency = false)
     {
@@ -213,7 +230,7 @@ internal sealed partial class Walker
         {
             IntPtr dialog = IntPtr.Zero; MixerWait(() => (dialog = MixerWindow(T("按程序分流会增加延迟"))) != IntPtr.Zero, "process capture latency confirmation");
             Expect(Has(Uia.Snapshot(dialog), _t.F("按程序采集会让送往音箱的声音多约 {0} ms 延迟，游戏无法补偿。要继续吗？", RoutedCapture.RoutedExtraLatencyMs)), "mixer", "wrong per-app latency confirmation");
-            Shoot(dialog, "routing-latency-confirmation", "process capture latency confirmation"); ClickMixerDialog(dialog, 6);
+            ShootMixerDialog(dialog, "routing-latency-confirmation", "process capture latency confirmation"); ClickMixerDialog(dialog, 6);
         }
         if (!setting.Wait(15000)) throw new StepFailed("mixer picker did not return: " + controlName);
     }
@@ -230,8 +247,19 @@ internal sealed partial class Walker
     }
     private void AnswerMixerConfirmation(int count, bool yes, string shot)
     {
-        var dialog = WaitMixerConfirmation(count); Shoot(dialog, shot, "override count " + count); ClickMixerDialog(dialog, yes ? 6 : 7);
+        var dialog = WaitMixerConfirmation(count); ShootMixerDialog(dialog, shot, "override count " + count); ClickMixerDialog(dialog, yes ? 6 : 7);
         MixerWait(() => !Native.IsWindowVisible(dialog), "replace-all confirmation closed");
+    }
+    private void ShootMixerDialog(IntPtr dialog, string name, string caption)
+    {
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            Thread.Sleep(100);
+            using var probe = Native.Capture(dialog);
+            if (Native.UniformClient(probe)) continue;
+            Shoot(dialog, name, caption); return;
+        }
+        throw new StepFailed("dialog client did not paint: " + name);
     }
     private static void ClickMixerDialog(IntPtr dialog, int id)
     {

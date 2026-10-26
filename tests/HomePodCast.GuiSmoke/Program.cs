@@ -226,6 +226,17 @@ internal static class Program
             Walker.MixerScrollAction(viewport, new(327, 1200, 1252, 48)) == Native.SB_PAGEDOWN &&
             Walker.MixerScrollAction(viewport, new(327, 100, 1252, 48)) == null,
             "mixer scrolling reaches controls straddling either page boundary");
+        Check(Walker.MixerScrollOffset(viewport, new(351, 973, 422, 111)) == 106 &&
+            Walker.MixerScrollOffset(viewport, new(351, 58, 422, 111)) == -5,
+            "help positioning includes the full link/action pair and its remaining pixel distance");
+        using (var capture = new Bitmap(100, 100))
+        {
+            using (var graphics = Graphics.FromImage(capture))
+            { graphics.Clear(Color.Black); graphics.FillRectangle(Brushes.White, 0, 0, 100, 20); }
+            Check(Native.UniformClient(capture), "a painted frame above a blank client is rejected");
+            capture.SetPixel(50, 50, Color.Red);
+            Check(!Native.UniformClient(capture), "painted client content is recognized");
+        }
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
         var baseline = SelectScenarios(["baseline"]);
         Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind is not ("group-outputs" or "mixer-destinations")).Select(s => s.Id)),
