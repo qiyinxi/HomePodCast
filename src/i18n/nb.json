@@ -719,7 +719,7 @@
   "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Installasjonspakken kontrolleres først med SHA-256. Windows ber om administratorrettigheter, og appen starter på nytt etter installasjonen. Strømmingen avbrytes i omtrent ett minutt.",
   "了解更多": "Les mer",
   "收起详细说明": "Skjul detaljer",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Send appene du vil strømme til én ledig lydenhet i Windows, og velg den som opptaksenhet. Den tas opp på samme måte som med \"Strøm alt\".",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。": "Send appene du vil strømme til én ledig lydenhet i Windows, og velg den som opptaksenhet. Den tas opp på samme måte som med \"{0}\".",
   "{0}：请先选择音频去处": "{0}: velg først et lydmål",
   "{0} + {1}": "{0} + {1}",
   "{0} 个程序的单独去处设置会被覆盖。要继续吗？": "De individuelle lydmålene for {0} apper blir overskrevet. Fortsette?",

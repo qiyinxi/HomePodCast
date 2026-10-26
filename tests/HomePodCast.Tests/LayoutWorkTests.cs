@@ -287,20 +287,21 @@ public class LayoutWorkTests
         var panels = All(mixer).OfType<LayoutPanel>().Where(panel => panel != mixer.Content).ToArray();
         var inputs = All(mixer).Where(control => !ParentPainting.IsPainted(control) && control is FluentControl).ToArray();
         output.WriteLine($"Mixer: {panels.Length} windowless layout nodes, {inputs.Length} native inputs, {Handles(mixer)} HWNDs");
-        Assert.Equal(16, panels.Length); // short summaries, help actions and the collapsed details are all windowless
+        Assert.Equal(19, panels.Length); // destination choices, summaries and collapsed details are all windowless
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
-        Assert.Equal(10, inputs.Length); // the help toggle adds one native input
+        Assert.Equal(13, inputs.Length); // switch-all picker/action and identity action add three native inputs
         Assert.All(inputs, input =>
         {
             Assert.True(input.IsHandleCreated);
             Assert.Same(mixer.Content, input.Parent);
-            Assert.NotSame(input.Parent, LogicalLayout.Parent(input));
+            // The identity action is intentionally a direct page child; nested inputs are reparented to the surface.
+            if (input.Text != L.T("确认设备身份")) Assert.NotSame(input.Parent, LogicalLayout.Parent(input));
         });
         Assert.Equal(2 + inputs.Length, Handles(mixer)); // only the scrolling page, native surface and its inputs
         var before = new MixerPage(TestApp.Create(TestApp.Config()), logicalLayout: false);
         before.FindApps = mixer.FindApps;
         using var beforeHost = new Host(before, 784);
-        Assert.Equal(Handles(mixer) + 8, Handles(before));
+        Assert.Equal(Handles(mixer) + 10, Handles(before)); // the new destination row and its actions are also windowless
         mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" },
             new AppAudio(9002, false, "Browser", null) { ExeKey = "browser.exe" }];
         using (var work = new Work())
@@ -309,7 +310,7 @@ public class LayoutWorkTests
             work.AssertOnce("mixer sessions changed", output);
             Assert.Equal(1, work.Pages);
         }
-        Assert.Equal(17, Handles(mixer)); // a second app adds its five input HWNDs, no row window
+        Assert.Equal(20, Handles(mixer)); // a second app adds its five input HWNDs, no row window
         window.Hide();
     });
 

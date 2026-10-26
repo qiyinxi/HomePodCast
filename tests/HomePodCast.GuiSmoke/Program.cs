@@ -180,7 +180,7 @@ internal static class Program
     private static List<Scenario> SelectScenarios(string[]? only, (int Index, int Count)? shard = null)
     {
         var filtered = Matrix.Where(s => only == null || only.Any(o => o == "baseline"
-            ? s.Kind != "group-outputs" : s.Id.StartsWith(o, StringComparison.Ordinal)));
+            ? s.Kind is not ("group-outputs" or "mixer-destinations") : s.Id.StartsWith(o, StringComparison.Ordinal)));
         return filtered.Where((_, index) => shard == null || index % shard.Value.Count == shard.Value.Index).ToList();
     }
 
@@ -222,8 +222,14 @@ internal static class Program
         }
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
         var baseline = SelectScenarios(["baseline"]);
-        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind != "group-outputs").Select(s => s.Id)),
-            "baseline automatically includes every non-group scenario");
+        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind is not ("group-outputs" or "mixer-destinations")).Select(s => s.Id)),
+            "baseline includes every scenario outside the language shards");
+        var mixerScenarios = Matrix.Where(s => s.Kind == "mixer-destinations").ToArray();
+        Check(mixerScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()) &&
+            mixerScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every language requires a 150 percent mixer scenario");
+        var languageShards = Enumerable.Range(0, 5).SelectMany(index => SelectScenarios(["group-outputs", "mixer-destinations"], (index, 5))).ToArray();
+        Check(languageShards.Select(s => s.Id).Order().SequenceEqual(groupScenarios.Concat(mixerScenarios).Select(s => s.Id).Order()),
+            "language shards cover every group and mixer scenario exactly once");
         Check(baseline.Where(s => s.Kind == "update-notes").Select(s => (s.Language, s.Scale, s.RequiredScale))
             .SequenceEqual(new[] { ("zh-CN", 100, true), ("en", 150, true) }),
             "baseline requires Chinese and English release-notes screenshots at their specified scales");

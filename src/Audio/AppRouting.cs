@@ -225,12 +225,6 @@ public sealed class AppRouting
         var sends = new Dictionary<string, int>();
         foreach (var (key, level) in _config.AppSendVolumes)
             if (RouteRules.KeyFor(key ?? "") is { Length: > 0 } k) sends[k] = Math.Clamp(level, 0, 100);
-        if (_syncTestRoutes > 0)
-        {
-            string own = RouteRules.KeyFor(System.Diagnostics.Process.GetCurrentProcess().ProcessName);
-            apps[own] = AudioRoute.HomePod;
-            sends.Remove(own);
-        }
         bool destinations = false;
         AudioRoute defaultRoute = _config.RouteDefault;
         if (MixerRoutes.Read(_config).Settings is { } routing)
@@ -239,6 +233,13 @@ public sealed class AppRouting
             defaultRoute = Legacy(routing.Default);
             foreach (var (key, route) in routing.Apps) apps[key] = Legacy(route);
             destinations = MixerOutputCoordinator.NeedsHub(_config, routing);
+        }
+        // The temporary calibration route overlays either persisted format and is never saved.
+        if (_syncTestRoutes > 0)
+        {
+            string own = RouteRules.KeyFor(System.Diagnostics.Process.GetCurrentProcess().ProcessName);
+            apps[own] = AudioRoute.HomePod;
+            sends.Remove(own);
         }
         return new RouteRules(defaultRoute, apps) { SendVolumes = sends, ForceRouting = _syncTestRoutes > 0 || _forceProcessCapture || destinations };
     }

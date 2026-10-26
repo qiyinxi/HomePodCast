@@ -52,7 +52,7 @@ internal sealed partial class Walker
         Expect(MixerAudit(a => Status(a, MixerRoutes.SpeakerKey("airplay:" + MixerScenario.GameId)).GetProperty("State").GetInt32() == (int)StreamState.Streaming &&
             a.GetProperty("senders").GetProperty(MixerRoutes.SpeakerKey("airplay:" + MixerScenario.GameId)).GetProperty("epoch").GetInt64() == gameEpoch), "mixer", "music loss stopped or restarted the game sender");
         ShootPage("混音器", "destinations-one-lost", checkEachScroll: true);
-        MixerCommand("reconnect-music");
+        Uia.Invoke(MixerButtonInRow(MixerScenario.MusicName, "连接"));
         MixerWait(() => MixerAudit(a => Status(a, "group:" + MixerScenario.MusicGroup).GetProperty("State").GetInt32() == (int)StreamState.Streaming), "music reconnected alone");
 
         // Changing the default preserves explicit app rules; this is also the first per-app latency confirmation.

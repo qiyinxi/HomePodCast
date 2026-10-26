@@ -96,6 +96,8 @@ internal sealed class MixerScenario : IAsyncDisposable
         var controller = new StreamController(destination.Config!.FifoTargetMs)
         {
             CaptureFactory = capture, ArrivalToRenderMs = 85, CapturedOutputId = () => CaptureId, TakeoverGrace = TimeSpan.Zero,
+            BusyReader = new InfoBusyReader(new SpeakerInfoCache((_, _) => Task.FromResult<IReadOnlyDictionary<string, object?>>(
+                new Dictionary<string, object?> { ["statusFlags"] = 4L })), () => Scan),
             AirPlayPort = destination.Config.DeviceId != null && _airplay.TryGetValue(destination.Config.DeviceId, out var primary) ? primary.Port : 7000,
             ResolveGroupMembers = (plan, _) => Task.FromResult(plan.Members.Select(m =>
                 new StreamController.ResolvedMember(m.DeviceId, m.Name, IPAddress.Loopback, _airplay[m.DeviceId].Port)).ToList()),

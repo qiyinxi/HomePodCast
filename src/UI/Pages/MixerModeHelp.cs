@@ -41,7 +41,7 @@ internal sealed class MixerModeHelp : Card
                 Ui.Note(L.F("为程序单独选择音箱、音箱组、本机或音箱加本机，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用「{1}」。", RoutedCapture.RoutedExtraLatencyMs, L.T("全部推送")))),
             Ui.Stack(4,
                 new TextBlock(L.T("按声卡分流（没有额外延迟）"), TextStyle.BodyStrong),
-                Ui.Note(L.T("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。"))),
+                Ui.Note(L.F("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。", L.T("全部推送")))),
             Ui.Row(0, null, appVolume),
             Ui.Row(0, null, more),
             details,

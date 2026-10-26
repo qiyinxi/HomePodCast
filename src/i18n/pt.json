@@ -719,7 +719,7 @@
   "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "O instalador é verificado primeiro com SHA-256. O Windows pedirá permissões de administrador e a aplicação reiniciará após a instalação. A transmissão será interrompida durante cerca de um minuto.",
   "了解更多": "Saiba mais",
   "收起详细说明": "Ocultar detalhes",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "No Windows, envie as aplicações a transmitir para um mesmo dispositivo de áudio livre e selecione-o como dispositivo de captura. É capturado como em \"Transmitir tudo\".",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。": "No Windows, envie as aplicações a transmitir para um mesmo dispositivo de áudio livre e selecione-o como dispositivo de captura. É capturado como em \"{0}\".",
   "{0}：请先选择音频去处": "{0}: escolha primeiro um destino de áudio",
   "{0} + {1}": "{0} + {1}",
   "{0} 个程序的单独去处设置会被覆盖。要继续吗？": "Os destinos individuais de {0} aplicações serão substituídos. Continuar?",

@@ -16,7 +16,7 @@ internal sealed partial class Walker
         [
             T("一次采集整个输出设备，延迟最低。所有程序送到同一个音箱或音箱组。"),
             _t.F("为程序单独选择音箱、音箱组、本机或音箱加本机，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用「{1}」。", RoutedCapture.RoutedExtraLatencyMs, T("全部推送")),
-            T("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。"),
+            _t.F("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。", T("全部推送")),
         ];
         var seen = new HashSet<string>();
         var more = HelpAction("了解更多");

@@ -719,7 +719,7 @@
   "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Asennuspaketti tarkistetaan ensin SHA-256:lla. Windows pyytää järjestelmänvalvojan oikeuksia, ja sovellus käynnistyy uudelleen asennuksen jälkeen. Suoratoisto keskeytyy noin minuutiksi.",
   "了解更多": "Lue lisää",
   "收起详细说明": "Piilota lisätiedot",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Ohjaa lähetettävät sovellukset Windowsissa samaan vapaaseen äänilaitteeseen ja valitse se kaappauslaitteeksi. Se kaapataan samalla tavalla kuin tilassa \"Kaiken suoratoisto\".",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。": "Ohjaa lähetettävät sovellukset Windowsissa samaan vapaaseen äänilaitteeseen ja valitse se kaappauslaitteeksi. Se kaapataan samalla tavalla kuin tilassa \"{0}\".",
   "{0}：请先选择音频去处": "{0}: valitse ensin äänen kohde",
   "{0} + {1}": "{0} + {1}",
   "{0} 个程序的单独去处设置会被覆盖。要继续吗？": "{0} sovelluksen omat äänikohteet korvataan. Jatketaanko?",
