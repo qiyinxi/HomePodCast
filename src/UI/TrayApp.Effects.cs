@@ -7,6 +7,7 @@ namespace HomePodCast.UI;
 internal sealed partial class TrayApp
 {
     private MicEffects? _fx;
+    public LiveStemMixer Stems { get; private set; } = null!;
 
     /// <summary>The microphone and effects engine shared by the send path and the 麦克风 page.</summary>
     public MicEffects Fx => _fx!;
@@ -20,6 +21,10 @@ internal sealed partial class TrayApp
         _fx = new MicEffects(Config.Effects);
         Controller.Effects.Insert(0, _fx.OutputEq);
         Controller.Effects.Insert(0, new MixIn(_fx.HomePodSource));
+        Config.Stems ??= new StemSettings();
+        Stems = new LiveStemMixer(Config.Stems);
+        Controller.Effects.Insert(0, Stems); // separate system audio; the live microphone keeps its own low-delay path
+        Stems.Failed += () => _ui.Post(_ => OnStemsFailed(), null);
         _fx.Changed += () => _ui.Post(_ => OnMicChanged(), null);
         ApplyNightEq();
     }
@@ -66,5 +71,5 @@ internal sealed partial class TrayApp
         return result;
     }
 
-    private void DisposeEffects() => _fx?.Dispose();
+    private void DisposeEffects() { Stems?.Dispose(); _fx?.Dispose(); }
 }

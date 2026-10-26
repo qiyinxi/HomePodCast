@@ -520,6 +520,92 @@ jobs:
           path: test-results/airplay-compat
           if-no-files-found: warn
 
+  # The optional music separation module, HomePodCast-stems-<version>.zip (docs/MUSIC_STEMS.md, tools/build-stem-module.ps1):
+  # the worker with the vocal branch of the pinned StemgenRT model and the licenses, checked against the publisher's
+  # independent PyTorch reference, benchmarked, and driven through its pipes by StemModuleTests (buffers only, nothing is
+  # played). The upstream files (the 32 MB model from Git LFS, the reference, the license) and the extracted model are
+  # cached by the pinned commit (modules/StemWorker/upstream.json) and checked against their SHA-256 on every run: with
+  # the cache, nothing is downloaded from upstream and no Python package is installed. The cache is saved only after the
+  # module passed, so it never holds a broken set; a tag build reads the cache of main. When upstream can't be reached
+  # and nothing is cached, the job passes with a warning and without the zip, and the release is published without it
+  # (re-run this job and the release job later to add it). A wrong SHA-256, the parity check or the tests failing fail
+  # the job, and the release waits for it like for the others.
+  stem-module:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      # Its own key: ONNX Runtime is 130 MB that the other jobs don't need.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-stems-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-stems-${{ runner.os }}-
+
+      - name: Upstream pin
+        id: pin
+        shell: pwsh
+        run: |
+          $pin = Get-Content modules/StemWorker/upstream.json -Raw | ConvertFrom-Json
+          "commit=$($pin.commit)" >> $env:GITHUB_OUTPUT
+
+      - name: Restore the upstream model
+        id: upstream
+        uses: actions/cache/restore@v6
+        with:
+          path: .stem-cache
+          key: stemgen-rt-${{ steps.pin.outputs.commit }}-${{ hashFiles('modules/StemWorker/upstream.json', 'tools/extract-vocal-model.py') }}
+          restore-keys: stemgen-rt-${{ steps.pin.outputs.commit }}-
+
+      - name: Build the module and check it against the PyTorch reference
+        id: module
+        shell: pwsh
+        run: |
+          ./tools/build-stem-module.ps1 -Cache .stem-cache -InstallOnnx
+          if ($LASTEXITCODE -eq 3) {
+            Write-Output '::warning title=No music separation module::StemgenRT (GitHub, its Git LFS) or PyPI could not be reached and the cache has no copy, so this build has no HomePodCast-stems zip. Everything else is unaffected; re-run this job later.'
+            'built=false' >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          if ($LASTEXITCODE) { throw 'Stem module build failed' }
+          'built=true' >> $env:GITHUB_OUTPUT
+
+      - name: Module tests through the pipes
+        if: steps.module.outputs.built == 'true'
+        shell: pwsh
+        run: |
+          $env:HOMEPODCAST_STEM_MODULE = (Resolve-Path publish/stem-module).Path
+          # Exercise the anonymous-pipe path without relying on a large thread pool.
+          $env:DOTNET_PROCESSOR_COUNT = '2'
+          dotnet test tests/HomePodCast.Tests -c Release --filter FullyQualifiedName~StemModuleTests
+          if ($LASTEXITCODE) { throw 'Live stem module integration failed' }
+
+      - name: Save the upstream model
+        if: steps.module.outputs.built == 'true' && steps.upstream.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .stem-cache
+          key: ${{ steps.upstream.outputs.cache-primary-key }}
+
+      - name: Package
+        if: steps.module.outputs.built == 'true'
+        shell: pwsh
+        run: Compress-Archive -Path publish/stem-module/* -DestinationPath "publish/HomePodCast-stems-${{ needs.build.outputs.version }}.zip"
+
+      - name: Upload the module
+        if: steps.module.outputs.built == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stem-module
+          path: publish/HomePodCast-stems-*.zip
+          if-no-files-found: error
+
   # The production SSDP/SOAP/HTTP sender against pinned, unmodified gmrender-resurrect.
   # Its only sink is a PCM file. Both peers live in namespaces with no host/LAN uplink.
   dlna-compat-e2e:
@@ -557,7 +643,7 @@ jobs:
           if-no-files-found: warn
 
   release:
-    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, gui-output-groups, aac-fixture, airplay-compat-e2e, dlna-compat-e2e]
+    needs: [build, update-e2e, msix-e2e, msi-e2e, extension-e2e, gui-smoke, gui-output-groups, aac-fixture, airplay-compat-e2e, dlna-compat-e2e, stem-module]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
@@ -566,6 +652,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: packages
+          path: packages
+
+      # Not there when job stem-module couldn't reach upstream: the release goes out without the module.
+      - uses: actions/download-artifact@v7
+        continue-on-error: true
+        with:
+          name: stem-module
           path: packages
 
       - uses: softprops/action-gh-release@v3
