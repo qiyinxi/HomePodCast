@@ -237,14 +237,54 @@ public class CinemaTransportTests
     }
 
     [Fact]
+    public void After_the_end_of_the_file_the_decoder_says_it_is_closing_it()
+    {
+        // The reader's cleanup steps (MFShutdown…) are not reported as part of the open once the file has opened.
+        StallReport.Prepare();
+        string path = CinemaTests.TempWave(16, 2, CinemaTests.Stereo, 44100);
+        var seen = new List<string>();
+        CinemaFileSource? source = null;
+        using var created = new ManualResetEventSlim();
+        source = new CinemaFileSource(path, CinemaTests.Layout(CinemaTests.L2), (file, step) => new CinemaMediaReader(file, s =>
+        {
+            step(s);
+            created.Wait();
+            lock (seen) seen.Add(source!.Progress);
+        }));
+        try
+        {
+            created.Set();
+            // 4800 frames fit the ring: the decoder reaches the end without a sender taking any.
+            if (!SpinWait.SpinUntil(() => source.Progress.StartsWith("at the end of the file", StringComparison.Ordinal), 20000))
+                Assert.Fail($"the decoder did not reach the end within 20 s: {source.Progress}; {StallReport.Describe()}");
+            lock (seen)
+            {
+                Assert.Matches(@"^opening the file: MFCreateSourceReaderFromURL for \d+\.\d s$", seen[2]);
+                Assert.Matches(@"^opening the file: the media type for \d+\.\d s$", seen[3]);
+                Assert.Equal(["closing the file: IMFSourceReader::Release", "closing the file: MFShutdown", "closing the file: CoUninitialize"],
+                    seen.Skip(4).Select(s => s[..s.LastIndexOf(" for ", StringComparison.Ordinal)]));
+            }
+        }
+        finally
+        {
+            created.Set();
+            source.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task A_file_without_a_decoder_ends_the_open_with_its_reason()
     {
         string garbage = Path.Combine(Path.GetTempPath(), "hpc-cinema-" + Guid.NewGuid().ToString("N") + ".wav");
         File.WriteAllBytes(garbage, Enumerable.Range(0, 4096).Select(i => (byte)(i * 37)).ToArray());
         try
         {
+            StallReport.Prepare();
             using var source = new CinemaFileSource(garbage, CinemaTests.Layout(CinemaTests.L2));
-            Assert.False(await source.Opened.WaitAsync(TimeSpan.FromSeconds(10)), source.Progress);
+            if (await Task.WhenAny(source.Opened, Task.Delay(TimeSpan.FromSeconds(10))) != source.Opened)
+                Assert.Fail($"the open did not end within 10 s: {source.Progress}; {StallReport.Describe()}");
+            Assert.False(await source.Opened);
             Assert.Equal("这个文件在这台电脑上无法解码：Windows 没有它的解码器，或者文件已损坏。", source.Error);
             Assert.StartsWith("failed: ", source.Progress, StringComparison.Ordinal);
             Assert.False(source.WaitOpened(TimeSpan.Zero));

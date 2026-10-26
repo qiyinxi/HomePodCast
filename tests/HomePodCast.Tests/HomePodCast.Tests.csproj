@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HomePodCast.csproj" />
+    <ProjectReference Include="..\HomePodCast.GuiSmoke\HomePodCast.GuiSmoke.csproj" ReferenceOutputAssembly="false" />
     <None Include="..\vectors\vectors.json" Link="vectors.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

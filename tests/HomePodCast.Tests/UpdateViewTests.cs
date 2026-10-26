@@ -111,14 +111,4 @@ public class UpdateViewTests
         Assert.True(newer.Banner && newer.Notify);
     }
 
-    [Fact]
-    public void Installing_while_connected_says_the_stream_stops_for_about_a_minute()
-    {
-        const string Streaming = "正在推流：推送会停止大约一分钟。";
-        var idle = TrayApp.InstallConfirmation(V("0.2.3"), StreamState.Idle);
-        Assert.StartsWith("下载并安装 HomePodCast 0.2.3？", idle);
-        Assert.DoesNotContain(Streaming, idle);
-        foreach (var state in new[] { StreamState.Streaming, StreamState.Connecting, StreamState.Retrying })
-            Assert.EndsWith("\n\n" + Streaming, TrayApp.InstallConfirmation(V("0.2.3"), state));
-    }
 }

@@ -38,6 +38,269 @@ public class LayoutWorkTests
     }
 
     [Fact]
+    public void Windows_UI_Automation_can_read_parent_painted_text_as_text_nodes() => Sta.Run(() =>
+    {
+        var page = new ScrollPage("painted title");
+        var status = new TextBlock("current value") { AccessibleName = "status" };
+        var button = new FluentButton("push");
+        var combo = new FluentComboBox { AccessibleName = "source" };
+        combo.Items.AddRange(["live", "file"]); combo.SelectedIndex = 0;
+        var nestedStatus = new TextBlock("nested value") { AccessibleName = "nested status" };
+        var nestedMetric = new MetricTile("nested count");
+        nestedMetric.SetValue("42");
+        var nestedRow = Ui.Row(nestedStatus, new GlyphBadge(Glyph.Speaker), nestedStatus);
+        var nestedCard = Ui.Card(nestedRow, nestedMetric);
+        nestedCard.AccessibleName = "painted card";
+        page.Content.Controls.AddRange([status, button, new FieldRow("source", combo), nestedCard]);
+        using var host = new Host(page, 784);
+        Assert.True(host.Page.TitleText!.Visible);
+        var hwnd = host.Handle;
+        var contentHwnd = host.Page.Content.Handle;
+        var buttonHwnd = button.Handle;
+        var comboHwnd = combo.Handle;
+        var groupConfig = TestApp.Config();
+        groupConfig.GroupSpeakers = [new() { DeviceId = TestApp.DeviceId, Name = "A", Position = SpeakerPosition.Left },
+            new() { DeviceId = "AA:00:00:00:00:02", Name = "B", Position = SpeakerPosition.Right }];
+        groupConfig.GroupCaptureDeviceIds = [TestApp.DeviceId, "AA:00:00:00:00:02"];
+        groupConfig.GroupCapturePositions = new() { [GroupPlan.Key(TestApp.DeviceId)] = SpeakerPosition.Left,
+            [GroupPlan.Key("AA:00:00:00:00:02")] = SpeakerPosition.Right };
+        using var groupHost = new MainWindow(TestApp.Create(groupConfig));
+        TestApp.Field<MixerPage>(groupHost, "_mixer").FindApps = _ => [];
+        ShowMain(groupHost);
+        Go(groupHost, AppPage.Group);
+        var groupPage = TestApp.Field<ScrollPage[]>(groupHost, "_pages")[(int)AppPage.Group];
+        var groupHwnd = groupHost.Handle;
+        var groupSourceHwnd = All(groupPage).OfType<FluentComboBox>().Single(c => c.AccessibleName == "音源").Handle;
+        using var dialogHost = new Host(new ScrollPage("temporary dialog"), 400);
+        var dialogHwnd = dialogHost.Handle;
+        using var modal = new GroupAlignmentForm([new("A", "A", 0), new("B", "B", 0)], canPlayTest: false)
+            { Opacity = 0, ShowInTaskbar = false };
+        using var modalShown = new ManualResetEventSlim();
+        using var modalClosed = new ManualResetEventSlim();
+        IntPtr modalHwnd = IntPtr.Zero;
+        modal.Shown += (_, _) => { modalHwnd = modal.Handle; modalShown.Set(); };
+        Exception? error = null;
+        bool done = false;
+        long lastProgress = Environment.TickCount64;
+        var reader = new Thread(() =>
+        {
+            try
+            {
+                var iid = new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
+                Assert.Equal(0, AccessibleObjectFromWindow(contentHwnd, 0xFFFFFFFC, ref iid, out var msaa));
+                var acc = (Accessibility.IAccessible)msaa;
+                output.WriteLine($"MSAA children: {acc.accChildCount}");
+                var child = (Accessibility.IAccessible)acc.get_accChild(1);
+                output.WriteLine($"MSAA text: {child.get_accName(0)}, role {child.get_accRole(0)}, state {child.get_accState(0)}");
+                var request = new System.Windows.Automation.CacheRequest
+                {
+                    TreeScope = System.Windows.Automation.TreeScope.Subtree,
+                    TreeFilter = System.Windows.Automation.Automation.RawViewCondition,
+                };
+                request.Add(System.Windows.Automation.AutomationElement.NameProperty);
+                request.Add(System.Windows.Automation.AutomationElement.ControlTypeProperty);
+                request.Add(System.Windows.Automation.AutomationElement.NativeWindowHandleProperty);
+                request.Add(System.Windows.Automation.AutomationElement.BoundingRectangleProperty);
+                request.Add(System.Windows.Automation.AutomationElement.IsEnabledProperty);
+                request.Add(System.Windows.Automation.AutomationElement.ClassNameProperty);
+                request.Add(System.Windows.Automation.AutomationElement.AutomationIdProperty);
+                System.Windows.Automation.AutomationElement root;
+                using (request.Activate()) root = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+                var nodes = new List<(string Name, System.Windows.Automation.ControlType ControlType, int NativeWindowHandle)>();
+                void Walk(System.Windows.Automation.AutomationElement node)
+                {
+                    nodes.Add((node.Cached.Name, node.Cached.ControlType, node.Cached.NativeWindowHandle));
+                    foreach (System.Windows.Automation.AutomationElement child in node.CachedChildren) Walk(child);
+                }
+                Walk(root);
+                output.WriteLine(string.Join("\n", nodes.Select(n => $"{n.ControlType.ProgrammaticName}: {n.Name} hwnd={n.NativeWindowHandle}")));
+                Assert.Contains(nodes, n => n.Name == "painted title" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "push" && n.ControlType == System.Windows.Automation.ControlType.Button && n.NativeWindowHandle != 0);
+                Assert.Equal(buttonHwnd.ToInt32(), nodes.Single(n => n.Name == "push").NativeWindowHandle);
+                Assert.Contains(nodes, n => n.Name == "painted card" && n.NativeWindowHandle == 0);
+                Assert.Contains(nodes, n => n.Name == "nested status" && n.ControlType == System.Windows.Automation.ControlType.Text && n.NativeWindowHandle == 0);
+                var nestedNode = System.Windows.Automation.AutomationElement.FromHandle(contentHwnd)
+                    .FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "nested count"));
+                Assert.NotNull(nestedNode);
+                Assert.Equal(0, nestedNode.Current.NativeWindowHandle);
+                var metricValue = (System.Windows.Automation.ValuePattern)nestedNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
+                Assert.Equal("42", metricValue.Current.Value);
+                host.BeginInvoke(() => nestedMetric.SetValue("43"));
+                Assert.True(SpinWait.SpinUntil(() => metricValue.Current.Value == "43", TimeSpan.FromSeconds(3)));
+                var sourceNode = nodes.Single(n => n.Name == "source" && n.ControlType == System.Windows.Automation.ControlType.ComboBox);
+                Assert.Equal(comboHwnd.ToInt32(), sourceNode.NativeWindowHandle);
+                Assert.Equal(0, AccessibleObjectFromWindow(new IntPtr(sourceNode.NativeWindowHandle), 0xFFFFFFFC, ref iid, out var sourceMsaa));
+                ((Accessibility.IAccessible)sourceMsaa).set_accValue(0, "file");
+                Assert.Equal("file", ((Accessibility.IAccessible)sourceMsaa).get_accValue(0));
+                var statusNode = System.Windows.Automation.AutomationElement.FromHandle(contentHwnd)
+                    .FindFirst(System.Windows.Automation.TreeScope.Children,
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "status"));
+                Assert.NotNull(statusNode);
+                var value = (System.Windows.Automation.ValuePattern)statusNode.GetCurrentPattern(System.Windows.Automation.ValuePattern.Pattern);
+                Assert.True(value.Current.IsReadOnly);
+                Assert.Equal("current value", value.Current.Value);
+                using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(dialogHwnd);
+                using (var closed = new ManualResetEventSlim())
+                {
+                    host.BeginInvoke(() => { dialogHost.Dispose(); closed.Set(); });
+                    Assert.True(closed.Wait(TimeSpan.FromSeconds(3)));
+                }
+                using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(hwnd);
+                Assert.Equal("current value", value.Current.Value); // closing another fragment must not disconnect this one
+                // The real unified page mixes many fragments with native controls and rebuilds its rows on source changes.
+                var groupRoot = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
+                var groupSource = groupRoot.FindFirst(System.Windows.Automation.TreeScope.Descendants,
+                    new System.Windows.Automation.AndCondition(
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.NameProperty, "音源"),
+                        new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.ControlTypeProperty, System.Windows.Automation.ControlType.ComboBox)));
+                Assert.NotNull(groupSource);
+                Assert.Equal(groupSourceHwnd.ToInt32(), groupSource.Current.NativeWindowHandle);
+                Assert.Equal(0, AccessibleObjectFromWindow(groupSourceHwnd, 0xFFFFFFFC, ref iid, out var groupAcc));
+                foreach (var selected in new[] { "本地影音文件", "电脑实时声音" })
+                {
+                    ((Accessibility.IAccessible)groupAcc).set_accValue(0, selected);
+                    Assert.Equal(selected, ((Accessibility.IAccessible)groupAcc).get_accValue(0));
+                    using (request.Activate()) _ = System.Windows.Automation.AutomationElement.FromHandle(groupHwnd);
+                }
+                var positions = groupRoot.FindAll(System.Windows.Automation.TreeScope.Descendants,
+                    new System.Windows.Automation.PropertyCondition(System.Windows.Automation.AutomationElement.ControlTypeProperty, System.Windows.Automation.ControlType.Button))
+                    .Cast<System.Windows.Automation.AutomationElement>().Where(n => n.Current.Name.StartsWith("前右：") || n.Current.Name.StartsWith("前左："))
+                    .ToDictionary(n => n.Current.Name[..2], n => n.Current.NativeWindowHandle);
+                string repo = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+                string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+                string probeDll = Path.Combine(repo, "tests", "HomePodCast.GuiSmoke", "bin", configuration, "net10.0-windows", "HomePodCast.GuiSmoke.dll");
+                var start = new System.Diagnostics.ProcessStartInfo("dotnet")
+                {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                };
+                foreach (var arg in new[] { probeDll, "--uia-probe", groupHwnd.ToInt64().ToString(), groupSourceHwnd.ToInt64().ToString(),
+                    positions["前左"].ToString(), positions["前右"].ToString() }) start.ArgumentList.Add(arg);
+                using var probe = new System.Diagnostics.Process { StartInfo = start };
+                bool ready = false;
+                var progress = new System.Collections.Concurrent.ConcurrentQueue<string>();
+                probe.OutputDataReceived += (_, e) =>
+                {
+                    if (e.Data == "READY") Volatile.Write(ref ready, true);
+                    if (e.Data == "READY" || e.Data?.StartsWith("PROGRESS:", StringComparison.Ordinal) == true)
+                    {
+                        progress.Enqueue(e.Data!);
+                        Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                    }
+                };
+                probe.Start(); probe.BeginOutputReadLine();
+                Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                while (!Volatile.Read(ref ready) && !probe.HasExited && Environment.TickCount64 - Interlocked.Read(ref lastProgress) < 5000) Thread.Sleep(10);
+                if (!Volatile.Read(ref ready) && !probe.HasExited) probe.Kill(entireProcessTree: true);
+                Assert.True(Volatile.Read(ref ready), "The UIA probe did not become ready.");
+                host.BeginInvoke(() => { modal.ShowDialog(groupHost); modalClosed.Set(); });
+                Assert.True(modalShown.Wait(TimeSpan.FromSeconds(3)));
+                probe.StandardInput.WriteLine(modalHwnd.ToInt64()); probe.StandardInput.Flush();
+                Interlocked.Exchange(ref lastProgress, Environment.TickCount64);
+                while (!probe.HasExited && Environment.TickCount64 - Interlocked.Read(ref lastProgress) < 5000) Thread.Sleep(10);
+                bool exited = probe.HasExited;
+                if (!exited) probe.Kill(entireProcessTree: true);
+                output.WriteLine(string.Join("\n", progress));
+                output.WriteLine(probe.StandardError.ReadToEnd());
+                Assert.True(exited, "The UIA probe made no completed-operation progress for 5 seconds.");
+                Assert.Equal(0, probe.ExitCode);
+            }
+            catch (Exception ex) { error = ex; }
+            finally { Volatile.Write(ref done, true); }
+        }) { IsBackground = true };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        using var completion = new System.Windows.Forms.Timer { Interval = 10 };
+        completion.Tick += (_, _) =>
+        {
+            if (Volatile.Read(ref done) || watch.ElapsedMilliseconds >= 60_000
+                || Environment.TickCount64 - Interlocked.Read(ref lastProgress) >= 10_000) Application.ExitThread();
+        };
+        reader.Start();
+        completion.Start();
+        Application.Run(); // service UIA's COM callbacks with the real message loop, not intermittent DoEvents
+        completion.Stop();
+        Assert.True(Volatile.Read(ref done), "UIA exceeded its completed-operation or overall budget");
+        if (error != null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(error);
+    });
+
+    [DllImport("oleacc.dll")]
+    private static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid,
+        [MarshalAs(UnmanagedType.Interface)] out object accessible);
+
+    [Fact]
+    public void Every_page_prepares_text_without_windows_including_dynamic_mixer_rows() => Sta.Run(() =>
+    {
+        using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+        var mixer = TestApp.Field<MixerPage>(window, "_mixer");
+        mixer.FindApps = _ => [new AppAudio(9001, false, "Game", null) { ExeKey = "game.exe" }];
+        ShowMain(window);
+        int saved = 0, savedVisuals = 0;
+        foreach (var page in Enum.GetValues<AppPage>())
+        {
+            Go(window, page);
+            var shown = TestApp.Field<ScrollPage[]>(window, "_pages")[(int)page];
+            var texts = All(shown).OfType<TextBlock>().Where(t => t.ParentPainted).ToArray();
+            saved += texts.Length;
+            var visuals = All(shown).Where(ParentPainting.IsPainted).ToArray();
+            savedVisuals += visuals.Length - texts.Length;
+            output.WriteLine($"{page}: {texts.Length} windowless texts, {visuals.Length - texts.Length} other windowless visuals/containers, {Handles(shown)} windows");
+            Assert.All(visuals, visual => Assert.False(visual.IsHandleCreated, visual.GetType().Name));
+            Assert.NotEmpty(texts);
+            Assert.All(texts, text => Assert.False(text.IsHandleCreated, $"{page}: 「{text.Text}」 created a window"));
+        }
+        Assert.True(saved >= 140, $"only {saved} text windows removed");
+        output.WriteLine($"Additional windowless visuals/containers: {savedVisuals}");
+        Assert.True(savedVisuals >= 25, $"only {savedVisuals} additional windows removed");
+        window.Hide();
+    });
+
+    [Fact]
+    public void Home_texts_keep_their_layout_and_accessibility_without_windows() => Sta.Run(() =>
+    {
+        using var host = new Host(new HomePage(TestApp.Create(TestApp.Config())), 784);
+        var texts = All(host.Page).OfType<TextBlock>().ToArray();
+        var painted = texts.Where(t => t.ParentPainted).ToArray();
+        output.WriteLine($"首页: {painted.Length} parent-painted texts, {Handles(host.Page)} native windows");
+        Assert.True(painted.Length >= 20, $"only {painted.Length} texts moved to their containers");
+        Assert.All(painted, t => Assert.False(t.IsHandleCreated, $"「{t.Text}」 created a window"));
+        Assert.True(LayoutPanel.CreateWindows(host.Page, () => false)); // preparation must not undo the saving
+        Assert.All(painted, t => Assert.False(t.IsHandleCreated));
+        foreach (var text in painted.Where(t => t.Visible && !t.Collapsed && t.Height > 0))
+        {
+            var parent = text.Parent!.AccessibilityObject;
+            var node = text.AccessibilityObject;
+            Assert.Contains(node, Enumerable.Range(0, parent.GetChildCount()).Select(parent.GetChild));
+            Assert.Equal(text.AccessibleName ?? text.Text, node.Name);
+            Assert.Equal(AccessibleRole.StaticText, node.Role);
+            var expectedBounds = text.Bounds;
+            for (var ancestor = text.Parent; ancestor != host; ancestor = ancestor!.Parent)
+                expectedBounds.Offset(ancestor!.Location);
+            Assert.Equal(host.RectangleToScreen(expectedBounds), node.Bounds);
+            Assert.Same(parent, node.Parent);
+            Assert.False(node.State.HasFlag(AccessibleStates.Focusable));
+            Assert.Equal(host.Page.DeviceDpi, text.DeviceDpi);
+        }
+        Assert.All(painted, text => Assert.False(text.IsHandleCreated));
+        var status = TestApp.Field<TextBlock>(host.Page, "_status");
+        using (var work = new Work())
+        {
+            status.Text = "A much longer status that is wrapped at the available width";
+            work.AssertOnce("parent-painted status change", output);
+        }
+        Assert.Equal(status.Text, status.AccessibilityObject.Name);
+        Assert.Equal(status.GetPreferredSize(new Size(status.Width, 0)).Height, status.Height);
+        status.Collapsed = true;
+        Assert.DoesNotContain(status.AccessibilityObject, Enumerable.Range(0, status.Parent!.AccessibilityObject.GetChildCount())
+            .Select(status.Parent.AccessibilityObject.GetChild));
+        status.Collapsed = false;
+        Assert.True(status.Visible);
+        Assert.False(status.IsHandleCreated);
+        Assert.All(All(host.Page).OfType<FluentButton>().Where(b => b.Visible), b => Assert.True(b.IsHandleCreated));
+    });
+
+    [Fact]
     public void Toggling_night_disconnect_lays_each_container_out_once_and_measures_each_text_once() => Sta.Run(() =>
     {
         var config = TestApp.Config();
@@ -208,6 +471,12 @@ public class LayoutWorkTests
                 var rail = TestApp.Field<NavRail>(window, "_rail");
                 Assert.All(rail.Items, item => Assert.Equal(Theme.Dp(38, dpi), item.Height));
                 AssertNoOverlap(shown.Content);
+                foreach (var text in All(shown).OfType<TextBlock>().Where(t => t.ParentPainted && t.Visible && t.Height > 0))
+                {
+                    Assert.False(text.IsHandleCreated);
+                    Assert.Equal(dpi, text.DeviceDpi);
+                    Assert.Equal(text.GetPreferredSize(new Size(text.Width, 0)).Height, text.Height);
+                }
             }
         }
         Assert.Equal(0, transition.Snapshots); // the theme fade never captures the window for a DPI change
@@ -538,7 +807,7 @@ public class LayoutWorkTests
         {
             Go(window, page);
             var hidden = All(pages[(int)page])
-                .Where(c => c.Parent is LayoutPanel { Visible: true } && !c.Visible && !LayoutPanel.IsCollapsed(c) && c.Height > 0)
+                .Where(c => c.Parent is LayoutPanel { Visible: true } && !LayoutPanel.IsShown(c) && !LayoutPanel.IsCollapsed(c) && c.Height > 0)
                 .Select(c => $"{c.GetType().Name} in {c.Parent!.GetType().Name} ({c.Height} px)").ToList();
             Assert.True(hidden.Count == 0, $"{page}: hidden but not collapsed: {string.Join(", ", hidden)}");
         }
@@ -742,7 +1011,7 @@ public class LayoutWorkTests
 
     private static void AssertNoOverlap(Control root)
     {
-        var shown = root.Controls.Cast<Control>().Where(c => c.Visible && c.Width > 0 && c.Height > 0).ToList();
+        var shown = root.Controls.Cast<Control>().Where(c => LayoutPanel.IsShown(c) && c.Width > 0 && c.Height > 0).ToList();
         for (int i = 0; i < shown.Count; i++)
         for (int j = i + 1; j < shown.Count; j++)
             Assert.False(shown[i].Bounds.IntersectsWith(shown[j].Bounds), $"{shown[i].GetType().Name} {shown[i].Bounds} and {shown[j].GetType().Name} {shown[j].Bounds} overlap");

@@ -8,7 +8,7 @@ namespace HomePodCast.UI.Pages;
 /// and on the right 「检查更新」, or while a new version is offered 「更新」「查看说明」「跳过此版本」 in its place (「更新」
 /// turns into 「取消」 while it downloads). Only what is in it changes: no row appears or goes away below it (2026-10-14,
 /// the maintainer: a second 「新版本 X」 row that came and went made the section jump). What 「更新」 does is its tooltip
-/// and accessible description, not a second line under the status: the confirmation says it again before anything happens.
+/// and accessible description, not a second line under the status: the notes window explains it before installing.
 /// The Microsoft Store version: the status only.
 /// </summary>
 internal sealed class UpdateStatusRow

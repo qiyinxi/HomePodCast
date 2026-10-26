@@ -95,30 +95,74 @@ public class PtpTests
     [Fact]
     public async Task BetterGrandmasterPausesOurClockButAnUnrelatedDomainDoesNot()
     {
+        // 2026-10-18 and 2026-10-20 CI (runs 39118623472 and 39334373985): this test gave up waiting for the withdrawal
+        // to resume our clock. Both times the async tests running alongside took 2.5 to 170 times as long as usual
+        // and ended within 15 ms of this failure: the test process had been starved for about 2 s, while every step
+        // here shared one 2 s budget, gave the master a fixed 50 ms to handle an announce, and relied on the 3 s hold
+        // lasting until the withdrawal. Freezing the process for 2 s reproduces the failure, and the master still
+        // handles the withdrawal within 1 ms of its arrival. So each step now waits for what the master has handled,
+        // under a guard of its own, and only the withdrawal can end the better clock's hold.
         using var events = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var general = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
         using var master = new PtpMaster(IPAddress.Loopback, (IPEndPoint)events.Client.LocalEndPoint!,
-            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123);
-        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, domain: 7, priority: 1),
-            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
-        await Task.Delay(50);
+            (IPEndPoint)general.Client.LocalEndPoint!, true, 0, 0, clockId: 123) { BetterClockHold = TimeSpan.FromHours(1) };
+        var peer = new IPEndPoint(IPAddress.Loopback, master.GeneralPort);
+
+        // The master handles one socket's datagrams in order and answers a delay request only while it is master, so a
+        // request sent right behind an announce shows where the election stood once that announce had been handled.
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, domain: 7, priority: 1), peer);
+        await general.SendAsync(DelayRequest(1), peer);
+        Assert.Equal(1, await NextDelayResponse(general));
         Assert.True(master.IsMaster);
-        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 1),
-            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        while (master.IsMaster) await Task.Delay(10, timeout.Token);
+
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 1), peer);
+        await Until(() => !master.IsMaster, "the better clock to take over");
         long sent = master.SyncMessagesSent;
-        await Task.Delay(200);
+        await Task.Delay(200); // more than one 125 ms Sync interval
         Assert.Equal(sent, master.SyncMessagesSent);
-        await general.SendAsync(PtpPackets.AnnounceMessage(789, 0, priority: 200),
-            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
-        await Task.Delay(50);
-        Assert.False(master.IsMaster);
-        await general.SendAsync(PtpPackets.AnnounceMessage(456, 0, priority: 200),
-            new IPEndPoint(IPAddress.Loopback, master.GeneralPort));
-        while (!master.IsMaster) await Task.Delay(10, timeout.Token);
-        await Task.Delay(200);
-        Assert.True(master.SyncMessagesSent > sent);
+
+        // A worse clock leaves us paused and the better one's withdrawal resumes us: request 2 follows the worse announce
+        // and request 3 the withdrawal. The master answers in the order it handles them, so 3 first means 2 found us paused.
+        await general.SendAsync(PtpPackets.AnnounceMessage(789, 0, priority: 200), peer);
+        await general.SendAsync(DelayRequest(2), peer);
+        await general.SendAsync(PtpPackets.AnnounceMessage(456, 1, priority: 200), peer);
+        await general.SendAsync(DelayRequest(3), peer);
+        Assert.Equal(3, await NextDelayResponse(general));
+        Assert.True(master.IsMaster);
+        await Until(() => master.SyncMessagesSent > sent, "Sync messages to resume");
+    }
+
+    private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
+
+    private static byte[] DelayRequest(ushort sequence) => PtpPackets.Header(PtpPackets.DelayRequest, 44, 999, sequence, 0, 0);
+
+    /// <summary>The sequence number of the next delay response, skipping the master's announces and follow-ups.</summary>
+    private static async Task<ushort> NextDelayResponse(UdpClient socket)
+    {
+        using var guard = new CancellationTokenSource(Guard);
+        try
+        {
+            while (true)
+            {
+                var packet = (await socket.ReceiveAsync(guard.Token)).Buffer;
+                if (packet[0] == PtpPackets.DelayResponse) return BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(30));
+            }
+        }
+        catch (OperationCanceledException) when (guard.IsCancellationRequested)
+        {
+            throw new TimeoutException($"No delay response within {Guard.TotalSeconds:F0} s");
+        }
+    }
+
+    private static async Task Until(Func<bool> condition, string what)
+    {
+        var waited = Stopwatch.StartNew();
+        // The condition is checked before the guard, so a wait that wakes up late still sees what happened meanwhile.
+        while (!condition())
+        {
+            if (waited.Elapsed > Guard) throw new TimeoutException($"Still waiting for {what} after {Guard.TotalSeconds:F0} s");
+            await Task.Delay(5);
+        }
     }
 
     [Fact]

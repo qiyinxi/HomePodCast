@@ -402,7 +402,7 @@ jobs:
       - name: GUI smoke test
         shell: pwsh
         run: |
-          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --video-window smoke-video-window --out gui-screenshots --only idle,retrying,streaming,runtime,compatibility
+          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --video-window smoke-video-window --out gui-screenshots --only baseline
           if ($LASTEXITCODE) { throw 'GUI smoke test failed: see the job summary, and the gui-screenshots artifact (index.html)' }
 
       - name: Upload screenshots

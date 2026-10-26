@@ -29,6 +29,8 @@ internal static class Program
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
         new("runtime", "zh-CN", 100),
+        new("update-notes", "zh-CN", 100, RequiredScale: true),
+        new("update-notes", "en", 150, RequiredScale: true),
         new("idle", "zh-CN", 150, DpiChange: true),
         new("idle", "de", 150),
         new("streaming", "de", 150),
@@ -42,6 +44,7 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--uia-probe") return UiaProbe.Run(args[1..]);
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
         if (Opt("--fit-dumps") is { } dumps) return FitDumps(dumps);
@@ -133,6 +136,8 @@ internal static class Program
                 }
                 if (scenario.Kind == "group-outputs" && !report.Shots.Any(shot => shot.Scenario == scenario.Id))
                     report.Fail(scenario.Id, "the required group-output scenario produced no screenshot");
+                if (scenario.Kind == "update-notes" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 2)
+                    report.Fail(scenario.Id, "the required update-notes scenario did not capture both the top and bottom");
                 int failed = report.Failures.Count - failuresBefore;
                 report.Scenarios.Add((scenario.Id, (failed == 0 ? "passed" : $"**{failed} failure(s)**") + $" ({watch.Elapsed.TotalSeconds:F0} s)"));
             }
@@ -166,7 +171,8 @@ internal static class Program
 
     private static List<Scenario> SelectScenarios(string[]? only, (int Index, int Count)? shard = null)
     {
-        var filtered = Matrix.Where(s => only == null || only.Any(o => s.Id.StartsWith(o, StringComparison.Ordinal)));
+        var filtered = Matrix.Where(s => only == null || only.Any(o => o == "baseline"
+            ? s.Kind != "group-outputs" : s.Id.StartsWith(o, StringComparison.Ordinal)));
         return filtered.Where((_, index) => shard == null || index % shard.Value.Count == shard.Value.Index).ToList();
     }
 
@@ -207,6 +213,12 @@ internal static class Program
             if (!ok) failures++;
         }
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
+        var baseline = SelectScenarios(["baseline"]);
+        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind != "group-outputs").Select(s => s.Id)),
+            "baseline automatically includes every non-group scenario");
+        Check(baseline.Where(s => s.Kind == "update-notes").Select(s => (s.Language, s.Scale, s.RequiredScale))
+            .SequenceEqual(new[] { ("zh-CN", 100, true), ("en", 150, true) }),
+            "baseline requires Chinese and English release-notes screenshots at their specified scales");
         Check(groupScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()),
             "group-output scenarios cover every supported language exactly once");
         Check(groupScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every group-output scenario requires 150 % scale");
@@ -231,7 +243,7 @@ internal static class Program
             Check(t.Pattern("已连接 · {0}").IsMatch(t.F("已连接 · {0}", "Smoke Test HomePod")), $"{lang}: 「{t.F("已连接 · {0}", "Smoke Test HomePod")}」");
             foreach (var key in new[] { "首页", "混音器", "麦克风", "均衡", "设置", "连接", "断开", "全局快捷键", "标记刚才的卡顿", "未设置", "使用配置",
                          "多音箱（实验性）", "导出诊断", "音箱信息", "HomePod 音响", "打开主界面", "退出", "需要防火墙放行", "当前是公用网络", "自动检查更新",
-                         "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "断音", "重传",
+                         "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "重传", "播放统计", "缓冲欠载", "网络波动",
                          "无线影院（实验性）", "选择影音文件", "播放", "暂停", "停止", "测量音箱延迟", "左", "低音", "侧右", "音源", "电脑实时声音", "本地影音文件",
                          "音画同步", "本地播放器", "影视场景自动调整播放器", "VLC 网页接口密码（自动读取失败时填写）", "选择模块…",
                          "同步观影窗口（实验性）", "选择窗口…", "停止采集", "全屏 / F11", "已跟随本机音频状态", "自动扣除显示延迟",

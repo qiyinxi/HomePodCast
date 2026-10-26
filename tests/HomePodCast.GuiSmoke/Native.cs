@@ -81,17 +81,22 @@ internal static partial class Native
         return sb.ToString();
     }
 
+    // NativeWindow registers a framework-prefixed subclass of common controls (including ToolTip).
+    internal static bool IsToolTipClass(string name) =>
+        name.Equals("tooltips_class32", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("WindowsForms10.tooltips_class32.", StringComparison.OrdinalIgnoreCase);
+
     public static long Style(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_STYLE);
     public static long ExStyle(IntPtr hwnd) => (long)GetWindowLongPtr(hwnd, GWL_EXSTYLE);
 
-    /// <summary>Visible top-level windows of a process.</summary>
-    public static List<IntPtr> TopLevelWindows(int pid)
+    /// <summary>Top-level windows of a process, optionally including hidden windows for failure diagnostics.</summary>
+    public static List<IntPtr> TopLevelWindows(int pid, bool visibleOnly = true)
     {
         var list = new List<IntPtr>();
         EnumWindows((hwnd, _) =>
         {
             GetWindowThreadProcessId(hwnd, out uint owner);
-            if (owner == pid && IsWindowVisible(hwnd)) list.Add(hwnd);
+            if (owner == pid && (!visibleOnly || IsWindowVisible(hwnd))) list.Add(hwnd);
             return true;
         }, IntPtr.Zero);
         return list;

@@ -56,6 +56,7 @@ internal sealed partial class Walker
     private Process? _app;
     private FakeAirPlayReceiver? _fake;
     private int _shots;
+    private bool _checkedPaintedToolTip;
 
     public Walker(Scenario scenario, string exe, string outRoot, Report report)
     {
@@ -73,6 +74,7 @@ internal sealed partial class Walker
 
     public void Run()
     {
+        Uia.Noted = text => _report.Note(Where("ui automation"), text); // this scenario's thread
         try
         {
             switch (_s.Kind)
@@ -82,6 +84,7 @@ internal sealed partial class Walker
                 case "streaming": RunStreaming(); break;
                 case "compatibility": RunCompatibility(); break;
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
+                case "update-notes": RunUpdateNotes(); break;
                 case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
@@ -89,18 +92,33 @@ internal sealed partial class Walker
         catch (StepFailed ex)
         {
             _report.Fail(Where(), "stopped: " + ex.Message);
+            RecordProcessState();
         }
         catch (Exception ex)
         {
             _report.Fail(Where(), $"stopped by {ex.GetType().Name}: {ex.Message}");
             File.WriteAllText(Path.Combine(_dir, "exception.txt"), ex.ToString());
+            RecordProcessState();
         }
         finally
         {
             StopApp();
             SaveLog();
             _fake?.Dispose();
+            Uia.Noted = null;
         }
+    }
+
+    private void RecordProcessState()
+    {
+        if (_app == null) return;
+        try
+        {
+            if (_app.HasExited) _report.Note(Where("process"), $"exited: 0x{_app.ExitCode:X8}");
+            else _report.Note(Where("process"), "windows: " + string.Join("; ", Native.TopLevelWindows(_app.Id, visibleOnly: false)
+                .Select(w => $"{w:X} {Native.ClassName(w)} visible={Native.IsWindowVisible(w)} title=「{Native.WindowText(w)}」")));
+        }
+        catch (Exception ex) { _report.Note(Where("process"), "diagnostics unavailable: " + ex.Message); }
     }
 
     /// <summary>The app is gone for good (also when a scenario overran its time).</summary>
@@ -262,7 +280,7 @@ internal sealed partial class Walker
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
-            if (page == "诊断") CheckDiagnostics(tree);
+            if (page == "诊断") CheckDiagnostics(tree, connected);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
@@ -458,6 +476,13 @@ internal sealed partial class Walker
     private void CheckHome(Node tree, bool connected)
     {
         var page = PagePane(tree, "首页");
+        Expect(page.Descendants().Count(n => n.Type == "Text" && n.Hwnd == IntPtr.Zero
+            && new[] { T("实际延迟"), T("缓冲"), T("音箱处理"), T("重传") }.Contains(n.Name)) == 4,
+            "首页", "the four playback metric tiles are missing or duplicated");
+        foreach (var caption in new[] { "首页", "推流状态" })
+            Expect(page.Descendants().Any(n => n.Type == "Text" && n.Says(T(caption)) && n.Hwnd == IntPtr.Zero && n.HasSize),
+                "首页", $"parent-painted 「{T(caption)}」 has no UI Automation text node/bounds, or created a window");
+        CheckPaintedToolTip(page);
         var buttons = page.Descendants().Where(n => n.Type == "Button" && n.Shown).ToList();
         string expected = connected ? T("断开") : T("连接");
         Expect(buttons.Any(b => b.Says(expected)), "首页", $"no 「{expected}」 button (buttons: {string.Join(", ", buttons.Select(b => b.Name))})");
@@ -479,21 +504,54 @@ internal sealed partial class Walker
             return;
         }
 
-        // The tiles show this connection's values (MetricTile: the caption is the name, the value the description).
+        // The tiles show this connection's values (MetricTile: the caption is the name, the read-only UIA value carries the number).
         var deadline = DateTime.UtcNow.AddSeconds(8);
-        foreach (var caption in new[] { "实际延迟", "缓冲", "音箱处理", "断音", "重传" })
+        foreach (var caption in new[] { "实际延迟", "缓冲", "音箱处理", "重传" })
         {
             string? value = null;
             do
             {
-                var tile = Find(Uia.Snapshot(MainWindow()), n => n.Name == T(caption) && n.Hwnd != IntPtr.Zero && n.Shown);
-                value = tile == null ? null : Native.MsaaDescription(tile.Hwnd);
+                var tile = Find(Uia.Snapshot(MainWindow()), n => n.Name == T(caption) && n.Type == "Text" && n.Hwnd == IntPtr.Zero && n.Shown);
+                value = tile?.Text;
                 if (!string.IsNullOrEmpty(value) && value != "—") break;
                 Thread.Sleep(250);
             } while (DateTime.UtcNow < deadline);
             Expect(!string.IsNullOrEmpty(value) && value != "—", "首页", $"the tile 「{T(caption)}」 shows 「{value ?? "(not found)"}」 while connected");
             if (!string.IsNullOrEmpty(value) && value != "—") _report.Pass(Where("首页"), $"{T(caption)} = {value}");
         }
+    }
+
+    private void CheckPaintedToolTip(Node page)
+    {
+        if (_checkedPaintedToolTip || _s.Kind != "idle" || _s.Language != "zh-CN" || _s.Scale != 100) return;
+        var tile = Find(page, n => n.Name == T("实际延迟") && n.Type == "Text" && n.Hwnd == IntPtr.Zero);
+        if (tile == null || !page.Rect.Contains(tile.Rect)) return; // a later full-width visit can expose it
+        _checkedPaintedToolTip = true;
+        bool shown = false;
+        bool activated = Native.SetForegroundWindow(MainWindow());
+        var observed = new HashSet<string>();
+        Cursor.Position = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(4);
+            while (!shown && DateTime.UtcNow < deadline)
+            {
+                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.IsToolTipClass(Native.ClassName(h))))
+                {
+                    var tooltip = Uia.Snapshot(window);
+                    observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
+                    // A native tooltip exposes its text as the root's Name and may have no children.
+                    if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(T("这次连接实际使用的延迟"), StringComparison.Ordinal)
+                        || Has(tooltip, T("这次连接实际使用的延迟")))) { shown = true; break; }
+                }
+                if (!shown) Thread.Sleep(100);
+            }
+            if (!shown) _report.Note(Where("painted tooltip"),
+                $"activated={activated}, pointer={Cursor.Position}, tile={tile.Rect}; observed: {string.Join("; ", observed)}");
+            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation: " + string.Join("; ", observed));
+            Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
+        }
+        finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }
     }
 
     private Node CheckSpeakers(bool connected, bool compatibility = false)
@@ -588,7 +646,7 @@ internal sealed partial class Walker
         Expect(Has(page, T("许可证")), "关于", "license missing");
         // 软件更新 is one row, as in Windows Update: 「检查更新」 sits in the row 「当前版本 X」, and an offered update would
         // put 更新 / 查看说明 / 跳过此版本 in its place there. Nothing is offered here (no check was made, and a release
-        // build can't be shown a fake one): UpdateStatusRowTests checks the row with an update.
+        // build has no test feed in these scenarios). The focused update-notes scenario uses a loopback feed.
         // Only in the row: German 「Aktualisieren」 is also 音箱信息's 刷新.
         var versionPattern = _t.Pattern("当前版本 {0}");
         var updateRow = Find(page, n => n.Type == "Text" && n.Shown && versionPattern.IsMatch(n.Name))?.Parent;
@@ -906,6 +964,10 @@ internal sealed partial class Walker
             Native.PostMessage(hwnd, Native.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
         }
         WaitUntil(() => !Native.IsWindow(hwnd) || !Native.IsWindowVisible(hwnd), $"the 「{title}」 dialog to close", 5000);
+        if (App.HasExited)
+            throw new StepFailed($"the app exited after closing 「{title}」: 0x{App.ExitCode:X8}");
+        if (MainWindow() == IntPtr.Zero)
+            throw new StepFailed($"the main window is no longer visible after closing 「{title}」");
     }
 
     // ---------------------------------------------------------------- pages
@@ -1000,6 +1062,7 @@ internal sealed partial class Walker
         if (Profile != null) psi.Environment["HOMEPODCAST_PROFILE"] = Profile;
         else psi.Environment.Remove("HOMEPODCAST_PROFILE");
         if (_dotnetRoot != null) psi.Environment["DOTNET_ROOT"] = psi.Environment["DOTNET_ROOT_X64"] = _dotnetRoot; // Walker.Runtime.cs
+        if (_guiUpdateFeed != null) psi.Arguments += " --gui-update-feed=" + _guiUpdateFeed;
         return psi;
     }
 

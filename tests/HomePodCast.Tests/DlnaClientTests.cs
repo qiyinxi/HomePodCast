@@ -62,6 +62,22 @@ public class DlnaClientTests
     }
 
     [Fact]
+    public async Task A_session_runs_on_a_renderer_that_closes_every_connection_after_one_reply()
+    {
+        // 2026-10-18 CI: connecting to gmrender-resurrect failed in the ownership check after SetVolume.
+        await using var fake = new FakeDlnaRenderer { CloseLikeLibupnp = true };
+        await using var pull = new Pull();
+        fake.OnPlayAsync = pull.StartAsync;
+        var client = await DlnaClient.ConnectAsync(fake.Device, Options());
+        await client.SetVolumeAsync(15, false);
+        Assert.Equal(("PLAYING", 15), (fake.TransportState, fake.Volume));
+        await client.StopAsync();
+        Assert.Equal("STOPPED", fake.TransportState);
+        Assert.All(fake.Requests.Where(r => r.Method == "POST"), request => Assert.True(request.CloseRequested));
+        Assert.Equal(0, fake.UnansweredRequests);
+    }
+
+    [Fact]
     public async Task A_lowered_live_cap_attenuates_PCM_without_waiting_for_remote_volume()
     {
         await using var fake = new FakeDlnaRenderer();

@@ -619,22 +619,6 @@ public class HomeNetworkTextTests
         }
     }
 
-    [Theory]
-    [InlineData(0, 0, "0")]
-    [InlineData(2, 0, "2")]
-    [InlineData(0, 3, "≈3")]
-    [InlineData(2, 3, "≈5")]
-    public void Dropouts_add_the_networks_estimate_and_say_it_is_one(long pc, int network, string shown) =>
-        Assert.Equal(shown, HomePage.DropoutValue(pc, network));
-
-    [Fact]
-    public void The_dropout_tooltip_splits_the_count_while_the_network_is_watched()
-    {
-        var tip = HomePage.DropoutTip(1, 3);
-        Assert.StartsWith("这次连接里的断音：电脑这边 1 次（实测），网络 3 次（估计）\n", tip);
-        Assert.Equal("这次连接中电脑这边断音的次数", HomePage.DropoutTip(1, null)); // a group: the network is not watched
-    }
-
     [Fact]
     public void Stutters_on_a_crowded_band_no_longer_show_as_0()
     {
@@ -651,7 +635,6 @@ public class HomeNetworkTextTests
         Assert.Equal(40, v.ConnectionThreats); // one per lost pair, since the connection started
         Assert.Equal(20, v.Threats);           // the hint's last 10 minutes
         Assert.Equal(NetworkHop.Speaker, v.Hop);
-        Assert.Equal("≈40", HomePage.DropoutValue(0, v.ConnectionThreats));
     }
 
     // ---------------------------------------------------------------- which of the line and the hint 首页 shows

@@ -7,14 +7,14 @@ internal enum TextRole { Primary, Secondary, Disabled, Accent, Success, Caution,
 /// Static text in a type-ramp style and a theme colour; single line with an ellipsis, or wrapped to the
 /// width it is given (its preferred height follows). Empty text takes no space in a stack.
 /// </summary>
-internal sealed class TextBlock : FluentControl
+internal sealed class TextBlock : PaintedControl
 {
     private TextStyle _style = TextStyle.Body;
     private TextRole _role = TextRole.Primary;
     private bool _wrap;
     private Color? _color;
-
-    public TextBlock(string text = "", TextStyle style = TextStyle.Body, TextRole role = TextRole.Primary, bool wrap = false)
+    public TextBlock(string text = "", TextStyle style = TextStyle.Body, TextRole role = TextRole.Primary, bool wrap = false,
+        bool nativeWindow = false) : base(nativeWindow)
     {
         SetStyle(ControlStyles.Selectable, false);
         TabStop = false;
@@ -34,14 +34,14 @@ internal sealed class TextBlock : FluentControl
     public TextRole Role
     {
         get => _role;
-        set { if (_role != value) { _role = value; Invalidate(); } }
+        set { if (_role != value) { _role = value; Repaint(); } }
     }
 
     /// <summary>An explicit colour (e.g. a status colour that is not a theme role); null = <see cref="Role"/>.</summary>
     public Color? CustomColor
     {
         get => _color;
-        set { if (_color != value) { _color = value; Invalidate(); } }
+        set { if (_color != value) { _color = value; Repaint(); } }
     }
 
     public bool Wrap
@@ -58,11 +58,12 @@ internal sealed class TextBlock : FluentControl
     {
         base.OnTextChanged(e);
         Changed();
+        if (ParentPainted) ParentPainting.Notify(this, AccessibleEvents.NameChange);
     }
 
     private void Changed()
     {
-        Invalidate();
+        Repaint();
         if (Parent == null || Width == 0) return;
         if (GetPreferredSize(new Size(Width, 0)).Height != Height || !_wrap) RequestLayout();
     }
@@ -88,10 +89,14 @@ internal sealed class TextBlock : FluentControl
             return new Size(proposedSize.Width, s.Height + 1);
         }
         var line = TextMeasure.Size(Text, font, Size.Empty, TextFlags.Measure);
-        return new Size(line.Width + 1, Math.Max(line.Height, LineHeight(_style)) + 1);
+        int lineHeight = TextMeasure.Size("Ag国", Theme.Font(_style, DeviceDpi), Size.Empty, TextFlags.Measure).Height;
+        return new Size(line.Width + 1, Math.Max(line.Height, lineHeight) + 1);
     }
 
     protected override void OnPaint(PaintEventArgs e)
+        => Draw(e.Graphics, ClientRectangle);
+
+    private void Draw(Graphics graphics, Rectangle bounds)
     {
         var color = !Enabled ? P.TextDisabled : _color ?? ColorOf(_role);
         var align = Align switch
@@ -100,6 +105,8 @@ internal sealed class TextBlock : FluentControl
             HorizontalAlignment.Center => TextFormatFlags.HorizontalCenter,
             _ => TextFormatFlags.Left,
         };
-        TextRenderer.DrawText(e.Graphics, Text, TextFont, ClientRectangle, color, (_wrap ? TextFlags.Wrap : TextFlags.Line) | align);
+        TextRenderer.DrawText(graphics, Text, TextFont, bounds, color,
+            (_wrap ? TextFlags.Wrap : TextFlags.Line) | align | TextFormatFlags.PreserveGraphicsClipping);
     }
+
 }

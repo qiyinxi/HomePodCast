@@ -13,6 +13,7 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
 {
     private nint _reader;
     private bool _started, _com;
+    private readonly Action<string>? _step;
     private const uint Audio = 0xfffffffd; // MF_SOURCE_READER_FIRST_AUDIO_STREAM
     private const uint FlagError = 0x1, FlagEnd = 0x2, FlagNativeChanged = 0x10, FlagCurrentChanged = 0x20;
     private static readonly Guid Major = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
@@ -40,13 +41,15 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
         if (Interlocked.CompareExchange(ref s_platformKept, 1, 0) == 0 && MFStartup(0x20070, 0) < 0) Volatile.Write(ref s_platformKept, 0);
     }
 
-    /// <param name="step">Told each native step before it starts, so a timeout can say where the open waits.</param>
+    /// <param name="step">Told each native step before it starts, so a timeout can say where the open waits; the cleanup's
+    /// steps too (<see cref="Dispose"/>, also after a failed open).</param>
     /// <exception cref="CinemaException">Not a local file, no decoder, or not a layout the cinema plays.</exception>
     public CinemaMediaReader(string path, Action<string>? step = null)
     {
         // A path, never a URL: Media Foundation would otherwise fetch it from the network.
         if (!Path.IsPathFullyQualified(path) || !File.Exists(path))
             throw new CinemaException(L.T("选的文件不存在或打不开。"), "not an existing file path");
+        _step = step;
         nint native = 0, type = 0, current = 0;
         try
         {
@@ -232,9 +235,15 @@ internal sealed unsafe class CinemaMediaReader : IDisposable
     private static void Release(nint obj) { if (obj != 0) ((delegate* unmanaged[Stdcall]<nint, uint>)Method(obj, 2))(obj); }
     public void Dispose()
     {
-        Release(_reader); _reader = 0;
-        if (_started) { MFShutdown(); _started = false; }
-        if (_com) { CoUninitialize(); _com = false; }
+        // The cleanup's native steps are reported as the open's are. 2026-10-17 CI (run 39026442901): a 20 s wait for a
+        // file without a decoder ran out, and nothing said whether the open or its cleanup was still running.
+        if (_reader != 0)
+        {
+            _step?.Invoke("IMFSourceReader::Release");
+            Release(_reader); _reader = 0;
+        }
+        if (_started) { _step?.Invoke("MFShutdown"); MFShutdown(); _started = false; }
+        if (_com) { _step?.Invoke("CoUninitialize"); CoUninitialize(); _com = false; }
     }
     [DllImport("mfplat.dll")] private static extern int MFStartup(uint version, uint flags);
     [DllImport("mfplat.dll")] private static extern int MFShutdown();

@@ -10,7 +10,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>HomePodCast</RootNamespace>
     <AssemblyName>HomePodCast</AssemblyName>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <ServerGarbageCollector>false</ServerGarbageCollector>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>true</TieredPGO>
@@ -24,6 +24,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
     <InternalsVisibleTo Include="HomePodCast.Tests" />
     <!-- The GUI smoke test hosts the tests' fake AirPlay receiver (tests/HomePodCast.GuiSmoke). -->
     <InternalsVisibleTo Include="HomePodCast.GuiSmoke" />
