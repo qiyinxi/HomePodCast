@@ -9,6 +9,27 @@ namespace HomePodCast.Tests;
 public sealed class MixerBoundaryTests
 {
     [Fact]
+    public async Task A_named_receiver_busy_prompt_can_only_resume_its_own_current_session_after_confirmation()
+    {
+        var config = MixerCoordinatorTests.Config(); MixerCoordinatorTests.Routes(config);
+        var app = TestApp.Create(config); using var initial = app.Controller;
+        var sessions = new Dictionary<string, GuardSession>();
+        await using var mixer = new MixerOutputCoordinator(new(), (d, _) => sessions[d.Key] = new(),
+            (_, _) => new MixerCoordinatorTests.FakeCapture(), () => new DormantHost());
+        typeof(TrayApp).GetField("<Mixer>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, mixer);
+        await mixer.RefreshRootsAsync([new(1, "music", false)]); await mixer.ConnectAsync(config, ConnectTrigger.Manual);
+        var music = sessions["group:music"];
+        var receiver = new AirPlayDevice("fake music receiver", "112233445566", IPAddress.Loopback, 7000, "", new Dictionary<string, string>());
+        await app.HandleMixerTakeoverAsync("group:music", music.Controller, new(receiver, ConnectTrigger.Automatic), _ => throw new Exception("automatic prompt"));
+        await app.HandleMixerTakeoverAsync("group:music", music.Controller, new(receiver, ConnectTrigger.Manual), _ => false);
+        Assert.Equal(1, music.Starts);
+        await app.HandleMixerTakeoverAsync("group:music", initial, new(receiver, ConnectTrigger.Manual), _ => throw new Exception("stale controller prompt"));
+        await app.HandleMixerTakeoverAsync("group:music", music.Controller, new(receiver, ConnectTrigger.Manual), _ => true);
+        Assert.Equal(2, music.Starts); Assert.Equal(ConnectTrigger.TakeOver, music.LastTrigger);
+        Assert.Equal(1, sessions["speaker:airplay:AABBCCDDEEFF"].Starts);
+    }
+
+    [Fact]
     public void Volume_keys_end_a_global_mute_but_alignment_preserves_it() => Sta.Run(() =>
     {
         var config = MixerCoordinatorTests.Config(); MixerCoordinatorTests.Routes(config);
@@ -54,6 +75,8 @@ public sealed class MixerBoundaryTests
         Assert.Equal(2, coordinator.Controllers.Count);
         Assert.Same(original, coordinator.ControllerForKey("speaker:airplay:AABBCCDDEEFF"));
         Assert.NotSame(original, coordinator.ControllerForKey("speaker:airplay:112233445566"));
+        var created = coordinator.ControllerForKey("speaker:airplay:112233445566")!;
+        Assert.NotNull(typeof(StreamController).GetField("RaopTakeoverRequired", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(created));
     }
 
     [Fact]
@@ -118,12 +141,14 @@ public sealed class MixerBoundaryTests
 
     private sealed class GuardSession : IMixerDestinationSession
     {
+        public int Starts;
+        public ConnectTrigger LastTrigger;
         public StreamController Controller { get; } = new();
         public StreamState State => StreamState.Idle;
         public string Status => "fake";
         public int EffectiveLatencyMs => 0;
         public event Action? Changed { add { } remove { } }
-        public void Start(ConnectTrigger trigger) { }
+        public void Start(ConnectTrigger trigger) { Starts++; LastTrigger = trigger; }
         public Task StopAsync(string? reason = null) => Task.CompletedTask;
         public void Dispose() => Controller.Dispose();
     }

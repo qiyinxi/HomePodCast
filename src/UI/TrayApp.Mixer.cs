@@ -127,6 +127,7 @@ internal sealed partial class TrayApp
             }, null);
             controller.PairingRequired += request => _ui.Post(_ => ShowMixerPairing(destination.Key, controller, request), null);
             controller.RaopPasswordRequired += request => _ui.Post(_ => ShowMixerPassword(destination.Key, controller, request), null);
+            controller.RaopTakeoverRequired += request => _ui.Post(async _ => await HandleMixerTakeoverAsync(destination.Key, controller, request), null);
             InitializeGroupInteractions(controller);
         }
         bool FreshEnough()
@@ -172,6 +173,22 @@ internal sealed partial class TrayApp
             Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
             Config.Save(); PostConnection(() => Mixer!.ReconnectAsync(key, ConnectTrigger.Manual).GetAwaiter().GetResult());
         }
+        finally { _raopDialog = false; }
+    }
+
+    internal async Task HandleMixerTakeoverAsync(string key, StreamController controller, RaopInteraction request,
+        Func<string, bool>? confirm = null)
+    {
+        bool Current() => !_quitting && controller.State == StreamState.Idle && Mixer?.IsConnected == true && ReferenceEquals(Mixer.ControllerForKey(key), controller) &&
+            Mixer.DestinationForKey(key)?.Config?.DeviceId is { } id && RaopPassword.Key(id) == RaopPassword.Key(request.Device.DeviceId);
+        if (!Current() || _raopDialog || request.GroupGeneration != null || request.Trigger != ConnectTrigger.Manual) return;
+        _raopDialog = true;
+        try
+        {
+            bool accepted = confirm?.Invoke(request.Device.Name) ?? TakeoverDialog.Confirm(_form.Visible ? _form : null, request.Device.Name);
+            if (accepted && Current()) await Mixer!.ReconnectAsync(key, ConnectTrigger.TakeOver);
+        }
+        catch (Exception ex) { Log.Warn($"mixer takeover {key}: {ex.Message}"); }
         finally { _raopDialog = false; }
     }
 
