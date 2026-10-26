@@ -160,6 +160,39 @@ public class ReceiverGroupControllerTests
     }
 
     [Fact]
+    public async Task Required_receiver_takeover_releases_the_capture_before_Idle_is_published()
+    {
+        // 2026-10-26: the group loop published Idle and only then disposed the capture, so whoever saw Idle first (a
+        // Changed handler, the tray's monitor guard, the test above polling State) could still find the capture.
+        var transport = new Transport();
+        using var controller = Controller(Receiver(), Home());
+        Capture? capture = null;
+        controller.CaptureFactory = fifo => capture = new Capture(fifo);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.ConnectGroupReceiverOutput = (_, _, _, _, _, _) => Task.FromResult<IPreparedReceiverSession>(transport);
+        controller.PrepareGroupMember = async (_, _, _, ct) =>
+        {
+            entered.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            throw new InvalidOperationException("cancelled prepare must not return");
+        };
+        // Changed runs on the loop inside Set: what it reads is exactly what Idle was published with.
+        var atIdle = new TaskCompletionSource<(ICaptureSource? Capture, int Disposals)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.Changed += () =>
+        {
+            if (controller.State == StreamState.Idle && controller.StatusText.Contains("taken over"))
+                atIdle.TrySetResult((controller.Capture, Volatile.Read(ref capture!.Disposals)));
+        };
+        controller.StartGroup(Plan(Receiver(), Home()), 120, 10);
+        await entered.Task.WaitAsync(Guard);
+        Assert.NotNull(controller.Capture);
+        transport.Lose(new ReceiverGroupStoppedException("taken over"));
+        var seen = await atIdle.Task.WaitAsync(Guard);
+        Assert.Null(seen.Capture);
+        Assert.Equal(1, seen.Disposals);
+    }
+
+    [Fact]
     public async Task Optional_busy_receiver_leaves_the_HomePod_streaming_and_expires_its_interaction_on_stop()
     {
         using var rx = new FakeReceiver();
