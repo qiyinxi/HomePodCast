@@ -62,7 +62,7 @@ internal sealed class MixerScenario : IAsyncDisposable
             GroupCaptureDeviceIds = [QuietId], GroupDelayMs = 500 }, QuietGroup);
         OutputGroups.Save(Config, "CI overlapping group", new OutputGroupSettings { DeviceId = GameId,
             GroupCaptureDeviceIds = [GameId, MusicId], GroupDelayMs = 2000 }, OverlapGroup);
-        foreach (string id in new[] { "airplay:" + GameId, "airplay:" + MusicId, "airplay:" + QuietId, "local:" + LocalId, "dlna:uuid:fake-renderer" })
+        foreach (string id in new[] { "airplay:" + GameId, "airplay:" + MusicId, "airplay:" + QuietId, "airplay:" + OfflineId, "local:" + LocalId, "dlna:uuid:fake-renderer" })
             Config.MixerDeviceIdentities[MixerDeviceIdentities.Canonical(id)] = Guid.NewGuid().ToString("N");
         MixerRoutes.Write(Config, new() { Default = MixerRoute.Current, Apps = new()
             { ["music"] = Group(MusicGroup), ["voice"] = MixerRoute.Local, ["inactive"] = Group(QuietGroup) },

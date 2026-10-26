@@ -34,6 +34,42 @@ public sealed class MixerEndToEndTests
         Assert.Equal(MixerScenario.CaptureId, scenario.Config.CaptureDeviceId);
     }
 
+    [Fact]
+    public async Task Full_route_sequence_including_offline_and_replace_all_keeps_fake_payloads_correct()
+    {
+        await using var scenario = new MixerScenario();
+        var c = scenario.Config; var mixer = scenario.Coordinator;
+        await scenario.Connect();
+        await Until(() => mixer.Statuses.Count == 2 && mixer.Statuses.All(s => s.State == StreamState.Streaming));
+        var settings = MixerRoutes.Read(c).Settings!;
+        async Task Apply(MixerRoutingSettings next)
+        {
+            Assert.Equal(MixerEditResult.Applied, (await mixer.EditAsync(c, next, scenario.NotifyRoutingChanged)).Result);
+        }
+        var quiet = MixerScenario.Group(MixerScenario.QuietGroup);
+        await Apply(settings with { Default = quiet });
+        await Until(() => mixer.Statuses.Any(s => s.Key == "group:" + MixerScenario.QuietGroup && s.State == StreamState.Streaming));
+        var offline = MixerRoutingV2Tests.Named("airplay:" + MixerScenario.OfflineId);
+        Assert.Equal(MixerEditResult.Applied, mixer.PreviewRoute(c, null, offline).Result);
+        await Apply(MixerRoutes.Read(c).Settings! with { Default = offline });
+        await Until(() => mixer.Statuses.Any(s => s.Key == MixerRoutes.SpeakerKey("airplay:" + MixerScenario.OfflineId) && s.State == StreamState.Retrying));
+        await Apply(MixerRoutes.Read(c).Settings! with { Default = quiet });
+        await Until(() => mixer.Statuses.Any(s => s.Key == "group:" + MixerScenario.QuietGroup && s.State == StreamState.Streaming));
+        var sender = scenario.Controller("group:" + MixerScenario.QuietGroup)!.ActiveSender;
+        settings = MixerRoutes.Read(c).Settings!; settings.Apps["game"] = quiet;
+        await Apply(settings);
+        Assert.Same(sender, scenario.Controller("group:" + MixerScenario.QuietGroup)!.ActiveSender);
+        Assert.Equal(MixerEditResult.Applied, (await mixer.SwitchAllAsync(c, MixerScenario.Group(MixerScenario.MusicGroup),
+            mixer.PreviewSwitch(c), scenario.NotifyRoutingChanged)).Result);
+        await Until(() => mixer.Statuses.Count == 1 && mixer.Statuses[0].State == StreamState.Streaming);
+        settings = MixerRoutes.Read(c).Settings!; settings.Apps["voice"] = MixerRoute.Local;
+        await Apply(settings);
+        await Task.Delay(3000); // Past the documented receiver-buffer drain interval; payload ratios must now match.
+        Assert.Empty(scenario.Errors);
+        Assert.Equal(32, c.AppSendVolumes["game"]); Assert.Equal(MixerScenario.CaptureId, c.CaptureDeviceId);
+        await mixer.DisconnectAsync(); Assert.Equal(0, mixer.Leases.Count);
+    }
+
     private static async Task Until(Func<bool> complete)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));

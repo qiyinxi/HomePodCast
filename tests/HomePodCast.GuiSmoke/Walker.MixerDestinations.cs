@@ -201,8 +201,10 @@ internal sealed partial class Walker
     private IntPtr MixerWindow(string title) => Native.TopLevelWindows(App.Id).FirstOrDefault(h => Native.IsWindowVisible(h) && Native.WindowText(h) == title);
     private IntPtr WaitMixerConfirmation(int count)
     {
-        IntPtr dialog = IntPtr.Zero; MixerWait(() => (dialog = MixerWindow(T("全部切到"))) != IntPtr.Zero, "replace-all confirmation");
-        Expect(Has(Uia.Snapshot(dialog), _t.F("{0} 个程序的单独去处设置会被覆盖。要继续吗？", count)), "mixer", "replace-all override count is not " + count);
+        string expected = _t.F("{0} 个程序的单独去处设置会被覆盖。要继续吗？", count);
+        // A stale confirmation can still be closing, and Windows may reuse its handle for the recounted dialog.
+        IntPtr dialog = IntPtr.Zero; MixerWait(() => (dialog = MixerWindow(T("全部切到"))) != IntPtr.Zero &&
+            Has(Uia.Snapshot(dialog), expected), "replace-all confirmation with override count " + count);
         return dialog;
     }
     private void AnswerMixerConfirmation(int count, bool yes, string shot)
