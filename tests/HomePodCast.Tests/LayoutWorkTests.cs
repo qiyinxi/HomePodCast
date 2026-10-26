@@ -437,13 +437,60 @@ public class LayoutWorkTests
     });
 
     [Fact]
+    public void Settings_mixed_rows_have_no_windows_and_keep_all_inputs_on_the_surface() => Sta.Run(() =>
+    {
+        using var before = new Host(new SettingsPage(TestApp.Create(TestApp.Config()), logicalLayout: false), 784);
+        using var after = new Host(new SettingsPage(TestApp.Create(TestApp.Config())), 784);
+        LayoutPanel.CreateWindows(before.Page, () => false);
+        LayoutPanel.CreateWindows(after.Page, () => false);
+        var panels = All(after.Page).OfType<LayoutPanel>().Where(panel => panel != after.Page.Content).ToArray();
+        var inputs = All(after.Page).Where(control => LogicalLayout.IsInput(control) && control.IsHandleCreated).ToArray();
+        output.WriteLine($"Settings: {Handles(before.Page)} -> {Handles(after.Page)} HWNDs, {panels.Length} logical panels, {inputs.Length} created native inputs");
+        Assert.Equal(21, Handles(before.Page));
+        Assert.Equal(11, Handles(after.Page));
+        Assert.Equal(13, panels.Length);
+        Assert.Equal(9, inputs.Length);
+        Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
+        Assert.All(inputs, input => Assert.Same(after.Page.Content, input.Parent));
+        Assert.Equal(2 + inputs.Length, Handles(after.Page));
+        AssertNoOverlap(after.Page.Content);
+    });
+
+    [Theory]
+    [InlineData(Theme.Light, 784)]
+    [InlineData(Theme.Dark, 784)]
+    [InlineData(Theme.Light, 600)]
+    [InlineData(Theme.Dark, 600)]
+    public void Settings_with_logical_rows_matches_the_native_page_pixel_for_pixel(string theme, int width) => Sta.Run(() =>
+    {
+        var previous = Theme.Mode;
+        try
+        {
+            Theme.Mode = theme;
+            using var beforeHost = new Host(new SettingsPage(TestApp.Create(TestApp.Config()), logicalLayout: false), width);
+            using var afterHost = new Host(new SettingsPage(TestApp.Create(TestApp.Config())), width);
+            var before = beforeHost.Page;
+            var after = afterHost.Page;
+            Assert.Equal(before.Size, after.Size);
+            using var expected = new Bitmap(before.Width, before.Height);
+            using var actual = new Bitmap(after.Width, after.Height);
+            before.DrawToBitmap(expected, new Rectangle(Point.Empty, expected.Size));
+            after.DrawToBitmap(actual, new Rectangle(Point.Empty, actual.Size));
+            for (int y = 0; y < expected.Height; y++)
+            for (int x = 0; x < expected.Width; x++)
+                Assert.True(expected.GetPixel(x, y) == actual.GetPixel(x, y), $"{theme}/{width}: pixel {x},{y} differs");
+        }
+        finally { Theme.Mode = previous; }
+    });
+
+    [Fact]
     public void Toggling_night_disconnect_lays_each_container_out_once_and_measures_each_text_once() => Sta.Run(() =>
     {
         var config = TestApp.Config();
         using var host = new Host(new SettingsPage(TestApp.Create(config)), 784);
         var page = (SettingsPage)host.Page;
         var night = TestApp.Field<ToggleSwitch>(page, "_night");
-        var nightRow = (SettingRow)night.Parent!;
+        var nightRow = (SettingRow)LogicalLayout.Parent(night)!;
         var windowRow = TestApp.Field<SettingRow>(page, "_nightWindowRow");
         var idleRow = TestApp.Field<SettingRow>(page, "_nightIdleRow");
         Assert.True(windowRow.Collapsed && idleRow.Collapsed);
