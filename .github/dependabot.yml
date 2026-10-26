@@ -2,7 +2,9 @@ version: 2
 updates:
   # Updates land on dev like any other change; they reach main with the next verified merge.
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/* # the workflow's own composite actions (apt-install uses actions/cache)
     target-branch: dev
     schedule:
       interval: weekly

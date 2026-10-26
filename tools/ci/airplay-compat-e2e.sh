@@ -10,9 +10,7 @@ cleanup() {
   if [[ -n "$reader_pid" ]]; then kill "$reader_pid" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config \
-  libpopt-dev libconfig-dev libavahi-client-dev avahi-daemon libssl-dev libsoxr-dev
+# The build packages and avahi-daemon come from the workflow's apt cache step (.github/workflows/build.yml).
 sudo systemctl start avahi-daemon
 git clone --branch 4.3.7 --depth 1 https://github.com/mikebrady/shairport-sync.git "$scratch/shairport-sync"
 cd "$scratch/shairport-sync"
