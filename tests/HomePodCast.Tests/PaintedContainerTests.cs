@@ -253,6 +253,55 @@ public class PaintedContainerTests
         Assert.False(metric.IsHandleCreated);
     });
 
+    [Fact]
+    public void Home_latency_hint_survives_live_values_and_a_layout_that_moves_nothing() => Sta.Run(() =>
+    {
+        // 2026-10-26 gui-smoke once got no hint here (a late message box had disabled the window). Ruled out on the page's
+        // side: its own refreshes (new values every stats tick while streaming, layouts that move nothing) keep a pending or
+        // shown hint; only a real move cancels it. Synchronous throughout, so the delay never runs and nothing is shown.
+        using var form = new Form { StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000), Opacity = 0,
+            ShowInTaskbar = false, FormBorderStyle = FormBorderStyle.None };
+        var page = new HomePage(TestApp.Create(TestApp.Config()));
+        form.Controls.Add(page);
+        form.Show();
+        form.ClientSize = new Size(Theme.Dp(784, form.DeviceDpi), Theme.Dp(600, form.DeviceDpi));
+        page.SetBounds(0, 0, form.ClientSize.Width, form.ClientSize.Height);
+        page.PageShown();
+        page.PerformLayout();
+        Application.DoEvents();
+        var tips = TestApp.Field<LayoutToolTip>(page, "_tips");
+        var tile = TestApp.Field<MetricTile>(page, "_effective");
+        var host = tile.Parent!;
+        while (ParentPainting.IsPainted(host)) host = host.Parent!;
+        var bounds = ParentPainting.ScreenBounds(tile, clipped: true);
+        Assert.False(bounds.IsEmpty);
+        var point = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        void Hover(Point screen)
+        {
+            var client = host.PointToClient(screen);
+            typeof(Control).GetMethod("OnMouseMove", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(host, [new MouseEventArgs(MouseButtons.None, 0, client.X, client.Y, 0)]);
+        }
+        Control? Pending() => (Control?)typeof(LayoutToolTip).GetField("_pending", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(tips);
+
+        Hover(point);
+        Assert.Same(tile, Pending());
+        tile.SetValue("120");
+        tile.SetValue("121");
+        typeof(HomePage).GetMethod("UpdateStats", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(page, null);
+        page.UpdateState();
+        page.Content.PerformLayout();
+        page.PerformLayout();
+        Hover(point + new Size(1, 1)); // still on the tile: the same hint stays pending
+        Assert.Same(tile, Pending());
+        Assert.True(TestApp.Field<System.Windows.Forms.Timer>(tips, "_delay").Enabled);
+        Assert.Equal(bounds, ParentPainting.ScreenBounds(tile, clipped: true));
+
+        tile.Left += 5;
+        Assert.Null(Pending());
+        Assert.False(TestApp.Field<System.Windows.Forms.Timer>(tips, "_delay").Enabled);
+    });
+
     private static IEnumerable<Control> All(Control root)
     {
         yield return root;

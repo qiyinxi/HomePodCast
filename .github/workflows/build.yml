@@ -103,6 +103,12 @@ jobs:
         shell: pwsh
         run: ./tools/release.ps1 -SelfTest
 
+      # The process helpers of tools/ci/update-e2e.ps1 (path comparison, waiting for a starting process's image path)
+      # against fake process snapshots, offline: it installs and starts nothing here.
+      - name: Check update e2e helpers
+        shell: pwsh
+        run: ./tools/ci/update-e2e.ps1 -SelfTest
+
       - name: Publish (framework-dependent, single file)
         run: >
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false

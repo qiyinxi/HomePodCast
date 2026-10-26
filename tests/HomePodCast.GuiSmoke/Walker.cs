@@ -43,6 +43,9 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
+    /// <summary>FirewallAdvisor's log line for a Public network: the app then asks 「当前是公用网络」.</summary>
+    private const string PublicNetworkLine = "firewall rule only applies on Private networks, so the speaker can't connect back";
+
     private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "诊断", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
@@ -530,29 +533,56 @@ internal sealed partial class Walker
         var tile = Find(page, n => n.Name == T("实际延迟") && n.Type == "Text" && n.Hwnd == IntPtr.Zero);
         if (tile == null || !page.Rect.Contains(tile.Rect)) return; // a later full-width visit can expose it
         _checkedPaintedToolTip = true;
+        var main = MainWindow();
+        var center = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        string explanation = T("这次连接实际使用的延迟");
+        string Describe(IntPtr h) => h == main ? "the main window" : h == IntPtr.Zero ? "none" : $"{Native.ClassName(h)} 「{Native.WindowText(h)}」";
         bool shown = false;
-        bool activated = Native.SetForegroundWindow(MainWindow());
         var observed = new HashSet<string>();
-        Cursor.Position = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        var blocked = new List<string>();
+        string state = "";
+        const int attempts = 3;
         try
         {
-            var deadline = DateTime.UtcNow.AddSeconds(4);
-            while (!shown && DateTime.UtcNow < deadline)
+            // A message box disables the main window until it is answered: no mouse message reaches the page, and the
+            // tooltip shows only in the active window. 2026-10-26 (run 40251785256) the startup 「当前是公用网络」 came up
+            // late on a cold runner, during this hover. A box that comes up meanwhile is answered and the tile hovered
+            // again; a hover with nothing in the way decides.
+            for (int attempt = 0; attempt < attempts && !shown; attempt++)
             {
-                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.IsToolTipClass(Native.ClassName(h))))
+                HandlePrompts();
+                bool activated = Native.SetForegroundWindow(main);
+                Cursor.Position = Point.Empty; // from outside: each attempt is a new move onto the tile
+                Thread.Sleep(100);
+                Cursor.Position = center;
+                string? inTheWay = null;
+                var deadline = DateTime.UtcNow.AddSeconds(4);
+                while (!shown && inTheWay == null && DateTime.UtcNow < deadline)
                 {
-                    var tooltip = Uia.Snapshot(window);
-                    observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
-                    // A native tooltip exposes its text as the root's Name and may have no children.
-                    if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(T("这次连接实际使用的延迟"), StringComparison.Ordinal)
-                        || Has(tooltip, T("这次连接实际使用的延迟")))) { shown = true; break; }
+                    foreach (var window in Native.TopLevelWindows(App.Id))
+                    {
+                        if (IsPrompt(window)) inTheWay ??= $"message box 「{Native.WindowText(window)}」";
+                        if (!Native.IsToolTipClass(Native.ClassName(window))) continue;
+                        var tooltip = Uia.Snapshot(window);
+                        observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
+                        // A native tooltip exposes its text as the root's Name and may have no children.
+                        if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(explanation, StringComparison.Ordinal)
+                            || Has(tooltip, explanation))) { shown = true; break; }
+                    }
+                    if (shown) break;
+                    if (inTheWay == null && (Native.Style(main) & Native.WS_DISABLED) != 0) inTheWay = "the main window was disabled";
+                    if (inTheWay == null) Thread.Sleep(100);
                 }
-                if (!shown) Thread.Sleep(100);
+                state = $"activated={activated}, foreground={Describe(Native.GetForegroundWindow())}, pointer={Cursor.Position}, tile={tile.Rect}";
+                if (shown || inTheWay == null) break;
+                blocked.Add(inTheWay);
             }
+            string answered = blocked.Count == 0 ? "" : $" (hovered again after: {string.Join("; ", blocked)})";
             if (!shown) _report.Note(Where("painted tooltip"),
-                $"activated={activated}, pointer={Cursor.Position}, tile={tile.Rect}; observed: {string.Join("; ", observed)}");
-            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation: " + string.Join("; ", observed));
-            Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
+                $"{state}; in the way: {(blocked.Count == 0 ? "nothing" : string.Join("; ", blocked))}; observed: {string.Join("; ", observed)}");
+            else _report.Pass(Where("painted tooltip"), $"the windowless latency tile shows its hover explanation{answered}: " + string.Join("; ", observed));
+            Expect(shown, "首页", "the windowless latency tile lost its hover explanation"
+                + (blocked.Count == attempts ? $" (each of {attempts} hovers was blocked: {string.Join("; ", blocked)})" : ""));
         }
         finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }
     }
@@ -1083,9 +1113,16 @@ internal sealed partial class Walker
         var main = WaitWindow(MainWindow, "the main window", 30_000);
         _report.Note(Where(), $"main window after {watch.ElapsedMilliseconds} ms ({FileVersionInfo.GetVersionInfo(_exe).ProductVersion})");
 
-        // The firewall check at startup may ask about a rule (none on the runner): answer it before anything else.
+        // The firewall check at startup may ask about a rule (none on the runner) or the network (Public there): answer it
+        // before anything else. The box is posted to the UI thread after the log line; a Public network's line announces
+        // it, so wait for that box rather than a fixed time. 2026-10-26 (run 40251785256, a cold first start: main window
+        // after 2.9 s) it came more than 1.5 s after the line, up during 首页's tooltip check, and the disabled window never
+        // got the hover.
         WaitUntil(() => ReadLog().Any(l => l.Contains(" network: ", StringComparison.Ordinal)), "the startup firewall check in the log", 20_000, fail: false);
-        Thread.Sleep(1500);
+        if (ReadLog().Any(l => l.Contains(PublicNetworkLine, StringComparison.Ordinal)))
+            WaitUntil(() => _promptsShot.Contains(T("当前是公用网络")), $"the message box 「{T("当前是公用网络")}」 that the log announced",
+                15_000, fail: false);
+        else Thread.Sleep(1500); // a missing rule has no line of its own
         HandlePrompts();
 
         uint dpi = Native.GetDpiForWindow(main), want = (uint)(96 * _s.Scale / 100);
@@ -1167,14 +1204,16 @@ internal sealed partial class Walker
 
     private bool _inPrompts;
 
+    // A closed native picker can remain as a hidden window briefly while its owner disposes it.
+    // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
+    private static bool IsPrompt(IntPtr h) => Native.ClassName(h) == "#32770" && Native.IsWindowVisible(h)
+        && Native.WindowRect(h) is { Width: > 0, Height: > 0 };
+
     private void AnswerPrompts()
     {
         foreach (var h in Native.TopLevelWindows(App.Id))
         {
-            // A closed native picker can remain as a hidden window briefly while its owner disposes it.
-            // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
-            if (Native.ClassName(h) != "#32770" || !Native.IsWindowVisible(h)
-                || Native.WindowRect(h) is not { Width: > 0, Height: > 0 }) continue;
+            if (!IsPrompt(h)) continue;
             string title = Native.WindowText(h);
             Node tree;
             try { tree = Uia.Snapshot(h); }
