@@ -94,7 +94,7 @@ internal sealed class HomePage : ScrollPage
     private DateTime _streamingSince;
     private bool _loading;
 
-    public HomePage(TrayApp app) : base(L.T("首页"))
+    public HomePage(TrayApp app, bool logicalLayout = true) : base(L.T("首页"))
     {
         _app = app;
         _refresh = Ui.IconButton(Glyph.Refresh, L.T("刷新"), L.T("重新搜索音箱"), _tips);
@@ -135,6 +135,7 @@ internal sealed class HomePage : ScrollPage
         LoadFromConfig();
         ShowUpdate();
         ShowRuntimeNotice();
+        if (logicalLayout) LogicalLayout.Enable(Content); // tests compare native and logical parents on the same page
     }
 
     // ---------------------------------------------------------------- layout
