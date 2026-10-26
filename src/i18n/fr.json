@@ -737,5 +737,6 @@
   "收起详细说明": "Masquer les détails",
   "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Capture tout le périphérique de sortie en une fois pour une latence minimale. Toutes les applications sont envoyées vers l’enceinte ou le groupe actuel.",
   "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Choisissez HomePod, ce PC ou les deux pour chaque application ; le son transmis ajoute environ {0} ms de latence. Pour une latence minimale en jeu, utilisez \"Tout diffuser\".",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Dans Windows, envoyez les applications à transmettre vers un même périphérique audio libre, puis sélectionnez-le comme périphérique de capture. Il est capturé comme avec \"Tout diffuser\"."
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Dans Windows, envoyez les applications à transmettre vers un même périphérique audio libre, puis sélectionnez-le comme périphérique de capture. Il est capturé comme avec \"Tout diffuser\".",
+  "{0}：请先选择音频去处": "{0} : choisissez d’abord une destination audio"
 }

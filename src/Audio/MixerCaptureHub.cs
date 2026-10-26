@@ -81,9 +81,11 @@ public sealed class MixerCaptureHub : IDisposable
     {
         lock (_gate)
         {
-            _buses.Remove(destination);
+            if (!_buses.TryGetValue(destination, out var bus)) return;
             // One controller's disposal must not restore or stop another destination's roots.
             foreach (var pid in _inputs.Where(p => p.Value.Root.Destination == destination).Select(p => p.Key).ToArray()) Remove(pid);
+            bus.ClearExtras();
+            _buses.Remove(destination);
         }
     }
 
@@ -211,6 +213,7 @@ public sealed class MixerCaptureHub : IDisposable
             _counts.Remove(pid);
             _fifo.RemoveMixerSource(pid);
         }
+        public void ClearExtras() => _fifo.RemoveMixerSource(0);
         public void Push(uint pid, ReadOnlySpan<float> samples, PacketGain gain)
         {
             // StreamMixer trims backlog after each cycle; cap the incoming packet as well.

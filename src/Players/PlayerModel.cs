@@ -52,6 +52,8 @@ internal interface IPlayerEndpoint
     string Key { get; }
     PlayerKind Kind { get; }
     string Name { get; }
+    string? ProcessKey => null;
+    uint? RoutingProcessId => null;
     Task<PlayerReading> ReadAsync(CancellationToken ct);
     Task WriteAsync(int delayMs, CancellationToken ct);
 
@@ -105,6 +107,7 @@ internal enum PlayerState
     LoginFailed,
     /// <summary>Set it by hand (DelayMs = the value to use).</summary>
     Manual,
+    DestinationRequired,
 }
 
 /// <param name="Password">Which password the player accepted (VLC), for the line in 设置; never the password.</param>

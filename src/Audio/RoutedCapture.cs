@@ -88,6 +88,7 @@ public sealed class RoutedCapture : ICaptureSource
     public bool Routed { get; private set; }
 
     public int ExtraLatencyMs => Routed ? RoutedExtraLatencyMs : 0;
+    internal string? OwnerKeyFor(uint pid) => _router.OwnerKeyFor(pid);
 
     public event Action<string>? DeviceChanged;
 

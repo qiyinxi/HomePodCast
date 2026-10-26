@@ -737,5 +737,6 @@
   "收起详细说明": "Piilota lisätiedot",
   "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Kaappaa koko lähtölaitteen äänen kerralla pienimmällä viiveellä. Kaikki sovellukset lähetetään nykyiseen kaiuttimeen tai kaiutinryhmään.",
   "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Valitse kullekin sovellukselle HomePod, tämä tietokone tai molemmat; lähetetyn äänen viive kasvaa noin {0} ms. Pienimmän peliviiveen saat valitsemalla tilan \"Kaiken suoratoisto\".",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Ohjaa lähetettävät sovellukset Windowsissa samaan vapaaseen äänilaitteeseen ja valitse se kaappauslaitteeksi. Se kaapataan samalla tavalla kuin tilassa \"Kaiken suoratoisto\"."
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Ohjaa lähetettävät sovellukset Windowsissa samaan vapaaseen äänilaitteeseen ja valitse se kaappauslaitteeksi. Se kaapataan samalla tavalla kuin tilassa \"Kaiken suoratoisto\".",
+  "{0}：请先选择音频去处": "{0}: valitse ensin äänen kohde"
 }

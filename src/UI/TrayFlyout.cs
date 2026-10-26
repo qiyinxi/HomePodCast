@@ -152,7 +152,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     {
         if (IsDisposed) return;
         var c = _app.Controller;
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
 
         _name.Text = cfg.DeviceName ?? L.T("还没有选择音箱");
         _dot.DotColor = Icons.For(c.State);

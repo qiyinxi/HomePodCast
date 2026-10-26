@@ -30,6 +30,7 @@ internal sealed partial class TrayApp
     /// </summary>
     private void OnMicChanged()
     {
+        ApplyMixerEffects();
         if (_quitting || _micDeniedShown || _fx?.Mic is not { AccessDenied: true }) return;
         _micDeniedShown = true;
         var answer = MessageBox.Show(MicDeniedText(AppEnvironment.IsPackaged), L.T("无法使用麦克风"),

@@ -14,6 +14,7 @@ internal sealed partial class TrayApp
         if (!CanTestOutputGroup || !TryGetCalibrationSnapshot(out var snapshot))
             throw new OperationCanceledException("The test group is no longer connected");
         _groupAlignmentTestOpen = true;
+        using var mixerRoute = Mixer?.BeginCalibrationRoute(SelectedMixerKey);
         using var cap = LimitVolumeForMeasurement();
         using var wait = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         try

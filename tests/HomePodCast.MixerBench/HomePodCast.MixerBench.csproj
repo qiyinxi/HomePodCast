@@ -7,4 +7,8 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/HomePodCast.csproj" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="../HomePodCast.Tests/FakeReceiver.cs" Link="FakeReceiver.cs" />
+    <Compile Include="../HomePodCast.Tests/FakeAirPlayReceiver.cs" Link="FakeAirPlayReceiver.cs" />
+  </ItemGroup>
 </Project>

@@ -49,6 +49,7 @@ internal sealed class SessionRouter : IDisposable
     private volatile bool _stop;
     private volatile bool _refresh = true;
     private volatile RoutePlan _plan = RoutePlan.EndpointOnly;
+    private volatile IReadOnlyDictionary<uint, ProcessEntry> _processes = new Dictionary<uint, ProcessEntry>();
 
     private sealed class Tracked
     {
@@ -73,6 +74,19 @@ internal sealed class SessionRouter : IDisposable
     }
 
     public RoutePlan Plan => _plan;
+
+    internal string? OwnerKeyFor(uint pid)
+    {
+        var processes = _processes; var targets = _plan.Targets;
+        for (int depth = 0; depth < 64 && pid != 0; depth++)
+        {
+            var owner = targets.FirstOrDefault(t => t.RootPid == pid);
+            if (owner != null) return owner.Key;
+            if (!processes.TryGetValue(pid, out var entry) || entry.ParentPid == pid) break;
+            pid = entry.ParentPid;
+        }
+        return null;
+    }
 
     /// <summary>Raised on the router thread when <see cref="Plan"/> changed.</summary>
     public event Action? PlanChanged;
@@ -103,7 +117,8 @@ internal sealed class SessionRouter : IDisposable
     internal SendVolumeGain SendGain => _sendGain;
 
     /// <summary>Put a plan in place without enumerating sessions (tests).</summary>
-    internal void UsePlan(RoutePlan plan) => _plan = plan;
+    internal void UsePlan(RoutePlan plan, IReadOnlyDictionary<uint, ProcessEntry>? processes = null)
+    { _plan = plan; if (processes != null) _processes = processes; }
 
     /// <summary>
     /// A tracked session of <paramref name="root"/> reported a new volume (IAudioSessionEvents, any thread). For a
@@ -179,8 +194,9 @@ internal sealed class SessionRouter : IDisposable
         var kept = new HashSet<object>(ReferenceEqualityComparer.Instance);
         try
         {
+            _processes = routing ? ProcessTree.Snapshot() : new Dictionary<uint, ProcessEntry>();
             var plan = routing
-                ? RoutePlanner.Plan(rules, sessions.Select(s => new SessionEntry(s.Pid, s.IsSystem)), ProcessTree.Snapshot())
+                ? RoutePlanner.Plan(rules, sessions.Select(s => new SessionEntry(s.Pid, s.IsSystem)), _processes)
                 : RoutePlan.EndpointOnly;
             if (!plan.SameAs(_plan))
             {

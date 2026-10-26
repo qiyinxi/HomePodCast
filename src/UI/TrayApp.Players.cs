@@ -20,7 +20,7 @@ internal sealed partial class TrayApp
     public IReadOnlyList<PlayerStatus> PlayerStatuses => _players?.Statuses ?? [];
 
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
-    public int VideoDelayMs => VideoDelayFor(Config, Controller.State, Controller.EffectiveLatencyMs,
+    public int VideoDelayMs => VideoDelayFor(PlaybackConfig, Controller.State, Controller.EffectiveLatencyMs,
         Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext);
 
     /// <summary>
@@ -32,7 +32,38 @@ internal sealed partial class TrayApp
         ? LatencyTuner.SoundLagMs(effectiveLatencyMs, cfg, captureExtraMs, fifoTargetMs, context)
         : 0;
 
-    private PlayerSyncInput PlayerInput() => PlayerInputFor(Config, Controller.State, VideoDelayMs);
+    private PlayerSyncInput PlayerInput() => Mixer is { IsConnected: true } mixer &&
+        MixerRoutes.Read(Config).Settings is { } routing && (mixer.UsesHub || routing.Apps.Count > 0)
+        ? new PlayerSyncInput(Config.MoviePlayerSync, StreamState.Streaming, 0)
+        {
+            ForEndpoint = endpoint =>
+            {
+                var destination = mixer.DestinationForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
+                var controller = mixer.ControllerForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
+                if (endpoint.ProcessKey == null || destination?.Config is not { } config || controller == null) return null;
+                var context = MixerCalibrationContext(config, controller, destination.Key);
+                return PlayerInputFor(config, controller.State, VideoDelayFor(config, controller.State,
+                    controller.EffectiveLatencyMs, controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context));
+            },
+        }
+        : PlayerInputFor(Config, Controller.State, VideoDelayMs);
+
+    private object ApiStatusForApp(string? app)
+    {
+        if (Mixer is not { IsConnected: true } mixer)
+            return ApiStatus(Controller.State == StreamState.Streaming, Config.DeviceName, Controller.EffectiveLatencyMs, VideoDelayMs, HasCurrentCalibration);
+        var destination = mixer.DestinationForApp(app);
+        if (destination == null) return new { app = "HomePodCast", streaming = false, destinationRequired = true,
+            destinations = mixer.Statuses.Select(s => new { s.Key, s.Name, s.State }) };
+        var controller = mixer.ControllerForApp(app);
+        if (destination.Config is not { } config || controller == null)
+            return new { app = "HomePodCast", streaming = false, destination = destination.Key, local = destination.IsLocal };
+        var context = MixerCalibrationContext(config, controller, destination.Key);
+        int delay = VideoDelayFor(config, controller.State, controller.EffectiveLatencyMs,
+            controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context);
+        return ApiStatus(controller.State == StreamState.Streaming, destination.Name, controller.EffectiveLatencyMs,
+            delay, AvCalibrations.Get(Config, context) != null);
+    }
 
     /// <summary>What the players follow: on only in the 影视 scene with the setting on.</summary>
     internal static PlayerSyncInput PlayerInputFor(AppConfig cfg, StreamState state, int videoDelayMs) =>

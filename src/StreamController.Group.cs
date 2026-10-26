@@ -151,6 +151,7 @@ public sealed partial class StreamController
             return m with { Device = device, Port = GroupUsesRaop(device) ? device!.RaopPort ?? device.Port : m.Port };
         }).ToList();
         ct.ThrowIfCancellationRequested();
+        CheckMixerGroupLease?.Invoke(plan, members.Select(m => m.DeviceId).ToArray());
         if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
             Volatile.Write(ref _groupSelection, new(run.Generation, members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
         if (run.Source != null && members.Any(m => GroupUsesReceiver(m.Device)))

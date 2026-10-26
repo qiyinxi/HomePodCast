@@ -26,3 +26,29 @@ allocations are existing Media Foundation wrapper packets, separately visible ab
 
 Raw CPU identity, nominal frequency, runtime, allocation, sample validation and per-case measurements accompany this
 report in `docs/mixer-resource-measurements.json`. No real hardware playback has been verified.
+
+## Single-controller A/B
+
+P6b3: `dotnet run --project tests/HomePodCast.MixerBench -c Release -- --ab test-results/mixer-controller-ab.json`.
+This runs the actual single-speaker `StreamController` loop, the existing `AirPlayClient` and `RtpSender`, an in-process
+AirPlay receiver on loopback, and a fake endpoint producer. ABBA order, three-second warmup and at least 60 seconds per
+pass. The receiver consumes and decrypts every packet. No GUI or Windows audio endpoint is opened. The fake receiver's
+workers and packet/decryption allocations are part of the process measurements in both arms.
+
+| Entry | CPU cores | Managed MiB | Target/cap frames at start and end | Extra capture ms | Skipped RTP packets | RTP arrival p99/max ms | Leases after stop |
+| --- | ---: | ---: | --- | ---: | ---: | --- | ---: |
+| Direct A1 | 0.6012 | 42.52 | 705/2557 → 705/2557 | 0 | 0 | 0.667/2.175 | 0 |
+| Coordinator B1 | 0.5888 | 41.37 | 705/2557 → 705/2557 | 0 | 0 | 0.676/1.160 | 0 |
+| Coordinator B2 | 0.5973 | 41.20 | 705/2557 → 705/2557 | 0 | 0 | 0.680/1.026 | 0 |
+| Direct A2 | 0.5825 | 41.20 | 705/2557 → 705/2557 | 0 | 0 | 0.663/1.007 | 0 |
+
+The mean difference is approximately 0.001 CPU core, smaller than the within-arm spread of 0.009–0.019 core. These
+passes show no repeatable coordinator CPU or RTP-lateness regression, and buffers match exactly; they are not a
+real-speaker latency or monitor timing measurement. All passes return to 20–21 threads before the fake receiver itself
+is disposed. Private bytes settle at about 67–70 MiB with CLR/fake transport heaps retained. Raw measurements are in
+`docs/mixer-controller-ab.json`. Deterministic frame/negotiation/RTP regressions separately catch an extra packet of
+algorithmic buffering, including the explicit negative control.
+
+The fake endpoint uses the same high-resolution timer and MMCSS scheduling as the existing audio threads. A coarse
+Wait-based producer was rejected after it caused artificial FIFO underruns; no production FIFO or latency was raised.
+The recorded run requires every decoded sample after warmup to equal the non-silent marker, and records that count.

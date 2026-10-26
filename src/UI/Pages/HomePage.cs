@@ -406,7 +406,8 @@ internal sealed class HomePage : ScrollPage
     private void LoadFromConfig()
     {
         _loading = true;
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
+        _tuner.Rebind(cfg, _app.Mixer?.SelectedConfig != null ? _app.SaveSelectedDestinationSettings : _app.Config.Save);
         UpdateFloor();
         ShowLatency();
         ShowVolume(_app.Controller.Volume ?? cfg.Volume ?? 0);
@@ -428,7 +429,7 @@ internal sealed class HomePage : ScrollPage
     {
         bool loading = _loading;
         _loading = true;
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
         var selection = _app.ReceiverSelection;
         _homePodLatency.Collapsed = selection != null;
         _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
@@ -454,7 +455,7 @@ internal sealed class HomePage : ScrollPage
     /// <summary>The 影视 hint: what the local players were set to, and the value for the others.</summary>
     public void ShowPlayers()
     {
-        var cfg = _app.Config;
+        var cfg = _app.PlaybackConfig;
         _movieHint.Collapsed = cfg.Scene != Scene.Movie;
         if (_movieHint.Collapsed) return;
         _movieHint.Text = Players.PlayerText.MovieHint(cfg.MoviePlayerSync, _app.Controller.State == StreamState.Streaming,

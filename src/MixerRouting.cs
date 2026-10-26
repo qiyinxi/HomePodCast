@@ -17,7 +17,7 @@ public sealed record MixerRoute(MixerOutput Output, bool AlsoLocal = false)
     public static readonly MixerRoute Local = new(new MixerOutput(MixerOutputKind.Local));
 }
 
-public sealed record MixerDestinationSettings(Scene Scene, int LatencyMs, int FifoTargetMs = AppConfig.DefaultFifoTargetMs);
+public sealed record MixerDestinationSettings(Scene Scene, int LatencyMs, int FifoTargetMs = AppConfig.DefaultFifoTargetMs, double? Volume = null);
 
 public sealed record MixerRoutingSettings
 {
@@ -84,7 +84,8 @@ public static class MixerRoutes
                 s.DestinationSettings.Count > MaxApps || !Valid(s.Default) ||
                 s.Apps.Any(p => !ValidKey(p.Key) || !Valid(p.Value)) ||
                 s.DestinationSettings.Any(p => !ValidKey(p.Key) || p.Value == null || !Enum.IsDefined(p.Value.Scene) ||
-                    p.Value.LatencyMs is < 0 or > 30000 || p.Value.FifoTargetMs is < 1 or > 1000))
+                    p.Value.LatencyMs is < 0 or > 30000 || p.Value.FifoTargetMs is < 1 or > 1000 ||
+                    p.Value.Volume is { } volume && (!double.IsFinite(volume) || volume is < 0 or > 100)))
                 return new(null, MixerRoutingError.InvalidConfig);
             return new(s with { Apps = s.Apps.ToDictionary(p => RouteRules.KeyFor(p.Key), p => p.Value) }, MixerRoutingError.None);
         }
@@ -161,10 +162,11 @@ public static class MixerDestinationResolver
                 id = id[8..];
                 var row = source.GroupSpeakers?.FirstOrDefault(p => GroupPlan.Key(p.DeviceId) == GroupPlan.Key(id));
                 var manual = source.ManualDevices.FirstOrDefault(p => GroupPlan.Key(p.DeviceId) == GroupPlan.Key(id));
+                var preferences = source.ReceiverSettings.GetValueOrDefault(RaopPassword.Key(id));
                 var found = scan.FirstOrDefault(p => GroupPlan.Key(p.DeviceId) == GroupPlan.Key(id));
                 bool current = source.DeviceId != null && GroupPlan.Key(source.DeviceId) == GroupPlan.Key(id);
-                if (row == null && manual == null && found == null && !current) return Missing(key);
-                name = row?.Name ?? manual?.Name ?? found?.Name ?? source.DeviceName ?? id;
+                if (row == null && manual == null && preferences == null && found == null && !current) return Missing(key);
+                name = row?.Name ?? manual?.Name ?? preferences?.Name ?? found?.Name ?? source.DeviceName ?? id;
                 selection = new() { DeviceId = id, DeviceName = name };
             }
             else if (id.StartsWith("dlna:", StringComparison.OrdinalIgnoreCase))
@@ -196,6 +198,8 @@ public static class MixerDestinationResolver
             else return new("current:none", "", null, MixerRoutingError.NoSelection);
         }
         OutputGroups.Apply(c, selection);
+        if (route.Output.Kind is MixerOutputKind.Speaker or MixerOutputKind.Group &&
+            (source.DeviceId == null || c.DeviceId == null || GroupPlan.Key(source.DeviceId) != GroupPlan.Key(c.DeviceId))) c.Volume = null;
         c.Host = UsageProfiles.FreshHost(c.DeviceId, source, scan);
         c.MultiRoomHost = UsageProfiles.FreshHost(c.MultiRoomDeviceId, source, scan);
         if (c.GroupSpeakers != null) foreach (var member in c.GroupSpeakers)
@@ -204,7 +208,7 @@ public static class MixerDestinationResolver
             return new(key, name, null, MixerRoutingError.DuplicateLocal);
         var settings = MixerRoutes.Read(source).Settings;
         if (route.Output.Kind != MixerOutputKind.Current && settings?.DestinationSettings.GetValueOrDefault(key) is { } delay)
-        { c.Scene = delay.Scene; c.LatencyMs = delay.LatencyMs; c.FifoTargetMs = delay.FifoTargetMs; }
+        { c.Scene = delay.Scene; c.LatencyMs = delay.LatencyMs; c.FifoTargetMs = delay.FifoTargetMs; c.Volume = delay.Volume; }
         c.MixerRouting = null;
         return new(key, name, c, MixerRoutingError.None);
     }

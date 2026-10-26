@@ -737,5 +737,6 @@
   "收起详细说明": "Skjul detaljer",
   "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Optager hele outputenheden på én gang med lavest forsinkelse. Alle apps sendes til den aktuelle højttaler eller højttalergruppe.",
   "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Vælg HomePod, denne pc eller begge for hver app; streamet lyd får cirka {0} ms ekstra forsinkelse. Brug \"Stream alt\" for lavest forsinkelse i spil.",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Send i Windows de apps, du vil streame, til én ledig lydenhed, og vælg den derefter som optageenhed. Den optages på samme måde som med \"Stream alt\"."
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Send i Windows de apps, du vil streame, til én ledig lydenhed, og vælg den derefter som optageenhed. Den optages på samme måde som med \"Stream alt\".",
+  "{0}：请先选择音频去处": "{0}: vælg først en lyddestination"
 }

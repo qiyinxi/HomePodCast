@@ -20,6 +20,12 @@ internal sealed partial class TrayApp
     {
         var group = Config.SavedOutputGroups.FirstOrDefault(g => g.Id == id);
         if (group == null) return;
+        if (Mixer != null)
+        {
+            var projection = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(Config))!;
+            OutputGroups.Apply(projection, group.Settings); projection.SelectedOutputGroupId = group.Id;
+            if (Mixer.ValidateConfiguration(projection).Result != MixerEditResult.Applied) return;
+        }
         _form.Flush(); SavePendingVolume();
         OutputGroups.Apply(Config, group.Settings);
         Config.SelectedOutputGroupId = group.Id;

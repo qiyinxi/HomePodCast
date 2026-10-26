@@ -8,6 +8,12 @@ using Microsoft.Win32;
 #if DEBUG
 throw new InvalidOperationException("Resource measurements require a Release test host");
 #endif
+if (args.FirstOrDefault() == "--ab")
+{
+    try { MixerControllerBenchmark.Run(args.Length > 1 ? args[1] : "test-results/mixer-controller-ab.json"); }
+    catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+    return;
+}
 int seconds = args.Length > 0 ? int.Parse(args[0]) : 60;
 if (seconds < 60) throw new ArgumentException("Measure at least 60 seconds after warmup");
 string output = args.Length > 1 ? Path.GetFullPath(args[1]) : Path.GetFullPath("test-results/mixer-resources.json");
