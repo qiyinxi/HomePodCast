@@ -48,9 +48,12 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
   the extension), `gui-smoke` (every page through UI Automation, screenshots in the `gui-screenshots` artifact) and
   `airplay-compat-e2e` (third-party AirPlay: a shairport-sync receiver on Linux). The `release` job needs all of them;
   main requires them. dev requires every job of the workflow (each `gui-output-groups` shard on its own), so a PR to
-  dev can merge itself once CI is green: `gh pr merge --auto --merge`. When you add, rename or remove a job or a
-  shard, change dev's required checks to match (`repos/qiyinxi/HomePodCast/branches/dev/protection`), or every PR to
-  dev waits for a check that never comes.
+  dev can merge itself once CI is green, through the API:
+  `gh api graphql -f query='mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id,mergeMethod:MERGE}){clientMutationId}}' -f id=$(gh pr view <N> --json id -q .id)`.
+  Never `gh pr merge --auto`: from the owner's account, which can bypass the checks, it merges at once (2026-10-26:
+  #103 merged with its CI just started). When you add, rename or remove a job or a shard, change dev's required
+  checks to match (`repos/qiyinxi/HomePodCast/branches/dev/protection`), or every PR to dev waits for a check that
+  never comes.
 - What only a person can check is in `docs/device-test-checklist.zh-CN.md`: a short per-release regression, one-time
   verifications (each says which change makes it worth re-testing), experimental features, and a list of what is
   already automated. When you automate an item, move it to that list with its CI job or test class.
