@@ -736,6 +736,6 @@
   "了解更多": "Läs mer",
   "收起详细说明": "Dölj detaljer",
   "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Spelar in hela utdataenheten på en gång för lägsta fördröjning. Alla appar skickas till den aktuella högtalaren eller högtalargruppen.",
-  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Välj HomePod, den här datorn eller båda för varje app; strömmat ljud får cirka {0} ms extra fördröjning. Använd inspelning av hela utdataenheten för lägsta fördröjning i spel.",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Skicka apparna du vill strömma till en ledig ljudenhet i Windows och välj den som inspelningsenhet. Detta använder samma väg som inspelning av hela utdataenheten."
+  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Välj HomePod, den här datorn eller båda för varje app; strömmat ljud får cirka {0} ms extra fördröjning. Använd \"Strömma allt\" för lägsta fördröjning i spel.",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "Skicka apparna du vill strömma till en ledig ljudenhet i Windows och välj den som inspelningsenhet. Den spelas in på samma sätt som med \"Strömma allt\"."
 }

@@ -736,6 +736,6 @@
   "了解更多": "Dowiedz się więcej",
   "收起详细说明": "Ukryj szczegóły",
   "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Przechwytuje całe urządzenie wyjściowe naraz, zapewniając najmniejsze opóźnienie. Wszystkie aplikacje trafiają do bieżącego głośnika lub grupy.",
-  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Dla każdej aplikacji wybierz HomePod, ten komputer lub oba; przesyłany dźwięk zyskuje około {0} ms opóźnienia. Aby uzyskać najmniejsze opóźnienie w grach, przechwytuj całe wyjście.",
-  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "W Windows skieruj aplikacje do przesyłania na jedno wolne urządzenie audio, a następnie wybierz je jako urządzenie przechwytywania. Używa to ścieżki przechwytywania całego wyjścia."
+  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Dla każdej aplikacji wybierz HomePod, ten komputer lub oba; przesyłany dźwięk zyskuje około {0} ms opóźnienia. Aby uzyskać najmniejsze opóźnienie w grach, użyj trybu \"Przesyłaj wszystko\".",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "W Windows skieruj aplikacje do przesyłania na jedno wolne urządzenie audio, a następnie wybierz je jako urządzenie przechwytywania. Jest ono przechwytywane tak samo jak w trybie \"Przesyłaj wszystko\"."
 }
