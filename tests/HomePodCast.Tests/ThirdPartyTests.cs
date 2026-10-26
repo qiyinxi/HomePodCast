@@ -161,6 +161,83 @@ public class ThirdPartyTests
     }
 
     [Fact]
+    public async Task Retry_finds_a_moved_receiver_by_its_id_never_by_name_or_old_address()
+    {
+        var device = Device(legacy: false);
+        var moved = device with { Address = IPAddress.Parse("127.0.0.2"), Port = 7002 };
+        var impostor = device with { DeviceId = "02:99" }; // same name, at the receiver's old address
+        var attempts = new List<AirPlayDevice>();
+        int browses = 0;
+        using var controller = RetryingController(device, attempts, () => { browses++; return [impostor, moved]; });
+        var hosts = new List<string>();
+        controller.HostResolved += hosts.Add;
+        var connected = new TaskCompletionSource<(string Id, ReceiverProtocol Protocol)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.ReceiverProtocolConnected += (id, protocol, _) => connected.TrySetResult((id, protocol));
+        controller.Start(device.DeviceId, null, 120, 10);
+        Assert.Equal(("02:11", ReceiverProtocol.AirPlay2Realtime), await connected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(new[] { "127.0.0.1:7001", "127.0.0.2:7002" }, attempts.Select(d => $"{d.Address}:{d.Port}"));
+        Assert.All(attempts, d => Assert.Equal("02:11", d.DeviceId));
+        Assert.Equal(1, browses);
+        Assert.Equal(new[] { "127.0.0.1", "127.0.0.2" }, hosts);
+        controller.Stop();
+    }
+
+    [Fact]
+    public async Task Retry_waits_for_the_receiver_instead_of_connecting_to_the_new_holder_of_its_address()
+    {
+        var device = Device(legacy: false);
+        var impostor = device with { DeviceId = "02:99" };
+        var attempts = new List<AirPlayDevice>();
+        using var controller = RetryingController(device, attempts, () => [impostor]);
+        string notFound = L.T("找不到音箱：请确认它已通电、和电脑在同一网络");
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.Changed += () =>
+        {
+            if (controller.State == StreamState.Retrying && controller.StatusText.StartsWith(notFound)) waiting.TrySetResult();
+        };
+        controller.Start(device.DeviceId, null, 120, 10);
+        await waiting.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Single(attempts);
+        controller.Stop();
+    }
+
+    [Fact]
+    public async Task Retry_keeps_an_explicit_address_without_browsing()
+    {
+        var device = Device(legacy: false);
+        var manual = device with { Address = IPAddress.Parse("127.0.0.3") };
+        var attempts = new List<AirPlayDevice>();
+        int browses = 0;
+        using var controller = RetryingController(device, attempts, () => { browses++; return [device]; });
+        controller.ManualGroupReceiverDevice = _ => manual;
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.ReceiverProtocolConnected += (_, _, _) => connected.TrySetResult();
+        controller.Start(device.DeviceId, null, 120, 10);
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(new[] { "127.0.0.1", "127.0.0.3" }, attempts.Select(d => d.Address.ToString()));
+        Assert.Equal(0, browses);
+        controller.Stop();
+    }
+
+    /// <summary>A controller whose first connect is refused and whose second succeeds, wherever each one goes.</summary>
+    private static StreamController RetryingController(AirPlayDevice device, List<AirPlayDevice> attempts, Func<List<AirPlayDevice>> browse)
+    {
+        var preferences = ReceiverPreferences.Of(device); preferences.ProtocolOverride = ReceiverProtocol.AirPlay2Realtime;
+        return new StreamController
+        {
+            ReceiverLookup = _ => device, ReceiverSettings = _ => preferences, CaptureFactory = _ => new SilentCapture(),
+            BrowseReceivers = _ => Task.FromResult(browse()),
+            ReceiverConnectorOverride = protocol => (target, _, _, _, _) =>
+            {
+                attempts.Add(target);
+                return attempts.Count == 1
+                    ? Task.FromException<IReceiverSession>(new IOException("connection refused"))
+                    : Task.FromResult<IReceiverSession>(new Session(protocol));
+            },
+        };
+    }
+
+    [Fact]
     public async Task Cancellation_ends_trials_without_starting_fallback()
     {
         int attempts = 0;
