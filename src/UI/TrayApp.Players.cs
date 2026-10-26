@@ -20,7 +20,7 @@ internal sealed partial class TrayApp
     public IReadOnlyList<PlayerStatus> PlayerStatuses => _players?.Statuses ?? [];
 
     /// <summary>How late the HomePod is heard now, as the local API reports it (0 when not streaming).</summary>
-    public int VideoDelayMs => VideoDelayFor(Config, Controller.State, Controller.EffectiveLatencyMs,
+    public int VideoDelayMs => VideoDelayFor(PlaybackConfig, Controller.State, Controller.EffectiveLatencyMs,
         Controller.Capture?.ExtraLatencyMs ?? 0, Controller.Fifo.TargetMs, CurrentCalibrationContext);
 
     /// <summary>
@@ -32,7 +32,46 @@ internal sealed partial class TrayApp
         ? LatencyTuner.SoundLagMs(effectiveLatencyMs, cfg, captureExtraMs, fifoTargetMs, context)
         : 0;
 
-    private PlayerSyncInput PlayerInput() => PlayerInputFor(Config, Controller.State, VideoDelayMs);
+    private PlayerSyncInput PlayerInput() => Mixer is { IsConnected: true } mixer &&
+        MixerRoutes.Read(Config).Settings is { } routing && (mixer.UsesHub || routing.Apps.Count > 0)
+        ? new PlayerSyncInput(Config.MoviePlayerSync, StreamState.Streaming, 0)
+        {
+            ForEndpoint = endpoint =>
+            {
+                var destination = mixer.DestinationForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
+                var controller = mixer.ControllerForApp(endpoint.ProcessKey, endpoint.RoutingProcessId);
+                if (endpoint.ProcessKey == null || destination?.Config is not { } config || controller == null) return null;
+                config.SyncCalibrations = Config.SyncCalibrations;
+                config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
+                var context = MixerCalibrationContext(config, controller, destination.Key);
+                return PlayerInputFor(config, controller.State, VideoDelayFor(config, controller.State,
+                    controller.EffectiveLatencyMs, controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context));
+            },
+        }
+        : PlayerInputFor(Config, Controller.State, VideoDelayMs);
+
+    private object ApiStatusForApp(string? app, uint? pid)
+    {
+        if (Mixer is not { IsConnected: true } mixer)
+            return ApiStatus(Controller.State == StreamState.Streaming, Config.DeviceName, Controller.EffectiveLatencyMs, VideoDelayMs, HasCurrentCalibration);
+        if (app == null && pid is { } process && Audio.ProcessTree.Snapshot().TryGetValue(process, out var caller) &&
+            MixerRoutes.Read(Config).Settings?.For(caller.Key).Output.Kind == MixerOutputKind.Local) app = caller.Key;
+        var destination = mixer.DestinationForApp(app, pid);
+        if (destination == null) return new { app = "HomePodCast", streaming = false, destinationRequired = true,
+            message = L.T("无法确定此程序的声音去处，同步暂不可用。"),
+            destinations = mixer.Statuses.Select(s => new { s.Key, s.Name, s.State }) };
+        var controller = mixer.ControllerForApp(app, pid);
+        if (destination.Config is not { } config || controller == null)
+            return new { app = "HomePodCast", streaming = false, destination = destination.Key, local = destination.IsLocal,
+                message = destination.IsLocal ? L.T("此程序在本机播放，不使用音箱画面延迟。") : L.T("无法确定此程序的声音去处，同步暂不可用。") };
+        config.SyncCalibrations = Config.SyncCalibrations;
+        config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
+        var context = MixerCalibrationContext(config, controller, destination.Key);
+        int delay = VideoDelayFor(config, controller.State, controller.EffectiveLatencyMs,
+            controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context);
+        return ApiStatus(controller.State == StreamState.Streaming, destination.Name, controller.EffectiveLatencyMs,
+            delay, AvCalibrations.Get(Config, context) != null);
+    }
 
     /// <summary>What the players follow: on only in the 影视 scene with the setting on.</summary>
     internal static PlayerSyncInput PlayerInputFor(AppConfig cfg, StreamState state, int videoDelayMs) =>

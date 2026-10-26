@@ -154,6 +154,8 @@ internal sealed class VlcEndpoint : IPlayerEndpoint
     public string Key => $"vlc:{ProcessId}:{Address.Port}";
     public PlayerKind Kind => PlayerKind.Vlc;
     public string Name => "VLC";
+    public string? ProcessKey => "vlc";
+    public uint? RoutingProcessId => (uint)ProcessId;
     public PasswordSource? PasswordInUse { get; private set; }
 
     /// <summary>Checks that the port is still VLC's (tests replace it).</summary>

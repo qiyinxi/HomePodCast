@@ -131,6 +131,8 @@ internal sealed class MpvEndpoint(string pipeName, int processId, string name) :
     public string Key => $"mpv:{ProcessId}:{PipeName}";
     public PlayerKind Kind => PlayerKind.Mpv;
     public string Name { get; } = name;
+    public string? ProcessKey => Name == "mpv.net" ? "mpvnet" : "mpv";
+    public uint? RoutingProcessId => (uint)ProcessId;
 
     public async Task<PlayerReading> ReadAsync(CancellationToken ct)
     {

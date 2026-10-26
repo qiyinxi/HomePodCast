@@ -4,7 +4,10 @@ namespace HomePodCast.Players;
 /// <param name="Enabled">The setting is on and the 影视 scene is selected.</param>
 /// <param name="State">The stream's state.</param>
 /// <param name="VideoDelayMs">How late the HomePod is heard (only meaningful while streaming).</param>
-internal readonly record struct PlayerSyncInput(bool Enabled, StreamState State, int VideoDelayMs);
+internal readonly record struct PlayerSyncInput(bool Enabled, StreamState State, int VideoDelayMs)
+{
+    public Func<IPlayerEndpoint, PlayerSyncInput?>? ForEndpoint { get; init; }
+}
 
 /// <summary>
 /// 「影视场景自动调整播放器」: while the 影视 scene streams, sets the audio delay of every supported running
@@ -29,6 +32,7 @@ internal sealed class PlayerSync : IDisposable
     private readonly IPlayerScanner _scanner;
     private readonly Func<DateTime> _now;
     private readonly Dictionary<string, Tracked> _tracked = [];
+    private readonly Dictionary<string, DateTime> _endpointStreaming = [];
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _stopping = new(); // Shutdown cuts a running step short
     private Func<PlayerSyncInput>? _input;
@@ -188,11 +192,26 @@ internal sealed class PlayerSync : IDisposable
         foreach (var endpoint in scan.Endpoints)
         {
             ct.ThrowIfCancellationRequested();
+            var own = input.ForEndpoint?.Invoke(endpoint);
+            if (input.ForEndpoint != null)
+            {
+                if (own is { Enabled: true, State: StreamState.Streaming } current)
+                {
+                    _endpointStreaming[endpoint.Key] = _now();
+                    statuses.Add(await ApplyAsync(endpoint, PlayerDelay.TargetMs(current.VideoDelayMs), ct).ConfigureAwait(false));
+                    continue;
+                }
+                bool hold = own is { Enabled: true, State: StreamState.Connecting or StreamState.Retrying } &&
+                    _endpointStreaming.TryGetValue(endpoint.Key, out var last) && _now() - last < RetryGrace;
+                if (!hold) await RestoreOneAsync(endpoint.Key, ct).ConfigureAwait(false);
+                statuses.Add(new(endpoint.Kind, endpoint.Name, own == null ? PlayerState.DestinationRequired : PlayerState.Waiting));
+                continue;
+            }
             statuses.Add(await ApplyAsync(endpoint, target, ct).ConfigureAwait(false));
         }
         foreach (var note in scan.Notes)
         {
-            statuses.Add(new PlayerStatus(note.Kind, note.Name, note.Problem switch
+            statuses.Add(new PlayerStatus(note.Kind, note.Name, input.ForEndpoint != null ? PlayerState.DestinationRequired : note.Problem switch
             {
                 PlayerProblem.NoPassword => PlayerState.NoPassword,
                 PlayerProblem.LoginFailed => PlayerState.LoginFailed,
@@ -200,7 +219,14 @@ internal sealed class PlayerSync : IDisposable
                 _ => PlayerState.NoInterface,
             }, note.Problem == PlayerProblem.Manual ? target : null));
         }
-        Publish(statuses, target);
+        Publish(statuses, input.ForEndpoint == null ? target : null);
+    }
+
+    private async Task RestoreOneAsync(string key, CancellationToken ct)
+    {
+        Tracked? tracked; lock (_tracked) _tracked.Remove(key, out tracked);
+        _endpointStreaming.Remove(key);
+        if (tracked != null) await tracked.Endpoint.WriteAsync(tracked.Original, ct).ConfigureAwait(false);
     }
 
     private async Task<PlayerStatus> ApplyAsync(IPlayerEndpoint endpoint, int target, CancellationToken ct)

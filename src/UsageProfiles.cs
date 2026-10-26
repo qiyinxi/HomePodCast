@@ -32,6 +32,7 @@ public sealed class UsageSettings
     public string? CaptureDeviceName { get; set; }
     public AudioRoute RouteDefault { get; set; } = AudioRoute.HomePod;
     public Dictionary<string, AudioRoute> AppRoutes { get; set; } = [];
+    public JsonElement? MixerRouting { get; set; }
     public Dictionary<string, int> AppSendVolumes { get; set; } = [];
     public EffectsSettings Effects { get; set; } = new();
     public bool GroupSplitChannels { get; set; }
@@ -69,6 +70,7 @@ public static class UsageProfiles
         VolumeCapPercent = c.VolumeCapPercent, NightMode = c.NightMode, VolumeKeys = c.VolumeKeys,
         MoviePlayerSync = c.MoviePlayerSync, CaptureDeviceId = c.CaptureDeviceId, CaptureDeviceName = c.CaptureDeviceName,
         RouteDefault = c.RouteDefault, AppRoutes = new(c.AppRoutes), AppSendVolumes = new(c.AppSendVolumes),
+        MixerRouting = c.MixerRouting?.Clone(),
         Effects = Clone(c.Effects), GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
         GroupPairLeaderOnly = c.GroupPairLeaderOnly,
         GroupVolumeOffsets = c.GroupVolumeOffsets == null ? null : new(c.GroupVolumeOffsets),
@@ -90,6 +92,10 @@ public static class UsageProfiles
     {
         var s = Clone(saved);
         Normalize(s);
+        var mixerConfig = new AppConfig { MixerRouting = s.MixerRouting, RouteDefault = s.RouteDefault, AppRoutes = s.AppRoutes };
+        if (!MixerRoutes.Read(c).Editable || !MixerRoutes.Read(mixerConfig).Editable)
+            throw new InvalidOperationException("Unsupported mixer configuration");
+        MixerRoutes.Migrate(mixerConfig);
         // A profile saved before any speaker was chosen says nothing about speakers: the selection and its group layout stay.
         if (s.DeviceId != null || s.GroupCaptureDeviceIds != null || s.GroupCaptureDlnaUdns != null || s.GroupCaptureLocalDeviceIds != null)
         {
@@ -120,6 +126,7 @@ public static class UsageProfiles
         c.VolumeCapPercent = s.VolumeCapPercent; c.NightMode = s.NightMode; c.VolumeKeys = s.VolumeKeys;
         c.MoviePlayerSync = s.MoviePlayerSync; c.CaptureDeviceId = s.CaptureDeviceId; c.CaptureDeviceName = s.CaptureDeviceName;
         c.RouteDefault = s.RouteDefault; c.AppRoutes = s.AppRoutes; c.AppSendVolumes = s.AppSendVolumes;
+        c.MixerRouting = mixerConfig.MixerRouting;
         // Never raise the saved loudness.
         if (c.Volume is { } v) c.Volume = Math.Min(v, s.VolumeCapPercent);
         CopyEffects(c.Effects, s.Effects);

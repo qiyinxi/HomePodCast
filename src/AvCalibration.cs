@@ -9,6 +9,7 @@ namespace HomePodCast;
 public readonly record struct AvCalibrationContext(string SpeakerId, string CaptureEndpointId, bool PerAppRouting,
     bool FollowsDefault = false)
 {
+    public string? MixerDestinationId { get; init; }
     [JsonIgnore]
     public bool IsValid => !string.IsNullOrWhiteSpace(SpeakerId) && !string.IsNullOrWhiteSpace(CaptureEndpointId)
         && SpeakerId.Length <= 2048 && CaptureEndpointId.Length <= 2048;
@@ -16,7 +17,8 @@ public readonly record struct AvCalibrationContext(string SpeakerId, string Capt
     /// <summary>Case-independent ids, length-delimited so device ids cannot collide with the separators.</summary>
     [JsonIgnore]
     public string Key => IsValid
-        ? $"{Part(SpeakerId)}.{Part(CaptureEndpointId)}.{(PerAppRouting ? 1 : 0)}.{(FollowsDefault ? 1 : 0)}"
+        ? $"{Part(SpeakerId)}.{Part(CaptureEndpointId)}.{(PerAppRouting ? 1 : 0)}.{(FollowsDefault ? 1 : 0)}" +
+            (MixerDestinationId == null ? "" : "." + Part(MixerDestinationId))
         : "";
 
     private static string Part(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value.Trim().ToUpperInvariant()));

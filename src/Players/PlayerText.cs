@@ -8,6 +8,7 @@ internal static class PlayerText
         string ms = s.DelayMs is { } d ? PlayerDelay.Text(d) : "?";
         return s.State switch
         {
+            PlayerState.DestinationRequired => L.F("{0}：请先选择音频去处", s.Name),
             PlayerState.Applied => L.F("{0}：已设为 {1} ms", s.Name, ms),
             PlayerState.Waiting => L.F("{0}：开始播放后自动调整", s.Name),
             PlayerState.UserChanged => L.F("{0}：已被手动改为 {1} ms", s.Name, ms),

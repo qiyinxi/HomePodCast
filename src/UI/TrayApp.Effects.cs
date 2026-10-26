@@ -18,6 +18,7 @@ internal sealed partial class TrayApp
     private void InitEffects()
     {
         _fx = new MicEffects(Config.Effects);
+        _fx.OutputSettingsChanged += ApplyMixerEffects;
         Controller.Effects.Insert(0, _fx.OutputEq);
         Controller.Effects.Insert(0, new MixIn(_fx.HomePodSource));
         _fx.Changed += () => _ui.Post(_ => OnMicChanged(), null);
@@ -30,6 +31,7 @@ internal sealed partial class TrayApp
     /// </summary>
     private void OnMicChanged()
     {
+        ApplyMixerEffects();
         if (_quitting || _micDeniedShown || _fx?.Mic is not { AccessDenied: true }) return;
         _micDeniedShown = true;
         var answer = MessageBox.Show(MicDeniedText(AppEnvironment.IsPackaged), L.T("无法使用麦克风"),

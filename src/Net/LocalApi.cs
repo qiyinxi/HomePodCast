@@ -23,7 +23,8 @@ public sealed class LocalApi : IDisposable
     internal TimeSpan ReadTimeout { get; init; } = TimeSpan.FromSeconds(2);
 
     private readonly TcpListener _listener;
-    private readonly Func<object> _status;
+    private readonly Func<string?, uint?, object> _status;
+    private readonly Func<IPEndPoint, int, uint?>? _caller;
     private readonly CancellationTokenSource _cts = new();
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -33,9 +34,14 @@ public sealed class LocalApi : IDisposable
 
     public int Port { get; }
 
-    public LocalApi(int port, Func<object> status)
+    public LocalApi(int port, Func<object> status) : this(port, _ => status()) { }
+
+    public LocalApi(int port, Func<string?, object> status) : this(port, (app, _) => status(app)) { }
+
+    public LocalApi(int port, Func<string?, uint?, object> status, Func<IPEndPoint, int, uint?>? caller = null)
     {
         _status = status;
+        _caller = caller;
         _listener = new TcpListener(IPAddress.Loopback, port);
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -82,7 +88,9 @@ public sealed class LocalApi : IDisposable
                 byte[] body;
                 try
                 {
-                    body = code == 200 ? JsonSerializer.SerializeToUtf8Bytes(_status(), Json) : ErrorBody(code);
+                    string? app = AppKeyFromHead(head);
+                    uint? pid = code == 200 && app == null && client.Client.RemoteEndPoint is IPEndPoint endpoint ? _caller?.Invoke(endpoint, Port) : null;
+                    body = code == 200 ? JsonSerializer.SerializeToUtf8Bytes(_status(app, pid), Json) : ErrorBody(code);
                 }
                 catch (Exception ex)
                 {
@@ -147,6 +155,22 @@ public sealed class LocalApi : IDisposable
 
     internal static bool IsOurHost(string? host, int port) =>
         host != null && (host == $"127.0.0.1:{port}" || string.Equals(host, $"localhost:{port}", StringComparison.OrdinalIgnoreCase));
+
+    internal static string? AppKeyFromHead(string head)
+    {
+        string target = head.Split('\r')[0].Split(' ').ElementAtOrDefault(1) ?? "";
+        int question = target.IndexOf('?');
+        if (question < 0) return null;
+        var apps = target[(question + 1)..].Split('&').Where(p => p.StartsWith("app=", StringComparison.Ordinal)).ToArray();
+        if (apps.Length != 1) return null;
+        try
+        {
+            string key = Uri.UnescapeDataString(apps[0][4..]);
+            return key.Length is > 0 and <= 128 && key.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_')
+                ? Audio.RouteRules.KeyFor(key) : null;
+        }
+        catch (UriFormatException) { return null; }
+    }
 
     private static string Reason(int code) => code switch
     {

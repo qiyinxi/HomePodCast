@@ -137,6 +137,9 @@ function renderStatus() {
   } else if (s.running === false) {
     text = t('statusNotRunning');
     st = 'off';
+  } else if ((s.destinationRequired || s.local) && typeof s.message === 'string') {
+    text = s.message;
+    st = s.destinationRequired ? 'unknown' : 'idle';
   } else if (!s.streaming) {
     text = t('statusIdle');
     st = 'idle';

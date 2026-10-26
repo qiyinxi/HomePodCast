@@ -32,6 +32,8 @@ internal sealed partial class TrayApp
         Controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
         Controller.RaopPasswordRequired += request => _ui.Post(_ =>
         {
+            if (Mixer?.KeyForController(_legacyController!) is { } key)
+            { ShowMixerPassword(key, _legacyController!, request); return; }
             if (!CanShowRaopDialog(request) || !PairingPolicy.OffersPinPairing(request.Trigger)) return;
             _raopDialog = true;
             try
@@ -46,6 +48,12 @@ internal sealed partial class TrayApp
         }, null);
         Controller.RaopTakeoverRequired += request => _ui.Post(_ =>
         {
+            if (Mixer?.KeyForController(_legacyController!) is { } key)
+            {
+                if (!_quitting && !_raopDialog && TakeoverDialog.Confirm(_form.Visible ? _form : null, request.Device.Name))
+                    PostConnection(() => Mixer.ReconnectAsync(key, ConnectTrigger.TakeOver).GetAwaiter().GetResult());
+                return;
+            }
             if (!CanShowRaopDialog(request)) return;
             _raopDialog = true;
             try

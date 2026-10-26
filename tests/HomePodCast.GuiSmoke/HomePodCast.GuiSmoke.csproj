@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\src\HomePodCast.csproj" />
     <Compile Include="..\HomePodCast.Tests\FakeAirPlayReceiver.cs" Link="Fakes\FakeAirPlayReceiver.cs" />
     <Compile Include="..\HomePodCast.Tests\FakeReceiver.cs" Link="Fakes\FakeReceiver.cs" />
+    <Compile Include="..\HomePodCast.Tests\FakeDlnaRenderer.cs" Link="Fakes\FakeDlnaRenderer.cs" />
+    <Compile Include="..\Shared\MixerScenario.cs" Link="Fakes\MixerScenario.cs" />
     <!-- The UI texts, to find controls by what they say in each language. -->
     <None Include="..\..\src\i18n\*.json" Link="i18n\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

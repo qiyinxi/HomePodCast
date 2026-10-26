@@ -180,6 +180,9 @@ public sealed class AppConfig
 
     /// <summary>Per-app destinations, keyed by lower-case executable name without ".exe".</summary>
     public Dictionary<string, Audio.AudioRoute> AppRoutes { get; set; } = [];
+    // Keep the JSON envelope so a future version, or a damaged routing section, survives a save unchanged.
+    public JsonElement? MixerRouting { get; set; }
+    public Dictionary<string, string> MixerDeviceIdentities { get; set; } = [];
     public Dictionary<string, int> AppSendVolumes { get; set; } = [];
 
     /// <summary>
@@ -285,6 +288,7 @@ public sealed class AppConfig
                 cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
                 cfg.ForwardVolumeKeys = null;
                 cfg.AppRoutes ??= [];
+                cfg.MixerDeviceIdentities ??= [];
                 cfg.AppSendVolumes ??= [];
                 cfg.AppSendVolumesOff ??= [];
                 cfg.Effects ??= new();
@@ -293,6 +297,7 @@ public sealed class AppConfig
                 GroupSettings.Normalize(cfg);
                 OutputGroups.Normalize(cfg);
                 HomePodCast.UsageProfiles.Normalize(cfg);
+                MixerRoutes.Migrate(cfg);
                 return cfg;
             }
         }

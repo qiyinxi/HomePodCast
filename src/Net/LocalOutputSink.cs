@@ -10,6 +10,7 @@ internal sealed class LocalOutputSink : IOutputSink
     private readonly Func<string, ILocalRenderDevice> _open;
     private readonly Func<string?> _captured;
     private readonly Func<double> _cap;
+    private readonly Func<string, bool>? _duplicate;
     private readonly Thread _thread;
     private readonly AutoResetEvent _go = new(false);
     private readonly TaskCompletionSource _prepared = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -24,9 +25,10 @@ internal sealed class LocalOutputSink : IOutputSink
     private int _groupDelayMs;
 
     private LocalOutputSink(LocalOutputOptions options, Func<string, ILocalRenderDevice> open, Func<string?> captured,
-        Func<double> cap)
+        Func<double> cap, Func<string, bool>? duplicate)
     {
         _options = options; _open = open; _captured = captured; _cap = cap;
+        _duplicate = duplicate;
         _thread = new Thread(Run) { IsBackground = true, Name = "Group local output", Priority = ThreadPriority.Highest };
     }
 
@@ -43,12 +45,13 @@ internal sealed class LocalOutputSink : IOutputSink
     public double DriftPpm => _renderer?.DriftPpm ?? 0;
 
     public static async Task<LocalOutputSink> PrepareAsync(LocalOutputOptions options, Func<string?> captured,
-        Func<double> cap, CancellationToken ct, Func<string, ILocalRenderDevice>? open = null)
+        Func<double> cap, CancellationToken ct, Func<string, ILocalRenderDevice>? open = null, Func<string, bool>? duplicate = null)
     {
         options.Validate();
         CheckCapture(options.DeviceId, captured());
+        CheckDuplicate(options.DeviceId, duplicate);
         ct.ThrowIfCancellationRequested();
-        var sink = new LocalOutputSink(options, open ?? (id => new WasapiOutputDevice(id)), captured, cap);
+        var sink = new LocalOutputSink(options, open ?? (id => new WasapiOutputDevice(id)), captured, cap, duplicate);
         try
         {
             sink._thread.Start();
@@ -77,6 +80,12 @@ internal sealed class LocalOutputSink : IOutputSink
         if (CaptureEndpoint.Same(endpointId, captured)) throw new AirPlayException(L.T(CapturedOutputText));
     }
 
+    internal static void CheckDuplicate(string endpointId, Func<string, bool>? duplicate)
+    {
+        if (duplicate?.Invoke(endpointId) == true)
+            throw new AirPlayException(L.T("本机副本会和此组的本机输出重复播放。"));
+    }
+
     public void SetVolume(double percent, bool mute = false)
     {
         Volatile.Write(ref _volume, mute ? 0 : percent);
@@ -97,6 +106,7 @@ internal sealed class LocalOutputSink : IOutputSink
         try
         {
             CheckCapture(Id, _captured());
+            CheckDuplicate(Id, _duplicate);
             using var device = _open(Id);
             if (device.Rate <= 0 || device.BufferFrames <= 0 || device.PeriodFrames <= 0 ||
                 !double.IsFinite(device.StreamLatencyMs) || device.StreamLatencyMs < 0)
@@ -107,6 +117,7 @@ internal sealed class LocalOutputSink : IOutputSink
             _go.WaitOne();
             if (_stop) return;
             CheckCapture(Id, _captured());
+            CheckDuplicate(Id, _duplicate);
             var renderer = new LocalOutputRenderer(Timeline!, _options, device.Rate, device.BufferFrames, _groupDelayMs, _cap, ReadVolume);
             _renderer = renderer;
             var pcm = new float[device.BufferFrames * 2];
@@ -119,6 +130,7 @@ internal sealed class LocalOutputSink : IOutputSink
                 device.WaitReady();
                 if (_stop) break;
                 CheckCapture(Id, _captured());
+                CheckDuplicate(Id, _duplicate);
                 int want = fill - device.PaddingFrames;
                 if (want <= 0) continue;
                 var position = device.Position;

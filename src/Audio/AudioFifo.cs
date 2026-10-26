@@ -12,7 +12,7 @@ namespace HomePodCast.Audio;
 /// data resumes: within <see cref="DropoutWindowMs"/> it was a dropout (counted in <see cref="Underruns"/>, and
 /// with an adaptive target the target grows), later it was the source going quiet (<see cref="IdleGaps"/>).
 /// </remarks>
-public sealed class AudioFifo
+public sealed partial class AudioFifo
 {
     /// <summary>Data that resumes within this time after the FIFO ran dry means an audible dropout.</summary>
     public const int DropoutWindowMs = 200;

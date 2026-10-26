@@ -98,6 +98,7 @@ public sealed class MicEffects : IDisposable
 
     /// <summary>Raised from audio threads when the mic or the monitor opens, fails or closes.</summary>
     public event Action? Changed;
+    internal event Action? OutputSettingsChanged;
 
     public MicEffects(EffectsSettings settings)
     {
@@ -141,6 +142,7 @@ public sealed class MicEffects : IDisposable
             MicEq.Set(s.MicEq.Preset, s.MicEq.Gains ?? []);
             if (_outputPresetOverride != null) OutputEq.SetPreset(_outputPresetOverride);
             else OutputEq.Set(s.OutputEq.Preset, s.OutputEq.Gains ?? []);
+            OutputSettingsChanged?.Invoke();
             Reverb.Enabled = s.ReverbEnabled;
             Reverb.RoomSize = (float)s.ReverbRoomSize;
             Reverb.Damping = (float)s.ReverbDamping;

@@ -4,7 +4,7 @@ namespace HomePodCast.GuiSmoke;
 
 internal sealed partial class Walker
 {
-    private const string MixerDetails = "直接抓取整个声音输出，没有额外延迟。所有程序都送到 HomePod；本机出不出声由 Windows 音量决定，想只在音箱播放，就打开「首页 → 仅 HomePod 输出」。";
+    private const string MixerDetails = "一次采集所选输出设备，所有程序送到同一个远端去处。本机是否出声由 Windows 音量和静音设置决定。";
 
     /// <summary>Runs on CI only, on the basic scenarios and the existing all-language, required-150% matrix.</summary>
     private void CheckMixerHelp()
@@ -14,9 +14,9 @@ internal sealed partial class Walker
         Expect(!Has(Uia.Snapshot(MainWindow()), T(MixerDetails)), page, "detailed mode help is not collapsed initially");
         string[] summaries =
         [
-            T("一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。"),
-            _t.F("为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。", RoutedCapture.RoutedExtraLatencyMs),
-            T("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。"),
+            T("一次采集整个输出设备，延迟最低。所有程序送到同一个音箱或音箱组。"),
+            _t.F("为程序单独选择音箱、音箱组、本机或音箱加本机，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用「{1}」。", RoutedCapture.RoutedExtraLatencyMs, T("全部推送")),
+            _t.F("在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用「{0}」的采集路径。", T("全部推送")),
         ];
         var seen = new HashSet<string>();
         var more = HelpAction("了解更多");
@@ -52,7 +52,13 @@ internal sealed partial class Walker
                     if (Find(tree, n => n.Shown && n.Says(summary) && n.Rect.IntersectsWith(Native.WindowRect(pane))) != null)
                         seen.Add(summary);
                 var action = Find(tree, n => n.Shown && n.Hwnd != IntPtr.Zero && n.Says(T(text)));
-                if (action != null && Native.WindowRect(pane).Contains(action.Rect)) return action;
+                if (action != null)
+                {
+                    var link = Find(tree, n => n.Shown && n.Hwnd != IntPtr.Zero && n.Says(T("打开 Windows 应用音量设置")));
+                    var target = link == null ? action.Rect : Rectangle.Union(action.Rect, link.Rect);
+                    if (PositionMixerControl(pane, target)) return action;
+                    continue;
+                }
                 var before = Native.VerticalScroll(pane);
                 Scroll(pane, Native.SB_PAGEDOWN);
                 if (Native.VerticalScroll(pane) is not { } after || before?.nPos == after.nPos) break;

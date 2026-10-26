@@ -23,6 +23,8 @@ internal sealed partial class TrayApp
     private void OnPairingRequired(PairingRequest request)
     {
         if (_quitting) return;
+        if (Mixer?.KeyForController(_legacyController!) is { } key)
+        { ShowMixerPairing(key, _legacyController!, request); return; }
         _wantConnected = false; // nothing reconnects by itself: 连接 starts the pairing
         bool ask = PairingPolicy.OffersPinPairing(request.Trigger);
         Log.Info($"pairing needed ({request.Reason}, {request.Trigger}): {(ask ? "asking" : "waiting for a click on 连接")}");

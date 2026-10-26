@@ -10,9 +10,8 @@ namespace HomePodCast.UI.Pages;
 /// level meter, its destination, volume and mute. App rows are created while the page is visible and kept, without
 /// their audio sessions, while it is hidden; everything is sized for the page's DPI.
 /// </summary>
-internal sealed class MixerPage : ScrollPage
+internal sealed partial class MixerPage : ScrollPage
 {
-    private static readonly AudioRoute[] Routes = [AudioRoute.HomePod, AudioRoute.Local, AudioRoute.Both];
 
     /// <summary>
     /// With a chosen capture device, 「HomePod 跟随 Windows 音量」 follows that device's volume (VolumeKeyForwarder watches
@@ -34,7 +33,7 @@ internal sealed class MixerPage : ScrollPage
     private readonly FluentSlider _master = Ui.Slider(0, 100, 1, 5);
     private readonly TimerDebounce _masterWait = new(150);
 
-    private readonly Segmented _routeDefault = new(Routes.Select(RouteName).ToArray()) { EqualWidths = false };
+    private readonly FluentComboBox _routeDefault = new() { MinWidth = 230, PreferredWidth = 290 };
     private readonly SettingRow _routeRow;
 
     private readonly StackPanel _rows = new() { Gap = 4 };
@@ -56,14 +55,15 @@ internal sealed class MixerPage : ScrollPage
         _captureRow.DescriptionText.Wrap = true;
 
         _routeDefault.Enabled = AppRouting.Supported;
-        _routeRow = new SettingRow(Glyph.Devices, L.T("默认输出到"), L.T("适用于未单独设置输出目标的应用。"), _routeDefault);
+        _routeRow = new SettingRow(Glyph.Devices, L.T("没单独设置的程序送到"), L.T("适用于未单独设置输出目标的应用。"), _routeDefault);
         _routeRow.DescriptionText.Wrap = true;
 
         var modes = new MixerModeHelp();
 
         var appsHeader = Ui.Section(L.T("应用（推送到音箱的声音）"));
-        var note = Ui.Note(L.F("Windows 音量和静音与系统合成器共用。开启某程序的 HomePod 独立音量后，音箱音量由 HomePod 滑块决定；开启时不会超过它现在的 Windows 音量，音箱不会突然变响。送到「两者」的程序可以分别调节音箱和本机；送到「HomePod」的程序本机已静音，Windows 音量不再改变音箱音量；送到「本机」的程序不推送。独立音量会启用按程序分流，推送的声音多约 {0} ms 延迟。Windows 静音或音量为 0 时，音箱也没有声音；同一程序几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × HomePod 音量。关闭独立音量可恢复跟随 Windows。", RoutedCapture.RoutedExtraLatencyMs));
+        var note = Ui.Note(L.F("Windows 音量和静音与系统共用。开启独立音量后，可单独调节程序送往音箱的音量；开启时不会超过当前 Windows 音量。远端加本机不承诺两处同步。本机播放不建立额外副本；系统提示音在按程序采集时只留在本机。独立音量也会增加约 {0} ms 采集延迟。", RoutedCapture.RoutedExtraLatencyMs));
         Content.Controls.AddRange([masterCard, _captureRow, _routeRow, modes, appsHeader, _rows, _empty, note]);
+        InitializeDestinations(modes);
         Content.GapBefore[appsHeader] = 20;
         Content.GapBefore[_rows] = 8;
         // _empty stays shown until the first refresh (PageShown, before the page is painted): a page built ahead of its first
@@ -81,18 +81,7 @@ internal sealed class MixerPage : ScrollPage
             _app.SetVolume(_master.Value);
             VolumeApplied?.Invoke(_master.Value);
         };
-        _routeDefault.SelectionChangeCommitted += (_, _) =>
-        {
-            if (_routeDefault.SelectedIndex < 0) return;
-            var route = Routes[_routeDefault.SelectedIndex];
-            if (!ConfirmRouting(_app.Routing.Rules with { Default = route }))
-            {
-                SyncRoutes();
-                return;
-            }
-            _app.Routing.Default = route;
-            SyncRoutes();
-        };
+        _routeDefault.SelectionChangeCommitted += async (_, _) => await ApplyDefaultChoice();
         _captureDevice.SelectionChangeCommitted += (_, _) => OnCaptureDeviceChosen();
         _meterTimer.Tick += (_, _) => UpdateMeters();
         _refreshTimer.Tick += (_, _) =>
@@ -113,7 +102,7 @@ internal sealed class MixerPage : ScrollPage
     private void LoadCaptureDevices()
     {
         if (_captureDevice.DroppedDown) return; // the next device change or page visit refreshes it
-        _captureOutputs = AudioEndpoints.Outputs();
+        _captureOutputs = FindCaptureOutputs();
         var chosen = _app.Routing.CaptureDeviceId;
         _captureDevice.Items.Clear();
         _captureDevice.Items.Add(L.T("跟随 Windows 默认输出（推荐）"));
@@ -175,29 +164,22 @@ internal sealed class MixerPage : ScrollPage
     /// <summary>The volume was changed here (首页 follows).</summary>
     public event Action<double>? VolumeApplied;
 
-    private static string RouteName(AudioRoute route) => route switch
-    {
-        AudioRoute.Local => L.T("本机"),
-        AudioRoute.Both => L.T("两者"),
-        _ => "HomePod",
-    };
-
-    /// <summary>Destination choices of an app row.</summary>
-    private static string[] RouteItems => [L.T("默认"), .. Routes.Select(RouteName)];
-
-    private string DefaultRouteText() => L.F("默认（{0}）", RouteName(_app.Routing.Default));
+    private string DefaultRouteText() => L.F("跟随默认：{0}", MixerDestinationOptions.Name(_app.Config,
+        MixerRoutes.Read(_app.Config).Settings?.Default ?? MixerRoute.Current, _app.LastScan));
 
     // ---------------------------------------------------------------- speaker volume
 
     private void ShowMaster()
     {
-        _masterTitle.Text = L.F("{0} 音量", _app.Config.DeviceName ?? "HomePod");
+        _masterTitle.Text = L.F("{0} 音量", _app.Mixer?.Statuses.FirstOrDefault(s => s.Key == _app.SelectedMixerKey)?.Name ?? _app.Config.DeviceName ?? "HomePod");
+        _master.Enabled = !_app.NativeMixerView;
         int cap = _app.Config.VolumeCapPercent;
         _master.Ceiling = cap;
         _master.Mark = cap < 100 ? cap : null;
         var volume = _app.Controller.Volume ?? _app.Config.Volume;
         ShowVolume(volume ?? 0);
         if (volume is null) _masterValue.Text = "--";
+        if (_app.NativeMixerView) { _masterTitle.Text = L.T("本机"); _masterValue.Text = "—"; }
     }
 
     /// <summary>Move the master slider without sending anything.</summary>
@@ -296,6 +278,9 @@ internal sealed class MixerPage : ScrollPage
 
     /// <summary>The apps playing on a device (null: the default output); tests give made-up ones.</summary>
     internal Func<string?, List<AppAudio>> FindApps { get; set; } = AppAudio.Enumerate;
+    internal Func<List<AudioEndpoint>> FindCaptureOutputs { get; set; } = AudioEndpoints.Outputs;
+    internal Func<bool> IsLocalOutputSilent { get; set; } = AppRouting.LocalOutputSilent;
+    internal Func<bool> NativeOutputAvailable { get; set; } = () => AudioEndpoints.DefaultOutputId() != null;
 
     private void RefreshApps()
     {
@@ -420,7 +405,7 @@ internal sealed class MixerPage : ScrollPage
     private void SyncRoutes()
     {
         var routing = _app.Routing;
-        _routeDefault.SelectedIndex = Array.IndexOf(Routes, routing.Default);
+        SyncDestinationChoices();
         foreach (var row in _byKey.Values) row.SyncRoute(routing);
         _routeRow.DescriptionText.Text = RouteStatus();
         _routeRow.DescriptionText.Role = !AppRouting.Supported ? TextRole.Caution : TextRole.Secondary;
@@ -435,7 +420,7 @@ internal sealed class MixerPage : ScrollPage
         if (_app.Config.RoutingNoticeAccepted || _app.Routing.Active || !AppRouting.Supported || !next.NeedsRouting)
             return true;
         var answer = MessageBox.Show(FindForm(),
-            L.F("给程序单独设置去处或 HomePod 音量后会改用「按程序分流」：Windows 只能逐个抓取程序的声音，推到 HomePod 的声音会比「全部推送」多约 {0} ms 延迟（浏览器插件会自动补偿画面，游戏无法补偿）。\n\n设为「HomePod」的程序会在本机静音（Windows 音量合成器里显示 0%），系统提示音只在本机播放。\n\n打游戏最在意延迟时，建议保持全部推送。要启用按程序分流吗？", RoutedCapture.RoutedExtraLatencyMs),
+            L.F("按程序采集会让送往音箱的声音多约 {0} ms 延迟，游戏无法补偿。要继续吗？", RoutedCapture.RoutedExtraLatencyMs),
             L.T("按程序分流会增加延迟"), MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button2);
         if (answer != DialogResult.Yes) return false;
         _app.Config.RoutingNoticeAccepted = true;
@@ -448,16 +433,19 @@ internal sealed class MixerPage : ScrollPage
         var routing = _app.Routing;
         if (!AppRouting.Supported)
             return L.T("按程序分流需要 Windows 10 2004 或更高版本，现在所有声音都推送到音箱。");
+        var settings = MixerRoutes.Read(_app.Config).Settings;
+        if (settings != null && new[] { settings.Default }.Concat(settings.Apps.Values).All(r => r.Output.Kind == MixerOutputKind.Local))
+            return L.T("本机播放由 Windows 决定；不创建播放副本，也不提供网络延迟设置。");
         if (!routing.Active)
-            return L.T("所有程序都推送到音箱，延迟最低；本机出不出声由 Windows 音量决定。");
+            return L.T("所有程序送到同一个远端去处，延迟最低；本机是否发声由 Windows 决定。");
         var lines = new List<string>
         {
-            L.F("已按程序分流：推送到音箱的声音多约 {0} ms 延迟，设为「HomePod」的程序在本机静音。", RoutedCapture.RoutedExtraLatencyMs),
+            L.F("按程序采集额外延迟约 {0} ms。", RoutedCapture.RoutedExtraLatencyMs),
         };
         if (_app.Controller.State == StreamState.Idle) lines.Add(L.T("连接音箱后生效。"));
         bool localWanted = routing.Default != AudioRoute.HomePod || routing.Rules.Apps.Values.Any(r => r != AudioRoute.HomePod);
-        if (localWanted && AppRouting.LocalOutputSilent())
-            lines.Add(L.T("Windows 输出已静音：设为「本机」或「两者」的程序在这台电脑上也听不到。"));
+        if (localWanted && IsLocalOutputSilent())
+            lines.Add(L.T("Windows 输出已静音：本机没有声音。"));
         return string.Join("\n", lines);
     }
 
@@ -489,8 +477,8 @@ internal sealed class MixerPage : ScrollPage
         private readonly FluentSlider _slider = Ui.Slider(0, 100, 1, 5);
         private readonly TextBlock _value = new("", TextStyle.Body, TextRole.Secondary) { Align = HorizontalAlignment.Right };
         private readonly TextBlock _localLabel = new(L.T("Windows 音量"), TextStyle.Caption, TextRole.Secondary);
-        private readonly TextBlock _sendLabel = new("HomePod", TextStyle.Caption, TextRole.Secondary);
-        private readonly ToggleSwitch _independent = new() { AccessibleName = L.T("HomePod 独立音量") };
+        private readonly TextBlock _sendLabel = new(L.T("音箱音量"), TextStyle.Caption, TextRole.Secondary);
+        private readonly ToggleSwitch _independent = new();
         private readonly FluentSlider _send = Ui.Slider(0, 100, 1, 5);
         private readonly TextBlock _sendValue = new("", TextStyle.Body, TextRole.Secondary) { Align = HorizontalAlignment.Right };
         private readonly TextBlock _sendStatus = new("", TextStyle.Caption, TextRole.Caution, wrap: true);
@@ -508,14 +496,15 @@ internal sealed class MixerPage : ScrollPage
             _mute = new FluentButton("", ButtonKind.Subtle, Glyph.Volume) { AccessibleName = L.F("{0} 静音", app.Name) };
             _slider.AccessibleName = L.F("{0} Windows 音量", app.Name);
             _slider.PreferredLength = 150;
-            _send.AccessibleName = L.F("{0} HomePod 音量", app.Name);
+            _send.AccessibleName = L.F("{0} 音箱音量", app.Name);
+            _independent.AccessibleName = L.F("{0} 独立音量", app.Name);
             _send.PreferredLength = 150;
             _independent.Enabled = AppRouting.Supported && !app.IsSystemSounds && app.ExeKey.Length > 0;
             _route = RouteCell();
             Controls.AddRange([_icon, _name, _meter, _route, _localLabel, _slider, _value, _mute,
                 _sendLabel, _independent, _send, _sendValue, _sendStatus]);
-            _page._tips.SetToolTip(_independent, L.T("独立控制此程序在 HomePod 上的音量"));
-            _page._tips.SetToolTip(_send, L.T("Windows 静音或音量为 0 时，HomePod 也没有声音。几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × 这里的音量。"));
+            _page._tips.SetToolTip(_independent, L.T("独立控制此程序送往音箱的音量"));
+            _page._tips.SetToolTip(_send, L.T("Windows 静音或音量为 0 时，音箱也没有声音。几个声音会话的 Windows 音量不一致或低于 1% 时，音箱暂为 Windows 音量 × 这里的音量。"));
 
             try { _slider.Value = (int)Math.Round(app.Volume * 100); } catch { }
             _value.Text = _slider.Value.ToString();
@@ -608,31 +597,14 @@ internal sealed class MixerPage : ScrollPage
                     : L.T("读不到这个程序的文件名，不能单独设置。"));
                 return label;
             }
-            var seg = new Segmented(RouteItems)
+            var combo = new FluentComboBox
             {
-                Compact = true,
-                EqualWidths = false,
+                MinWidth = 220, PreferredWidth = 290,
                 Enabled = AppRouting.Supported,
                 AccessibleName = L.F("{0} 输出到", _app.Name),
             };
-            seg.SelectionChangeCommitted += (_, _) =>
-            {
-                if (seg.SelectedIndex < 0) return;
-                AudioRoute? route = seg.SelectedIndex == 0 ? null : Routes[seg.SelectedIndex - 1];
-                var routing = _page._app.Routing;
-                var apps = new Dictionary<string, AudioRoute>(routing.Rules.Apps);
-                var key = RouteRules.KeyFor(_app.ExeKey);
-                if (route is { } r) apps[key] = r;
-                else apps.Remove(key);
-                if (!_page.ConfirmRouting(routing.Rules with { Apps = apps }))
-                {
-                    _page.SyncRoutes();
-                    return;
-                }
-                routing.Set(_app.ExeKey, route);
-                _page.SyncRoutes();
-            };
-            return seg;
+            combo.SelectionChangeCommitted += async (_, _) => await _page.ApplyAppChoice(_app.ExeKey, combo);
+            return combo;
         }
 
         public void SyncRoute(AppRouting routing)
@@ -650,16 +622,18 @@ internal sealed class MixerPage : ScrollPage
             _sendStatus.Text = independent && sent && routing.Active && _page._app.Controller.State == StreamState.Streaming
                 ? routing.SendStatus(key) switch
                 {
-                    SendVolumeStatus.MutedOrZero => L.T("Windows 已静音或音量为 0，HomePod 没有声音。"),
+                    SendVolumeStatus.MutedOrZero => L.T("Windows 已静音或音量为 0，音箱没有声音。"),
                     SendVolumeStatus.DifferentSessionLevels => L.T("此程序几个声音会话的 Windows 音量不一致：音箱暂为 Windows 音量 × HomePod 音量，比设定的小。"),
                     SendVolumeStatus.BelowMinimum => L.T("Windows 音量低于 1%：音箱暂为 Windows 音量 × HomePod 音量，几乎听不到。"),
                     _ => "",
                 } : "";
-            if (_route is Segmented seg)
+            if (_route is FluentComboBox combo)
             {
-                seg.SelectedIndex = routing.Get(_app.ExeKey) is { } own ? Array.IndexOf(Routes, own) + 1 : 0;
-                _page._tips.SetToolTip(seg, _page.DefaultRouteText() + "\n" +
-                    L.T("HomePod：只在音箱播放，本机静音\n本机：只在这台电脑播放，不推送\n两者：音箱和本机都播放"));
+                _page.SyncAppChoice(_app.ExeKey, combo);
+                string? owner = _page._app.Mixer?.OwnerKeyForProcess(_app.ProcessId);
+                bool nested = owner != null && owner != RouteRules.KeyFor(_app.ExeKey);
+                if (nested) { combo.Enabled = false; _independent.Enabled = false; }
+                _page._tips.SetToolTip(combo, nested ? L.F("此程序随父程序「{0}」的去处播放，不能单独分开采集。", owner!) : combo.SelectedText ?? _page.DefaultRouteText());
             }
             else if (_route is TextBlock label)
             {
@@ -695,6 +669,7 @@ internal sealed class MixerPage : ScrollPage
             if (disposing)
             {
                 FlushSend(); // the rows go when the page is left: a level still waiting is saved now
+                if (_route is FluentComboBox combo) _page._destinationChoices.Remove(combo);
                 _sendWait.Dispose();
                 // The page's tooltip would otherwise keep every row ever shown.
                 _page._tips.SetToolTip(_mute, null);
@@ -711,7 +686,7 @@ internal sealed class MixerPage : ScrollPage
             int inner = width - padX * 2;
             int icon = Dp(24), gap = Dp(12), small = Dp(6);
             // Same column for every row (system sounds show a note there), so the sliders line up.
-            int routeW = Math.Max(WidthFor(_route), Segmented.PreferredWidthFor(RouteItems, compact: true, equal: false, DeviceDpi));
+            int routeW = Math.Max(WidthFor(_route), Dp(240));
             int valueW = Dp(34), muteW = Dp(32);
             int nameH = HeightFor(_name, 100), meterH = Dp(6);
             int nameBlock = nameH + Dp(4) + meterH;
@@ -740,7 +715,8 @@ internal sealed class MixerPage : ScrollPage
                 y += rh + small;
             }
             int line = Dp(32);
-            int labelW = Math.Min(Dp(120), Math.Max(Dp(80), inner / 4));
+            int labelW = Math.Min(Math.Max(Dp(120), Math.Max(WidthFor(_localLabel), WidthFor(_sendLabel))),
+                Math.Max(Dp(80), inner / 3));
             int toggleW = Dp(44);
             int sliderX = padX + labelW + small;
             int valueX = padX + inner - valueW;

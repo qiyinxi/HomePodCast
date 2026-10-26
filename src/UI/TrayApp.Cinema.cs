@@ -9,7 +9,8 @@ internal sealed partial class TrayApp : ICinemaHost
     private CinemaSession? _cinemaSession;
     private bool _wantedBeforeCinema;
 
-    private CinemaSession Cinema => _cinemaSession ??= new CinemaSession(Controller, _connection);
+    private CinemaSession Cinema => _cinemaSession ??= new CinemaSession(_legacyController ?? Controller, _connection,
+        Mixer == null ? null : plan => Mixer.AcquireExternalAsync("cinema", plan.Members.Select(m => "airplay:" + m.DeviceId).ToArray(), replaceSelected: true).GetAwaiter().GetResult());
 
     /// <summary>
     /// Every connection request goes through here: the cinema's playback, if any, ends with it (it is the latest request,
@@ -18,7 +19,7 @@ internal sealed partial class TrayApp : ICinemaHost
     private void PostConnection(Action request)
     {
         if (_cinemaSession?.Supersede() == true) Log.Info("cinema: ended by another connection");
-        _connection.Post(request);
+        _connection.Post(() => { _cinemaSession?.ReleaseSuperseded(); request(); });
     }
 
     IReadOnlyList<AirPlayDevice> ICinemaHost.Speakers => LastScan;
@@ -32,6 +33,7 @@ internal sealed partial class TrayApp : ICinemaHost
     public void StartCinema(CinemaFileSource source, IReadOnlyList<CinemaSpeaker> speakers, double volume)
     {
         CinemaMatrix.Validate(speakers);
+        if (_legacyController != null) Controller = _legacyController;
         if (!Cinema.Holding) _wantedBeforeCinema = _wantConnected;
         // The cinema retries within its own group; a network change or a wake must not start the system capture instead.
         _wantConnected = false;

@@ -32,7 +32,14 @@ internal enum SyncCalibrationOutcome
 internal sealed partial class TrayApp
 {
     /// <summary>The exact open endpoint; an unavailable capture never reuses a default-device calibration.</summary>
-    public AvCalibrationContext? CurrentCalibrationContext => CalibrationContextFor(Config, Controller.Capture, Routing.CaptureDeviceId);
+    public AvCalibrationContext? CurrentCalibrationContext => MixerCalibrationContext(PlaybackConfig, Controller, SelectedMixerKey);
+
+    private AvCalibrationContext? MixerCalibrationContext(AppConfig config, StreamController controller, string? key)
+    {
+        var context = CalibrationContextFor(config, controller.Capture, Routing.CaptureDeviceId);
+        return context is { } value && key != null && (!ReferenceEquals(controller, _legacyController) || Mixer?.UsesHub == true)
+            ? value with { MixerDestinationId = key } : context;
+    }
 
     /// <summary>
     /// The calibration key of what is captured now: the selected speaker or group, the endpoint actually open, whether it
