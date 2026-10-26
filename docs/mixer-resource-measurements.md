@@ -18,7 +18,10 @@ capacity measurement, not an acoustic measurement or a measurement of transport 
 | 4 | AAC + MP3 | 0.1935 | 50.107 | 111.71 | 67.35 | 7/7 | 0 | 0.96/4.80 |
 
 The final P6c run includes per-bus clock steering. PCM differences are within run-to-run scheduling noise;
-codec work and packet allocations grow with destination count. The two-destination codec pass includes a
+codec work and packet allocations grow with destination count. The 1-to-4 endpoint CPU slope is
+-0.0028 core per extra PCM destination and +0.0291 core per extra encoded destination.
+These are slopes from this one run; the PCM reduction illustrates the scheduling noise, not a speedup guarantee.
+The two-destination codec pass includes a
 174.88 ms host scheduling outlier, with no dropped input frames. This is console pacing, not measured RTP lateness.
 Do not turn these numbers into a device-independent CPU promise. All input/bus leases return to zero after
 disposal. Private bytes include retained CLR/codec heaps. The warm-cycle regression separately requires no

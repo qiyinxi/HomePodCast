@@ -22,8 +22,8 @@ internal static class MixerUiFixture
         int exit = 0;
         var thread = new Thread(() =>
         {
-            try { Window(language, Path.GetFullPath(auditFile)); }
-            catch (Exception ex) { Console.Error.WriteLine(ex); exit = 1; }
+            try { Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException); Window(language, Path.GetFullPath(auditFile)); }
+            catch (Exception ex) { Console.Error.WriteLine(ex); File.WriteAllText(auditFile + ".exception.txt", ex.ToString()); exit = 1; }
         });
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); thread.Join(); return exit;
     }
@@ -80,8 +80,9 @@ internal static class MixerUiFixture
                 senders = scenario.Coordinator.Statuses.ToDictionary(s => s.Key, s =>
                     new { epoch = scenario.Controller(s.Key)?.ActiveSender?.T0, fifo = scenario.Controller(s.Key)?.Fifo.TargetFrames }),
             };
-            string temp = auditFile + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(value)); File.Move(temp, auditFile, true);
+            // This is transient fixture telemetry, not product configuration. Readers allow writes and retry a
+            // partial snapshot; replacing a destination file being read can fail on Windows despite delete sharing.
+            File.WriteAllText(auditFile, JsonSerializer.Serialize(value));
         }
         scenario.Coordinator.Changed += () => ui.Post(_ =>
         {
@@ -92,16 +93,17 @@ internal static class MixerUiFixture
         using var timer = new System.Windows.Forms.Timer { Interval = 100 };
         timer.Tick += async (_, _) =>
         {
-            string path = auditFile + ".command";
-            if (File.Exists(path))
+            foreach (string path in Directory.EnumerateFiles(Path.GetDirectoryName(auditFile)!, Path.GetFileName(auditFile) + ".command.*.json")
+                .OrderBy(p => long.Parse(Path.GetFileName(p).Split('.')[^2])))
             {
-                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                using var json = JsonDocument.Parse(stream);
-                long id = json.RootElement.GetProperty("id").GetInt64();
-                if (id != command)
+                JsonElement input;
+                using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (var json = JsonDocument.Parse(stream)) input = json.RootElement.Clone();
+                long id = input.GetProperty("id").GetInt64();
+                if (id > command)
                 {
                     command = id;
-                    switch (json.RootElement.GetProperty("op").GetString())
+                    switch (input.GetProperty("op").GetString())
                     {
                         case "lose-music": scenario.LoseMusic(); break;
                         case "reconnect-music": await scenario.Coordinator.ReconnectAsync("group:" + MixerScenario.MusicGroup, ConnectTrigger.Manual); break;

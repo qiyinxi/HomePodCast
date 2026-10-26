@@ -220,6 +220,12 @@ internal static class Program
             Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
             if (!ok) failures++;
         }
+        var viewport = new Rectangle(285, 63, 1350, 915);
+        Check(Walker.MixerScrollAction(viewport, new(327, 954, 1252, 48)) == Native.SB_LINEDOWN &&
+            Walker.MixerScrollAction(viewport, new(327, 39, 1252, 48)) == 0 &&
+            Walker.MixerScrollAction(viewport, new(327, 1200, 1252, 48)) == Native.SB_PAGEDOWN &&
+            Walker.MixerScrollAction(viewport, new(327, 100, 1252, 48)) == null,
+            "mixer scrolling reaches controls straddling either page boundary");
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
         var baseline = SelectScenarios(["baseline"]);
         Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind is not ("group-outputs" or "mixer-destinations")).Select(s => s.Id)),

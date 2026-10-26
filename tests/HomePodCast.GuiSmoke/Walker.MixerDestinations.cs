@@ -136,8 +136,15 @@ internal sealed partial class Walker
     });
     private T MixerRead<T>(Func<JsonElement, T> read)
     {
-        using var file = new FileStream(MixerAuditPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var json = JsonDocument.Parse(file); return read(json.RootElement);
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var file = new FileStream(MixerAuditPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var json = JsonDocument.Parse(file); return read(json.RootElement);
+            }
+            catch (Exception ex) when (attempt < 9 && ex is IOException or JsonException or UnauthorizedAccessException) { Thread.Sleep(10); }
+        }
     }
     private bool MixerAudit(Func<JsonElement, bool> read)
     { try { return MixerRead(read); } catch (Exception ex) when (ex is IOException or JsonException or KeyNotFoundException or InvalidOperationException) { return false; } }
@@ -149,8 +156,8 @@ internal sealed partial class Walker
     }
     private void MixerCommand(string operation)
     {
-        long id = ++_mixerCommand; string path = MixerAuditPath + ".command", temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(new { id, op = operation })); File.Move(temp, path, true);
+        long id = ++_mixerCommand; string path = MixerAuditPath + ".command." + id + ".json", temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(new { id, op = operation })); File.Move(temp, path);
         MixerWait(() => MixerAudit(a => a.GetProperty("command").GetInt64() == id), "fixture command " + operation);
     }
     private Node MixerControl(string name, string type)
@@ -160,8 +167,8 @@ internal sealed partial class Walker
         for (int i = 0; i < 30; i++)
         {
             var tree = Uia.Snapshot(MainWindow());
-            var control = Find(tree, n => n.Type == type && n.Name == name && n.Shown && n.Hwnd != IntPtr.Zero && Native.WindowRect(pane).Contains(n.Rect));
-            if (control != null) return control;
+            var control = Find(tree, n => n.Type == type && n.Name == name && n.Shown && n.Hwnd != IntPtr.Zero);
+            if (control != null) { if (PositionMixerControl(pane, control.Rect)) return control; continue; }
             var before = Native.VerticalScroll(pane); Scroll(pane, Native.SB_PAGEDOWN);
             if (Native.VerticalScroll(pane) is not { } after || before?.nPos == after.nPos) break;
         }
@@ -176,13 +183,27 @@ internal sealed partial class Walker
             foreach (var heading in tree.Descendants().Where(n => n.Name == title && n.Type == "Text"))
             {
                 var row = heading.Ancestors().FirstOrDefault(n => n.Descendants().Any(c => c.Type == "Button" && c.Says(T(button))));
-                var result = row?.Descendants().FirstOrDefault(n => n.Type == "Button" && n.Says(T(button)) && Native.WindowRect(pane).Contains(n.Rect));
-                if (result != null) return result;
+                var result = row?.Descendants().FirstOrDefault(n => n.Type == "Button" && n.Says(T(button)));
+                if (result != null)
+                {
+                    if (PositionMixerControl(pane, result.Rect)) return result;
+                    goto ReadAgain;
+                }
             }
             var before = Native.VerticalScroll(pane); Scroll(pane, Native.SB_PAGEDOWN);
             if (Native.VerticalScroll(pane) is not { } after || before?.nPos == after.nPos) break;
+            ReadAgain:;
         }
         throw new StepFailed("unreachable destination action " + title + ": " + button);
+    }
+    internal static int? MixerScrollAction(Rectangle viewport, Rectangle target) => viewport.Contains(target) ? null :
+        target.Top < viewport.Top ? 0 /* SB_LINEUP */ : target.Top >= viewport.Bottom ? Native.SB_PAGEDOWN : Native.SB_LINEDOWN;
+    private static bool PositionMixerControl(IntPtr pane, Rectangle target)
+    {
+        var viewport = Native.WindowRect(pane);
+        if (target.Left < viewport.Left || target.Right > viewport.Right) throw new StepFailed("mixer control is clipped horizontally");
+        if (MixerScrollAction(viewport, target) is not { } action) return true;
+        Scroll(pane, action); return false;
     }
     private void SetMixerChoice(string controlName, string value, bool confirmLatency = false)
     {

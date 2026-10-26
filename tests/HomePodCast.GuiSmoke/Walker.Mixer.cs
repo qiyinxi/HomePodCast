@@ -52,7 +52,13 @@ internal sealed partial class Walker
                     if (Find(tree, n => n.Shown && n.Says(summary) && n.Rect.IntersectsWith(Native.WindowRect(pane))) != null)
                         seen.Add(summary);
                 var action = Find(tree, n => n.Shown && n.Hwnd != IntPtr.Zero && n.Says(T(text)));
-                if (action != null && Native.WindowRect(pane).Contains(action.Rect)) return action;
+                if (action != null)
+                {
+                    var link = Find(tree, n => n.Shown && n.Hwnd != IntPtr.Zero && n.Says(T("打开 Windows 应用音量设置")));
+                    var target = link == null ? action.Rect : Rectangle.Union(action.Rect, link.Rect);
+                    if (PositionMixerControl(pane, target)) return action;
+                    continue;
+                }
                 var before = Native.VerticalScroll(pane);
                 Scroll(pane, Native.SB_PAGEDOWN);
                 if (Native.VerticalScroll(pane) is not { } after || before?.nPos == after.nPos) break;
