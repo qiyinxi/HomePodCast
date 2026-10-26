@@ -18,9 +18,11 @@
          the 更新 button's code (UpdateFlow: check, pick, download, SHA-256, helper, exit) without UI;
        - waits for the helper: msiexec through Verb runas, then the app started again with --updated-from=<old>;
        - checks: exactly one HomePodCast product (Windows Installer and Add/Remove Programs) and it is the new
-         version, in the same folder; the relaunched process is the new exe there with --updated-from=<old> --tray;
-         the app logged "update: updated from <old> to <new> (msiexec: 0)" and removed its %TEMP%\HomePodCast-update-*
-         folder; Windows Installer logged the install with status 0 (event 1033); then stops the app and uninstalls.
+         version, in the same folder; the relaunched process (found by its --updated-from=<old> command line, then
+         read again by pid until Windows reports its image path) is the new exe there, started by the helper, with
+         --updated-from=<old> --tray; the app logged "update: updated from <old> to <new> (msiexec: 0)" and removed
+         its %TEMP%\HomePodCast-update-* folder; Windows Installer logged the install with status 0 (event 1033);
+         then stops the app and uninstalls.
 
   What only a person sees: the UAC dialog itself. GitHub-hosted runners run the job as an administrator with UAC not
   prompting, so the helper's Verb runas elevates without a dialog here; on a real PC Windows asks (and a declined
@@ -31,18 +33,25 @@
   throwaway VM) and whenever HomePodCast is already installed. -NoInstall runs only the parts that install nothing:
   the fake feed and `update-selftest --no-install` of -Exe (check, download, SHA-256 good and corrupted).
 
+  -SelfTest checks this script's process helpers (path comparison, waiting for a starting process's image path)
+  against known cases, with fake process snapshots. Offline; build.yml runs it on every build.
+
 .EXAMPLE
   ./tools/ci/update-e2e.ps1 -NewMsi packages/HomePodCast-1.0.0-pr.5.100-x64.msi -NewVersion 1.0.0-pr.5.100
 
 .EXAMPLE
   # Safe anywhere: nothing is installed.
   ./tools/ci/update-e2e.ps1 -NoInstall -Exe app/HomePodCast.exe -NewMsi publish/HomePodCast-1.0.0-local.1-x64.msi -NewVersion 9.9.9-local.1
+
+.EXAMPLE
+  ./tools/ci/update-e2e.ps1 -SelfTest
 #>
+[CmdletBinding(DefaultParameterSetName = 'Run')]
 param(
     # The build's MSI: the update offered to the old install.
-    [Parameter(Mandatory)] [string] $NewMsi,
+    [Parameter(Mandatory, ParameterSetName = 'Run')] [string] $NewMsi,
     # The build's version (build.yml "Version" step), e.g. 1.0.0-pr.5.100, 1.0.0-beta.6, 1.0.0.
-    [Parameter(Mandatory)] [string] $NewVersion,
+    [Parameter(Mandatory, ParameterSetName = 'Run')] [string] $NewVersion,
     # The old install's version; below every real one. Built here from this source, never published.
     [string] $OldVersion = '0.0.1-e2e.1',
     [string] $WorkDir = (Join-Path ($env:RUNNER_TEMP ?? [System.IO.Path]::GetTempPath()) 'update-e2e'),
@@ -51,7 +60,9 @@ param(
     [switch] $NoInstall,
     # -NoInstall: the exe whose update-selftest --no-install runs (a portable build).
     [string] $Exe,
-    [switch] $AllowOutsideCi
+    [switch] $AllowOutsideCi,
+    # Check the process helpers against known cases (offline, installs and starts nothing).
+    [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -136,6 +147,50 @@ function Assert-Installed([string] $msiVersion, [string] $folder, [string] $what
 function Get-UpdateFolders { @(Get-ChildItem -LiteralPath ([System.IO.Path]::GetTempPath()) -Directory -Filter 'HomePodCast-update-*' -ErrorAction SilentlyContinue) }
 
 function Get-AppProcesses { @(Get-CimInstance Win32_Process -Filter "Name = 'HomePodCast.exe'") }
+
+# One Win32_Process snapshot as a log line: everything needed to tell processes of the same name apart.
+function Format-AppProcess($p) {
+    $created = if ($p.CreationDate) { $p.CreationDate.ToString('HH:mm:ss.fff') } else { '?' }
+    $path = if ($p.ExecutablePath) { $p.ExecutablePath } else { '<none>' }
+    "pid $($p.ProcessId), parent $($p.ParentProcessId), created $created, ExecutablePath $path, CommandLine $($p.CommandLine)"
+}
+
+function Show-AppProcesses([string] $why) {
+    $all = @(Get-AppProcesses)
+    Say "$why; HomePodCast.exe processes at $((Get-Date).ToString('HH:mm:ss.fff')): $($all.Count)"
+    $all | ForEach-Object { Write-Host "    process | $(Format-AppProcess $_)" }
+}
+
+# The same file: full paths compared case-insensitively, as Windows does (UpdateInstaller.IsInFolder).
+function Test-SamePath([string] $a, [string] $b) {
+    if ([string]::IsNullOrWhiteSpace($a) -or [string]::IsNullOrWhiteSpace($b)) { return $false }
+    try { [string]::Equals([System.IO.Path]::GetFullPath($a), [System.IO.Path]::GetFullPath($b), [StringComparison]::OrdinalIgnoreCase) }
+    catch { $false } # not a path
+}
+
+# 2026-10-15 and 2026-10-26 (custom folder both times; the re-run passed): the poll caught the relaunched process the
+# moment the helper's Start-Process created it (10-26: before the poll had seen the result file the helper writes just
+# before, and before the app wrote its first log line). CIM lists such a process with its command line (its creator writes that) but no
+# ExecutablePath until its loader has run (2026-10-26: a process created suspended shows the same), so the path check
+# of that first snapshot failed. This reads the same process again (pid and creation time, so a reused pid does not
+# count) until Windows reports its image path. Status: ok, exited or timeout.
+function Wait-ExecutablePath($process, [double] $timeoutSeconds = 30, [int] $pollMs = 100,
+    [scriptblock] $query = { param($id) Get-CimInstance Win32_Process -Filter "ProcessId = $id" }) {
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $current = $process
+    $polls = 0
+    while ($true) {
+        $status = if ($current.ExecutablePath) { 'ok' } elseif ($watch.Elapsed.TotalSeconds -ge $timeoutSeconds) { 'timeout' } else { $null }
+        if ($status) { return [pscustomobject]@{ Status = $status; Process = $current; Polls = $polls; Elapsed = $watch.Elapsed } }
+        Start-Sleep -Milliseconds $pollMs
+        $polls++
+        $next = @(& $query $process.ProcessId) | Where-Object {
+            $null -ne $_ -and $_.ProcessId -eq $process.ProcessId -and ($null -eq $process.CreationDate -or $_.CreationDate -eq $process.CreationDate)
+        } | Select-Object -First 1
+        if (-not $next) { return [pscustomobject]@{ Status = 'exited'; Process = $current; Polls = $polls; Elapsed = $watch.Elapsed } }
+        $current = $next
+    }
+}
 
 function Stop-App {
     foreach ($p in Get-AppProcesses) {
@@ -274,33 +329,53 @@ function Test-Update($feed, [string] $served, [string] $folder, [string] $newMsi
     if ($r.Output -notmatch '(?m)update: downloading \S+ \(\d+ bytes\) to (.+?)\s*$') { Fail "$name`: no download folder in the output" }
     $updateFolder = $Matches[1]
     Say "update folder: $updateFolder"
+    if ($r.Output -notmatch 'update: helper started \(PowerShell, pid (\d+)\)') { Fail "$name`: no helper pid in the output" }
+    $helperPid = [int]$Matches[1]
 
     # The helper: waits for the self-test to exit, msiexec /i /passive through Verb runas, result file, app started again.
+    # Its files are copied while they exist: the new app removes the update folder about a second after it starts.
+    function Save-HelperFiles {
+        foreach ($f in 'msiexec.log', 'result.txt') {
+            $src = Join-Path $updateFolder $f
+            if (Test-Path -LiteralPath $src) { try { Copy-Item -LiteralPath $src (Join-Path $logs "$name-$f") -Force } catch { } }
+        }
+        Test-Path -LiteralPath (Join-Path $updateFolder 'result.txt')
+    }
     $deadline = (Get-Date).AddMinutes(5)
     $app = $null
     $resultAt = $null
     while (-not $app -and (Get-Date) -lt $deadline) {
-        foreach ($f in 'msiexec.log', 'result.txt') {
-            $src = Join-Path $updateFolder $f
-            if (Test-Path -LiteralPath $src) {
-                try { Copy-Item -LiteralPath $src (Join-Path $logs "$name-$f") -Force } catch { }
-                if ($f -eq 'result.txt' -and -not $resultAt) { $resultAt = Get-Date }
-            }
-        }
+        if ((Save-HelperFiles) -and -not $resultAt) { $resultAt = Get-Date }
         $app = Get-AppProcesses | Where-Object { $_.CommandLine -like "*--updated-from=$OldVersion*" } | Select-Object -First 1
         if (-not $app) {
             if ($resultAt -and ((Get-Date) - $resultAt).TotalSeconds -gt 60) { break }
             Start-Sleep -Milliseconds 200
         }
     }
+    $seenAt = Get-Date
+    [void](Save-HelperFiles) # the helper writes the result just before it starts the app: this poll may have missed it
     $result = Get-Content -LiteralPath (Join-Path $logs "$name-result.txt") -Raw -ErrorAction SilentlyContinue
     if ($result) { Say "helper result file: $($result.Trim())" }
     if (-not $app) {
         Get-Content -LiteralPath (Join-Path $logs "$name-msiexec.log") -Tail 40 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    msiexec | $_" }
+        Show-AppProcesses "$name`: no HomePodCast.exe with --updated-from=$OldVersion"
         Fail "$name`: HomePodCast was not started again with --updated-from=$OldVersion within 5 minutes"
     }
-    Say "relaunched: pid $($app.ProcessId) $($app.CommandLine)"
-    Check ($app.ExecutablePath -eq (Join-Path $folder 'HomePodCast.exe')) "$name`: the relaunched process is $folder\HomePodCast.exe"
+    Say "relaunched (seen $($seenAt.ToString('HH:mm:ss.fff'))): $(Format-AppProcess $app)"
+
+    # That process, by pid: its image path once Windows reports it (Wait-ExecutablePath).
+    $exe = Join-Path $folder 'HomePodCast.exe'
+    $image = Wait-ExecutablePath $app
+    if ($image.Status -eq 'ok' -and $image.Polls) { Say "pid $($app.ProcessId): ExecutablePath reported after $($image.Polls) more look(s), $([int]$image.Elapsed.TotalMilliseconds) ms" }
+    $found = switch ($image.Status) {
+        'ok' { $image.Process.ExecutablePath }
+        'exited' { 'it exited before Windows reported its ExecutablePath' }
+        default { "no ExecutablePath reported within $([int]$image.Elapsed.TotalSeconds) s" }
+    }
+    $isExe = $image.Status -eq 'ok' -and (Test-SamePath $image.Process.ExecutablePath $exe)
+    if (-not $isExe) { Show-AppProcesses "$name`: pid $($app.ProcessId) is not $exe (last seen: $(Format-AppProcess $image.Process))" }
+    Check $isExe "$name`: the relaunched process is $exe (pid $($app.ProcessId), found $found)"
+    Check ($app.ParentProcessId -eq $helperPid) "$name`: it was started by the helper (PowerShell pid $helperPid; parent pid $($app.ParentProcessId))"
     Check ($app.CommandLine -match "--updated-from=$([regex]::Escape($OldVersion))(\s|$)" -and $app.CommandLine -match '--tray') "$name`: started with --updated-from=$OldVersion --tray"
 
     # The new app reads the result, says so, and removes the update folder (UpdatePackage.CleanUp).
@@ -333,6 +408,55 @@ function Test-Update($feed, [string] $served, [string] $folder, [string] $newMsi
     Stop-App
     $installed
 }
+
+# ---------------------------------------------------------------- -SelfTest
+
+# Test-SamePath and Wait-ExecutablePath against known cases, with fake Win32_Process snapshots: starts and installs nothing.
+function Invoke-HelperSelfTest {
+    $failures = [System.Collections.Generic.List[string]]::new()
+    function Expect([bool] $ok, [string] $text) { if ($ok) { Pass $text } else { $failures.Add($text); Write-Host "update-e2e: FAIL $text" -ForegroundColor Red } }
+
+    $exe = 'C:\HomePodCast e2e\Custom Folder\HomePodCast.exe'
+    Expect (Test-SamePath $exe $exe) 'same path'
+    Expect (Test-SamePath 'c:\homepodcast E2E\custom folder\HOMEPODCAST.EXE' $exe) 'same path in another case'
+    Expect (Test-SamePath 'C:/HomePodCast e2e/Custom Folder/./HomePodCast.exe' $exe) 'same path with / and .'
+    Expect (Test-SamePath 'C:\HomePodCast e2e\Other\..\Custom Folder\HomePodCast.exe' $exe) 'same path with ..'
+    Expect (-not (Test-SamePath $null $exe)) 'no path (CIM before the loader ran) is not the exe'
+    Expect (-not (Test-SamePath '' $exe)) 'an empty path is not the exe'
+    Expect (-not (Test-SamePath 'C:\Program Files\HomePodCast\HomePodCast.exe' $exe)) 'the default folder is not the custom one'
+    Expect (-not (Test-SamePath "`"$exe`"" $exe)) 'a quoted path is not the exe'
+
+    $created = [datetime]'2026-10-26T11:52:34.650'
+    function Snapshot([string] $path, [datetime] $at = $created) {
+        [pscustomobject]@{ ProcessId = 2412; ParentProcessId = 8492; CreationDate = $at; ExecutablePath = $(if ($path) { $path } else { $null })
+                           CommandLine = "`"$exe`" --updated-from=0.0.1-e2e.1 --tray" }
+    }
+    # A query that returns the given snapshots one per call (the last one again once they run out); $null: no such process.
+    function Wait-Fake($first, [object[]] $later, [double] $timeoutSeconds = 5) {
+        $calls = [ref]0
+        $query = { param($id) $i = [Math]::Min($calls.Value, $later.Count - 1); $calls.Value++; $later[$i] }.GetNewClosure()
+        $w = Wait-ExecutablePath $first -timeoutSeconds $timeoutSeconds -pollMs 1 -query $query
+        $w | Add-Member -NotePropertyName Calls -NotePropertyValue $calls.Value -PassThru
+    }
+
+    $w = Wait-Fake (Snapshot $exe) @($null)
+    Expect ($w.Status -eq 'ok' -and $w.Calls -eq 0 -and $w.Process.ExecutablePath -eq $exe) "a running process: its path at once ($($w.Status), $($w.Calls) queries)"
+    $w = Wait-Fake (Snapshot $null) @((Snapshot $null), (Snapshot $null), (Snapshot $exe))
+    Expect ($w.Status -eq 'ok' -and $w.Calls -eq 3 -and $w.Process.ExecutablePath -eq $exe) "a starting process: its path once reported ($($w.Status), $($w.Calls) queries)"
+    $w = Wait-Fake (Snapshot $null) @((Snapshot $null), $null)
+    Expect ($w.Status -eq 'exited' -and $w.Calls -eq 2) "a process that exits first: exited ($($w.Status), $($w.Calls) queries)"
+    $w = Wait-Fake (Snapshot $null) @((Snapshot $exe $created.AddSeconds(1)))
+    Expect ($w.Status -eq 'exited' -and $w.Calls -eq 1) "the pid reused by another process: exited, not its path ($($w.Status))"
+    $w = Wait-Fake (Snapshot $null) @((Snapshot $null)) -timeoutSeconds 0.2
+    Expect ($w.Status -eq 'timeout' -and $w.Calls -ge 1 -and -not $w.Process.ExecutablePath) "a path never reported: timeout ($($w.Status) after $($w.Calls) queries)"
+    Expect ((Format-AppProcess (Snapshot $null)) -match 'pid 2412, parent 8492, created 11:52:34\.650, ExecutablePath <none>, CommandLine ".+" --updated-from=') 'a snapshot without a path formats as <none>'
+
+    if ($failures.Count) { Write-Host "update-e2e: $($failures.Count) of $($checks.Count + $failures.Count) self-test checks failed" -ForegroundColor Red; return $false }
+    Say "all $($checks.Count) self-test checks passed"
+    $true
+}
+
+if ($SelfTest) { if (Invoke-HelperSelfTest) { exit 0 } else { exit 1 } }
 
 # ---------------------------------------------------------------- main
 
