@@ -732,5 +732,10 @@
   "此版本没有提供更新说明。": "Brak informacji o zmianach w tej wersji.",
   "更早的变化见发布页。": "Wcześniejsze zmiany znajdziesz na stronie wydań.",
   "在 GitHub 上查看": "Zobacz w GitHub",
-  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Instalator zostanie najpierw zweryfikowany za pomocą SHA-256. Windows poprosi o uprawnienia administratora, a aplikacja uruchomi się ponownie po instalacji. Transmisja zostanie przerwana na około minutę."
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "Instalator zostanie najpierw zweryfikowany za pomocą SHA-256. Windows poprosi o uprawnienia administratora, a aplikacja uruchomi się ponownie po instalacji. Transmisja zostanie przerwana na około minutę.",
+  "了解更多": "Dowiedz się więcej",
+  "收起详细说明": "Ukryj szczegóły",
+  "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Przechwytuje całe urządzenie wyjściowe naraz, zapewniając najmniejsze opóźnienie. Wszystkie aplikacje trafiają do bieżącego głośnika lub grupy.",
+  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Dla każdej aplikacji wybierz HomePod, ten komputer lub oba; przesyłany dźwięk zyskuje około {0} ms opóźnienia. Aby uzyskać najmniejsze opóźnienie w grach, przechwytuj całe wyjście.",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "W Windows skieruj aplikacje do przesyłania na jedno wolne urządzenie audio, a następnie wybierz je jako urządzenie przechwytywania. Używa to ścieżki przechwytywania całego wyjścia."
 }

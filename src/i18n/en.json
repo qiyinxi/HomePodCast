@@ -732,5 +732,10 @@
   "此版本没有提供更新说明。": "No release notes were provided for this version.",
   "更早的变化见发布页。": "See the releases page for earlier changes.",
   "在 GitHub 上查看": "View on GitHub",
-  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "The installer is verified with SHA-256 first. Windows will request administrator permission, and the app restarts after installation. Streaming will stop for about a minute."
+  "安装包会先用 SHA-256 校验，Windows 会请求管理员权限，装好后自动重启。正在推流时会中断约一分钟。": "The installer is verified with SHA-256 first. Windows will request administrator permission, and the app restarts after installation. Streaming will stop for about a minute.",
+  "了解更多": "Learn more",
+  "收起详细说明": "Hide details",
+  "一次采集整个输出设备，延迟最低。所有程序送到当前音箱或音箱组。": "Captures the entire output device at once for the lowest latency. All apps go to the current speaker or speaker group.",
+  "为程序单独选择 HomePod、本机或两者，推送声音额外延迟约 {0} ms。游戏最在意延迟时，建议使用全部推送。": "Choose HomePod, this PC, or both for each app; streamed audio gains about {0} ms of latency. For the lowest gaming latency, use whole-output capture.",
+  "在 Windows 中把要推送的程序放到同一块空闲声卡，再选择它作为采集设备。仍使用全部推送的采集路径。": "In Windows, send the apps you want to stream to one spare audio device, then select it as the capture device. This uses the whole-output capture path."
 }
