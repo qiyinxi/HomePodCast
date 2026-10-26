@@ -7,13 +7,17 @@
 # timeout, so the fix is not to need the mirror:
 # - The cache key is the runner image (ImageOS, ImageVersion: GitHub replaces the image about weekly, and ubuntu-latest
 #   moves to Ubuntu 26 from 2026-10-19) and the package list, so nothing is carried from one image to another.
-# - A miss runs apt-get update (from the image's own indexes, so only what changed is fetched), installs, and saves the
-#   indexes with the .deb files right away, also when a later test fails.
+# - A miss runs apt-get update (from the image's own indexes, so only what changed is fetched), downloads, installs, and
+#   saves the indexes with the .deb files right away, also when a later test fails. Each of its two fetches gets 2 min;
+#   a slower one is repeated without the Azure mirror, from the image's other mirrors (archive.ubuntu.com,
+#   security.ubuntu.com): the same indexes and versions, and what was already downloaded is kept. 2026-10-26: the first
+#   cache miss of dlna-compat-e2e (westus) got 57 of 188 packages in 15 min from the Azure mirror, while extension-e2e
+#   (eastus) had got 33 MB/s from it two minutes earlier.
 # - A hit installs from the saved indexes without apt-get update: apt resolves exactly the versions of the first run on
 #   that image, finds every .deb in the cache and downloads nothing.
 # Retries and timeouts are the ones the x64 images set (actions/runner-images#14726): a stalled connection is given up
-# after 2 x 15 s and the file comes from the next mirror (archive.ubuntu.com). They are passed explicitly so a miss
-# keeps them on an image that doesn't; more retries or a longer timeout would only delay that failover.
+# after 2 x 15 s and the file comes from the next mirror. They are passed explicitly so a miss keeps them on an image
+# that doesn't; more retries or a longer timeout would only delay that failover.
 name: apt install (cached)
 description: apt-get install --no-install-recommends, with indexes and packages cached per runner image and package list.
 inputs:
@@ -55,11 +59,21 @@ runs:
         apt=(sudo apt-get -q -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
              -o Dir::State::Lists="$dir/lists" -o Dir::Cache::Archives="$dir/archives"
              -o APT::Keep-Downloaded-Packages=true)
+        # apt-get "$@", repeated without the Azure mirror when it takes over 2 min (97 MB take 7-17 s at its usual speed).
+        fetch() {
+          local status=0
+          timeout 120 "${apt[@]}" "$@" || status=$?
+          (( status == 124 )) || return "$status"
+          echo "::warning title=Slow apt mirror::apt-get $1 took over 2 min; repeating it without azure.archive.ubuntu.com"
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt; fi
+          "${apt[@]}" "$@"
+        }
         if [[ "$CACHE_HIT" != true ]]; then
           sudo rm -rf "$dir"
           mkdir -p "$dir/archives/partial"
           sudo cp -a /var/lib/apt/lists "$dir/lists"
-          "${apt[@]}" update
+          fetch update
+          fetch install --download-only -y --no-install-recommends "${packages[@]}"
         fi
         "${apt[@]}" install -y --no-install-recommends "${packages[@]}"
         # apt wrote as root; the cache action reads the directory as the runner user.
