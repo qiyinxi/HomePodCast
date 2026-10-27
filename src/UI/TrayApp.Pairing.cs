@@ -5,7 +5,7 @@ namespace HomePodCast.UI;
 // Receivers that need a one-time PIN pairing (an Apple TV). A connect to one without a pairing (or whose pairing it
 // refused) stops in the controller (StreamController.Pairing.cs). After the user's 连接 click the pairing dialog opens
 // (PairingDialog.cs: the TV shows 4 digits, the user types them) and, once paired, connects; an automatic connect only says
-// so in the status line, since starting a pairing lights up the TV. 设置 → 已配对的电视 lists the pairings and forgets one.
+// so in the status line, since starting a pairing lights up the TV. 音箱信息 → 已配对的电视 lists the pairings and forgets one.
 internal sealed partial class TrayApp
 {
     /// <summary>The HAP pairings (pairings.dat next to config.json, DPAPI-encrypted).</summary>
@@ -57,7 +57,7 @@ internal sealed partial class TrayApp
             Connect(request.Trigger == ConnectTrigger.TakeOver ? ConnectTrigger.TakeOver : ConnectTrigger.Manual);
     }
 
-    /// <summary>设置 → 已配对的电视 → 忘记配对. The next connect to it asks for a new pairing.</summary>
+    /// <summary>音箱信息 → 已配对的电视 → 忘记配对. The next connect to it asks for a new pairing.</summary>
     public void ForgetPairing(string deviceId)
     {
         try

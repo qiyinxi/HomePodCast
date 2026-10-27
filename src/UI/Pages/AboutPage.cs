@@ -30,9 +30,9 @@ internal sealed class AboutPage : ScrollPage
             L.T("正式版只提示正式版本；测试版也提示测试版本（比正式版先拿到新功能，可能不太稳定），哪个新提示哪个。"), _channel);
         _autoUpdateRow = new SettingRow(Glyph.Recent, L.T("自动检查更新"), "", _autoUpdate);
 
-        var version = typeof(AboutPage).Assembly.GetName().Version?.ToString(3) ?? "?";
+        // The release's version (1.3.0-beta.2), as 当前版本 below says: the assembly version drops the prerelease part.
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
-        var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {version}", RepositoryUrl, link);
+        var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {ReleaseVersion.CurrentText}", RepositoryUrl, link);
 
         var license = new FluentButton("GPL-3.0", ButtonKind.Link, Glyph.OpenInNew);
         var licenseRow = new SettingRow(Glyph.Info, L.T("许可证"), "GNU General Public License v3.0", license);
