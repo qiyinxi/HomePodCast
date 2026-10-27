@@ -288,6 +288,14 @@ public sealed class MixSources
 
     public IReadOnlyList<IMixSource> Snapshot => _items;
 
+    /// <summary>Whether any of <paramref name="sources"/> has audio to add now (<see cref="IMixSource.HasAudio"/>).</summary>
+    public static bool HasAudio(IReadOnlyList<IMixSource> sources)
+    {
+        for (int i = 0; i < sources.Count; i++)
+            if (sources[i].HasAudio) return true;
+        return false;
+    }
+
     public void Add(IMixSource source)
     {
         lock (_lock) _items = [.. _items, source];

@@ -295,8 +295,14 @@ internal sealed partial class TrayApp
         private sealed class Shared(MixSources sources, AudioTap mic) : IMixSource
         {
             private float[] _scratch = new float[8820];
+            // A closed mic adds nothing: an idle destination then writes no silence of its own.
+            public bool HasAudio => mic.IsBeingWritten || MixSources.HasAudio(sources.Snapshot);
             public void Read(Span<float> dest)
-            { mic.Read(dest); StreamMixer.AddSources(dest, sources.Snapshot, ref _scratch); }
+            {
+                // The hub reads what its destinations wrote this cycle: two packets at once now and then.
+                mic.EnsureReadFrames(dest.Length / 2);
+                mic.Read(dest); StreamMixer.AddSources(dest, sources.Snapshot, ref _scratch);
+            }
         }
     }
 

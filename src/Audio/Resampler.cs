@@ -7,12 +7,12 @@ namespace HomePodCast.Audio;
 /// </summary>
 public sealed class Resampler
 {
-    private const int HalfTaps = 32;          // 64-tap kernel
-    private const int Taps = HalfTaps * 2;
+    private const int BaseHalfTaps = 32;      // 64-tap kernel
     private const int Phases = 128;           // kernel table resolution, linearly interpolated
     private const double KaiserBeta = 8.6;    // ~ -85 dB stopband
 
-    private readonly float[] _table;          // (Phases + 1) rows of Taps coefficients
+    private readonly int _halfTaps, _taps;
+    private readonly float[] _table;          // (Phases + 1) rows of _taps coefficients
     private readonly double _nominalStep;     // input frames per output frame
     private float[] _hist = new float[4096 * 2];
     private int _histFrames;                  // valid frames in _hist
@@ -24,29 +24,43 @@ public sealed class Resampler
     public int InputRate { get; }
     public int OutputRate { get; }
 
+    /// <summary>
+    /// Delay the kernel adds, in input frames (half its length): the first output frame sits at input frame
+    /// DelayFrames - 1, and DelayFrames input frames of look-ahead are held back.
+    /// </summary>
+    public int DelayFrames => _halfTaps;
+
     public Resampler(int inputRate, int outputRate)
     {
         InputRate = inputRate;
         OutputRate = outputRate;
         _nominalStep = (double)inputRate / outputRate;
 
+        // The window's transition band is a fixed share of the input rate, so with 64 taps a 96 or 192 kHz input
+        // rolled off from 16 or 12 kHz (2026-10-27 review). Decimating by 1.5 or more, the kernel grows with the
+        // ratio and keeps the transition about 3.8 kHz wide at the output rate; 44.1/48 kHz (the realtime path,
+        // the drift resamplers) keep the 64-tap kernel and its latency.
+        double ratio = (double)inputRate / outputRate;
+        _halfTaps = ratio < 1.5 ? BaseHalfTaps : (int)Math.Ceiling(BaseHalfTaps * ratio);
+        _taps = _halfTaps * 2;
+
         // Cutoff relative to the input rate, a bit below the lower Nyquist to leave a transition band.
         double cutoff = 0.5 * Math.Min(1.0, (double)outputRate / inputRate) * 0.92;
-        _table = new float[(Phases + 1) * Taps];
+        _table = new float[(Phases + 1) * _taps];
         for (int p = 0; p <= Phases; p++)
         {
             double frac = (double)p / Phases;
             double sum = 0;
-            for (int t = 0; t < Taps; t++)
+            for (int t = 0; t < _taps; t++)
             {
-                double x = t - (HalfTaps - 1) - frac; // distance from the output point, in input frames
-                double h = 2 * cutoff * Sinc(2 * cutoff * x) * Kaiser(x / HalfTaps);
-                _table[p * Taps + t] = (float)h;
+                double x = t - (_halfTaps - 1) - frac; // distance from the output point, in input frames
+                double h = 2 * cutoff * Sinc(2 * cutoff * x) * Kaiser(x / _halfTaps);
+                _table[p * _taps + t] = (float)h;
                 sum += h;
             }
-            for (int t = 0; t < Taps; t++) _table[p * Taps + t] = (float)(_table[p * Taps + t] / sum);
+            for (int t = 0; t < _taps; t++) _table[p * _taps + t] = (float)(_table[p * _taps + t] / sum);
         }
-        _pos = HalfTaps - 1;
+        _pos = _halfTaps - 1;
         _histFrames = 0;
     }
 
@@ -81,19 +95,20 @@ public sealed class Resampler
         double step = _nominalStep * (1.0 + Adjust);
         var table = _table;
         var hist = _hist;
+        int halfTaps = _halfTaps, taps = _taps;
         while (true)
         {
             int ip = (int)_pos;
-            if (ip + HalfTaps >= _histFrames) break; // need HalfTaps frames of look-ahead
+            if (ip + halfTaps >= _histFrames) break; // need halfTaps frames of look-ahead
             double frac = _pos - ip;
             double phase = frac * Phases;
             int p0 = (int)phase;
             float w1 = (float)(phase - p0), w0 = 1f - w1;
-            int row0 = p0 * Taps, row1 = row0 + Taps;
-            int start = ip - (HalfTaps - 1);
+            int row0 = p0 * taps, row1 = row0 + taps;
+            int start = ip - (halfTaps - 1);
 
             float l = 0, r = 0;
-            for (int t = 0; t < Taps; t++)
+            for (int t = 0; t < taps; t++)
             {
                 float c = table[row0 + t] * w0 + table[row1 + t] * w1;
                 int idx = (start + t) * 2;
@@ -105,8 +120,8 @@ public sealed class Resampler
             _pos += step;
         }
 
-        // Drop consumed history, keeping HalfTaps frames behind the read point.
-        int keepFrom = Math.Max(0, (int)_pos - (HalfTaps - 1));
+        // Drop consumed history, keeping halfTaps frames behind the read point.
+        int keepFrom = Math.Max(0, (int)_pos - (halfTaps - 1));
         if (keepFrom > 0)
         {
             int remain = _histFrames - keepFrom;
@@ -119,7 +134,7 @@ public sealed class Resampler
     public void Reset()
     {
         _histFrames = 0;
-        _pos = HalfTaps - 1;
+        _pos = _halfTaps - 1;
     }
 
     private void EnsureCapacity(int frames)
