@@ -93,10 +93,7 @@
   function adjustOffset(delta) {
     const [lo, hi] = offsetBounds();
     const next = clamp(settings.offsetMs + delta, lo, hi);
-    // An offset saved at another delay can lie outside the bounds, and the clamp would then move it to the far bound:
-    // never against the key or button pressed (Alt+→ at a 2250 ms delay would save −250, and at 141 ms that site
-    // loses its delay).
-    if (next === settings.offsetMs || Math.sign(next - settings.offsetMs) !== Math.sign(delta)) return;
+    if (next === settings.offsetMs) return;
     settings.offsetMs = next;
     pendingSiteSave = { enabled: settings.siteEnabled, offsetMs: next };
     clearTimeout(saveTimer);
