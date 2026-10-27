@@ -233,11 +233,12 @@ public class MicPathTests(ITestOutputHelper output)
         Assert.Equal(0, tap.Overflows);
         Assert.Equal(1024 + 221 + 88, tap.TargetFrames);   // one read, half a write, 2 ms
 
-        // Back on a realtime HomePod (352-frame packets): a second later the configured 20 ms target returns, and
-        // the surplus drains through the drift control without dropping audio.
-        Run(1, 352);
-        Assert.Equal(1024 + 221 + 88, tap.TargetFrames);
-        Run(2, 352);
+        // Smaller reads that still need more than 20 ms (the mixer hub's, 10-15 ms of frames per cycle): within two
+        // seconds the target follows them down. Back on a realtime HomePod (352-frame packets) the configured 20 ms
+        // return; the surplus drains through the drift control without dropping audio.
+        Run(3, 600);
+        Assert.Equal(600 + 221 + 88, tap.TargetFrames);
+        Run(3, 352);
         Assert.Equal(882, tap.TargetFrames);
         Assert.Equal(3528, tap.CapFrames);
         Assert.Equal(0, tap.Overflows);
