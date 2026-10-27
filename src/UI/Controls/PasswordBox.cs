@@ -113,19 +113,24 @@ internal sealed class PasswordBox : FluentControl, ISurface
         _box.Focus();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnPaint(PaintEventArgs e) => PaintBox(e.Graphics, _box.Focused);
+
+    /// <summary>The box's outline, with the focus line while the text box has focus.</summary>
+    internal void PaintBox(Graphics g, bool focused)
     {
-        var g = e.Graphics;
         var r = new Rectangle(0, 0, Width, Height);
         float radius = Dp(4);
         Shapes.FillRound(g, P.Control, r, radius);
         Shapes.BorderRound(g, P.ControlBorder, r, radius, Hairline);
-        if (_box.Focused)
+        if (focused)
         {
-            // Fluent text box: an accent line along the bottom while it has focus.
-            int inset = (int)radius;
+            // Fluent text box: an accent line along the bottom while it has focus, the full width clipped to the rounded
+            // outline (like HotkeyBox). Inset by the radius, it left the grey corners showing at both ends.
+            using var clip = Shapes.Round(r, radius);
+            g.SetClip(clip);
             using var accent = new SolidBrush(P.Accent);
-            g.FillRectangle(accent, inset, Height - Dp(2), Width - inset * 2, Dp(2));
+            g.FillRectangle(accent, 0, Height - Dp(2), Width, Dp(2));
+            g.ResetClip();
         }
     }
 }

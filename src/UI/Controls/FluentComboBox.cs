@@ -291,7 +291,9 @@ internal sealed class FluentMenuRenderer : ToolStripRenderer
     {
         var item = e.Item;
         var r = new Rectangle(Dp(e.ToolStrip, 4), 1, item.Width - Dp(e.ToolStrip, 8), item.Height - 2);
-        if (item.Selected && item.Enabled) Shapes.FillRound(e.Graphics, P.Subtle, r, Dp(e.ToolStrip, 4));
+        // Also on a disabled entry: the arrow keys stop there (WinForms selects disabled menu items), and without the
+        // highlight the list showed no position at all. Its grey text already says it can't be picked.
+        if (item.Selected) Shapes.FillRound(e.Graphics, P.Subtle, r, Dp(e.ToolStrip, 4));
         if (item is ToolStripMenuItem { Checked: true } && e.ToolStrip is ContextMenuStrip { ShowCheckMargin: false, ShowImageMargin: false })
         {
             // Selected entry of a drop-down list: accent pill on the left, like Windows 11.

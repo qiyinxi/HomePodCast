@@ -581,7 +581,7 @@ internal sealed partial class MixerPage : ScrollPage
         private void ShowMute(bool muted)
         {
             _mute.Glyph = muted ? Glyph.Mute : Glyph.Volume;
-            _mute.GlyphColor = muted ? Theme.P.Critical : null;
+            _mute.GlyphRole = muted ? TextRole.Critical : null;
             _page._tips.SetToolTip(_mute, muted ? L.T("取消静音") : L.T("静音"));
             _mute.Invalidate();
         }

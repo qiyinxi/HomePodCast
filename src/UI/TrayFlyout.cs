@@ -199,7 +199,7 @@ internal sealed class TrayFlyout : Form, ISurface, ILayoutRoot
     private void ShowMute(bool muted)
     {
         _mute.Glyph = muted ? Glyph.Mute : Glyph.Volume;
-        _mute.GlyphColor = muted ? Theme.P.Critical : null;
+        _mute.GlyphRole = muted ? TextRole.Critical : null;
         _mute.Invalidate();
         if (_shownMuted == muted) return;
         _shownMuted = muted;

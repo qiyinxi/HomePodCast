@@ -42,8 +42,20 @@ internal sealed class FluentButton : FluentControl, IButtonControl
         set { if (_glyph != value) { _glyph = value; Invalidate(); RequestLayout(); } }
     }
 
-    /// <summary>Glyph colour override (e.g. a muted speaker in the state colour).</summary>
-    public Color? GlyphColor { get; set; }
+    /// <summary>
+    /// Glyph colour override (e.g. a muted speaker in the state colour), as a role: the colour is read from the palette when
+    /// painting, so it follows a theme switch. A colour copied once kept the old theme's red (2026-10-27, 首页's mute button).
+    /// </summary>
+    public TextRole? GlyphRole
+    {
+        get => _glyphRole;
+        set { if (_glyphRole != value) { _glyphRole = value; Invalidate(); } }
+    }
+
+    private TextRole? _glyphRole;
+
+    /// <summary>The glyph's colour now: <see cref="GlyphRole"/> in the current palette, or the text colour.</summary>
+    internal Color GlyphColorFor(Color fore) => GlyphRole is { } role && Enabled ? TextBlock.ColorOf(role) : fore;
 
     /// <summary>Minimum width in 96-DPI units.</summary>
     public int MinWidth { get; set; }
@@ -115,7 +127,7 @@ internal sealed class FluentButton : FluentControl, IButtonControl
                 fore = enabled ? P.TextOnAccent : P.Card;
                 break;
             case ButtonKind.Subtle:
-                fill = !enabled ? Surface : IsPressed ? P.SubtlePressed : IsHover ? P.Subtle : Surface;
+                fill = enabled && (IsPressed || IsHover) ? Theme.SubtleOn(Surface, IsPressed) : Surface;
                 fore = enabled ? P.Text : P.TextDisabled;
                 break;
             case ButtonKind.Link:
@@ -139,7 +151,7 @@ internal sealed class FluentButton : FluentControl, IButtonControl
             int icon = Dp(16);
             int textWidth = hasText ? TextMeasure.Size(Text, font, Size.Empty, TextFlags.Measure).Width + Dp(8) : 0;
             int x = (Width - icon - textWidth) / 2;
-            Shapes.Glyph(g, _glyph, iconFont, new Rectangle(x, 0, icon, Height), GlyphColor is { } gc && enabled ? gc : fore);
+            Shapes.Glyph(g, _glyph, iconFont, new Rectangle(x, 0, icon, Height), GlyphColorFor(fore));
             if (hasText)
                 TextRenderer.DrawText(g, Text, font, new Rectangle(x + icon + Dp(8), 0, Width - x - icon - Dp(8), Height), fore, TextFlags.Line);
         }

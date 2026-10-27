@@ -496,7 +496,7 @@ internal sealed class HomePage : ScrollPage
     {
         bool muted = _app.Controller.Muted;
         _mute.Glyph = muted ? Glyph.Mute : Glyph.Volume;
-        _mute.GlyphColor = muted ? Theme.P.Critical : null;
+        _mute.GlyphRole = muted ? TextRole.Critical : null;
         _mute.Invalidate();
         _mute.AccessibleName = muted ? L.T("取消静音") : L.T("HomePod 静音");
         _mute.AccessibleDescription = muted ? L.T("取消静音") : L.T("让 HomePod 静音，不断开连接");
