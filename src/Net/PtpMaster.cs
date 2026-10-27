@@ -100,8 +100,10 @@ public sealed class PtpMaster : IDisposable
         ClockId = clockId ?? BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
         Domain = domain;
         _ownAnnounce = PtpPackets.AnnounceMessage(ClockId, 0, Domain);
-        _events = new UdpClient(new IPEndPoint(local, eventPort));
-        try { _general = new UdpClient(new IPEndPoint(local, generalPort)); }
+        // A receive error stops the clock for every receiver sharing it (PtpClockPool), so a peer whose 319/320 is closed
+        // for a moment must not raise one: ReceiveLoop would end on the port unreachable that Windows reports.
+        _events = new UdpClient(new IPEndPoint(local, eventPort)).IgnorePortUnreachable();
+        try { _general = new UdpClient(new IPEndPoint(local, generalPort)).IgnorePortUnreachable(); }
         catch { _events.Dispose(); _stop.Dispose(); throw; }
         _tasks = [Task.Run(SendLoop), Task.Run(() => ReceiveLoop(_events)), Task.Run(() => ReceiveLoop(_general))];
     }

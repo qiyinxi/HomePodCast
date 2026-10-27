@@ -163,6 +163,90 @@ public class NetworkWatchTests
         Assert.Equal(new[] { -1L }, spikes);
     }
 
+    /// <summary>Answers each ping with the next round trip of <paramref name="answers"/>, then holds the probe until released.</summary>
+    private sealed class ScriptedEcho(long[] answers, ManualResetEventSlim release) : NetworkWatch.IEcho
+    {
+        private int _next;
+        private volatile bool _done;
+        public NetworkWatch.EchoResult Send(IPAddress target, int timeoutMs)
+        {
+            if (_next == answers.Length)
+            {
+                _done = true;
+                release.Wait();
+            }
+            long rtt = answers[Math.Min(_next++, answers.Length - 1)];
+            return rtt < 0 ? new(IPStatus.TimedOut, 0) : new(IPStatus.Success, rtt);
+        }
+
+        /// <summary>The probe asked for one more: every scripted answer is counted.</summary>
+        public bool Done => _done;
+
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public async Task The_summary_has_the_median_p99_and_largest_of_exactly_the_answered_pings()
+    {
+        var random = new Random(7);
+        var answers = Enumerable.Range(0, 1000).Select(i => i % 97 == 0 ? -1 : (long)random.Next(0, NetworkWatch.TimeoutMs + 1))
+            .Append(0).Append(NetworkWatch.TimeoutMs).ToArray();
+        var release = new ManualResetEventSlim(); // not disposed: the probe may still be waiting on it
+        var echo = new ScriptedEcho(answers, release);
+        using var watch = new NetworkWatch(IPAddress.Loopback, IPAddress.Loopback, 0, () => echo).Start();
+        try
+        {
+            await WaitFor(() => echo.Done);
+            // What the summary said when it kept every round trip in a list and sorted it.
+            var rtts = answers.Where(a => a >= 0).Order().ToArray();
+            long Pct(double p) => rtts[Math.Min(rtts.Length - 1, (int)(p * rtts.Length))];
+            Assert.Equal($"ping={Pct(0.5)}/{Pct(0.99)}/{NetworkWatch.TimeoutMs}ms lost={answers.Length - rtts.Length}/{answers.Length}",
+                watch.TakeSummary());
+            Assert.Equal("ping=-", watch.TakeSummary()); // and the next one starts over
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    [Fact]
+    public async Task A_watch_nobody_summarizes_keeps_no_history_per_ping()
+    {
+        // Only the HomePod session logs summaries: the RAOP and third-party sessions never took one, and every round trip
+        // stayed in a list for the whole session, 20 a second. Counted on the probe's own thread, so nothing else in the
+        // test process adds to it.
+        var echo = new AllocationCountingEcho(from: 1_000, to: 101_000);
+        using (new NetworkWatch(IPAddress.Loopback, IPAddress.Loopback, 0, () => echo).Start())
+        {
+            await WaitFor(() => echo.Counted.IsSet);
+        }
+        Assert.True(echo.Allocated < 64 * 1024, $"{echo.Allocated} bytes allocated over 100000 pings");
+    }
+
+    /// <summary>Answers every ping in 2 ms and measures what the probe's thread allocates between two of them.</summary>
+    private sealed class AllocationCountingEcho(int from, int to) : NetworkWatch.IEcho
+    {
+        private int _calls; // the probe's thread only
+        private long _start;
+        public long Allocated { get; private set; }
+        public ManualResetEventSlim Counted { get; } = new();
+
+        public NetworkWatch.EchoResult Send(IPAddress target, int timeoutMs)
+        {
+            int call = ++_calls;
+            if (call == from) _start = GC.GetAllocatedBytesForCurrentThread();
+            if (call == to)
+            {
+                Allocated = GC.GetAllocatedBytesForCurrentThread() - _start;
+                Counted.Set();
+            }
+            return new NetworkWatch.EchoResult(IPStatus.Success, 2);
+        }
+
+        public void Dispose() { } // Counted has no kernel handle: nothing waits on its WaitHandle
+    }
+
     private static async Task WaitFor(Func<bool> condition)
     {
         var sw = Stopwatch.StartNew();

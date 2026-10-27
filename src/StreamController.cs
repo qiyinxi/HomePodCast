@@ -216,6 +216,7 @@ public sealed partial class StreamController : IDisposable
                 };
                 var client = await AirPlayClient.ConnectAsync(address, AirPlayPort, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
+                if (client.LostReason is { } early) lost.TrySetResult(early);
                 // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
                 // by now: publish only while still current, and never touch another loop's client.
                 lock (_lock)

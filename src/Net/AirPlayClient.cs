@@ -61,6 +61,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     private RtpSender? _sender;
     private System.Threading.Timer? _feedbackTimer;
     private int _feedbackFailures;
+    private int _feedbackBusy;
+    private volatile bool _lostByFeedback;
     private int _lostSignalled;
 
     public IReadOnlyDictionary<string, object?> Info { get; private set; } = new Dictionary<string, object?>();
@@ -89,7 +91,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     {
         _rtsp = rtsp;
         _timing = new TimingServer(rtsp.LocalIp);
-        _control = new UdpClient(new IPEndPoint(rtsp.LocalIp, 0));
+        // PtpRealtimeSender reads resend requests from this socket and ends the session on any error.
+        _control = new UdpClient(new IPEndPoint(rtsp.LocalIp, 0)).IgnorePortUnreachable();
     }
 
     public static async Task<AirPlayClient> ConnectAsync(IPAddress host, int port, StreamOptions options,
@@ -282,8 +285,13 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         return body;
     }
 
+    /// <summary>
+    /// Starts the /feedback heartbeat once; later calls do nothing. PrepareAsync starts it, and the third-party paths that
+    /// start a prepared stream (StartPreparedStream, StartCoordinatedNtp) call it again: a second timer would double the
+    /// requests and the failure count, and outlive Dispose, which only disposes the timer in the field.
+    /// </summary>
     private void StartFeedback() =>
-        _feedbackTimer = new System.Threading.Timer(_ => Feedback(), null, TimeSpan.Zero, FeedbackInterval);
+        _feedbackTimer ??= new System.Threading.Timer(_ => Feedback(), null, TimeSpan.Zero, FeedbackInterval);
 
     public void Record() => Expect(_rtsp.Rtsp("RECORD"), "RECORD");
 
@@ -392,19 +400,37 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     private static HttpMessage Expect(HttpMessage resp, string what) =>
         resp.IsSuccess ? resp : throw new AirPlayException($"{what} failed: {resp.StartLine}") { ResponseStatusCode = resp.StatusCode, RequestName = what };
 
-    private void Feedback()
+    /// <summary>
+    /// One /feedback heartbeat (the timer's tick). One at a time: a periodic timer runs its callbacks side by side, and a
+    /// request can wait the whole 5 s receive timeout, so a speaker that stopped answering would queue a new request on
+    /// the RTSP lock every 2 s, with Dispose's TEARDOWN behind all of them. A tick while one is under way is skipped and
+    /// counts as no failure: the one under way decides.
+    /// </summary>
+    internal void Feedback()
     {
+        if (Interlocked.Exchange(ref _feedbackBusy, 1) != 0) return;
         try
         {
-            var r = _rtsp.Rtsp("POST", "/feedback");
-            _feedbackFailures = r.IsSuccess ? 0 : _feedbackFailures + 1;
+            try
+            {
+                var r = _rtsp.Rtsp("POST", "/feedback");
+                _feedbackFailures = r.IsSuccess ? 0 : _feedbackFailures + 1;
+            }
+            catch (Exception ex)
+            {
+                _feedbackFailures++;
+                Log.Debug($"feedback failed: {ex.Message}");
+            }
+            if (_feedbackFailures >= 3)
+            {
+                _lostByFeedback = true;
+                SignalLost(L.T("音箱没有响应（网络中断？）"));
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _feedbackFailures++;
-            Log.Debug($"feedback failed: {ex.Message}");
+            Volatile.Write(ref _feedbackBusy, 0);
         }
-        if (_feedbackFailures >= 3) SignalLost(L.T("音箱没有响应（网络中断？）"));
     }
 
     private void SignalLost(string reason)
@@ -440,12 +466,18 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         _sender?.Dispose();
         _buffered?.Dispose();
         PtpRealtime?.Dispose();
-        try
+        // A session lost to three failed heartbeats in a row (as a rule, no answer within the receive timeout) would not
+        // get a TEARDOWN answered either: it would only hold up the reconnect for another receive timeout. One failed
+        // heartbeat and then 断开 still ends the session cleanly.
+        if (!_lostByFeedback)
         {
-            if (_rtsp.PairingOverRtsp) _rtsp.RtspPlist("TEARDOWN", new());
-            else _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]);
+            try
+            {
+                if (_rtsp.PairingOverRtsp) _rtsp.RtspPlist("TEARDOWN", new());
+                else _rtsp.Rtsp("TEARDOWN", extra: [new("Session", "0")]);
+            }
+            catch { }
         }
-        catch { }
         _events?.Dispose();
         _control.Dispose();
         _timing.Dispose();
