@@ -394,8 +394,9 @@ internal sealed class MicPipeline
         for (int i = 0; i < frames; i++) mono[i] = Sample(data.Slice(i * block + offset, bytes), isFloat);
     }
 
+    // Only a float format can carry a NaN, an Inf or an absurd level (a virtual mic, an APO): SampleGuard.
     private static float Sample(ReadOnlySpan<byte> s, bool isFloat) => isFloat
-        ? (s.Length == 8 ? (float)MemoryMarshal.Read<double>(s) : MemoryMarshal.Read<float>(s))
+        ? SampleGuard.Clean(s.Length == 8 ? (float)MemoryMarshal.Read<double>(s) : MemoryMarshal.Read<float>(s))
         : s.Length switch
         {
             1 => (s[0] - 128) / 128f,
@@ -445,7 +446,8 @@ public sealed class NoiseGate
         {
             float a = MathF.Abs(mono[i]);
             _env += (a - _env) * (a > _env ? _envAttack : _envRelease);
-            if (_env < 1e-12f) _env = 0;
+            // A NaN envelope never compares above or below a threshold: the gate would stay open or closed for good.
+            if (!float.IsFinite(_env) || _env < 1e-12f) _env = 0;
 
             if (!enabled || _env >= open)
             {
