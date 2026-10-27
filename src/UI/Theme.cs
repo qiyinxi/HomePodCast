@@ -313,8 +313,13 @@ internal static partial class Theme
     /// <summary>Scroll bars (and other common-control parts) in the light or dark system style.</summary>
     public static void StyleScrollBars(Control control)
     {
-        if (control.IsHandleCreated) SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : "Explorer", null);
+        if (!control.IsHandleCreated) return;
+        SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : "Explorer", null);
+        ScrollBarsStyled?.Invoke(control.Handle, IsDark);
     }
+
+    /// <summary>Tests: a window whose scroll bars were styled on this thread, and whether dark.</summary>
+    [ThreadStatic] internal static Action<IntPtr, bool>? ScrollBarsStyled;
 
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);

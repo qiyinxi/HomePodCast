@@ -412,7 +412,9 @@ internal sealed class MainWindow : Form, ISurface
         if (IsDisposed) return;
         BackColor = Theme.P.Window;
         Theme.StyleWindow(this);
-        Invalidate(true);
+        // RDW_FRAME: the scroll bars too (the rail's and the page's), restyled by their controls before this handler runs.
+        if (IsHandleCreated) RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        else Invalidate(true);
     }
 
     /// <summary>

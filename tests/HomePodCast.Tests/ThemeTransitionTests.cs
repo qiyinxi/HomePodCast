@@ -173,6 +173,48 @@ public class ThemeTransitionTests(ITestOutputHelper output)
         window.Hide();
     });
 
+    [Fact]
+    public void Holding_Enter_on_the_theme_button_switches_once() => WithTheme(Theme.Light, () =>
+    {
+        var config = TestApp.Config(); config.Theme = Theme.Light;
+        using var window = new MainWindow(TestApp.Create(config));
+        ShowMain(window);
+        var button = TestApp.Field<NavItem>(TestApp.Field<NavRail>(window, "_rail"), "_themeButton");
+        const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, VK_RETURN = 0x0D;
+        void Key(int message, uint lParam)
+        {
+            SendMessage(button.Handle, message, VK_RETURN, unchecked((int)lParam));
+            Application.DoEvents();
+        }
+        Key(WM_KEYDOWN, 0x00000001);
+        for (int i = 0; i < 5; i++) Key(WM_KEYDOWN, 0x40000001); // auto-repeat: the key was already down
+        Key(WM_KEYUP, 0xC0000001);
+        Assert.Equal(Theme.Dark, config.Theme);
+        Key(WM_KEYDOWN, 0x00000001); // the next press
+        Key(WM_KEYUP, 0xC0000001);
+        Assert.Equal(Theme.Light, config.Theme);
+        window.Hide();
+    });
+
+    [Fact]
+    public void The_rail_s_scroll_bar_follows_the_theme() => WithTheme(Theme.Dark, () =>
+    {
+        var styled = new List<(IntPtr Handle, bool Dark)>();
+        Theme.ScrollBarsStyled = (handle, dark) => styled.Add((handle, dark));
+        try
+        {
+            using var window = new MainWindow(TestApp.Create(TestApp.Config()));
+            ShowMain(window);
+            var viewport = TestApp.Field<Panel>(TestApp.Field<NavRail>(window, "_rail"), "_viewport");
+            Assert.Contains((viewport.Handle, true), styled);
+            styled.Clear();
+            window.ToggleTheme();
+            Assert.Contains((viewport.Handle, false), styled);
+            window.Hide();
+        }
+        finally { Theme.ScrollBarsStyled = null; }
+    });
+
     // ---------------------------------------------------------------- helpers
 
     /// <summary>The cover: a window of its own, owned by the window, right above it, never taking the mouse or activation.</summary>
