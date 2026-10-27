@@ -71,18 +71,20 @@ public sealed partial class StreamController
                 lostReason = await output.Lost.WaitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (RaopPasswordRequiredException ex)
+            // Only a loop still current acts on a refusal; a cancelled one ends below without touching the capture or the
+            // state a newer loop owns (as in RunThirdPartyAsync; RaopClient already turns a cancelled setup into a cancel).
+            catch (RaopPasswordRequiredException ex) when (!ct.IsCancellationRequested)
             {
                 DisposeCapture(); Set(StreamState.Idle, ex.Message);
                 RaopPasswordRequired?.Invoke(new(device, trigger)); return;
             }
-            catch (RaopUnsupportedException ex)
+            catch (RaopUnsupportedException ex) when (!ct.IsCancellationRequested)
             {
                 Log.Warn($"RAOP: {ex.Message}");
                 DisposeCapture(); Set(StreamState.Idle, ex.Message);
                 return; // FairPlay only: every retry would end the same
             }
-            catch (RaopBusyException ex)
+            catch (RaopBusyException ex) when (!ct.IsCancellationRequested)
             {
                 if (trigger is ConnectTrigger.Manual or ConnectTrigger.TakeOver)
                 {
