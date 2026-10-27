@@ -53,6 +53,53 @@ public class MixerControllerWiringTests
         Assert.Equal(key, config.LastOwnSession?.Key);
     }
 
+    [Fact]
+    public async Task Another_sender_taking_an_app_routes_speaker_keeps_the_selected_speakers_session()
+    {
+        var config = MixerRoutingV2Tests.Speaker();
+        var (_, mixer, created) = await SwitchToAnotherSpeaker(config);
+        await using var ownedMixer = mixer;
+        string key = OwnSession.KeyOf(config)!;
+        var selected = new OwnSessionRecord(key, DateTime.UtcNow, Clean: false); // streaming on another controller
+        config.LastOwnSession = selected;
+
+        created.OwnSession.Began(OwnSession.KeyOf("AA:BB:CC:DD:EE:FF"), DateTime.UtcNow); // an app route's speaker
+        Raise(created, nameof(StreamController.Changed));
+        created.OwnSession.Forget(); // an iPhone took that speaker over: the session keeps no key
+        Raise(created, nameof(StreamController.Changed));
+        Assert.Same(selected, config.LastOwnSession);
+
+        created.OwnSession.Began(key, DateTime.UtcNow); // the selected speaker's own session, taken over too: its record goes
+        Raise(created, nameof(StreamController.Changed));
+        created.OwnSession.Forget();
+        Raise(created, nameof(StreamController.Changed));
+        Assert.Null(config.LastOwnSession);
+    }
+
+    [Fact]
+    public async Task The_startup_controllers_next_change_keeps_another_controllers_session()
+    {
+        var config = MixerRoutingV2Tests.Speaker();
+        var (app, mixer, created) = await SwitchToAnotherSpeaker(config);
+        await using var ownedMixer = mixer;
+        StartTakeover(app);
+        string key = OwnSession.KeyOf(config)!;
+
+        created.OwnSession.Began(key, DateTime.UtcNow); // the selected speaker streams on the controller made for it
+        Raise(created, nameof(StreamController.Changed));
+        Raise(app.Controller, nameof(StreamController.Changed)); // the startup one, not streaming, says something new
+
+        Assert.Equal(key, config.LastOwnSession?.Key);
+        Assert.False(config.LastOwnSession!.Clean);
+    }
+
+    /// <summary>The app's own watch of Controller's session (InitTakeover), without its minute's timer.</summary>
+    private static void StartTakeover(TrayApp app)
+    {
+        typeof(TrayApp).GetMethod("InitTakeover", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
+        ((IDisposable)typeof(TrayApp).GetField("_ownSessionTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!).Dispose();
+    }
+
     /// <summary>The startup speaker connected on the startup controller, then another speaker selected: a controller made for it.</summary>
     private static async Task<(TrayApp App, MixerOutputCoordinator Mixer, StreamController Created)> SwitchToAnotherSpeaker(AppConfig config)
     {

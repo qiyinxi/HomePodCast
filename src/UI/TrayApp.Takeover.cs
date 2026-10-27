@@ -42,7 +42,9 @@ internal sealed partial class TrayApp
 
     private void SaveOwnSession(StreamController controller)
     {
-        _ownSessionLive = controller.OwnSession.Live;
+        // What InitTakeover's handler compares Controller's session with, so only Controller's own: set from another
+        // (a mixer destination's) controller, Controller's next status change would save its own record over that one.
+        if (ReferenceEquals(controller, Controller)) _ownSessionLive = controller.OwnSession.Live;
         var record = controller.OwnSession.Record(DateTime.UtcNow);
         if (record == Config.LastOwnSession) return;
         Config.LastOwnSession = record;
@@ -58,15 +60,19 @@ internal sealed partial class TrayApp
     private void WatchOwnSession(StreamController controller)
     {
         bool live = false;
+        string? liveKey = null; // the speaker this controller's session went live for
         controller.Changed += () => _ui.Post(_ =>
         {
             if (_quitting || controller.OwnSession.Live == live) return;
             live = !live;
-            // Only the selected speaker's: what the next start's controller restores. Forgotten (another sender took the
-            // speaker over): a record saved for that speaker goes.
+            // Forgotten (another sender took the speaker over), the session keeps no key: the one it went live for says
+            // whose it was. 2026-10-27: the saved record's key stood in for it, the selected speaker's whatever this
+            // controller played to, so an iPhone taking an app route's speaker erased the selected one's, still streaming.
+            string? key = controller.OwnSession.Record(DateTime.UtcNow)?.Key ?? liveKey;
+            if (live) liveKey = key;
+            // Only the selected speaker's: what the next start's controller restores. A forgotten one's record goes.
             string? selection = OwnSession.KeyOf(Config);
-            if (selection != null && (controller.OwnSession.Record(DateTime.UtcNow)?.Key ?? Config.LastOwnSession?.Key) == selection)
-                SaveOwnSession(controller);
+            if (selection != null && key == selection) SaveOwnSession(controller);
         }, null);
     }
 

@@ -34,6 +34,34 @@ public class ConfigCrossThreadTests
     }
 
     [Fact]
+    public async Task A_mixer_connect_waiting_its_turn_copies_the_config_on_the_calling_thread()
+    {
+        var config = MixerRoutingV2Tests.Speaker();
+        config.LatencyMs = 50;
+        var made = new System.Collections.Concurrent.ConcurrentQueue<int>();
+        using var entered = new ManualResetEventSlim();
+        using var applying = new ManualResetEventSlim();
+        await using var mixer = new MixerOutputCoordinator(new(), (d, _) =>
+            {
+                made.Enqueue(d.Config!.LatencyMs);
+                if (made.Count == 1) { entered.Set(); applying.Wait(); } // a queued change still being applied
+                return new IdleSession();
+            },
+            (_, _) => new MixerCoordinatorTests.FakeCapture(), () => new MixerControllerWiringTests.DormantHost());
+        var first = Task.Run(() => mixer.ConnectAsync(config, ConnectTrigger.Automatic));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        config.LatencyMs = 120;
+        var second = mixer.ConnectAsync(config, ConnectTrigger.Reconnect); // the UI thread passes its live config (连接)
+        config.LatencyMs = 999; // and goes on changing it while that waits for its turn
+        applying.Set();
+        await first.WaitAsync(TimeSpan.FromSeconds(10));
+        await second.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal([50, 120], made);
+    }
+
+    [Fact]
     public void Selecting_a_receiver_replaces_the_settings_a_stream_thread_may_be_reading()
     {
         var config = TestApp.Config();
