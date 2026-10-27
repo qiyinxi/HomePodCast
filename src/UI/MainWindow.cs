@@ -61,7 +61,8 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
         _rail.Add(Glyph.Info, L.T("关于"), bottom: true);
-        _rail.ThemeRequested += ToggleTheme;
+        // Once the click is done: the fade captures the window as it stays, the theme button hovered, not pressed.
+        _rail.ThemeRequested += () => Later(ToggleTheme);
         _rail.Navigate += i => ShowPage((AppPage)i);
 
         _home = new HomePage(app);
@@ -82,10 +83,10 @@ internal sealed class MainWindow : Form, ISurface
             Controls.Add(page);
         }
         Controls.Add(_rail);
-        Controls.Add(_transition);
         _rail.TabIndex = 0;
         for (int i = 0; i < _pages.Length; i++) _pages[i].TabIndex = 1 + i;
 
+        _settings.ThemeChosen += mode => Later(() => SetTheme(mode)); // once its list has closed
         _home.VolumeApplied += v => _mixer.ShowVolume(v);
         _mixer.VolumeApplied += v => _home.ShowVolume(v);
         _settings.CapChanged += () =>
@@ -103,6 +104,7 @@ internal sealed class MainWindow : Form, ISurface
         SetInitialSize();
         SelectPage(AppPage.Home);
         Theme.Changed += OnThemeChanged;
+        Theme.SystemChanged += OnSystemTheme;
         _dpiSettle.Tick += (_, _) => { if (!_sizeMove) FinishDpiChange(); }; // in a drag: when it ends (WndProc)
         _prepare.Tick += (_, _) => PrepareSome();
         ResumeLayout(false);
@@ -345,6 +347,12 @@ internal sealed class MainWindow : Form, ISurface
         UpdateShownPage();
     }
 
+    protected override void OnMove(EventArgs e)
+    {
+        _transition?.Stop(); // its cover is a window of its own over the client area: it would stay where it was
+        base.OnMove(e);
+    }
+
     protected override void OnLayout(LayoutEventArgs levent)
     {
         if (_pages is null) return; // Form setters lay out before the constructor is done
@@ -364,15 +372,39 @@ internal sealed class MainWindow : Form, ISurface
         Theme.StyleWindow(this);
     }
 
-    internal void ToggleTheme()
+    internal void ToggleTheme() => SetTheme(Theme.IsDark ? Theme.Light : Theme.Dark);
+
+    /// <summary>The rail's 浅色/深色 and 设置 → 外观: saved, then applied.</summary>
+    internal void SetTheme(string mode)
     {
-        _transition.Run(this, () =>
+        mode = Theme.Normalize(mode);
+        _app.Config.Theme = mode;
+        _app.Config.Save(); // before the cover goes up: no file written while the window waits under it
+        ChangeTheme(mode, () =>
         {
-            _app.Config.Theme = Theme.IsDark ? Theme.Light : Theme.Dark;
-            _app.Config.Save();
-            Theme.Mode = _app.Config.Theme;
+            Theme.Mode = mode;
             _settings.ShowTheme();
         });
+    }
+
+    /// <summary>Windows switched light/dark or its accent (Theme.SystemChanged): with 跟随 Windows, faded like the others.</summary>
+    private void OnSystemTheme()
+    {
+        if (!IsDisposed) ChangeTheme(Theme.Mode, Theme.Refresh);
+    }
+
+    /// <summary>Every theme change of the window goes through the fade, when it changes the colours.</summary>
+    private void ChangeTheme(string mode, Action change)
+    {
+        if (Theme.Changes(mode)) _transition.Run(this, change);
+        else change();
+    }
+
+    /// <summary>Once the message being handled is done (posted), or now while the window has no handle.</summary>
+    private void Later(Action action)
+    {
+        if (IsHandleCreated && !IsDisposed) BeginInvoke(action);
+        else action();
     }
 
     private void OnThemeChanged()
@@ -534,6 +566,7 @@ internal sealed class MainWindow : Form, ISurface
         if (disposing)
         {
             Theme.Changed -= OnThemeChanged;
+            Theme.SystemChanged -= OnSystemTheme;
             _transition.Dispose();
             StopPreparing();
             _prepare.Dispose();

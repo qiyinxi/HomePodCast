@@ -32,6 +32,9 @@ internal sealed class SettingsPage : ScrollPage
     private readonly SettingRow _hotkeysRow;
     public void ShowTheme() => _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(_app.Config.Theme));
 
+    /// <summary>外观 chosen ("auto", "light" or "dark"); without a handler the page saves and applies it itself.</summary>
+    public event Action<string>? ThemeChosen;
+
     public SettingsPage(TrayApp app, bool logicalLayout = true) : base(L.T("设置"))
     {
         _app = app;
@@ -93,6 +96,11 @@ internal sealed class SettingsPage : ScrollPage
         _theme.SelectionChangeCommitted += (_, _) =>
         {
             var mode = ThemeModes[Math.Max(0, _theme.SelectedIndex)];
+            if (ThemeChosen is { } chosen)
+            {
+                chosen(mode); // the main window: saved and faded in, as its rail's 浅色/深色
+                return;
+            }
             _app.Config.Theme = mode;
             _app.Config.Save();
             Theme.Mode = mode;

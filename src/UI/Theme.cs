@@ -65,19 +65,43 @@ internal static partial class Theme
         {
             if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle)
             {
-                if (_ui != null) _ui.Post(_ => Refresh(), null);
-                else Refresh();
+                if (_ui != null) _ui.Post(_ => SystemChange(), null);
+                else SystemChange();
             }
         };
     }
 
+    /// <summary>
+    /// Windows' light/dark, accent or visual style may have changed (on the UI thread). A handler applies it itself with
+    /// <see cref="Refresh"/>: the main window, faded like its own theme switch (until 2026-10-27, 跟随 Windows switched at once,
+    /// and the window repainted one control at a time). Without one it applies at once.
+    /// </summary>
+    public static event Action? SystemChanged;
+
+    internal static void SystemChange()
+    {
+        if (SystemChanged is { } handlers) handlers();
+        else Refresh();
+    }
+
     public static void Refresh()
     {
-        bool dark = _mode == Dark || _mode == Auto && SystemUsesDark();
-        var p = Build(dark, ReadAccent(dark));
+        var p = Current(_mode);
         if (p == P) return;
         P = p;
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// <see cref="Mode"/> set to <paramref name="mode"/> (or <see cref="Refresh"/> with it) would change the colours. Windows
+    /// sends General for many unrelated settings, and 跟随 Windows can give the theme already shown: nothing to fade then.
+    /// </summary>
+    public static bool Changes(string mode) => Current(Normalize(mode)) != P;
+
+    private static Palette Current(string mode)
+    {
+        bool dark = mode == Dark || mode == Auto && SystemUsesDark();
+        return Build(dark, ReadAccent(dark));
     }
 
     /// <summary>HKCU\…\Themes\Personalize AppsUseLightTheme (0 = dark).</summary>
