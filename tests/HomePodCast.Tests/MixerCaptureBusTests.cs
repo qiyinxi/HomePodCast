@@ -65,12 +65,129 @@ public sealed class MixerCaptureBusTests
     public void Mic_is_read_once_per_cycle_and_copied_to_each_bus()
     {
         var mic = new FakeMic(); var sources = new MixSources(); sources.Add(mic);
-        using var hub = new MixerCaptureHub(44100, _ => new FakeInput(0), sources);
+        long now = 0;
+        using var hub = new MixerCaptureHub(44100, _ => new FakeInput(0), sources) { Clock = () => now };
         var a = Fifo(); var b = Fifo();
         using var ca = hub.Subscribe("a", a); using var cb = hub.Subscribe("b", b); ca.Start(); cb.Start();
         hub.Cycle();
+        Assert.Equal(0, a.Depth);   // no app plays to either: an empty cycle alone writes nothing
+        now += Ms(30);
+        hub.Cycle();
         Assert.Equal(1, mic.Reads);
+        Assert.Equal(1323, a.Depth); Assert.Equal(1323, b.Depth);   // the 30 ms since, on the wall clock
         AssertConstant(Read(a, 200), .25f); AssertConstant(Read(b, 200), .25f);
+    }
+
+    [Fact]
+    public void Each_bus_gets_every_mic_frame_once_whatever_it_writes_per_cycle()
+    {
+        // 2026-10-27 review: the hub read a fixed 441 mic frames per cycle and cut or padded them to what each bus
+        // wrote, so a bus writing two packets in one cycle got a 10 ms hole in the voice. Bus a also goes idle for
+        // five cycles and carries the mic alone meanwhile; bus b's packets come at other times than a's.
+        var mic = new RampMic(); var sources = new MixSources(); sources.Add(mic);
+        int[] a = [441, 0, 882, 441, 441, 0, 882, 441, 0, 0, 0, 0, 0, 441, 441, 441, 0, 882, 441, 441];
+        int[] b = [882, 0, 441, 441, 882, 0, 441, 441, 441, 441, 0, 882, 441, 441, 0, 882, 441, 441, 441, 441];
+        int cycle = 0;
+        long now = 0;
+        using var hub = new MixerCaptureHub(44100, t => new PacketInput(t.RootPid == 1 ? a : b, () => cycle), sources,
+            steerClock: false) { Clock = () => now };
+        var fa = Fifo(); var fb = Fifo();
+        using var ca = hub.Subscribe("a", fa); using var cb = hub.Subscribe("b", fb); ca.Start(); cb.Start();
+        hub.Apply(new(1, [Root(1, "a"), Root(2, "b")]));
+        var heardA = new List<float>(); var heardB = new List<float>();
+        for (cycle = 0; cycle < 400; cycle++)
+        {
+            now += Ms(10);
+            hub.Cycle();
+            Drain(fa, heardA); Drain(fb, heardB);
+        }
+        AssertRamp(heardA); AssertRamp(heardB);
+        Assert.InRange(heardA.Count / 2, 400 * 441 - 63 - 1323, 400 * 441);
+        Assert.InRange(heardB.Count / 2, 400 * 441 - 63 - 1323, 400 * 441);
+        Assert.InRange(mic.Frames, 400 * 441 - 63, 400 * 441 + 1323);   // real time, as far as the busier bus
+    }
+
+    [Fact]
+    public void A_destination_that_drifts_behind_skips_single_mic_frames_and_stays_close()
+    {
+        // Each destination's resampler follows its own receiver: one that runs slower writes fewer frames, and would
+        // fall further and further behind the mic the other one keeps fresh.
+        var mic = new RampMic(); var sources = new MixSources(); sources.Add(mic);
+        int cycle = 0;
+        long now = 0;
+        using var hub = new MixerCaptureHub(44100, t => new PacketInput(t.RootPid == 1 ? [441] : [440], () => cycle), sources,
+            steerClock: false) { Clock = () => now };
+        var fa = Fifo(); var fb = Fifo();
+        using var ca = hub.Subscribe("a", fa); using var cb = hub.Subscribe("b", fb); ca.Start(); cb.Start();
+        hub.Apply(new(1, [Root(1, "a"), Root(2, "b")]));
+        var heardA = new List<float>(); var heardB = new List<float>();
+        for (cycle = 0; cycle < 3000; cycle++)
+        {
+            now += Ms(10);
+            hub.Cycle();
+            Drain(fa, heardA); Drain(fb, heardB);
+        }
+        AssertRamp(heardA);
+        int skipped = 0;
+        for (int i = 2; i < heardB.Count; i += 2)
+        {
+            int step = RampMic.Distance(heardB[i - 2], heardB[i]);
+            Assert.InRange(step, 1, 2);
+            skipped += step - 1;
+        }
+        int behind = RampMic.Distance(heardB[^2], heardA[^2]);
+        Assert.InRange(behind, 1300, 1324);   // 30 ms at most: the rest went one frame at a time
+        Assert.InRange(skipped, 3000 - 1323 - 64, 3000 - 1323);
+    }
+
+    [Fact]
+    public void A_live_input_a_cycle_or_two_late_gets_no_silence_in_front_of_its_audio()
+    {
+        var sources = new MixSources(); sources.Add(new FakeMic { Value = 0 });   // the mic is on, quiet
+        int[] packets = [441, 441, 0, 882, 441, 0, 0, 1323, 441, 441];
+        int cycle = 0;
+        long now = 0;
+        using var hub = new MixerCaptureHub(44100, _ => new PacketInput(packets, () => cycle, .1f), sources,
+            steerClock: false) { Clock = () => now };
+        var fifo = Fifo(); using var bus = hub.Subscribe("a", fifo); bus.Start();
+        hub.Apply(new(1, [Root(1, "a")]));
+        var heard = new List<float>();
+        for (cycle = 0; cycle < 200; cycle++)
+        {
+            now += Ms(10);
+            hub.Cycle();
+            Drain(fifo, heard);
+        }
+        AssertConstant([.. heard], .1f);                 // the app's audio only, nothing between its packets
+        Assert.Equal(200 * 441 - 63, heard.Count / 2);   // every frame once (the resampler holds 63 back)
+    }
+
+    [Fact]
+    public void An_idle_destination_carries_the_mic_in_real_time_and_nothing_while_it_is_off()
+    {
+        var mic = new FakeMic(); var sources = new MixSources(); sources.Add(mic);
+        long now = 0;
+        using var hub = new MixerCaptureHub(44100, _ => new FakeInput(0), sources) { Clock = () => now };
+        var fifo = Fifo(); using var bus = hub.Subscribe("a", fifo); bus.Start();
+        var heard = new List<float>();
+        // The capture thread's cycles run 10-20 ms apart: at 441 frames each the speaker ran dry.
+        for (int i = 0; i < 400; i++)
+        {
+            now += Ms(i % 2 == 0 ? 10 : 15);
+            hub.Cycle();
+            Drain(fifo, heard);
+        }
+        Assert.InRange(heard.Count / 2, 220500 - 2, 220500 + 2);   // 5 s
+        AssertConstant([.. heard], .25f);
+
+        mic.On = false;   // a closed mic: an idle destination writes no silence of its own
+        for (int i = 0; i < 100; i++) { now += Ms(12); hub.Cycle(); }
+        Assert.Equal(0, fifo.Depth);
+        mic.On = true;
+        now += Ms(10); hub.Cycle(); now += Ms(10); hub.Cycle();
+        Assert.Equal(0, fifo.Depth);                     // back after a 20 ms gap
+        for (int i = 0; i < 6; i++) { now += Ms(10); hub.Cycle(); }
+        Assert.InRange(fifo.Depth, 3528 - 1, 3528 + 1);  // then all 80 ms since it came back
     }
 
     [Fact]
@@ -193,6 +310,23 @@ public sealed class MixerCaptureBusTests
     internal static float[] Read(AudioFifo fifo, int frames)
     { var data = new float[frames * 2]; Assert.True(fifo.Read(data)); return data; }
     private static void AssertConstant(float[] values, float expected) => Assert.All(values, v => Assert.InRange(v, expected - .0001f, expected + .0001f));
+    private static long Ms(double ms) => (long)(ms * System.Diagnostics.Stopwatch.Frequency / 1000);
+    /// <summary>Everything the bus wrote since the last call (as a sender would hear it).</summary>
+    private static void Drain(AudioFifo fifo, List<float> heard)
+    {
+        int frames = fifo.Depth;
+        if (frames == 0) return;
+        var data = new float[frames * 2];
+        Assert.True(fifo.Read(data));
+        heard.AddRange(data);
+    }
+    private static void AssertRamp(List<float> heard)
+    {
+        Assert.Equal(0, heard[0]);
+        for (int i = 2; i < heard.Count; i += 2)
+            if (RampMic.Distance(heard[i - 2], heard[i]) != 1 || heard[i + 1] != heard[i])
+                Assert.Fail($"mic frame {i / 2}: {RampMic.Number(heard[i - 2])} then {RampMic.Number(heard[i])}");
+    }
     internal sealed class FakeInput(float marker) : IMixerProcessInput
     {
         private readonly float[] _samples = Enumerable.Repeat(marker, 882).ToArray();
@@ -202,5 +336,32 @@ public sealed class MixerCaptureBusTests
         public void Dispose() => Disposals++;
     }
     private sealed class FakeMic : IMixSource
-    { public int Reads; public void Read(Span<float> dest) { Reads++; dest.Fill(.25f); } }
+    {
+        public int Reads;
+        public float Value = .25f;
+        public bool On = true;
+        public bool HasAudio => On;
+        public void Read(Span<float> dest) { Reads++; dest.Fill(Value); }
+    }
+    /// <summary>Numbers its frames (0.5 s around), so a gap or a repeat shows.</summary>
+    private sealed class RampMic : IMixSource
+    {
+        public const float Step = 1e-5f;
+        public const int Modulo = 50_000;
+        public long Frames;
+        public void Read(Span<float> dest)
+        { for (int i = 0; i < dest.Length; i += 2) dest[i] = dest[i + 1] = Frames++ % Modulo * Step; }
+        public static int Number(float sample) => (int)Math.Round(sample / Step);
+        public static int Distance(float from, float to) => (Number(to) - Number(from) + Modulo) % Modulo;
+    }
+    /// <summary>An app whose packets arrive unevenly: so many frames in each cycle, in turn.</summary>
+    private sealed class PacketInput(int[] frames, Func<int> cycle, float marker = 0) : IMixerProcessInput
+    {
+        public bool Drain(List<float> samples)
+        {
+            for (int i = frames[cycle() % frames.Length] * 2; i > 0; i--) samples.Add(marker);
+            return true;
+        }
+        public void Dispose() { }
+    }
 }
