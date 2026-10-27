@@ -344,6 +344,8 @@ public sealed class AppConfig
         cfg.AppSendVolumes ??= [];
         cfg.AppSendVolumesOff ??= [];
         cfg.Effects ??= new();
+        // As Audio.AppRouting reads it: the playback config (TrayApp.PlaybackConfig) shows this one, never a copy of it.
+        cfg.CaptureDeviceId = string.IsNullOrWhiteSpace(cfg.CaptureDeviceId) ? null : cfg.CaptureDeviceId.Trim();
         cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
         AvCalibrations.Normalize(cfg);
         GroupSettings.Normalize(cfg);

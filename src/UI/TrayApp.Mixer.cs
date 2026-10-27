@@ -8,11 +8,16 @@ internal sealed partial class TrayApp
     private StreamController? _legacyController;
     private string? _legacyDestinationKey;
     internal MixerOutputCoordinator? Mixer { get; private set; }
+    /// <summary>
+    /// The config of what plays now: the selected mixer destination's, with the app-wide settings laid over it, or the app's
+    /// own. Read on other threads too (PlayerSync's poll, the local API), so the app's own is returned as it is: 2026-10-27,
+    /// writing the routing's capture device back into it undid a usage profile's device between its apply and Routing.Reload.
+    /// </summary>
     internal AppConfig PlaybackConfig
     {
         get
         {
-            var selected = Mixer?.SelectedConfig ?? Config;
+            if (Mixer?.SelectedConfig is not { } selected) return Config;
             selected.SyncCalibrations = Config.SyncCalibrations;
             selected.ReceiverSettings = Config.ReceiverSettings;
             selected.VideoDelayExtraMs = Config.VideoDelayExtraMs;
