@@ -451,7 +451,8 @@ internal sealed partial class Walker
         {
             foreach (string text in new[] { "麦克风监听", "输入设备", "输出到", "本机输出设备", "麦克风监听已关闭。",
                          "每次启动 HomePodCast 时麦克风默认关闭。", "衰减（Room Size）", "高频阻尼（Damping）",
-                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡" })
+                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡", "低切", "压缩器", "齿音消除", "限制器",
+                         "输入电平", "输出电平", "频率响应" })
                 Expect(Has(page, T(text)), name, $"missing microphone control or explanation: {T(text)}");
             Expect(!Has(page, T("HomePod 输出均衡")), name, "output EQ is still on the microphone page");
             var route = Find(page, n => n.Name == T("输出到") && n.Type == "List");
@@ -461,7 +462,8 @@ internal sealed partial class Walker
         }
         else
         {
-            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。" })
+            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。",
+                         "频率响应", "频率", "增益", "Q 值", "类型", "输出增益" })
                 Expect(Has(page, T(text)), name, $"missing output EQ control or scope: {T(text)}");
             Expect(!Has(page, T("麦克风均衡")), name, "microphone EQ is on the output page");
         }

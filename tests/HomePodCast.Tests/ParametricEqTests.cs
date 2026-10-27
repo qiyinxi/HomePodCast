@@ -196,6 +196,23 @@ public class ParametricEqTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void A_NaN_sample_does_not_silence_everything_after_it()
+    {
+        var eq = new Equalizer(Rate);
+        eq.SetBands([new EqBand(EqFilterType.Peak, 200, 6, 1), new EqBand(EqFilterType.LowCut, 50, Slope: 24)]);
+        var deEsser = new DeEsser(Rate) { Enabled = true, ThresholdDb = -60 };
+        var x = Signals.Sine(Rate, 300, 4096, 0.5);
+        x[100] = float.NaN;
+        x[201] = float.PositiveInfinity;
+        eq.Process(x, 2048);
+        deEsser.Process(x, 2048);
+        var y = Signals.Sine(Rate, 300, 4096, 0.5);
+        eq.Process(y, 4096);
+        deEsser.Process(y, 4096);
+        Assert.All(y, v => Assert.True(float.IsFinite(v)));
+    }
+
+    [Fact]
     public void Bands_are_kept_in_their_ranges()
     {
         var band = new EqBand((EqFilterType)99, double.NaN, 99, 0, Slope: 100).Normalized();

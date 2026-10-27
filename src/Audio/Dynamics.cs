@@ -240,7 +240,24 @@ public sealed class DeEsser : IAudioEffect
         }
     }
 
-    private static double Flush(double v) => Math.Abs(v) < 1e-25 ? 0 : v;
+    /// <summary>Tiny state to 0 (no subnormals), and a NaN or infinity from the input to 0 so it doesn't stay for good.</summary>
+    private static double Flush(double v) => Math.Abs(v) < 1e-25 || !double.IsFinite(v) ? 0 : v;
+}
+
+/// <summary>The level at a point of the chain (decaying peak, 0..1) for a meter; passes the audio unchanged.</summary>
+public sealed class PeakMeter : IAudioEffect
+{
+    private float _peak;
+
+    public float Peak => _peak;
+
+    public void Process(Span<float> interleaved, int frames)
+    {
+        float peak = 0f;
+        var x = interleaved[..(frames * 2)];
+        for (int i = 0; i < x.Length; i++) peak = MathF.Max(peak, MathF.Abs(x[i]));
+        _peak = MathF.Max(_peak * 0.9f, float.IsFinite(peak) ? peak : 0f);
+    }
 }
 
 /// <summary>

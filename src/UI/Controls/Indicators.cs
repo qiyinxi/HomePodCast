@@ -49,6 +49,50 @@ internal sealed class LevelMeter : PaintedControl
     }
 }
 
+/// <summary>
+/// Gain reduction of a compressor, de-esser or limiter: a bar from the left, 0 to <see cref="RangeDb"/> dB, in the caution
+/// colour; fast attack, slow release like <see cref="LevelMeter"/>.
+/// </summary>
+internal sealed class ReductionMeter : PaintedControl
+{
+    private float _shown;
+
+    public ReductionMeter()
+    {
+        SetStyle(ControlStyles.Selectable, false);
+        TabStop = false;
+        AccessibleRole = AccessibleRole.ProgressBar;
+    }
+
+    public float RangeDb { get; set; } = 24;
+
+    /// <summary>The reduction being shown (dB, ≥ 0).</summary>
+    public float ShownDb => _shown * RangeDb;
+
+    public void SetReduction(float db)
+    {
+        float level = Math.Clamp(db / RangeDb, 0f, 1f);
+        float shown = level > _shown ? level : _shown * 0.8f + level * 0.2f;
+        if (shown < 0.002f) shown = 0;
+        if (Math.Abs(shown - _shown) < 0.001f) return;
+        _shown = shown;
+        AccessibleDescription = L.F("衰减 {0:0.0} dB", ShownDb);
+        Repaint();
+    }
+
+    public override Size GetPreferredSize(Size proposedSize) => new(Dp(120), Dp(8));
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        int t = Dp(4);
+        var r = new Rectangle(0, (Height - t) / 2, Width, t);
+        Shapes.FillRound(g, P.MeterTrack, r, t / 2f);
+        int w = (int)(Width * _shown);
+        if (w > 0) Shapes.FillRound(g, P.Caution, new Rectangle(r.X, r.Y, Math.Max(w, t), t), t / 2f);
+    }
+}
+
 /// <summary>A small labelled number (stream statistics). Shows "—" when there is no value.</summary>
 internal sealed class MetricTile : PaintedControl
 {

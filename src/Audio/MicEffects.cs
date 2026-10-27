@@ -10,6 +10,12 @@ public sealed class EffectsSettings
 {
     /// <summary>Input device id; null = the default input.</summary>
     public string? MicDeviceId { get; set; }
+
+    /// <summary>
+    /// Which input of a multi-channel device is the mic: 0-based, or −1 for all of them mixed. An audio interface's
+    /// "Analogue 1 + 2" is one stereo device; a mic on input 2 was silent when only the first channel was read.
+    /// </summary>
+    public int MicChannel { get; set; }
     public double MicGainDb { get; set; }
     public bool GateEnabled { get; set; }
     public double GateThresholdDb { get; set; } = -50;
@@ -132,8 +138,11 @@ public sealed class MicEffects : IDisposable
     public Reverb Reverb { get; } = new(MicCapture.OutputRate);
     public PeakLimiter Limiter { get; } = new(MicCapture.OutputRate);
 
+    /// <summary>The voice's level after the whole chain (输出电平).</summary>
+    public PeakMeter OutputMeter { get; } = new();
+
     /// <summary>The voice chain after the gate, in order (what the mic runs on every packet).</summary>
-    internal IAudioEffect[] Chain => [LowCut, MicEq, Compressor, DeEsser, Reverb, Limiter];
+    internal IAudioEffect[] Chain => [LowCut, MicEq, Compressor, DeEsser, Reverb, Limiter, OutputMeter];
 
     /// <summary>EQ for everything sent to the HomePod: call OutputEq.Process on the mixed 44.1 kHz stereo before sending.</summary>
     public Equalizer OutputEq { get; } = new(MicCapture.OutputRate);

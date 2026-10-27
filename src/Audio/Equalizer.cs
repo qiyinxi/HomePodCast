@@ -684,6 +684,9 @@ public sealed class Equalizer : IAudioEffect
             x[i * 2] = (float)outL;
             x[i * 2 + 1] = (float)outR;
         }
+        // A NaN or infinite input sample (a driver, an APO, a virtual mic) would stay in the state for good and silence
+        // everything after it: start over from rest instead.
+        if (!double.IsFinite(l1 + l2 + r1 + r2)) l1 = l2 = r1 = r2 = 0;
         // Flush tiny state so silence never decays into (slow) subnormal arithmetic.
         s.ZL1 = Math.Abs(l1) < 1e-25 ? 0 : l1;
         s.ZL2 = Math.Abs(l2) < 1e-25 ? 0 : l2;

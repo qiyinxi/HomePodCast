@@ -113,7 +113,7 @@ public class DynamicsTests(ITestOutputHelper output)
             LimiterEnabled = true, LimiterCeilingDb = -2, LimiterReleaseMs = 40,
         };
         using var fx = new MicEffects(settings);
-        Assert.Equal<IAudioEffect>([fx.LowCut, fx.MicEq, fx.Compressor, fx.DeEsser, fx.Reverb, fx.Limiter], fx.Chain);
+        Assert.Equal<IAudioEffect>([fx.LowCut, fx.MicEq, fx.Compressor, fx.DeEsser, fx.Reverb, fx.Limiter, fx.OutputMeter], fx.Chain);
         Assert.Equal(new EqBand(EqFilterType.LowCut, 120, Slope: 24), fx.LowCut.Bands.Single());
         Assert.Equal((true, -30f, 6f, 2f, 300f, 3f, 5f), (fx.Compressor.Enabled, fx.Compressor.ThresholdDb, fx.Compressor.Ratio,
             fx.Compressor.AttackMs, fx.Compressor.ReleaseMs, fx.Compressor.KneeDb, fx.Compressor.MakeupDb));
