@@ -12,8 +12,10 @@ public sealed class MixIn(AudioTap source) : IAudioEffect
     public void Process(Span<float> interleaved, int frames)
     {
         int n = frames * 2;
-        if (n > _buffer.Length) return; // never on the sender path (352 frames per packet)
+        if (n > _buffer.Length) return; // never on a sender path (352 frames per realtime packet, 1024 buffered)
         var mic = _buffer.AsSpan(0, n);
+        // A buffered AirPlay 2 session reads 1024 frames per packet, more than the tap's 20 ms target covers.
+        source.EnsureReadFrames(frames);
         source.Read(mic);
         for (int i = 0; i < n; i++) interleaved[i] += mic[i];
     }

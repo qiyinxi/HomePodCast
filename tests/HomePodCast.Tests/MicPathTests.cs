@@ -201,6 +201,59 @@ public class MicPathTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Tap_read_in_buffered_1024_frame_packets_does_not_underrun()
+    {
+        // 2026-10-27 review: a buffered AirPlay 2 session's MixIn reads 1024 frames per packet (every 23.2 ms) from
+        // the 20 ms (882-frame) HomePod tap, which underran on every packet. Producer: 441 frames every 10 ms.
+        var tap = new AudioTap(44100, 44100, targetMs: 20, capMs: 80);
+        long now = 1;
+        tap.Clock = () => now;
+        var mix = new MixIn(tap);
+        long tick = Stopwatch.Frequency / 10_000;   // 0.1 ms
+        var chunk = Signals.Sine(44100, 440, 441, 0.2);
+        var packet = new float[1024 * 2];
+        double owed = 0;
+        void Run(int seconds, int frames)
+        {
+            for (int t = 0; t < seconds * 10_000; t++)
+            {
+                now += tick;
+                if (t % 100 == 0) tap.Write(chunk);
+                owed += 4.41;
+                if (owed < frames) continue;
+                owed -= frames;
+                mix.Process(packet.AsSpan(0, frames * 2), frames);
+            }
+        }
+        Run(2, 1024);
+        long underrunsAfterStart = tap.Underruns;
+        Run(60, 1024);
+        output.WriteLine($"target {tap.TargetFrames}, depth {tap.AverageDepth:F0}, drift {tap.DriftPpm:F0} ppm, start-up underruns {underrunsAfterStart}");
+        Assert.Equal(underrunsAfterStart, tap.Underruns);
+        Assert.Equal(0, tap.Overflows);
+        Assert.Equal(1024 + 221 + 88, tap.TargetFrames);   // one read, half a write, 2 ms
+
+        // Back on a realtime HomePod (352-frame packets): a second later the configured 20 ms target returns, and
+        // the surplus drains through the drift control without dropping audio.
+        Run(1, 352);
+        Assert.Equal(1024 + 221 + 88, tap.TargetFrames);
+        Run(2, 352);
+        Assert.Equal(882, tap.TargetFrames);
+        Assert.Equal(3528, tap.CapFrames);
+        Assert.Equal(0, tap.Overflows);
+        Assert.Equal(underrunsAfterStart, tap.Underruns);
+
+        // Attaching again (a new mic) starts from the configured values too; a target set by hand is left alone.
+        mix.Process(packet, 1024);
+        Assert.True(tap.TargetFrames > 882);
+        tap.Clear();
+        Assert.Equal(882, tap.TargetFrames);
+        var monitor = new AudioTap(44100, 48000, 0, 0) { TargetFrames = 500, CapFrames = 2000 };
+        monitor.Clear();
+        Assert.Equal((500, 2000), (monitor.TargetFrames, monitor.CapFrames));
+    }
+
+    [Fact]
     public void Tap_absorbs_clock_drift_without_dropouts()
     {
         // Producer: 441 frames every 10 ms of its clock. Consumer: the sender's 352-frame packets, its

@@ -39,6 +39,9 @@ public sealed class AudioTap
     private volatile bool _resetResampler;
     private double _avgDepth, _integral;
     private long _lastSteer, _lastWrite, _lastRead;
+    private double _writeFrames;                // average write, in output frames (0 = none yet)
+    private int _configuredTarget = -1, _configuredCap; // while EnsureReadFrames has raised the target
+    private long _lastLargeRead;
 
     /// <summary>Time source (QPC ticks); tests replace it to simulate hours of drift in milliseconds.</summary>
     internal Func<long> Clock = Stopwatch.GetTimestamp;
@@ -113,6 +116,7 @@ public sealed class AudioTap
             data[..(first * 2)].CopyTo(_buf.AsSpan(write * 2));
             data[(first * 2)..].CopyTo(_buf);
             _count += frames;
+            if (frames > 0) _writeFrames = _writeFrames == 0 ? frames : _writeFrames + 0.1 * (frames - _writeFrames);
             if (_count > CapFrames)
             {
                 int drop = _count - TargetFrames;
@@ -171,6 +175,44 @@ public sealed class AudioTap
         }
     }
 
+    /// <summary>
+    /// Consumer: it is about to read <paramref name="frames"/> at once. While that is more than the target covers
+    /// (one read, half an average write and 2 ms of jitter), raises <see cref="TargetFrames"/> to it, and the cap to
+    /// at least 40 ms above; back to the configured values once reads have fit them again for a second, or at
+    /// <see cref="Clear"/>. 2026-10-27 review: a buffered AirPlay 2 session reads 1024 frames per packet from the
+    /// mic's 20 ms (882-frame) tap and underran on every packet (~3 ms of silence and ~3 ms of voice lost each
+    /// time); a fixed larger target would add that latency to the realtime path's 352-frame reads too.
+    /// </summary>
+    public void EnsureReadFrames(int frames)
+    {
+        lock (_lock)
+        {
+            long now = Clock();
+            double write = _writeFrames > 0 ? _writeFrames : OutputRate / 100.0; // a 10 ms packet until one came
+            int need = frames + (int)Math.Ceiling(write / 2) + OutputRate / 500;
+            int configured = _configuredTarget >= 0 ? _configuredTarget : TargetFrames;
+            if (need > configured)
+            {
+                _lastLargeRead = now;
+                if (need <= TargetFrames) return;
+                if (_configuredTarget < 0) (_configuredTarget, _configuredCap) = (TargetFrames, CapFrames);
+                TargetFrames = need;
+                CapFrames = Math.Max(CapFrames, need + OutputRate / 25);
+            }
+            else if (_configuredTarget >= 0 && now - _lastLargeRead > Stopwatch.Frequency)
+            {
+                // The surplus drains through the drift control (≤ 1000 ppm), without a skip.
+                RestoreTarget();
+            }
+        }
+    }
+
+    private void RestoreTarget()
+    {
+        (TargetFrames, CapFrames) = (_configuredTarget, _configuredCap);
+        _configuredTarget = -1;
+    }
+
     public void Clear()
     {
         lock (_lock)
@@ -178,6 +220,8 @@ public sealed class AudioTap
             _read = 0;
             _count = 0;
             _priming = true;
+            _writeFrames = 0;
+            if (_configuredTarget >= 0) RestoreTarget();
             _avgDepth = TargetFrames;
         }
         _resetResampler = true;
