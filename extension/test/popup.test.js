@@ -1,9 +1,51 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readyPopup } = require('./popup-harness');
+const { openPopup, readyPopup, settled, msg } = require('./popup-harness');
 
 const streaming = (videoDelayMs) => ({ running: true, streaming: true, device: 'HomePod', videoDelayMs });
+
+test('the popup says nothing about the page or the app before they have answered', async () => {
+  const p = openPopup();
+  await settled(); // asking the page
+  const waiting = { status: msg('statusConnecting'), state: 'unknown', hint: null, dimmed: false, delay: '—',
+    offset: '+0 ms', videos: '—' };
+  assert.deepEqual(p.view(), waiting);
+  p.answerPage({ host: 'example.test', videos: [] });
+  await settled(); // settings read, asking the app
+  assert.deepEqual(p.view(), { ...waiting, videos: msg('videosNone') });
+  p.answerStatus({ running: false });
+  await settled();
+  assert.deepEqual(p.view(), { ...waiting, status: msg('statusNotRunning'), state: 'off', hint: msg('hintNotRunning'),
+    videos: msg('videosNone') });
+
+  const idle = await readyPopup({ status: { running: true, streaming: false } });
+  assert.equal(idle.view().hint, msg('hintNotStreaming'));
+  const live = await readyPopup({ status: streaming(141) });
+  assert.equal(live.view().hint, null); assert.equal(live.view().delay, '141');
+});
+
+test('a page without the content script gets the reload hint once it has been asked, whatever the app says', async () => {
+  const p = openPopup();
+  await settled();
+  p.answerPage(undefined);
+  await settled();
+  assert.equal(p.view().hint, msg('hintUnavailable')); assert.equal(p.view().dimmed, true);
+  assert.equal(p.view().videos, '');
+  p.answerStatus(streaming(141));
+  await settled();
+  assert.equal(p.view().hint, msg('hintUnavailable')); assert.equal(p.view().delay, '—');
+});
+
+test('switched off on all sites or this one, the popup says so before the app answers', async () => {
+  const p = openPopup({ stored: { __global__: { enabled: false } } });
+  await settled();
+  p.answerPage({ host: 'example.test', videos: [] });
+  await settled();
+  assert.equal(p.view().hint, msg('hintGlobalOff')); assert.equal(p.view().delay, '0');
+  const site = await readyPopup({ status: streaming(141), stored: { 'example.test': { enabled: false } } });
+  assert.equal(site.view().hint, msg('hintSiteOff'));
+});
 
 test('the popup\'s −/+ never move a saved offset outside the bounds against the button pressed', async () => {
   // A compatibility delay above 2000 ms: the picture is pinned at 2000 ms, so only offsets of −250 and lower count.

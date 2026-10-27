@@ -41,6 +41,10 @@ class Node {
  */
 function openPopup({ stored = {}, getError = null, setError = null } = {}) {
   const nodes = Object.fromEntries(IDS.map((id) => [id, new Node(id)]));
+  // As popup.html has them before popup.js runs.
+  Object.assign(nodes.host, { textContent: '—' }); Object.assign(nodes.effDelay, { textContent: '—' });
+  Object.assign(nodes.offset, { textContent: '+0 ms' }); Object.assign(nodes.videos, { textContent: '—' });
+  nodes.hint.hidden = true; nodes.statusCard.dataset.state = 'unknown';
   const pending = { page: [], status: [] };
   const timers = new Map(); let nextTimer = 1;
   const data = structuredClone(stored); const writes = [];
@@ -119,6 +123,7 @@ function openPopup({ stored = {}, getError = null, setError = null } = {}) {
       dimmed: nodes.siteCard.classes.has('unavailable'),
       delay: nodes.effDelay.textContent,
       offset: nodes.offset.textContent,
+      videos: nodes.videos.textContent,
     }),
     // Keyboard presses of −/+ (a click with detail 0), as Enter or Space give.
     press: (id) => nodes[id].dispatch('click', { detail: 0 }),

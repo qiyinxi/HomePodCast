@@ -47,6 +47,7 @@ const el = {
 
 const state = {
   tabId: null,
+  pageChecked: false, // the page has answered (or has no content script to answer)
   host: null,
   status: null,
   videos: null,
@@ -155,8 +156,11 @@ function renderStatus() {
 }
 
 function renderSite() {
+  // Nothing is said about the page or the app before they have answered: guesses ("not available, reload", then "not
+  // running" under "Connecting…") would contradict the status and change the popup's height on every open.
+  const known = state.pageChecked;
   const available = !!state.host;
-  el.siteCard.classList.toggle('unavailable', !available);
+  el.siteCard.classList.toggle('unavailable', known && !available);
   el.host.textContent = available ? hostLabel(state.host) : '—';
   el.host.title = available ? hostLabel(state.host) : '';
   for (const b of [el.minus, el.plus, el.reset, el.siteToggle]) b.disabled = !available;
@@ -169,7 +173,9 @@ function renderSite() {
 
   let hint = '';
   const eff = effectiveDelay();
-  if (!available) {
+  if (!known) {
+    el.effDelay.textContent = '—';
+  } else if (!available) {
     el.effDelay.textContent = '—';
     hint = t('hintUnavailable');
   } else if (!state.globalEnabled) {
@@ -178,11 +184,11 @@ function renderSite() {
   } else if (!state.siteEnabled) {
     el.effDelay.textContent = '0';
     hint = t('hintSiteOff');
+  } else if (state.status === null) {
+    el.effDelay.textContent = '—'; // the app's answer decides the hint
   } else if (eff === null) {
     el.effDelay.textContent = '—';
-    hint = state.status && state.status.running !== false
-      ? t('hintNotStreaming')
-      : t('hintNotRunning');
+    hint = state.status.running === false ? t('hintNotRunning') : t('hintNotStreaming');
   } else {
     el.effDelay.textContent = String(eff);
     if (Number(state.status.videoDelayMs) + state.offset > MAX_DELAY_MS) hint = t('hintDelayLimit'); // experimental since 1.1
@@ -194,6 +200,7 @@ function renderSite() {
 
 function renderVideos() {
   const vids = state.videos;
+  if (!state.pageChecked) return; // keeps popup.html's '—' line: emptied, the popup would shrink and grow again
   if (!state.host) {
     el.videos.textContent = '';
     return;
@@ -336,6 +343,7 @@ async function init() {
       if (Array.isArray(page.videos)) state.videos = page.videos;
     }
   }
+  state.pageChecked = true;
 
   const keys = [GLOBAL_KEY];
   if (state.host) keys.push(state.host);
