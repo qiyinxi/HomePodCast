@@ -38,13 +38,36 @@ internal sealed partial class TrayApp
         }, null);
     }
 
-    private void SaveOwnSession()
+    private void SaveOwnSession() => SaveOwnSession(Controller);
+
+    private void SaveOwnSession(StreamController controller)
     {
-        _ownSessionLive = Controller.OwnSession.Live;
-        var record = Controller.OwnSession.Record(DateTime.UtcNow);
+        _ownSessionLive = controller.OwnSession.Live;
+        var record = controller.OwnSession.Record(DateTime.UtcNow);
         if (record == Config.LastOwnSession) return;
         Config.LastOwnSession = record;
-        Config.Save();
+        Config.TrySave();
+    }
+
+    /// <summary>
+    /// A controller the mixer made for a destination (the startup one is watched in InitTakeover): its session to the
+    /// selected speaker is saved as soon as it begins or ends, read from this controller, since Controller may be the idle
+    /// startup one again by the time the post runs. 2026-10-27: such sessions were saved only by the minute's timer, and
+    /// their end never, so a crash in their first minute left the next start taking our own session for another sender's.
+    /// </summary>
+    private void WatchOwnSession(StreamController controller)
+    {
+        bool live = false;
+        controller.Changed += () => _ui.Post(_ =>
+        {
+            if (_quitting || controller.OwnSession.Live == live) return;
+            live = !live;
+            // Only the selected speaker's: what the next start's controller restores. Forgotten (another sender took the
+            // speaker over): a record saved for that speaker goes.
+            string? selection = OwnSession.KeyOf(Config);
+            if (selection != null && (controller.OwnSession.Record(DateTime.UtcNow)?.Key ?? Config.LastOwnSession?.Key) == selection)
+                SaveOwnSession(controller);
+        }, null);
     }
 
     /// <summary>The PC goes to sleep (any thread): our session ends now as far as the speaker's flag is concerned.</summary>

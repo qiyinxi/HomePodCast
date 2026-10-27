@@ -112,6 +112,9 @@ internal sealed partial class TrayApp
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
             controller.Changed += () => _ui.Post(_ => { if (!_quitting) RememberMixerSession(destination.Key, config, controller); }, null);
+            // The startup controller's are wired in InitFirewall and InitTakeover; one made here needs its own.
+            WatchFirewall(controller, () => config.Host);
+            WatchOwnSession(controller);
             controller.HostResolved += host =>
             {
                 config.Host = host;
