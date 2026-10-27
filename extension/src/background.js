@@ -14,11 +14,14 @@
 const STATUS_URL = 'http://127.0.0.1:47100/v1/status';
 const TIMEOUT_MS = 800;
 const CACHE_MS = 500;
+const TIMEOUT_GRACE_MS = 2500;
 const REPORT_TTL_MS = 3000;
 
 let cached = null;
 let cachedAt = 0;
 let inflight = null;
+let lastGood = null; // the app's last answer, for a timeout within TIMEOUT_GRACE_MS of it
+let lastGoodAt = 0;
 
 /** tabId -> Map(frameId -> {at, videos}) */
 const reports = new Map();
@@ -28,12 +31,21 @@ async function fetchStatus() {
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(STATUS_URL, { signal: ctrl.signal, cache: 'no-store', credentials: 'omit' });
-    if (!res.ok) return { running: false };
-    const json = await res.json();
-    if (!json || typeof json !== 'object' || json.app !== 'HomePodCast') return { running: false };
-    return { ...json, running: true };
-  } catch (_) {
-    return { running: false }; // 连接被拒绝 / 超时：HomePodCast 未运行
+    const json = res.ok ? await res.json() : null;
+    if (!json || typeof json !== 'object' || json.app !== 'HomePodCast') {
+      lastGood = null;
+      return { running: false };
+    }
+    lastGood = { ...json, running: true };
+    lastGoodAt = Date.now();
+    return lastGood;
+  } catch (e) {
+    // A refused connection: HomePodCast is not running, and the delay goes at once. A timeout is an app that answers
+    // slowly (a stalled thread pool under game load): its last answer holds a little longer, because {running:false}
+    // would switch the picture delay off and on again (the picture jumps ahead, then freezes until the buffer refills).
+    if (e && e.name === 'AbortError' && lastGood && Date.now() - lastGoodAt < TIMEOUT_GRACE_MS) return lastGood;
+    lastGood = null;
+    return { running: false };
   } finally {
     clearTimeout(timer);
   }
