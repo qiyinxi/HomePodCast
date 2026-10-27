@@ -31,6 +31,41 @@ public class UsageProfileTests
     }
 
     [Fact]
+    public void Every_mic_and_EQ_setting_is_restored_by_a_profile()
+    {
+        var c = new AppConfig();
+        var s = c.Effects;
+        // A non-default value for every property, so a setting missing from the copy shows up.
+        foreach (var p in typeof(EffectsSettings).GetProperties().Where(p => p.CanWrite))
+        {
+            object? value = p.PropertyType switch
+            {
+                var t when t == typeof(bool) => !(bool)p.GetValue(s)!,
+                var t when t == typeof(double) => (double)p.GetValue(s)! + 1.5,
+                var t when t == typeof(int) => (int)p.GetValue(s)! + 12,
+                var t when t == typeof(string) => "device-" + p.Name,
+                var t when t == typeof(MicDestination) => MicDestination.Both,
+                var t when t == typeof(EqSettings) => new EqSettings
+                {
+                    Preset = "custom", OutputGainDb = -4, Enabled = false,
+                    Bands = [new() { Type = EqFilterType.Notch, Frequency = 456, Q = 7 }],
+                },
+                _ => throw new InvalidOperationException($"no test value for {p.Name} ({p.PropertyType})"),
+            };
+            p.SetValue(s, value);
+        }
+        string expected = JsonSerializer.Serialize(s);
+        var saved = UsageProfiles.Capture(c);
+        c.Effects = new EffectsSettings();
+        var engineSettings = c.Effects;
+        UsageProfiles.Apply(c, saved);
+        Assert.Same(engineSettings, c.Effects);
+        Assert.Equal(expected, JsonSerializer.Serialize(c.Effects));
+        c.Effects.MicEq.Bands![0].Frequency = 1000;
+        Assert.Equal(456, saved.Effects.MicEq.Bands![0].Frequency); // the profile keeps its own bands
+    }
+
+    [Fact]
     public void Profiles_do_not_copy_credentials_startup_updates_or_global_calibration()
     {
         var source = new AppConfig { Language = "ja", Theme = "dark", AutoConnect = true, VlcPasswordProtected = "secret",

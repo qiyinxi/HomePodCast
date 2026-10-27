@@ -102,7 +102,7 @@ internal sealed partial class TrayApp
         }
         if (!useLegacy)
         {
-            var eq = new Equalizer(44100); eq.Set(Config.Effects.OutputEq);
+            var eq = new Equalizer(44100); ConfigureOutputEq(eq);
             controller.Effects.Insert(0, eq); _mixerEqualizers[controller] = eq;
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
@@ -311,11 +311,18 @@ internal sealed partial class TrayApp
         {
             controller.NightMode.Enabled = Config.NightMode;
             if (controller.VolumeCapPercent != Config.VolumeCapPercent) controller.SetVolumeCap(Config.VolumeCapPercent);
-            if (_mixerEqualizers.TryGetValue(controller, out var eq))
-            {
-                if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);
-                else eq.Set(Config.Effects.OutputEq);
-            }
+            if (_mixerEqualizers.TryGetValue(controller, out var eq)) ConfigureOutputEq(eq);
         }
+    }
+
+    /// <summary>
+    /// A mixer destination's output EQ: the saved one, or 「减弱低音」 while night mode is on (MicEffects.OutputPresetOverride
+    /// does the same for the startup speaker). Also when the destination is created: 2026-10-27, a speaker connected while
+    /// night mode was on played the saved EQ (e.g. 低音增强) with the night compressor until some setting changed.
+    /// </summary>
+    private void ConfigureOutputEq(Equalizer eq)
+    {
+        if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);
+        else eq.Set(Config.Effects.OutputEq);
     }
 }

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using HomePodCast.Audio;
 using HomePodCast.Net;
@@ -170,14 +171,14 @@ public static class UsageProfiles
     public static bool NameTaken(IEnumerable<UsageProfile> profiles, string name, string? exceptId) =>
         profiles.Any(p => p.Id != exceptId && string.Equals(p.Name.Trim(), name.Trim(), StringComparison.CurrentCultureIgnoreCase));
 
-    private static void CopyEffects(EffectsSettings target, EffectsSettings source)
+    /// <summary>
+    /// Every setting of <paramref name="source"/> into the object MicEffects keeps. All properties, not a hand-kept list: a
+    /// new mic or EQ setting would otherwise be saved in profiles but never restored. The EQs are copies.
+    /// </summary>
+    internal static void CopyEffects(EffectsSettings target, EffectsSettings source)
     {
-        target.MicDeviceId = source.MicDeviceId; target.MicGainDb = source.MicGainDb;
-        target.GateEnabled = source.GateEnabled; target.GateThresholdDb = source.GateThresholdDb;
-        target.Destination = source.Destination; target.MonitorDeviceId = source.MonitorDeviceId;
-        target.ReverbEnabled = source.ReverbEnabled; target.ReverbRoomSize = source.ReverbRoomSize;
-        target.ReverbDamping = source.ReverbDamping; target.ReverbMix = source.ReverbMix;
-        target.ReverbPreDelayMs = source.ReverbPreDelayMs; target.MicEq = source.MicEq; target.OutputEq = source.OutputEq;
+        foreach (var p in typeof(EffectsSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (p.CanRead && p.CanWrite) p.SetValue(target, p.GetValue(source) is EqSettings eq ? eq.Clone() : p.GetValue(source));
     }
 
     public static void Normalize(AppConfig c)
