@@ -85,9 +85,10 @@ internal sealed class EqEditor
         _bandPicker.SelectionChangeCommitted += (_, _) => _graph.SelectedIndex = _bandPicker.SelectedIndex;
         _bandOn.Toggled += (_, _) => EditBand(b => b with { Enabled = _bandOn.Checked });
         _type.SelectionChangeCommitted += (_, _) => EditBand(b => WithType(b, EqText.Types[Math.Max(0, _type.SelectedIndex)]));
-        _frequency.Scroll += (_, _) => EditBand(b => b with { Frequency = Math.Round(FrequencyOf(_frequency.Value), 1) });
+        // Not rounded: the slider is set again from the value, and a rounded one moved the thumb by a step while dragging.
+        _frequency.Scroll += (_, _) => EditBand(b => b with { Frequency = FrequencyOf(_frequency.Value) });
         _gain.Scroll += (_, _) => EditBand(b => b with { GainDb = _gain.Value / 10.0 });
-        _q.Scroll += (_, _) => EditBand(b => b with { Q = Math.Round(QOf(_q.Value), 2) });
+        _q.Scroll += (_, _) => EditBand(b => b with { Q = QOf(_q.Value) });
         _slope.SelectionChangeCommitted += (_, _) => EditBand(b => b with { Slope = Slopes[Math.Max(0, _slope.SelectedIndex)] });
         _output.Scroll += (_, _) => Edit(s => s.OutputGainDb = _output.Value / 10.0, toCustom: false);
         _fixHeadroom.Click += (_, _) => Edit(s => s.OutputGainDb = Math.Clamp(Math.Floor((s.OutputGainDb - PeakDb()) * 10) / 10,
