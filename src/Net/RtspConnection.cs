@@ -131,15 +131,16 @@ public sealed class RtspConnection : IDisposable
     {
         lock (_lock)
         {
+            int cseq = _cseq++;
             var headers = new List<KeyValuePair<string, string>>
             {
-                new("CSeq", (_cseq++).ToString()),
+                new("CSeq", cseq.ToString()),
                 new("DACP-ID", DacpId),
                 new("Active-Remote", ActiveRemote.ToString()),
                 new("Client-Instance", DacpId),
             };
             if (extra != null) headers.AddRange(extra);
-            return Send(method, uri ?? Uri, "RTSP/1.0", UserAgent, contentType, body, headers);
+            return Send(method, uri ?? Uri, "RTSP/1.0", UserAgent, contentType, body, headers, cseq);
         }
     }
 
@@ -156,13 +157,15 @@ public sealed class RtspConnection : IDisposable
         lock (_lock)
         {
             var requestHeaders = headers.ToList();
-            if (PairingOverRtsp) requestHeaders.Add(new("CSeq", (_cseq++).ToString()));
-            return Send(method, path, PairingOverRtsp ? "RTSP/1.0" : "HTTP/1.1", userAgent, contentType, body, requestHeaders);
+            int? cseq = PairingOverRtsp ? _cseq++ : null;
+            if (cseq != null) requestHeaders.Add(new("CSeq", cseq.Value.ToString()));
+            return Send(method, path, PairingOverRtsp ? "RTSP/1.0" : "HTTP/1.1", userAgent, contentType, body, requestHeaders, cseq);
         }
     }
 
+    /// <param name="cseq">The request's CSeq (none over HTTP/1.1): see <see cref="ReadResponse"/>.</param>
     private HttpMessage Send(string method, string uri, string protocol, string userAgent, string? contentType,
-        byte[]? body, List<KeyValuePair<string, string>> headers)
+        byte[]? body, List<KeyValuePair<string, string>> headers, int? cseq)
     {
         var all = new List<KeyValuePair<string, string>> { new("User-Agent", userAgent) };
         if (contentType != null) all.Add(new("Content-Type", contentType));
@@ -172,17 +175,32 @@ public sealed class RtspConnection : IDisposable
         var raw = HttpMessage.Format($"{method} {uri} {protocol}", all, body);
         var wire = _session?.Encrypt(raw) ?? raw;
         _stream.Write(wire);
-        var response = ReadResponse();
+        var response = ReadResponse(cseq);
         RequestTrace?.Invoke(method, uri, response.StartLine);
         return response;
     }
 
-    private HttpMessage ReadResponse()
+    /// <summary>
+    /// The reply to the request with <paramref name="cseq"/>. A reply with a lower CSeq answers a request that gave up
+    /// waiting (the 5 s receive timeout, while the connection survived a Wi-Fi blip) and is dropped. Taken for this
+    /// request's, it shifted every later reply by one for the rest of the session: a /feedback got a volume change's
+    /// status, and a volume that must be confirmed could be confirmed by an earlier request's 200.
+    /// </summary>
+    private HttpMessage ReadResponse(int? cseq)
     {
         while (true)
         {
             var msg = HttpMessage.TryParse(_rx);
-            if (msg != null) return msg;
+            if (msg != null)
+            {
+                if (cseq is { } expected && msg.Headers.TryGetValue("CSeq", out var echoed) &&
+                    int.TryParse(echoed, out int answered) && answered < expected)
+                {
+                    Log.Debug($"RTSP: dropped a late reply to CSeq {answered} ({msg.StartLine}) while waiting for CSeq {expected}");
+                    continue;
+                }
+                return msg;
+            }
             int n = _stream.Read(_readBuf, 0, _readBuf.Length);
             if (n == 0) throw new IOException("connection closed by speaker");
             var chunk = _readBuf.AsSpan(0, n);
