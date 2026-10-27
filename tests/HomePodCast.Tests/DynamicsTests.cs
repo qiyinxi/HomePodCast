@@ -43,6 +43,34 @@ public class DynamicsTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Switching_the_compressor_with_make_up_gain_glides()
+    {
+        var comp = new DynamicsCompressor(Rate) { ThresholdDb = -20, Ratio = 4, MakeupDb = 12, KneeDb = 0 };
+        var input = Signals.Sine(Rate, 200, Rate, 0.05); // under the threshold: only the make-up gain acts
+        var x = (float[])input.Clone();
+        int on = Rate / 4, off = Rate * 3 / 4;
+        for (int i = 0; i < Rate; i += 441)
+        {
+            if (i == on) comp.Enabled = true;
+            if (i == off) comp.Enabled = false;
+            comp.Process(x.AsSpan(i * 2, 441 * 2), 441);
+        }
+        // The gain sample by sample (where the sine is not near zero): switched at once, 12 dB came within one 16-frame block,
+        // 0.75 dB per sample; gliding over ~20 ms it is about 0.015.
+        double previous = double.NaN, steepest = 0;
+        for (int i = 0; i < Rate; i++)
+        {
+            if (Math.Abs(input[i * 2]) < 0.02) { previous = double.NaN; continue; }
+            double db = Signals.Db(x[i * 2] / input[i * 2]);
+            if (!double.IsNaN(previous)) steepest = Math.Max(steepest, Math.Abs(db - previous));
+            previous = db;
+        }
+        output.WriteLine($"steepest gain change {steepest:F3} dB per sample");
+        Assert.True(steepest < 0.1, $"gain jumped {steepest:F2} dB in one sample");
+        Assert.InRange(Signals.Db(Signals.Tone(x.AsSpan(on * 2 + 8820, 8820 * 2), Rate, 200) / 0.05), 11.5, 12.5); // and it got there
+    }
+
+    [Fact]
     public void Soft_knee_is_continuous()
     {
         float previous = 0;

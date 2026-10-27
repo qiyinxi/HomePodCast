@@ -838,6 +838,26 @@ internal class ScrollPage : Panel, ISurface
 
     public TextBlock? TitleText { get; }
 
+    private static long _scrolledAt = long.MinValue / 2;
+
+    /// <summary>
+    /// A page scrolled within the last 400 ms: the wheel is scrolling, and a control it brings under the pointer leaves the
+    /// wheel to the page instead of changing its value (FluentSlider, EqGraph).
+    /// </summary>
+    public static bool ScrolledRecently => Environment.TickCount64 - _scrolledAt < 400;
+
+    protected override void OnScroll(ScrollEventArgs se)
+    {
+        _scrolledAt = Environment.TickCount64;
+        base.OnScroll(se);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        _scrolledAt = Environment.TickCount64;
+        base.OnMouseWheel(e);
+    }
+
     /// <summary>The page became the visible one (window shown and this page selected): start timers, refresh.</summary>
     public virtual void PageShown() { }
 

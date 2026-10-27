@@ -36,6 +36,10 @@ public sealed class UsageSettings
     public JsonElement? MixerRouting { get; set; }
     public Dictionary<string, int> AppSendVolumes { get; set; } = [];
     public EffectsSettings Effects { get; set; } = new();
+
+    /// <summary>Which mic and EQ settings <see cref="Effects"/> holds (<see cref="UsageProfiles.EffectsVersion"/>; 0: before 1.3).</summary>
+    public int EffectsVersion { get; set; }
+
     public bool GroupSplitChannels { get; set; }
     public bool GroupSwapChannels { get; set; }
     public bool GroupPairLeaderOnly { get; set; }
@@ -64,6 +68,24 @@ public static class UsageProfiles
 
     private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
 
+    /// <summary>2: the input channel and the voice chain (low cut, compressor, de-esser, limiter) are saved too (1.3).</summary>
+    public const int EffectsVersion = 2;
+
+    /// <summary>
+    /// The settings a profile saved before <see cref="EffectsVersion"/> 2 knows nothing about. Applying such a profile keeps
+    /// them as they are: read as defaults, they switched the voice chain off and the mic back to the first input (silent
+    /// for a mic on input 2 of an interface), as a profile without speakers keeps the speaker selection.
+    /// </summary>
+    private static readonly string[] SinceVersion2 =
+    [
+        nameof(EffectsSettings.MicChannel), nameof(EffectsSettings.LowCutEnabled), nameof(EffectsSettings.LowCutHz), nameof(EffectsSettings.LowCutSlope),
+        nameof(EffectsSettings.CompressorEnabled), nameof(EffectsSettings.CompressorThresholdDb), nameof(EffectsSettings.CompressorRatio),
+        nameof(EffectsSettings.CompressorAttackMs), nameof(EffectsSettings.CompressorReleaseMs), nameof(EffectsSettings.CompressorKneeDb),
+        nameof(EffectsSettings.CompressorMakeupDb), nameof(EffectsSettings.DeEsserEnabled), nameof(EffectsSettings.DeEsserFrequencyHz),
+        nameof(EffectsSettings.DeEsserThresholdDb), nameof(EffectsSettings.DeEsserRangeDb), nameof(EffectsSettings.LimiterEnabled),
+        nameof(EffectsSettings.LimiterCeilingDb), nameof(EffectsSettings.LimiterReleaseMs),
+    ];
+
     public static UsageSettings Capture(AppConfig c) => new()
     {
         DeviceId = c.DeviceId, DeviceName = c.DeviceName, Host = c.Host,
@@ -72,7 +94,8 @@ public static class UsageProfiles
         MoviePlayerSync = c.MoviePlayerSync, CaptureDeviceId = c.CaptureDeviceId, CaptureDeviceName = c.CaptureDeviceName,
         RouteDefault = c.RouteDefault, AppRoutes = new(c.AppRoutes), AppSendVolumes = new(c.AppSendVolumes),
         MixerRouting = c.MixerRouting?.Clone(),
-        Effects = Clone(c.Effects), GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
+        Effects = Clone(c.Effects), EffectsVersion = EffectsVersion,
+        GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
         GroupPairLeaderOnly = c.GroupPairLeaderOnly,
         GroupVolumeOffsets = c.GroupVolumeOffsets == null ? null : new(c.GroupVolumeOffsets),
         GroupSpeakers = c.GroupSpeakers == null ? null : GroupSettings.Copy(c.GroupSpeakers),
@@ -130,6 +153,9 @@ public static class UsageProfiles
         c.MixerRouting = mixerConfig.MixerRouting;
         // Never raise the saved loudness.
         if (c.Volume is { } v) c.Volume = Math.Min(v, s.VolumeCapPercent);
+        if (s.EffectsVersion < 2)
+            foreach (string name in SinceVersion2)
+                typeof(EffectsSettings).GetProperty(name)!.SetValue(s.Effects, typeof(EffectsSettings).GetProperty(name)!.GetValue(c.Effects));
         CopyEffects(c.Effects, s.Effects);
         Scenes.Reconcile(c);
     }

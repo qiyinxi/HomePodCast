@@ -56,6 +56,7 @@ internal sealed class EqGraph : FluentControl
     private double _outputGainDb;
     private bool _active = true;
     private int _selected = -1, _hot = -1, _drag = -1;
+    private bool _dragging; // the pointer moved past the drag distance: until then a press only selects
     private Point _dragFrom;
     private EqBand _dragBand;
     private double _range = 12;
@@ -234,13 +235,17 @@ internal sealed class EqGraph : FluentControl
         base.OnMouseMove(e);
         if (_drag >= 0 && _drag < _bands.Count)
         {
-            // Shift: a quarter of the movement, for fine adjustments.
+            int dx = e.X - _dragFrom.X, dy = e.Y - _dragFrom.Y;
+            // A click to select a band must not change it: the hand moves a pixel or two, and a preset's band turned the
+            // curve into 自定义 (replacing the saved custom curve) just for being clicked.
+            if (!_dragging && Math.Abs(dx) <= SystemInformation.DragSize.Width / 2 && Math.Abs(dy) <= SystemInformation.DragSize.Height / 2) return;
+            _dragging = true;
+            // Shift: a quarter of the movement, for fine adjustments. An axis the pointer is back on keeps its exact value.
             float k = (ModifierKeys & Keys.Shift) != 0 ? 0.25f : 1f;
             var b = _dragBand;
-            double f = FrequencyAt(X(b.Frequency) + (e.X - _dragFrom.X) * k);
-            f = Math.Round(f, f < 100 ? 1 : 0);
-            var moved = b with { Frequency = f };
-            if (b.HasGain) moved = moved with { GainDb = Math.Round(Math.Clamp(GainAt(Y(b.GainDb) + (e.Y - _dragFrom.Y) * k), -Equalizer.MaxGainDb, Equalizer.MaxGainDb), 1) };
+            double f = FrequencyAt(X(b.Frequency) + dx * k);
+            var moved = b with { Frequency = dx == 0 ? b.Frequency : Math.Round(f, f < 100 ? 1 : 0) };
+            if (b.HasGain && dy != 0) moved = moved with { GainDb = Math.Round(Math.Clamp(GainAt(Y(b.GainDb) + dy * k), -Equalizer.MaxGainDb, Equalizer.MaxGainDb), 1) };
             if (moved != _bands[_drag]) Edit(_drag, moved);
             return;
         }
@@ -258,6 +263,7 @@ internal sealed class EqGraph : FluentControl
         base.OnMouseUp(e);
         if (_drag < 0) return;
         _drag = -1;
+        _dragging = false;
         Capture = false;
         _range = RangeFor();
         Invalidate();
@@ -269,6 +275,7 @@ internal sealed class EqGraph : FluentControl
         if (_drag >= 0 && !Capture)
         {
             _drag = -1;
+            _dragging = false;
             _range = RangeFor();
             Invalidate();
         }
@@ -300,7 +307,7 @@ internal sealed class EqGraph : FluentControl
     protected override void OnMouseWheel(MouseEventArgs e)
     {
         base.OnMouseWheel(e);
-        if (!Enabled || !Focused || _selected < 0 || !_bands[_selected].HasQ) return; // the page scrolls past
+        if (!Enabled || !Focused || ScrollPage.ScrolledRecently || _selected < 0 || !_bands[_selected].HasQ) return; // the page scrolls past
         _wheelDelta += e.Delta;
         int notches = _wheelDelta / 120;
         if (notches == 0) return;

@@ -206,7 +206,9 @@ internal sealed class FluentSlider : FluentControl
     protected override void OnMouseWheel(MouseEventArgs e)
     {
         base.OnMouseWheel(e);
-        if (!WheelSteps || !Enabled || !Focused) return; // a page scrolling under the mouse must not change values on the way
+        // A page scrolling under the mouse must not change values on the way: a focused slider that the scrolling brought
+        // under the pointer took the next notches and stopped the page (the wheel goes to the window under the pointer).
+        if (!WheelSteps || !Enabled || !Focused || ScrollPage.ScrolledRecently) return;
         _wheelDelta += e.Delta;
         int notches = _wheelDelta / 120;
         if (notches == 0) return;

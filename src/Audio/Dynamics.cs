@@ -15,11 +15,17 @@ public sealed class DynamicsCompressor : IAudioEffect
     private volatile float _thresholdDb = -24f, _ratio = 3f, _kneeDb = 6f, _attackMs = 10f, _releaseMs = 150f, _makeupDb;
     private volatile bool _enabled;
     private bool _active;
+    private readonly float _makeupGlide; // per block: make-up gain changes over ~20 ms
     private float _reductionDb;     // smoothed gain reduction (≤ 0)
+    private float _makeupNowDb;     // make-up gain being applied (glides to the setting, or to 0 when off)
     private float _gain = 1f;       // linear gain at the end of the last block
     private float _meterDb;         // for the UI
 
-    public DynamicsCompressor(int sampleRate = 44100) => _rate = sampleRate;
+    public DynamicsCompressor(int sampleRate = 44100)
+    {
+        _rate = sampleRate;
+        _makeupGlide = 1f - MathF.Exp(-BlockFrames / (0.02f * sampleRate));
+    }
 
     public bool Enabled { get => _enabled; set => _enabled = value; }
     public float ThresholdDb { get => _thresholdDb; set => _thresholdDb = Math.Clamp(Finite(value, -24f), -60f, 0f); }
@@ -56,6 +62,7 @@ public sealed class DynamicsCompressor : IAudioEffect
         }
         _active = true;
         float threshold = _thresholdDb, ratio = _ratio, knee = _kneeDb, makeup = enabled ? _makeupDb : 0f;
+        // The make-up gain glides too: switched at once, +12 dB came or went within one block, a click on live speech.
         float attack = Coefficient(_attackMs), release = Coefficient(_releaseMs);
         var x = interleaved[..(frames * 2)];
         for (int start = 0; start < frames; start += BlockFrames)
@@ -70,7 +77,9 @@ public sealed class DynamicsCompressor : IAudioEffect
             _reductionDb += (target - _reductionDb) * coef * n / BlockFrames;
             if (MathF.Abs(_reductionDb) < 1e-4f) _reductionDb = 0;
 
-            float g0 = _gain, g1 = FromDb(_reductionDb + makeup), dg = (g1 - g0) / n;
+            _makeupNowDb += (makeup - _makeupNowDb) * _makeupGlide * n / BlockFrames;
+            if (MathF.Abs(makeup - _makeupNowDb) < 1e-3f) _makeupNowDb = makeup;
+            float g0 = _gain, g1 = FromDb(_reductionDb + _makeupNowDb), dg = (g1 - g0) / n;
             for (int i = 0; i < n; i++)
             {
                 float g = g0 + dg * (i + 1);
@@ -80,7 +89,7 @@ public sealed class DynamicsCompressor : IAudioEffect
             _gain = g1;
         }
         _meterDb = MathF.Max(-_reductionDb, _meterDb * 0.9f);
-        if (!enabled && MathF.Abs(_gain - 1) < 1e-4f && _reductionDb == 0)
+        if (!enabled && MathF.Abs(_gain - 1) < 1e-4f && _reductionDb == 0 && _makeupNowDb == 0)
         {
             _gain = 1f;
             _active = false;

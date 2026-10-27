@@ -66,6 +66,25 @@ public class UsageProfileTests
     }
 
     [Fact]
+    public void A_profile_from_before_the_voice_chain_keeps_the_current_one()
+    {
+        var c = new AppConfig();
+        c.Effects.MicChannel = 1; c.Effects.CompressorEnabled = true; c.Effects.CompressorRatio = 6; c.Effects.LimiterEnabled = true;
+        c.Effects.ReverbMix = 0.9;
+        // Saved by 1.2: no EffectsVersion, none of the new settings.
+        var old = JsonSerializer.Deserialize<UsageSettings>("{\"Scene\":0,\"Effects\":{\"ReverbMix\":0.1,\"MicGainDb\":6}}")!;
+        Assert.Equal(0, old.EffectsVersion);
+        UsageProfiles.Apply(c, old);
+        Assert.Equal((0.1, 6.0), (c.Effects.ReverbMix, c.Effects.MicGainDb)); // what it saved is restored
+        Assert.Equal((1, true, 6.0, true), (c.Effects.MicChannel, c.Effects.CompressorEnabled, c.Effects.CompressorRatio, c.Effects.LimiterEnabled));
+
+        var now = UsageProfiles.Capture(new AppConfig()); // saved now: everything, the voice chain off
+        Assert.Equal(UsageProfiles.EffectsVersion, now.EffectsVersion);
+        UsageProfiles.Apply(c, now);
+        Assert.Equal((0, false, false), (c.Effects.MicChannel, c.Effects.CompressorEnabled, c.Effects.LimiterEnabled));
+    }
+
+    [Fact]
     public void Profiles_do_not_copy_credentials_startup_updates_or_global_calibration()
     {
         var source = new AppConfig { Language = "ja", Theme = "dark", AutoConnect = true, VlcPasswordProtected = "secret",
@@ -266,12 +285,16 @@ public class UsageProfileTests
         [nameof(AppConfig.PcMutedEndpointId)] = "a record of this PC's own mute, given back at the next start after a crash",
     };
 
+    /// <summary>The profile's settings: every property but EffectsVersion, which says what its Effects hold (no setting).</summary>
+    private static System.Reflection.PropertyInfo[] Captured => typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+        .Where(p => p.Name != nameof(UsageSettings.EffectsVersion)).ToArray();
+
     [Fact]
     public void Every_setting_is_restored_by_profiles_or_deliberately_left_out()
     {
         var settable = typeof(AppConfig).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.SetMethod is { IsPublic: true }).ToDictionary(p => p.Name, p => p.PropertyType);
-        var captured = typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var captured = Captured;
         var undecided = settable.Keys.Where(n => !NotInProfiles.ContainsKey(n) && captured.All(p => p.Name != n)).ToList();
         Assert.True(undecided.Count == 0, "AppConfig settings neither in UsageSettings nor in NotInProfiles (decide whether a " +
                                           "profile restores them): " + string.Join(", ", undecided));
@@ -288,7 +311,7 @@ public class UsageProfileTests
     public void Capture_copies_every_choice_of_a_profile()
     {
         var cfg = new AppConfig();
-        var captured = typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var captured = Captured;
         foreach (var p in captured)
         {
             var setting = typeof(AppConfig).GetProperty(p.Name)!;

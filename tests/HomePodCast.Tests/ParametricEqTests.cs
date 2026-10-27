@@ -196,6 +196,39 @@ public class ParametricEqTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Deleting_a_band_leaves_the_others_where_they_are()
+    {
+        var eq = new Equalizer(Rate);
+        EqBand[] bands = [new(EqFilterType.Peak, 50, 0, 1), new(EqFilterType.Peak, 100, 12, 1), new(EqFilterType.Peak, 8000, 12, 1)];
+        eq.SetBands(bands);
+        int slot100 = eq.SlotOf(1), slot8k = eq.SlotOf(2);
+        // An 8 kHz tone: with slots tied to list positions, the 8 kHz boost faded out while the 100 Hz bell swept up to it.
+        var x = Signals.Sine(Rate, 8000, Rate, 0.05);
+        int at = 86 * 256;
+        for (int i = 0; i < Rate; i += 256)
+        {
+            if (i == at) eq.SetBands([bands[1], bands[2]]);
+            int n = Math.Min(256, Rate - i);
+            eq.Process(x.AsSpan(i * 2, n * 2), n);
+        }
+        Assert.Equal((slot100, slot8k), (eq.SlotOf(0), eq.SlotOf(1)));
+        double Level(int from) => Signals.Db(Signals.Tone(x.AsSpan(from * 2, 2205 * 2), Rate, 8000) / 0.05);
+        double before = Level(at - 2205);
+        foreach (int from in new[] { at, at + 1102, at + 2205, at + 4410 })
+            Assert.InRange(Level(from), before - 0.3, before + 0.3);
+    }
+
+    [Fact]
+    public void A_custom_curve_with_every_band_deleted_is_flat_plus_the_output_gain()
+    {
+        var eq = new Equalizer(Rate);
+        eq.Set(new EqSettings { Preset = "custom", Bands = [], Gains = [-6, -6, -6, -6, -6], OutputGainDb = -6 });
+        Assert.Empty(eq.Bands);
+        Assert.Equal(-6, eq.MagnitudeDb(1000), 6);
+        Assert.InRange(MeasuredDb(eq, 1000), -6.2, -5.8);
+    }
+
+    [Fact]
     public void A_NaN_sample_does_not_silence_everything_after_it()
     {
         var eq = new Equalizer(Rate);

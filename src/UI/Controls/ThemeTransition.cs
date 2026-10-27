@@ -184,7 +184,10 @@ internal sealed class ThemeTransition : IDisposable
     public void Stop()
     {
         _timer.Stop();
-        _cover?.Hide();
+        // Destroyed, not hidden: a hidden layered window keeps its client-size image (6 MB at 150 %, 30 MB maximized on
+        // 4K) for the rest of the session, and Windows showed a popup hidden by the owner's minimize again on restore.
+        _cover?.DestroyHandle();
+        _cover = null;
         _image?.Dispose();
         _image = null;
         _window = null;

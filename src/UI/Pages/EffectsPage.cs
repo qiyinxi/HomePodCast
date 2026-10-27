@@ -146,8 +146,17 @@ internal sealed class EffectsPage : ScrollPage
         return row;
     }
 
+    /// <summary>
+    /// A stage's card. Its controls are named after the stage too (「压缩器 · 阈值」): the page has two 阈值, two 释放时间 and
+    /// three 增益衰减, which a screen reader could not tell apart.
+    /// </summary>
     private static Card Section(ToggleSwitch on, string title, params Control[] rows)
     {
+        foreach (var row in rows.OfType<FieldRow>())
+        {
+            var named = row.Field is RowPanel panel ? LogicalLayout.Children(panel).OfType<FluentControl>().FirstOrDefault() : row.Field;
+            if (named != null) named.AccessibleName = $"{title} · {row.Caption.Text}";
+        }
         var header = Ui.Header(title);
         var card = Ui.Card([Ui.Row(12, header, header, on), .. rows]);
         card.Gap = 8;
@@ -189,7 +198,7 @@ internal sealed class EffectsPage : ScrollPage
         _deEsserMeter.AccessibleName = L.T("增益衰减");
         return Section(_deEsserOn, L.T("齿音消除"),
             ParamRow(L.T("频率"), L.T("高于这个频率的齿音（“丝”“嘶”声）被压低。"), 0, 1000, 10, 100, Log(2000, 12000), LogStep(2000, 12000), EqText.Hz,
-                s => s.DeEsserFrequencyHz, (s, v) => s.DeEsserFrequencyHz = Math.Round(v, -1), _deEsserOn),
+                s => s.DeEsserFrequencyHz, (s, v) => s.DeEsserFrequencyHz = Math.Round(v / 10) * 10, _deEsserOn),
             ParamRow(L.T("阈值"), L.T("齿音超过这个电平时才压低。"), -60, 0, 1, 6, v => v, x => (int)Math.Round(x), v => $"{v:0} dB",
                 s => s.DeEsserThresholdDb, (s, v) => s.DeEsserThresholdDb = v, _deEsserOn),
             ParamRow(L.T("最大衰减"), L.T("齿音最多被压低多少。"), 0, 24, 1, 3, v => v, x => (int)Math.Round(x), v => $"{v:0} dB",
@@ -356,6 +365,9 @@ internal sealed class EffectsPage : ScrollPage
     private void ShowChannels(int channels)
     {
         int shown = Math.Max(channels, S.MicChannel + 1);
+        // The mic is off at every start, so its channel count is unknown: with 全部声道混合 saved, the list would offer
+        // nothing else until the mic was turned on (and the voice sent).
+        if (channels == 0 && S.MicChannel < 0) shown = Math.Max(shown, 2);
         if (shown != _channels || _micChannel.Items.Count == 0)
         {
             _channels = shown;

@@ -21,7 +21,7 @@ internal sealed class EqEditor
     private readonly EqGraph _graph = new();
     private readonly Segmented _bandPicker = new();
     private readonly FluentComboBox _type = new();
-    private readonly ToggleSwitch _bandOn = new() { AccessibleName = L.T("启用频段") };
+    private readonly ToggleSwitch _bandOn = new();
     private readonly FluentSlider _frequency = Slider(0, FrequencySteps, 8, 100);
     private readonly FluentSlider _gain = Slider(-240, 240, 5, 30);
     private readonly FluentSlider _q = Slider(0, QSteps, 22, 131);
@@ -43,15 +43,16 @@ internal sealed class EqEditor
         foreach (var t in EqText.Types) _type.Items.Add(EqText.TypeName(t));
         _graph.PreferredHeight = graphHeight;
         _preset.AccessibleName = L.T("预设");
-        _type.AccessibleName = L.T("类型");
-        _bandPicker.AccessibleName = L.T("频段");
-        _slope.AccessibleName = L.T("斜率");
         _frequency.ValueText = v => EqText.Hz(FrequencyOf(v));
         _gain.ValueText = v => EqText.Db(v / 10.0);
         _q.ValueText = v => EqText.Q(QOf(v));
         _output.ValueText = v => EqText.Db(v / 10.0);
         _gain.FillOrigin = _output.FillOrigin = 0;
         _gain.ResetValue = _output.ResetValue = 0;
+        // Named after the card too (「麦克风均衡 · 频率」): the mic page also has the low cut's and the de-esser's 频率.
+        foreach (var (control, caption) in new (Control, string)[] { (_type, L.T("类型")), (_bandPicker, L.T("频段")), (_bandOn, L.T("启用频段")),
+                     (_frequency, L.T("频率")), (_gain, L.T("增益")), (_q, L.T("Q 值")), (_slope, L.T("斜率")), (_output, L.T("输出增益")) })
+            control.AccessibleName = $"{title} · {caption}";
 
         var header = Ui.Header(title);
         var head = Ui.Row(12, header, header, _on);
@@ -197,6 +198,10 @@ internal sealed class EqEditor
         double peak = 0;
         for (double f = Equalizer.MinFrequency; f <= Equalizer.MaxFrequency; f *= 1.03)
             peak = Math.Max(peak, Equalizer.ResponseDb(bands, f) + _settings.OutputGainDb);
+        // And at each band's centre: a narrow peak (Q 20) between two of those points read 3 dB low, so 降低输出增益
+        // left it clipping and the hint disappeared.
+        foreach (var b in bands)
+            if (b.Enabled && b.HasGain) peak = Math.Max(peak, Equalizer.ResponseDb(bands, b.Frequency) + _settings.OutputGainDb);
         return peak;
     }
 

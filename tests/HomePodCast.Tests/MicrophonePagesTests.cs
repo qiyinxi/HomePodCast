@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Windows.Forms;
 using HomePodCast.Audio;
 using HomePodCast.UI;
@@ -256,6 +257,85 @@ public class MicrophonePagesTests
         using var fx2 = new MicEffects(plain.Effects);
         using var page2 = new EffectsPage(plain, fx2);
         Assert.True(TestApp.Field<FieldRow>(page2, "_channelRow").Collapsed); // a one-channel or unknown device: no choice
+    });
+
+    private static void Mouse(Control c, string handler, Point at, int clicks = 1) =>
+        typeof(EqGraph).GetMethod(handler, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(c, [new MouseEventArgs(MouseButtons.Left, clicks, at.X, at.Y, 0)]);
+
+    [Fact]
+    public void Clicking_a_band_selects_it_without_changing_it() => Sta.Run(() =>
+    {
+        using var graph = new EqGraph { Size = new Size(600, 200) };
+        graph.SetBands(Equalizer.LegacyBands(EqPresets.Gains(EqPreset.BassBoost)!), 0, true);
+        int edits = 0;
+        graph.BandsEdited += () => edits++;
+        var node = Point.Round(graph.NodeCenter(1));
+        Mouse(graph, "OnMouseDown", node);
+        Mouse(graph, "OnMouseMove", node + new Size(1, 1)); // the hand moves a pixel while clicking
+        Mouse(graph, "OnMouseUp", node + new Size(1, 1));
+        Assert.Equal((1, 0), (graph.SelectedIndex, edits));
+
+        Mouse(graph, "OnMouseDown", node);
+        Mouse(graph, "OnMouseMove", node + new Size(40, 0)); // a real drag: frequency only, the gain stays exact
+        Mouse(graph, "OnMouseUp", node + new Size(40, 0));
+        Assert.Equal(1, edits);
+        var bass = Equalizer.LegacyBands(EqPresets.Gains(EqPreset.BassBoost)!);
+        Assert.Equal(bass[1].GainDb, graph.Bands[1].GainDb);
+        Assert.True(graph.Bands[1].Frequency > bass[1].Frequency * 1.2);
+    });
+
+    [Fact]
+    public void Every_voice_chain_slider_moves_its_setting_and_has_a_name_of_its_own() => Sta.Run(() =>
+    {
+        var config = TestApp.Config();
+        using var fx = new MicEffects(config.Effects);
+        using var page = new EffectsPage(config, fx);
+        foreach (string on in new[] { "_lowCutOn", "_compressorOn", "_deEsserOn", "_limiterOn" }) TestApp.Field<ToggleSwitch>(page, on).Flip();
+        var sliders = ((System.Collections.IEnumerable)TestApp.Field<object>(page, "_params")).Cast<object>()
+            .Select(p => (FluentSlider)p.GetType().GetProperty("Slider")!.GetValue(p)!).ToList();
+        string before = System.Text.Json.JsonSerializer.Serialize(config.Effects);
+        foreach (var slider in sliders) slider.UserSetValue(slider.Minimum + (slider.Maximum - slider.Minimum) / 2); // threw for the de-esser's 频率
+        Assert.InRange(config.Effects.DeEsserFrequencyHz, 4890, 4910); // halfway on the log scale from 2 to 12 kHz, in 10 Hz steps
+        Assert.Equal(0, config.Effects.DeEsserFrequencyHz % 10);
+        Assert.Equal((float)config.Effects.DeEsserFrequencyHz, fx.DeEsser.FrequencyHz);
+        Assert.NotEqual(before, System.Text.Json.JsonSerializer.Serialize(config.Effects));
+
+        // Screen readers can tell the stages apart: no two controls on the page share a name.
+        var names = All<Control>(page).Where(c => c is FluentSlider or ReductionMeter or Segmented && c.AccessibleName != null)
+            .Select(c => c.AccessibleName!).ToList();
+        Assert.Contains("压缩器 · 阈值", names);
+        Assert.Contains("齿音消除 · 阈值", names);
+        Assert.Contains("麦克风均衡 · 频率", names);
+        Assert.Equal(names.Count, names.Distinct().Count());
+    });
+
+    [Fact]
+    public void All_channels_mixed_still_offers_single_channels_while_the_mic_is_off() => Sta.Run(() =>
+    {
+        var config = TestApp.Config();
+        config.Effects.MicChannel = -1;
+        using var fx = new MicEffects(config.Effects);
+        using var page = new EffectsPage(config, fx);
+        var channel = TestApp.Field<FluentComboBox>(page, "_micChannel");
+        Assert.Equal(["声道 1", "声道 2", "全部声道混合"], channel.Items);
+        Assert.Equal("全部声道混合", channel.SelectedText);
+        channel.AccessibilityObject.Value = "声道 2";
+        Assert.Equal(1, config.Effects.MicChannel);
+    });
+
+    [Fact]
+    public void A_narrow_boost_between_the_sampling_points_is_still_found() => Sta.Run(() =>
+    {
+        var config = TestApp.Config();
+        // 1 kHz sits between the 3 % steps from 20 Hz; at Q 20 the curve there is about 3 dB lower than at the centre.
+        config.Effects.OutputEq = new EqSettings { Preset = "custom", Bands = [new() { Type = EqFilterType.Peak, Frequency = 1007, GainDb = 12, Q = 20 }] };
+        using var fx = new MicEffects(config.Effects);
+        using var page = new EqualizerPage(config, fx);
+        var editor = TestApp.Field<EqEditor>(page, "_outputEq");
+        TestApp.Field<FluentButton>(editor, "_fixHeadroom").PerformClick();
+        Assert.InRange(fx.OutputEq.MagnitudeDb(1007), -0.1, 0.05);
+        Assert.InRange(fx.OutputEq.PeakGainDb, 0, 0.1);
     });
 
     private static IEnumerable<T> All<T>(Control root) where T : Control => root.Controls.Cast<Control>()

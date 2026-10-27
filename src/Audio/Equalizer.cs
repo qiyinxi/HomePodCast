@@ -134,8 +134,11 @@ public sealed class Equalizer : IAudioEffect
     public static IReadOnlyList<double> BandFrequencies { get; } = Legacy.Select(b => b.Control).ToArray();
     public static IReadOnlyList<string> BandLabels { get; } = ["60", "250", "1k", "3.5k", "12k"];
 
-    /// <summary>Everything the audio thread works towards; replaced as a whole, never changed.</summary>
-    private sealed record Target(EqBand[] Bands, double OutputGainDb);
+    /// <summary>
+    /// Everything the audio thread works towards; replaced as a whole, never changed. <see cref="BandOfSlot"/>: which band
+    /// each filter slot runs (−1: none), kept across edits (<see cref="Publish"/>).
+    /// </summary>
+    private sealed record Target(EqBand[] Bands, int[] BandOfSlot, double OutputGainDb);
 
     private struct Section
     {
@@ -161,7 +164,7 @@ public sealed class Equalizer : IAudioEffect
     private readonly Slot[] _slots = new Slot[MaxBands];
     private readonly Section[] _sections = new Section[MaxBands * MaxSections];
     private readonly float[] _dry = new float[Block * 2];
-    private volatile Target _target = new([], 0);
+    private volatile Target _target = new([], Enumerable.Repeat(-1, MaxBands).ToArray(), 0);
     private double _outGain = 1, _outFrom = 1;
     private int _identityFrames;
     private bool _started;
@@ -231,7 +234,9 @@ public sealed class Equalizer : IAudioEffect
         var preset = EqPresets.FromId(settings.Preset);
         double output = settings.Enabled && double.IsFinite(settings.OutputGainDb)
             ? Math.Clamp(settings.OutputGainDb, MinOutputGainDb, MaxOutputGainDb) : 0;
-        if (preset == EqPreset.Custom && settings.Bands is { Count: > 0 } saved)
+        // Bands, even none (every band deleted: flat, plus the output gain): Gains then hold the curve with the output gain
+        // folded in, for older versions, and using them here applied the output gain twice.
+        if (preset == EqPreset.Custom && settings.Bands is { } saved)
         {
             var bands = saved.Where(b => b != null).Take(MaxBands).Select(b => b.ToBand()).ToArray();
             if (!settings.Enabled) bands = bands.Select(b => b with { Enabled = false }).ToArray();
@@ -265,7 +270,43 @@ public sealed class Equalizer : IAudioEffect
         Publish(LegacyBands(want, _rate), outputGainDb);
     }
 
-    private void Publish(EqBand[] bands, double outputGainDb) => _target = new Target(bands, outputGainDb);
+    /// <summary>
+    /// The new target, each band on a filter slot: a band that is still there (unchanged) keeps its slot, then band i takes
+    /// the slot band i had (an edited band glides there, as does a switch between presets), then the first free one.
+    /// 2026-10-27: with slots tied to list positions, deleting a band handed every later band the next one's settings, so
+    /// a +12 dB bell swept from 100 Hz to 8 kHz in 100 ms, and bands of other types faded out and in.
+    /// </summary>
+    private void Publish(EqBand[] bands, double outputGainDb)
+    {
+        var old = _target;
+        var bandOfSlot = Enumerable.Repeat(-1, MaxBands).ToArray();
+        var slotOf = Enumerable.Repeat(-1, bands.Length).ToArray();
+        for (int i = 0; i < bands.Length && i < MaxBands; i++)
+            for (int s = 0; s < MaxBands; s++)
+                if (bandOfSlot[s] < 0 && old.BandOfSlot[s] is var b && b >= 0 && b < old.Bands.Length && old.Bands[b] == bands[i])
+                {
+                    (bandOfSlot[s], slotOf[i]) = (i, s);
+                    break;
+                }
+        for (int i = 0; i < bands.Length && i < MaxBands; i++)
+        {
+            if (slotOf[i] >= 0) continue;
+            int s = Array.IndexOf(old.BandOfSlot, i);
+            if (s < 0 || bandOfSlot[s] >= 0) s = Array.IndexOf(bandOfSlot, -1);
+            (bandOfSlot[s], slotOf[i]) = (i, s);
+        }
+        _target = new Target(bands, bandOfSlot, outputGainDb);
+    }
+
+    /// <summary>Tests: the filter slot band <paramref name="band"/> runs on.</summary>
+    internal int SlotOf(int band) => Array.IndexOf(_target.BandOfSlot, band);
+
+    private static bool Wanted(Target target, int slot, out EqBand band)
+    {
+        int b = target.BandOfSlot[slot];
+        band = b >= 0 && b < target.Bands.Length ? target.Bands[b] : default;
+        return b >= 0 && b < target.Bands.Length && band.Enabled;
+    }
 
     // ---------------------------------------------------------------- the five-band presets as parametric bands
 
@@ -351,6 +392,8 @@ public sealed class Equalizer : IAudioEffect
         {
             double peak = 0;
             for (double f = 20; f <= Math.Min(20000, _rate * 0.45); f *= 1.02) peak = Math.Max(peak, MagnitudeDb(f));
+            foreach (var b in _target.Bands)
+                if (b.Enabled && b.HasGain) peak = Math.Max(peak, MagnitudeDb(b.Frequency)); // a narrow peak between the points
             return peak;
         }
     }
@@ -474,7 +517,7 @@ public sealed class Equalizer : IAudioEffect
             _started = true;
             for (int i = 0; i < MaxBands; i++)
             {
-                if (i < target.Bands.Length && target.Bands[i].Enabled) Start(i, target.Bands[i], mix: 1);
+                if (Wanted(target, i, out var band)) Start(i, band, mix: 1);
             }
             _outGain = _outFrom = FromDb(target.OutputGainDb);
         }
@@ -555,8 +598,7 @@ public sealed class Equalizer : IAudioEffect
         for (int i = 0; i < MaxBands; i++)
         {
             ref var slot = ref _slots[i];
-            bool wanted = i < target.Bands.Length && target.Bands[i].Enabled;
-            var band = wanted ? target.Bands[i] : default;
+            bool wanted = Wanted(target, i, out var band);
             if (!slot.Present)
             {
                 if (!wanted) continue;
