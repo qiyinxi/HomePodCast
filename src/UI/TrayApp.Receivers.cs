@@ -50,7 +50,7 @@ internal sealed partial class TrayApp
         if ((Controller.ReceiverSession?.ArrivalToRenderMs ?? Controller.Client?.ArrivalToRenderMs) is { } processing)
             settings.ArrivalToRenderMs = processing;
         bool notice = selection.TakeCompatibilityNotice(settings);
-        Config.Save();
+        Config.TrySave(); // part of OnControllerChanged, which has to go on
         if (notice) _tray.ShowBalloonTip(8000, L.T("AirPlay 兼容模式（实验性）"), // experimental since 1.1
             L.T("兼容模式延迟约 2 秒，适合听音乐"), ToolTipIcon.Info);
     }

@@ -504,17 +504,17 @@ internal sealed partial class TrayApp : ApplicationContext
             _lastIconState = c.State;
         }
         var volume = c.Volume;
-        if (SavesStreamingVolume(c, volume, Config, _pendingVolume != null))
-        {
-            Config.Volume = volume;
-            Config.Save();
-        }
+        bool saveVolume = SavesStreamingVolume(c, volume, Config, _pendingVolume != null);
+        if (saveVolume) Config.Volume = volume;
         RememberReceiverConnection();
         UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
         UpdatePcMute(); // after the keys' route: 推流时电脑静音 mutes once streaming, unmutes when the session is over
         _form.UpdateState();
         RaiseStateChanged();
+        // Saved last, and never throwing: a save that threw (config.json held by another program) used to skip the hook,
+        // the PC mute and the window's update for this change.
+        if (saveVolume) Config.TrySave();
     }
 
     /// <summary>

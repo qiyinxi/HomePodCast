@@ -121,7 +121,7 @@ internal sealed partial class TrayApp
                 _ui.Post(_ =>
                 {
                     if (!_quitting && config.DeviceId != null && GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(config.DeviceId))
-                    { Config.Host = host; Config.Save(); }
+                    { Config.Host = host; Config.TrySave(); }
                 }, null);
             };
             controller.ArrivalToRenderChanged += ms => config.ArrivalToRenderMs = ms;
@@ -131,7 +131,7 @@ internal sealed partial class TrayApp
                 string key = RaopPassword.Key(id);
                 if (!Config.ReceiverSettings.TryGetValue(key, out var settings)) Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
                 settings.LastSuccessfulProtocol = protocol; if (processing != null) settings.ArrivalToRenderMs = processing;
-                Config.Save();
+                Config.TrySave();
             }, null);
             controller.PairingRequired += request => _ui.Post(_ => ShowMixerPairing(destination.Key, controller, request), null);
             controller.RaopPasswordRequired += request => _ui.Post(_ => ShowMixerPassword(destination.Key, controller, request), null);
@@ -153,7 +153,7 @@ internal sealed partial class TrayApp
         // Per-device measurements live with that receiver, never in the selected HomePod's global slot.
         if (projection.DeviceId is { } id && projection.ArrivalToRenderMs is { } ms &&
             Config.ReceiverSettings.TryGetValue(RaopPassword.Key(id), out var preferences) && preferences.ArrivalToRenderMs != ms)
-        { preferences.ArrivalToRenderMs = ms; Config.Save(); }
+        { preferences.ArrivalToRenderMs = ms; Config.TrySave(); }
     }
 
     private void ShowMixerPairing(string key, StreamController controller, PairingRequest request)
