@@ -275,51 +275,229 @@ public sealed class AppConfig
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // keep 卧室 readable
     };
 
-    public static AppConfig Load() => Load(FilePath);
+    /// <summary>
+    /// The config of this run. A file that cannot be read (damaged, or written by a newer version: one enum value this
+    /// version does not know fails the whole file) is kept beside it as config.json.corrupt-&lt;time&gt;, and the copy of the
+    /// last good start (config.json.bak) is used instead; without one, the defaults with 启动后自动连接 off, so a lost
+    /// selection never connects to whichever HomePod answers first. Before 2026-10-27 such a file was replaced by the
+    /// defaults at the next save, and every setting was lost with it.
+    /// </summary>
+    public static AppConfig Load() => Load(FilePath, keepBackup: true);
 
-    internal static AppConfig Load(string path)
+    /// <param name="keepBackup">After a good read, keep a copy as config.json.bak (the app's own loads; tests leave it off).</param>
+    internal static AppConfig Load(string path, bool keepBackup = false)
+    {
+        // No file: a fresh install, or the user removed it to start over. Never brought back from the backup.
+        if (!File.Exists(path)) return Fresh(autoConnect: Profile is null);
+        try
+        {
+            var cfg = Read(path, out string text);
+            if (keepBackup) KeepBackup(path, text);
+            return cfg;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"config unreadable: {ex.GetType().Name}: {ex.Message}");
+        }
+        // Only once the damaged file is kept is config.json given what this run uses, so the next Load (Program's, then
+        // TrayApp's) reads the same and keeps no second copy. A file that could not even be copied (held by another
+        // program) is left alone: it may well be readable again a moment later.
+        bool kept = KeepDamaged(path);
+        string backup = path + BackupSuffix;
+        if (File.Exists(backup))
+        {
+            try
+            {
+                var cfg = Read(backup, out string text);
+                Log.Warn($"config: using {Path.GetFileName(backup)}, the copy kept at the last good start");
+                if (kept) TryWrite(path, text);
+                return cfg;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"config backup unreadable too: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+        Log.Warn("config: using the defaults, with auto-connect off");
+        var defaults = Fresh(autoConnect: false);
+        if (kept) TryWrite(path, JsonSerializer.Serialize(defaults, Json));
+        return defaults;
+    }
+
+    /// <summary>A fresh install starts on the recommended scene; a file without "Scene" (older versions) stays Custom.</summary>
+    private static AppConfig Fresh(bool autoConnect) => Profile is null
+        ? new AppConfig { Scene = Scene.Recommended, AutoConnect = autoConnect }
+        : new AppConfig { Scene = Scene.Recommended, AutoConnect = false, LocalApiPort = 0 };
+
+    private static AppConfig Read(string path, out string text)
+    {
+        text = File.ReadAllText(path);
+        var cfg = JsonSerializer.Deserialize<AppConfig>(text, Json) ?? throw new JsonException("the file holds null");
+        if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
+        cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
+        cfg.ForwardVolumeKeys = null;
+        cfg.ManualDevices ??= [];
+        cfg.ReceiverSettings ??= [];
+        cfg.RaopPasswordsProtected ??= [];
+        cfg.AppRoutes ??= [];
+        cfg.MixerDeviceIdentities ??= [];
+        cfg.AppSendVolumes ??= [];
+        cfg.AppSendVolumesOff ??= [];
+        cfg.Effects ??= new();
+        // As Audio.AppRouting reads it: the playback config (TrayApp.PlaybackConfig) shows this one, never a copy of it.
+        cfg.CaptureDeviceId = string.IsNullOrWhiteSpace(cfg.CaptureDeviceId) ? null : cfg.CaptureDeviceId.Trim();
+        cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
+        AvCalibrations.Normalize(cfg);
+        GroupSettings.Normalize(cfg);
+        OutputGroups.Normalize(cfg);
+        HomePodCast.UsageProfiles.Normalize(cfg);
+        MixerRoutes.Migrate(cfg);
+        return cfg;
+    }
+
+    internal const string BackupSuffix = ".bak";
+    internal const string DamagedSuffix = ".corrupt-";
+
+    /// <summary>The file as it was read, kept as config.json.bak: what a later start falls back to.</summary>
+    private static void KeepBackup(string path, string text)
     {
         try
         {
-            if (File.Exists(path))
+            lock (SaveLock) WriteDurably(path + BackupSuffix, text);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"config: no backup kept: {ex.Message}");
+        }
+    }
+
+    /// <summary>Copies the unreadable file to config.json.corrupt-&lt;time&gt;, never over an earlier copy; false when it could not.</summary>
+    private static bool KeepDamaged(string path)
+    {
+        try
+        {
+            string stamp = DateTime.Now.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+            for (int i = 0; i < 100; i++)
             {
-                var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), Json) ?? new AppConfig();
-                if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
-                cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
-                cfg.ForwardVolumeKeys = null;
-                cfg.AppRoutes ??= [];
-                cfg.MixerDeviceIdentities ??= [];
-                cfg.AppSendVolumes ??= [];
-                cfg.AppSendVolumesOff ??= [];
-                cfg.Effects ??= new();
-                cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
-                AvCalibrations.Normalize(cfg);
-                GroupSettings.Normalize(cfg);
-                OutputGroups.Normalize(cfg);
-                HomePodCast.UsageProfiles.Normalize(cfg);
-                MixerRoutes.Migrate(cfg);
-                return cfg;
+                string target = path + DamagedSuffix + stamp + (i == 0 ? "" : "-" + i);
+                if (File.Exists(target)) continue;
+                File.Copy(path, target);
+                Log.Error($"config: the unreadable file is kept as {Path.GetFileName(target)}");
+                return true;
             }
         }
         catch (Exception ex)
         {
-            Log.Warn($"config unreadable, using defaults: {ex.Message}");
+            Log.Error($"config: the unreadable file could not be kept: {ex.Message}");
         }
-        // A fresh install starts on the recommended scene; a file without "Scene" (older versions) stays Custom.
-        return Profile is null
-            ? new AppConfig { Scene = Scene.Recommended }
-            : new AppConfig { Scene = Scene.Recommended, AutoConnect = false, LocalApiPort = 0 };
+        return false;
+    }
+
+    private static void TryWrite(string path, string text)
+    {
+        try
+        {
+            lock (SaveLock) WriteDurably(path, text);
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"config: not replaced: {ex.Message}");
+        }
     }
 
     public void Save() => Save(FilePath);
 
+    /// <summary>Throws when the file cannot be written: callers that roll a change back rely on it (see <see cref="TrySave()"/>).</summary>
     internal void Save(string path)
+    {
+        string text = JsonSerializer.Serialize(this, Json);
+        lock (SaveLock) WriteDurably(path, text);
+    }
+
+    /// <summary>
+    /// <see cref="Save()"/> for handlers whose work has to go on when the file cannot be written: a few tries 50 ms apart (a
+    /// backup, sync or security program may hold config.json for a moment), then logged and false. A throw there skipped
+    /// the rest of a state change (TrayApp.OnControllerChanged: the volume-key hook, the PC mute, the window).
+    /// </summary>
+    public bool TrySave() => TrySave(FilePath);
+
+    internal bool TrySave(string path)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Save(path);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt >= SaveAttempts)
+                {
+                    Log.Warn($"config not saved: {ex.Message}");
+                    return false;
+                }
+                Thread.Sleep(SaveRetryMs);
+            }
+        }
+    }
+
+    internal const int SaveAttempts = 3, SaveRetryMs = 50;
+
+    /// <summary>One write at a time: the mixer saves from the thread pool while the UI thread may save too, both through config.json.tmp.</summary>
+    private static readonly object SaveLock = new();
+
+    /// <summary>
+    /// Writes through a temporary file that is flushed to the disk before it replaces <paramref name="path"/>: a power cut
+    /// or a bluescreen right after a save leaves the old file or the new one. Unflushed, NTFS may keep the rename but not
+    /// the data, and the file is then empty or full of NULs (the app saves every minute while streaming).
+    /// </summary>
+    private static void WriteDurably(string path, string text)
     {
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var tmp = path + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(this, Json));
+        using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            file.Write(System.Text.Encoding.UTF8.GetBytes(text));
+            file.Flush(flushToDisk: true);
+        }
         File.Move(tmp, path, overwrite: true);
     }
+
+    /// <summary>
+    /// A deep copy (through JSON) for work on another thread: the UI thread changes the live config's lists and dictionaries,
+    /// and serializing or enumerating one while it changes throws.
+    /// </summary>
+    internal AppConfig Snapshot() => JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(this))!;
+
+    // ReceiverSettings, ManualDevices and RaopPasswordsProtected are read on the stream threads as well (StreamController's
+    // ReceiverLookup, ReceiverSettings and ReceiverPassword, which TrayApp gives it). So the UI thread never changes one in
+    // place: it puts a changed copy in its place (the methods below), and a reader never has one change under it.
+
+    /// <summary>The receiver's preferences; made by <paramref name="create"/> and added when it has none yet.</summary>
+    internal Net.ReceiverPreferences ReceiverPreferencesFor(string key, Func<Net.ReceiverPreferences> create)
+    {
+        if (ReceiverSettings.TryGetValue(key, out var existing)) return existing;
+        var made = create();
+        SetReceiverPreferences(key, made);
+        return made;
+    }
+
+    /// <summary>Sets one receiver's preferences (null: removes them).</summary>
+    internal void SetReceiverPreferences(string key, Net.ReceiverPreferences? preferences)
+    {
+        var next = new Dictionary<string, Net.ReceiverPreferences>(ReceiverSettings, ReceiverSettings.Comparer);
+        if (preferences == null) next.Remove(key);
+        else next[key] = preferences;
+        ReceiverSettings = next;
+    }
+
+    internal void SetRaopPassword(string key, string protectedPassword) =>
+        RaopPasswordsProtected = new(RaopPasswordsProtected, RaopPasswordsProtected.Comparer) { [key] = protectedPassword };
+
+    /// <summary>Adds an address typed in by the user, in place of one with the same address or device id.</summary>
+    internal void AddManualDevice(Net.ManualAirPlayDevice device) => ManualDevices =
+        [.. ManualDevices.Where(d => !(d.Host == device.Host && d.Port == device.Port || d.DeviceId == device.DeviceId)), device];
 }
 
 /// <summary>How 开机自动启动 works for this copy.</summary>

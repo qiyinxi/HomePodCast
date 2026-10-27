@@ -21,7 +21,7 @@ internal sealed partial class TrayApp
     /// <summary>Called once from the constructor (UI thread).</summary>
     private void InitFirewall()
     {
-        Controller.FirewallBlocked += () => _ui.Post(_ => CheckFirewall(FirewallTrigger.Blocked), null);
+        WatchFirewall(Controller, () => Config.Host);
         _networkSettle = new System.Windows.Forms.Timer { Interval = NetworkSettleMs };
         _networkSettle.Tick += (_, _) =>
         {
@@ -44,11 +44,20 @@ internal sealed partial class TrayApp
         _networkSettle.Start();
     }
 
+    /// <summary>
+    /// A connection of <paramref name="controller"/> was blocked: check the firewall and the network that reaches its speaker
+    /// (<paramref name="host"/>). Every controller, not only the startup one: 2026-10-27, one the mixer made (another
+    /// speaker, or a first run's HomePod) never offered the firewall rule or the Public network's fix, only its retry line.
+    /// </summary>
+    private void WatchFirewall(StreamController controller, Func<string?> host) =>
+        controller.FirewallBlocked += () => _ui.Post(_ => CheckFirewall(FirewallTrigger.Blocked, host()), null);
+
     /// <summary>Reads the firewall and the speaker's network on the thread pool (COM), then shows what is wrong, if anything.</summary>
-    private void CheckFirewall(FirewallTrigger trigger)
+    /// <param name="host">The speaker's address; null: the selected speaker's (Config.Host).</param>
+    private void CheckFirewall(FirewallTrigger trigger, string? host = null)
     {
         if (_quitting) return;
-        var speaker = IPAddress.TryParse(Config.Host, out var ip) ? ip : null;
+        var speaker = IPAddress.TryParse(host ?? Config.Host, out var ip) ? ip : null;
         Task.Run(async () =>
         {
             var (prompt, network) = _firewall.Check(trigger, speaker);

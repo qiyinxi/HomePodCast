@@ -8,11 +8,16 @@ internal sealed partial class TrayApp
     private StreamController? _legacyController;
     private string? _legacyDestinationKey;
     internal MixerOutputCoordinator? Mixer { get; private set; }
+    /// <summary>
+    /// The config of what plays now: the selected mixer destination's, with the app-wide settings laid over it, or the app's
+    /// own. Read on other threads too (PlayerSync's poll, the local API), so the app's own is returned as it is: 2026-10-27,
+    /// writing the routing's capture device back into it undid a usage profile's device between its apply and Routing.Reload.
+    /// </summary>
     internal AppConfig PlaybackConfig
     {
         get
         {
-            var selected = Mixer?.SelectedConfig ?? Config;
+            if (Mixer?.SelectedConfig is not { } selected) return Config;
             selected.SyncCalibrations = Config.SyncCalibrations;
             selected.ReceiverSettings = Config.ReceiverSettings;
             selected.VideoDelayExtraMs = Config.VideoDelayExtraMs;
@@ -47,7 +52,9 @@ internal sealed partial class TrayApp
         }, null);
         Routing.Changed += () =>
         {
-            if (Mixer.IsConnected) PostConnection(() => Mixer.ConnectAsync(Config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
+            if (!Mixer.IsConnected) return;
+            var config = Config.Snapshot(); // on the UI thread, which changes the live one (Connect)
+            PostConnection(() => Mixer.ConnectAsync(config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
         };
     }
 
@@ -107,23 +114,25 @@ internal sealed partial class TrayApp
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
             controller.Changed += () => _ui.Post(_ => { if (!_quitting) RememberMixerSession(destination.Key, config, controller); }, null);
+            // The startup controller's are wired in InitFirewall and InitTakeover; one made here needs its own.
+            WatchFirewall(controller, () => config.Host);
+            WatchOwnSession(controller);
             controller.HostResolved += host =>
             {
                 config.Host = host;
                 _ui.Post(_ =>
                 {
                     if (!_quitting && config.DeviceId != null && GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(config.DeviceId))
-                    { Config.Host = host; Config.Save(); }
+                    { Config.Host = host; Config.TrySave(); }
                 }, null);
             };
             controller.ArrivalToRenderChanged += ms => config.ArrivalToRenderMs = ms;
             controller.ReceiverProtocolConnected += (id, protocol, processing) => _ui.Post(_ =>
             {
                 if (_quitting || controller.ReceiverLookup?.Invoke(id) is not { } device) return;
-                string key = RaopPassword.Key(id);
-                if (!Config.ReceiverSettings.TryGetValue(key, out var settings)) Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+                var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(id), () => ReceiverPreferences.Of(device));
                 settings.LastSuccessfulProtocol = protocol; if (processing != null) settings.ArrivalToRenderMs = processing;
-                Config.Save();
+                Config.TrySave();
             }, null);
             controller.PairingRequired += request => _ui.Post(_ => ShowMixerPairing(destination.Key, controller, request), null);
             controller.RaopPasswordRequired += request => _ui.Post(_ => ShowMixerPassword(destination.Key, controller, request), null);
@@ -145,7 +154,7 @@ internal sealed partial class TrayApp
         // Per-device measurements live with that receiver, never in the selected HomePod's global slot.
         if (projection.DeviceId is { } id && projection.ArrivalToRenderMs is { } ms &&
             Config.ReceiverSettings.TryGetValue(RaopPassword.Key(id), out var preferences) && preferences.ArrivalToRenderMs != ms)
-        { preferences.ArrivalToRenderMs = ms; Config.Save(); }
+        { preferences.ArrivalToRenderMs = ms; Config.TrySave(); }
     }
 
     private void ShowMixerPairing(string key, StreamController controller, PairingRequest request)
@@ -170,7 +179,7 @@ internal sealed partial class TrayApp
         {
             using var dialog = new RaopPasswordDialog(request.Device.Name);
             if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || _quitting) return;
-            Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+            Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
             Config.Save(); PostConnection(() => Mixer!.ReconnectAsync(key, ConnectTrigger.Manual).GetAwaiter().GetResult());
         }
         finally { _raopDialog = false; }
@@ -263,9 +272,9 @@ internal sealed partial class TrayApp
             string receiverKey = RaopPassword.Key(receiverId);
             var old = Config.ReceiverSettings.GetValueOrDefault(receiverKey);
             var next = old == null ? ReceiverPreferences.Of(selection.Device) : old with { };
-            selection.Save(next, delay.LatencyMs); Config.ReceiverSettings[receiverKey] = next;
+            selection.Save(next, delay.LatencyMs); Config.SetReceiverPreferences(receiverKey, next);
             try { SaveMixerConfig(); }
-            catch { if (old == null) Config.ReceiverSettings.Remove(receiverKey); else Config.ReceiverSettings[receiverKey] = old; return new(MixerEditResult.SaveFailed); }
+            catch { Config.SetReceiverPreferences(receiverKey, old); return new(MixerEditResult.SaveFailed); }
             if (Mixer.IsConnected) await Mixer.ReconnectAsync(key, ConnectTrigger.Reconnect);
             return new(MixerEditResult.Applied);
         }

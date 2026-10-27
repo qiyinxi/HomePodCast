@@ -171,9 +171,11 @@ internal sealed partial class TrayApp : ApplicationContext
         if (Mixer != null)
         {
             _wantConnected = true; _nightDisconnected = false;
+            // Copied here, on the UI thread: the queue may run it later, while this thread changes the config's lists.
+            var config = Config.Snapshot();
             PostConnection(() =>
             {
-                var result = Mixer.ConnectAsync(Config, trigger).GetAwaiter().GetResult();
+                var result = Mixer.ConnectAsync(config, trigger).GetAwaiter().GetResult();
                 if (result.Result != MixerEditResult.Applied) Log.Warn($"mixer connect: {result.Result} {result.Conflict}");
             });
             return;
@@ -240,7 +242,7 @@ internal sealed partial class TrayApp : ApplicationContext
                 updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
                 updated.CompatibilityNoticeShown = previous.CompatibilityNoticeShown;
             }
-            Config.ReceiverSettings[key] = updated;
+            Config.SetReceiverPreferences(key, updated);
         }
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
@@ -253,7 +255,11 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             selected.LatencyMs = ms; if (selected.Scene == Scene.Custom) selected.CustomLatencyMs = ms;
             SaveSelectedDestinationSettings();
-            if (_wantConnected) PostConnection(() => Mixer.ConnectAsync(Config, ConnectTrigger.Reconnect).GetAwaiter().GetResult());
+            if (_wantConnected)
+            {
+                var config = Config.Snapshot();
+                PostConnection(() => Mixer.ConnectAsync(config, ConnectTrigger.Reconnect).GetAwaiter().GetResult());
+            }
             return;
         }
         if (Config.Scene == Scene.Custom) Config.CustomLatencyMs = ms;
@@ -504,17 +510,17 @@ internal sealed partial class TrayApp : ApplicationContext
             _lastIconState = c.State;
         }
         var volume = c.Volume;
-        if (SavesStreamingVolume(c, volume, Config, _pendingVolume != null))
-        {
-            Config.Volume = volume;
-            Config.Save();
-        }
+        bool saveVolume = SavesStreamingVolume(c, volume, Config, _pendingVolume != null);
+        if (saveVolume) Config.Volume = volume;
         RememberReceiverConnection();
         UpdateMonitorGuard();
         UpdateVolumeKeys(); // the hook is only in while streaming; following too
         UpdatePcMute(); // after the keys' route: 推流时电脑静音 mutes once streaming, unmutes when the session is over
         _form.UpdateState();
         RaiseStateChanged();
+        // Saved last, and never throwing: a save that threw (config.json held by another program) used to skip the hook,
+        // the PC mute and the window's update for this change.
+        if (saveVolume) Config.TrySave();
     }
 
     /// <summary>

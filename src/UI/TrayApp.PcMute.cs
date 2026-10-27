@@ -46,7 +46,7 @@ internal sealed partial class TrayApp
     {
         if (Config.PcMutedEndpointId == id) return;
         Config.PcMutedEndpointId = id;
-        Config.Save();
+        Config.TrySave(); // called inside PcMute.Update (OnControllerChanged), which has to go on
     }
 
     /// <summary>Quitting (also for Windows: QuitForSystem): the PC's sound comes back, if the mute is ours and still there.</summary>
