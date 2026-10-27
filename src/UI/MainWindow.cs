@@ -594,7 +594,7 @@ internal sealed class MainWindow : Form, ISurface
     /// <summary>What the volume keys do changed (mode, stream, output device): 设置 says so.</summary>
     public void ShowVolumeKeys() => _settings.ShowVolumeKeys();
 
-    /// <summary>The update check, download or result changed: 设置 → 软件更新 and the banner on 首页.</summary>
+    /// <summary>The update check, download or result changed: 关于 → 软件更新 and the banner on 首页.</summary>
     public void ShowUpdate()
     {
         _home.ShowUpdate();

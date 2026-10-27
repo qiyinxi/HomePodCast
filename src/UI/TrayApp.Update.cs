@@ -4,9 +4,9 @@ using HomePodCast.Update;
 
 namespace HomePodCast.UI;
 
-/// <summary>What 设置 → 软件更新 and the 首页 banner show.</summary>
+/// <summary>What 关于 → 软件更新 and the 首页 banner show.</summary>
 /// <param name="Available">A newer release (not skipped), until it is installed, skipped or the channel changes.</param>
-/// <param name="Banner">The update was found by an automatic check: 首页 shows it (a manual check answers in 设置).</param>
+/// <param name="Banner">The update was found by an automatic check: 首页 shows it (a manual check answers in 关于).</param>
 /// <param name="MsiInstall">An MSI install (更新 installs), a portable copy (更新 opens the release page), or not known yet.</param>
 /// <param name="Store">The Microsoft Store version: the Store updates it, the app never checks.</param>
 internal sealed record UpdateView(string Status, TextRole Role, Release? Available, bool Checking, bool Downloading, bool Banner, bool? MsiInstall,
@@ -156,7 +156,7 @@ internal sealed partial class TrayApp
     // ---------------------------------------------------------------- checking
 
     /// <summary>
-    /// Asks GitHub for the releases (one GET) and shows what it found. A manual check answers in 设置 (also when it
+    /// Asks GitHub for the releases (one GET) and shows what it found. A manual check answers in 关于 (also when it
     /// fails); an automatic one stays quiet unless there is an update, which gets a balloon (once per version) and
     /// the banner on 首页.
     /// </summary>
@@ -222,9 +222,9 @@ internal sealed partial class TrayApp
     internal static bool ShouldShowNotes(CheckOutcome outcome, bool automatic, bool store) =>
         !store && !automatic && outcome == CheckOutcome.UpdateAvailable;
 
-    /// <summary>What a check's result does to 设置 → 软件更新 and 首页 (<see cref="ShowCheckResult"/> applies it).</summary>
+    /// <summary>What a check's result does to 关于 → 软件更新 and 首页 (<see cref="ShowCheckResult"/> applies it).</summary>
     /// <param name="Update">The release 「更新」 offers (null: no 更新 button, no banner).</param>
-    /// <param name="Banner">首页's banner: only for an update an automatic check found (a manual check answers in 设置).</param>
+    /// <param name="Banner">首页's banner: only for an update an automatic check found (a manual check answers in 关于).</param>
     /// <param name="Notify">The tray balloon: an automatic check's first find of this version.</param>
     internal readonly record struct UpdateCheckView(Release? Update, bool Banner, string Status, TextRole Role, bool Notify);
 
@@ -416,6 +416,15 @@ internal sealed partial class TrayApp
         }
     }
 
+    /// <summary>
+    /// The page with 软件更新, where the balloons about an install lead. It was in 设置 until the navigation was split into
+    /// pages (2026-10-15); the balloons still opened 设置 after that, a page without anything about updates.
+    /// </summary>
+    internal const AppPage UpdatePage = AppPage.About;
+
+    /// <summary>The balloon when the helper did not install: where the details are.</summary>
+    internal static string NotInstalledBalloon => L.F("更新没有完成，详情见「{0}」→「{1}」。", L.T("关于"), L.T("软件更新"));
+
     /// <summary>Started by the helper (--updated-from=): a balloon that it worked, or why it did not.</summary>
     private void ShowInstallResult(string? updatedFrom, InstallResult? result)
     {
@@ -429,19 +438,19 @@ internal sealed partial class TrayApp
         {
             Log.Info($"update: updated from {updatedFrom} to {ReleaseVersion.CurrentText} (msiexec: {result?.Text ?? "?"})");
             SetUpdateStatus(L.F("已更新到 {0}", ReleaseVersion.CurrentText), TextRole.Success);
-            ShowBalloon(L.F("已更新到 {0}", ReleaseVersion.CurrentText), ToolTipIcon.Info, () => ShowMain(AppPage.Settings));
+            ShowBalloon(L.F("已更新到 {0}", ReleaseVersion.CurrentText), ToolTipIcon.Info, () => ShowMain(UpdatePage));
             return;
         }
         if (result is { WasCancelled: true })
         {
             Log.Info($"update: cancelled (UAC declined or msiexec cancelled: {result.Code}); still {ReleaseVersion.CurrentText}");
             SetUpdateStatus(L.T("更新已取消，仍在使用当前版本。"), TextRole.Secondary);
-            ShowBalloon(L.T("更新已取消，仍在使用当前版本。"), ToolTipIcon.Info, () => ShowMain(AppPage.Settings));
+            ShowBalloon(L.T("更新已取消，仍在使用当前版本。"), ToolTipIcon.Info, () => ShowMain(UpdatePage));
             return;
         }
         var detail = result == null ? "?" : result.Code is { } code ? $"msiexec {code}" : result.Text;
         Log.Warn($"update: not installed ({detail}); still {ReleaseVersion.CurrentText}" + (result?.MsiLog is { } log ? $"; msiexec log: {log}" : ""));
         SetUpdateStatus(L.F("更新没有完成（{0}），仍在使用 {1}。可以在发布页下载安装包手动安装。", detail, ReleaseVersion.CurrentText), TextRole.Critical);
-        ShowBalloon(L.T("更新没有完成，详情见「设置」→「软件更新」。"), ToolTipIcon.Warning, () => ShowMain(AppPage.Settings));
+        ShowBalloon(NotInstalledBalloon, ToolTipIcon.Warning, () => ShowMain(UpdatePage));
     }
 }

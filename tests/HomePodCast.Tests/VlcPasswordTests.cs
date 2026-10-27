@@ -167,15 +167,15 @@ public class VlcPasswordTests
         Assert.Equal(("使用 VLC 设置里的密码", false), await LineFor(Endpoint(takesOwn, own, () => typed)));
         Assert.Equal(("使用手动输入的密码", false), await LineFor(Endpoint(takesTyped, own, () => typed)));
         Assert.Equal(("使用手动输入的密码", false), await LineFor(Endpoint(takesTyped, null, () => typed)));
-        Assert.Equal(("密码错误，请在设置里重新输入", true), await LineFor(Endpoint(takesTyped, own, () => Secret("typo"))));
+        Assert.Equal(("密码错误，请在这里重新输入", true), await LineFor(Endpoint(takesTyped, own, () => Secret("typo"))));
         Assert.Equal(("没有找到密码，请在这里输入", true), await LineFor(Endpoint(takesOwn, null, () => null)));
 
         // Not adjusting VLC right now: whether one is saved.
         Assert.Equal(("已保存手动输入的密码（加密保存，只有当前 Windows 用户能解密）。", false), PlayerText.VlcPasswordStatus([], true));
         Assert.Equal(("先用 VLC 设置里的密码；读不到或不对时用这里输入的密码。密码加密保存在本机。", false), PlayerText.VlcPasswordStatus([], false));
-        // The home page points to 设置 when VLC refuses.
-        Assert.Equal("VLC：密码错误，请在设置里重新输入", PlayerText.Line(new PlayerStatus(PlayerKind.Vlc, "VLC", PlayerState.LoginFailed)));
-        Assert.Equal("VLC：没有找到网页接口密码（见「设置」）", PlayerText.Line(new PlayerStatus(PlayerKind.Vlc, "VLC", PlayerState.NoPassword)));
+        // The home page points to 音画同步 (the page with the password box) when VLC refuses.
+        Assert.Equal("VLC：密码错误，请在「音画同步」里重新输入", PlayerText.Line(new PlayerStatus(PlayerKind.Vlc, "VLC", PlayerState.LoginFailed)));
+        Assert.Equal("VLC：没有找到网页接口密码（见「音画同步」）", PlayerText.Line(new PlayerStatus(PlayerKind.Vlc, "VLC", PlayerState.NoPassword)));
     }
 
     [Fact]

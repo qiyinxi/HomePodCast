@@ -2,7 +2,7 @@ namespace HomePodCast.Update;
 
 /// <summary>
 /// <c>HomePodCast.exe update-selftest --feed http://127.0.0.1:PORT/... [--channel beta|stable] [--no-install]</c>:
-/// what 设置 → 软件更新 「检查更新」 and then 「更新」 do (<see cref="UpdateFlow"/>: check, pick the newest release on the
+/// what 关于 → 软件更新 「检查更新」 and then 「更新」 do (<see cref="UpdateFlow"/>: check, pick the newest release on the
 /// channel, download, SHA-256 check, installer helper, exit), without a window or a question, against a fake release
 /// list on this PC. CI (tools/ci/update-e2e.ps1) installs an older MSI, serves this build's MSI on 127.0.0.1 and runs
 /// this from the installed exe; the helper then installs the MSI and starts the new version with --updated-from=.
