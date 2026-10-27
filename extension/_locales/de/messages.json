@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "Läuft nicht" },
   "statusIdle": { "message": "Kein Streaming" },
   "statusStreaming": { "message": "Streamt" },
+  "statusDestinationUnknown": { "message": "Das Audioziel des Browsers ist unbekannt; die Synchronisierung ist vorübergehend nicht verfügbar." },
+  "statusLocalOutput": { "message": "Der Browser spielt lokal; das Bild wird nicht verzögert." },
   "siteLabel": { "message": "Diese Website" },
   "localFile": { "message": "(lokale Datei)" },
   "minusLabel": { "message": "1 ms weniger" },

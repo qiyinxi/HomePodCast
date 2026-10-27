@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "起動していません" },
   "statusIdle": { "message": "送信していません" },
   "statusStreaming": { "message": "送信中" },
+  "statusDestinationUnknown": { "message": "ブラウザーの音声送信先を特定できないため、同期は一時的に利用できません。" },
+  "statusLocalOutput": { "message": "ブラウザーはローカルで再生しているため、映像は遅延しません。" },
   "siteLabel": { "message": "このサイト" },
   "localFile": { "message": "(ローカル ファイル)" },
   "minusLabel": { "message": "1 ミリ秒減らす" },

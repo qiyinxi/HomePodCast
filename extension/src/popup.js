@@ -47,6 +47,7 @@ const el = {
 
 const state = {
   tabId: null,
+  pageChecked: false, // the page has answered (or has no content script to answer)
   host: null,
   status: null,
   videos: null,
@@ -108,8 +109,12 @@ function flushSave() {
     if (isDefault) remove.push(k);
     else set[k] = v;
   }
-  if (remove.length) chrome.storage.sync.remove(remove);
-  if (Object.keys(set).length) chrome.storage.sync.set(set);
+  // A failed write (the sync quota) is only lost, as in the page: without a callback it would be an unhandled rejection.
+  const done = () => { void chrome.runtime.lastError; };
+  try {
+    if (remove.length) chrome.storage.sync.remove(remove, done);
+    if (Object.keys(set).length) chrome.storage.sync.set(set, done);
+  } catch (_) { /* ignore */ }
 }
 
 function saveSite() {
@@ -127,8 +132,20 @@ function effectiveDelay() {
   return clamp(Math.round(base + state.offset), 0, MAX_DELAY_MS);
 }
 
+// With the app's mixer, the browser's sound can go where the picture gets no speaker delay. The app says why in reason
+// (its message is in the app's language, not the browser's); older apps send only the flags and the message.
+function undelayedStatus(s) {
+  if (!s || s.running === false || s.streaming) return null;
+  const reason = s.reason || (s.destinationRequired ? 'destination-unknown' : s.local ? 'local-output' : '');
+  if (reason === 'destination-unknown') return { text: t('statusDestinationUnknown'), st: 'unknown' };
+  if (reason === 'local-output') return { text: t('statusLocalOutput'), st: 'idle' };
+  if (reason && typeof s.message === 'string') return { text: s.message, st: 'unknown' }; // a newer app's reason
+  return null;
+}
+
 function renderStatus() {
   const s = state.status;
+  const undelayed = undelayedStatus(s);
   let text;
   let st;
   if (!s) {
@@ -137,9 +154,8 @@ function renderStatus() {
   } else if (s.running === false) {
     text = t('statusNotRunning');
     st = 'off';
-  } else if ((s.destinationRequired || s.local) && typeof s.message === 'string') {
-    text = s.message;
-    st = s.destinationRequired ? 'unknown' : 'idle';
+  } else if (undelayed) {
+    ({ text, st } = undelayed);
   } else if (!s.streaming) {
     text = t('statusIdle');
     st = 'idle';
@@ -155,8 +171,11 @@ function renderStatus() {
 }
 
 function renderSite() {
+  // Nothing is said about the page or the app before they have answered: guesses ("not available, reload", then "not
+  // running" under "Connecting…") would contradict the status and change the popup's height on every open.
+  const known = state.pageChecked;
   const available = !!state.host;
-  el.siteCard.classList.toggle('unavailable', !available);
+  el.siteCard.classList.toggle('unavailable', known && !available);
   el.host.textContent = available ? hostLabel(state.host) : '—';
   el.host.title = available ? hostLabel(state.host) : '';
   for (const b of [el.minus, el.plus, el.reset, el.siteToggle]) b.disabled = !available;
@@ -169,7 +188,9 @@ function renderSite() {
 
   let hint = '';
   const eff = effectiveDelay();
-  if (!available) {
+  if (!known) {
+    el.effDelay.textContent = '—';
+  } else if (!available) {
     el.effDelay.textContent = '—';
     hint = t('hintUnavailable');
   } else if (!state.globalEnabled) {
@@ -178,11 +199,13 @@ function renderSite() {
   } else if (!state.siteEnabled) {
     el.effDelay.textContent = '0';
     hint = t('hintSiteOff');
+  } else if (state.status === null) {
+    el.effDelay.textContent = '—'; // the app's answer decides the hint
+  } else if (undelayedStatus(state.status)) {
+    el.effDelay.textContent = '—'; // the status says why; "not streaming" would contradict it (other apps may stream)
   } else if (eff === null) {
     el.effDelay.textContent = '—';
-    hint = state.status && state.status.running !== false
-      ? t('hintNotStreaming')
-      : t('hintNotRunning');
+    hint = state.status.running === false ? t('hintNotRunning') : t('hintNotStreaming');
   } else {
     el.effDelay.textContent = String(eff);
     if (Number(state.status.videoDelayMs) + state.offset > MAX_DELAY_MS) hint = t('hintDelayLimit'); // experimental since 1.1
@@ -194,6 +217,7 @@ function renderSite() {
 
 function renderVideos() {
   const vids = state.videos;
+  if (!state.pageChecked) return; // keeps popup.html's '—' line: emptied, the popup would shrink and grow again
   if (!state.host) {
     el.videos.textContent = '';
     return;
@@ -247,7 +271,9 @@ function step(delta) {
   if (!state.host) return;
   const [lo, hi] = offsetBounds();
   const next = clamp(state.offset + delta, lo, hi);
-  if (next === state.offset) return;
+  // An offset saved at another delay can lie outside the bounds, and the clamp would then move it to the far bound:
+  // never against the button pressed (+ at a 2250 ms delay would save −250, and at 141 ms that site loses its delay).
+  if (next === state.offset || Math.sign(next - state.offset) !== Math.sign(delta)) return;
   state.offset = next;
   saveSite();
   renderSite();
@@ -334,10 +360,15 @@ async function init() {
       if (Array.isArray(page.videos)) state.videos = page.videos;
     }
   }
+  state.pageChecked = true;
 
   const keys = [GLOBAL_KEY];
   if (state.host) keys.push(state.host);
-  const items = await chrome.storage.sync.get(keys);
+  // Unreadable settings keep the defaults: the status and the refresh below must start anyway.
+  let items = {};
+  try {
+    items = (await chrome.storage.sync.get(keys)) || {};
+  } catch (_) { /* ignore */ }
   const g = items[GLOBAL_KEY] || {};
   const s = (state.host && items[state.host]) || {};
   state.globalEnabled = g.enabled !== false;
