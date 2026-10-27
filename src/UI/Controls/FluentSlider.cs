@@ -13,6 +13,8 @@ internal sealed class FluentSlider : FluentControl
 {
     private int _min, _max = 100, _value, _floor = int.MinValue, _ceiling = int.MaxValue;
     private bool _dragging;
+    private int _grabOffset; // where on the thumb it was grabbed (pixels from its centre along the rail)
+    private int _wheelDelta;
 
     public FluentSlider()
     {
@@ -33,6 +35,12 @@ internal sealed class FluentSlider : FluentControl
 
     /// <summary>Where the accent fill starts (e.g. 0 dB on an equalizer band); null = <see cref="Minimum"/>.</summary>
     public int? FillOrigin { get; set; }
+
+    /// <summary>The value as screen readers say it (with its unit, e.g. "+3.5 dB", "1.2 kHz"); null = the number.</summary>
+    public Func<int, string>? ValueText { get; set; }
+
+    /// <summary>A value double-clicking the thumb returns to (e.g. 0 dB); null = none.</summary>
+    public int? ResetValue { get; set; }
 
     /// <summary>Raised for every change of <see cref="Value"/>.</summary>
     public event EventHandler? ValueChanged;
@@ -99,10 +107,13 @@ internal sealed class FluentSlider : FluentControl
     private int ThumbSize => Dp(20);
     private bool Vertical => Orientation == Orientation.Vertical;
 
-    /// <summary>Pixel range the thumb centre moves along.</summary>
+    /// <summary>
+    /// Pixel range the thumb centre moves along. The ends keep room for the focus ring (Dp(2) and its inner line): with
+    /// Dp(1), the ring cut across the thumb at the minimum and the maximum.
+    /// </summary>
     private (int Start, int End) Travel()
     {
-        int half = ThumbSize / 2 + Dp(1);
+        int half = ThumbSize / 2 + Dp(4);
         int length = Vertical ? Height : Width;
         return (half, Math.Max(half, length - half));
     }
@@ -160,19 +171,48 @@ internal sealed class FluentSlider : FluentControl
         return true;
     }
 
+    /// <summary>
+    /// A press on the thumb grabs it where it is (the value stays until it moves); a press on the rail jumps there. Taking
+    /// the value under the mouse also on the thumb moved an EQ band by 1–2 dB just for clicking its edge.
+    /// </summary>
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
         if (e.Button != MouseButtons.Left || !Enabled) return;
         _dragging = true;
         Capture = true;
-        SetValueCore(ValueAt(e.Location), user: true);
+        int along = Vertical ? e.Y : e.X, across = Vertical ? e.X : e.Y;
+        int pos = PositionOf(_value), cross = (Vertical ? Width : Height) / 2;
+        bool onThumb = Math.Abs(along - pos) <= ThumbSize / 2 && Math.Abs(across - cross) <= ThumbSize / 2;
+        _grabOffset = onThumb ? along - pos : 0;
+        if (!onThumb) SetValueCore(ValueAt(e.Location), user: true);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (_dragging) SetValueCore(ValueAt(e.Location), user: true);
+        if (_dragging) SetValueCore(ValueAt(Vertical ? new Point(e.X, e.Y - _grabOffset) : new Point(e.X - _grabOffset, e.Y)), user: true);
+    }
+
+    protected override void OnMouseDoubleClick(MouseEventArgs e)
+    {
+        base.OnMouseDoubleClick(e);
+        if (e.Button == MouseButtons.Left && Enabled && ResetValue is { } reset) SetValueCore(reset, user: true);
+    }
+
+    /// <summary>The wheel moves the value one <see cref="SmallChange"/> per notch while the slider has the focus.</summary>
+    public bool WheelSteps { get; set; }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        if (!WheelSteps || !Enabled || !Focused) return; // a page scrolling under the mouse must not change values on the way
+        _wheelDelta += e.Delta;
+        int notches = _wheelDelta / 120;
+        if (notches == 0) return;
+        _wheelDelta -= notches * 120;
+        SetValueCore(_value + notches * SmallChange, user: true);
+        if (e is HandledMouseEventArgs handled) handled.Handled = true;
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -245,7 +285,7 @@ internal sealed class FluentSlider : FluentControl
     {
         public override string? Value
         {
-            get => owner.Value.ToString();
+            get => owner.ValueText?.Invoke(owner.Value) ?? owner.Value.ToString();
             set
             {
                 if (int.TryParse(value, out var v)) owner.SetValueCore(v, user: true);

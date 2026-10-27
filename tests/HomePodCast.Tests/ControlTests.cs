@@ -87,6 +87,36 @@ public class ControlTests
         Assert.InRange(v.ValueAt(new Point(20, 150)), -1, 1);
     });
 
+    private static void Mouse(Control c, string handler, MouseButtons button, Point at, int clicks = 1, int delta = 0) =>
+        c.GetType().GetMethod(handler, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(c, [handler == "OnMouseWheel" ? new HandledMouseEventArgs(button, clicks, at.X, at.Y, delta) : new MouseEventArgs(button, clicks, at.X, at.Y, delta)]);
+
+    [Fact]
+    public void Slider_thumb_is_grabbed_where_pressed_and_the_rail_jumps() => Sta.Run(() =>
+    {
+        using var s = new FluentSlider { Minimum = -12, Maximum = 12, Orientation = Orientation.Vertical, ResetValue = 0, WheelSteps = true };
+        s.Size = new Size(32, 132);
+        s.Value = 3;
+        int scrolled = 0;
+        s.Scroll += (_, _) => scrolled++;
+        var thumb = typeof(FluentSlider).GetMethod("PositionOf", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        int y = (int)thumb.Invoke(s, [3])!;
+        Mouse(s, "OnMouseDown", MouseButtons.Left, new Point(16, y + 8)); // the thumb's lower edge: grabbed, not moved
+        Assert.Equal((3, 0), (s.Value, scrolled));
+        Mouse(s, "OnMouseMove", MouseButtons.Left, new Point(16, y + 8));
+        Assert.Equal(3, s.Value);
+        Mouse(s, "OnMouseUp", MouseButtons.Left, new Point(16, y + 8));
+        Mouse(s, "OnMouseDown", MouseButtons.Left, new Point(16, s.Height - 2)); // the rail: jumps
+        Assert.Equal(-12, s.Value);
+        Mouse(s, "OnMouseUp", MouseButtons.Left, new Point(16, s.Height - 2));
+        Mouse(s, "OnMouseDoubleClick", MouseButtons.Left, new Point(16, s.Height - 2), clicks: 2);
+        Assert.Equal(0, s.Value); // double-click resets
+        Mouse(s, "OnMouseWheel", MouseButtons.None, new Point(16, 60), delta: 240);
+        Assert.Equal(0, s.Value); // not focused: a page scrolling past changes nothing
+        s.ValueText = v => $"{v:+0;-0;0} dB";
+        Assert.Equal("0 dB", s.AccessibilityObject.Value);
+    });
+
     [Fact]
     public void Segmented_keys_select_and_only_user_changes_are_committed() => Sta.Run(() =>
     {
