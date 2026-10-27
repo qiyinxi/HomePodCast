@@ -5,14 +5,17 @@ using HomePodCast.UI.Controls;
 namespace HomePodCast.UI.Pages;
 
 /// <summary>
-/// 设置 → 已配对的电视: the receivers paired with a PIN (Apple TV), each with 忘记配对. Hidden, header included, while there
-/// are none: HomePods never need it. Read when the page is shown and whenever a pairing is saved or forgotten.
+/// 音箱信息 → 已配对的电视: the receivers paired with a PIN (Apple TV), each with 忘记配对. Hidden, header included, while
+/// there are none: HomePods never need it. Read when the page is shown and whenever a pairing is saved or forgotten.
 /// </summary>
 internal sealed class PairingsPanel : StackPanel
 {
     private readonly PairingStore _store;
     private readonly Action<string> _forget;
     private readonly TextBlock _header;
+    // The UI thread, for the store's Changed (raised on the saving thread). Not this panel's handle: with no pairings it is
+    // empty, painted by its parent and has no window, so the first pairing saved while the page was open never showed up.
+    private readonly SynchronizationContext? _ui;
     private bool _shown;
     private IReadOnlyList<PairedDevice>? _shownList;
 
@@ -24,6 +27,7 @@ internal sealed class PairingsPanel : StackPanel
     internal PairingsPanel(PairingStore store, Action<string> forget, TextBlock header)
     {
         (_store, _forget, _header) = (store, forget, header);
+        _ui = SynchronizationContext.Current; // set by WinForms for the control's thread (Control's constructor)
         Gap = 4;
         _store.Changed += OnStoreChanged;
         ShowPairings();
@@ -39,15 +43,15 @@ internal sealed class PairingsPanel : StackPanel
 
     private void OnStoreChanged()
     {
-        if (IsDisposed || !IsHandleCreated) return;
+        if (IsDisposed) return;
         try
         {
-            BeginInvoke(() =>
+            _ui?.Post(_ =>
             {
                 if (!IsDisposed && _shown) ShowPairings();
-            });
+            }, null);
         }
-        catch (InvalidOperationException) { } // the handle went away meanwhile
+        catch (InvalidOperationException) { } // the UI thread's windows are gone (quitting)
     }
 
     private void ShowPairings()
@@ -62,7 +66,7 @@ internal sealed class PairingsPanel : StackPanel
             Log.Warn($"pairings: {ex.Message}");
             paired = [];
         }
-        // Read on every visit to 设置; the rows are built again only when the list changed (their windows take about 1.4 ms
+        // Read on every visit to 音箱信息; the rows are built again only when the list changed (their windows take about 1.4 ms
         // each to create on the maintainer's PC, 2026-10-15).
         if (_shownList != null && paired.SequenceEqual(_shownList)) return;
         _shownList = paired;

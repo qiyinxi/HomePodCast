@@ -4,7 +4,7 @@ using HomePodCast.Update;
 namespace HomePodCast.UI.Pages;
 
 /// <summary>
-/// 设置 → 软件更新's first row, one row in every state as in Windows Update: 当前版本 X with the check's status under it,
+/// 关于 → 软件更新's first row, one row in every state as in Windows Update: 当前版本 X with the check's status under it,
 /// and on the right 「检查更新」, or while a new version is offered 「更新」「查看说明」「跳过此版本」 in its place (「更新」
 /// turns into 「取消」 while it downloads). Only what is in it changes: no row appears or goes away below it (2026-10-14,
 /// the maintainer: a second 「新版本 X」 row that came and went made the section jump). What 「更新」 does is its tooltip

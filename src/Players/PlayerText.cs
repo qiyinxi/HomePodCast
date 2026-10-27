@@ -6,16 +6,19 @@ internal static class PlayerText
     public static string Line(PlayerStatus s)
     {
         string ms = s.DelayMs is { } d ? PlayerDelay.Text(d) : "?";
+        // The page with the mpv line, the VLC steps and the VLC password: 设置 until the navigation was split into pages
+        // (2026-10-15), and these lines kept sending people there. The page's own name, so a rename stays in step.
+        string page = L.T("音画同步");
         return s.State switch
         {
             PlayerState.DestinationRequired => L.F("{0}：请先选择音频去处", s.Name),
             PlayerState.Applied => L.F("{0}：已设为 {1} ms", s.Name, ms),
             PlayerState.Waiting => L.F("{0}：开始播放后自动调整", s.Name),
             PlayerState.UserChanged => L.F("{0}：已被手动改为 {1} ms", s.Name, ms),
-            PlayerState.NoInterface when s.Kind == PlayerKind.Vlc => L.F("{0}：未开启网页接口（见「设置」）", s.Name),
-            PlayerState.NoInterface => L.F("{0}：未开启 IPC（见「设置」）", s.Name),
-            PlayerState.NoPassword => L.F("{0}：没有找到网页接口密码（见「设置」）", s.Name),
-            PlayerState.LoginFailed => L.F("{0}：密码错误，请在设置里重新输入", s.Name),
+            PlayerState.NoInterface when s.Kind == PlayerKind.Vlc => L.F("{0}：未开启网页接口（见「{1}」）", s.Name, page),
+            PlayerState.NoInterface => L.F("{0}：未开启 IPC（见「{1}」）", s.Name, page),
+            PlayerState.NoPassword => L.F("{0}：没有找到网页接口密码（见「{1}」）", s.Name, page),
+            PlayerState.LoginFailed => L.F("{0}：密码错误，请在「{1}」里重新输入", s.Name, page),
             PlayerState.Manual => L.F("{0}：请手动设为 {1} ms", s.Name, ms),
             _ => L.F("{0}：调整失败", s.Name),
         };
@@ -43,14 +46,14 @@ internal static class PlayerText
     }
 
     /// <summary>
-    /// The line under 「VLC 网页接口密码」 in 设置: which password VLC accepted, or that it refused them, while
+    /// The line under 「VLC 网页接口密码」 in 音画同步: which password VLC accepted, or that it refused them, while
     /// the 影视 scene adjusts VLC; otherwise whether one is saved. Never the password itself.
     /// </summary>
     /// <returns>The text, and whether it asks the user to do something.</returns>
     public static (string Text, bool Problem) VlcPasswordStatus(IReadOnlyList<PlayerStatus> statuses, bool manualSaved)
     {
         var vlc = statuses.Where(s => s.Kind == PlayerKind.Vlc).ToList();
-        if (vlc.Any(s => s.State == PlayerState.LoginFailed)) return (L.T("密码错误，请在设置里重新输入"), true);
+        if (vlc.Any(s => s.State == PlayerState.LoginFailed)) return (L.T("密码错误，请在这里重新输入"), true); // under the box
         if (vlc.Any(s => s.Password == PasswordSource.Manual)) return (L.T("使用手动输入的密码"), false);
         if (vlc.Any(s => s.Password == PasswordSource.Player)) return (L.T("使用 VLC 设置里的密码"), false);
         if (vlc.Any(s => s.State == PlayerState.NoPassword)) return (L.T("没有找到密码，请在这里输入"), true);

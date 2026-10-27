@@ -217,7 +217,10 @@ internal sealed class NavItem : FluentControl
     {
         var g = e.Graphics;
         var r = new Rectangle(0, 0, Width, Height);
-        var fill = _selected ? (IsHover ? P.NavHover : P.NavSelected) : IsPressed ? P.NavSelected : IsHover ? P.NavHover : Color.Empty;
+        // From the rail or list underneath (Theme.NavSelectedOn): the light rail is darker than the window.
+        var s = Surface;
+        var fill = _selected ? (IsHover ? Theme.NavHoverOn(s) : Theme.NavSelectedOn(s))
+            : IsPressed ? Theme.NavSelectedOn(s) : IsHover ? Theme.NavHoverOn(s) : Color.Empty;
         if (!fill.IsEmpty) Shapes.FillRound(g, fill, r, Dp(4));
         if (_selected)
         {
