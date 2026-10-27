@@ -171,9 +171,11 @@ internal sealed partial class TrayApp : ApplicationContext
         if (Mixer != null)
         {
             _wantConnected = true; _nightDisconnected = false;
+            // Copied here, on the UI thread: the queue may run it later, while this thread changes the config's lists.
+            var config = Config.Snapshot();
             PostConnection(() =>
             {
-                var result = Mixer.ConnectAsync(Config, trigger).GetAwaiter().GetResult();
+                var result = Mixer.ConnectAsync(config, trigger).GetAwaiter().GetResult();
                 if (result.Result != MixerEditResult.Applied) Log.Warn($"mixer connect: {result.Result} {result.Conflict}");
             });
             return;
@@ -240,7 +242,7 @@ internal sealed partial class TrayApp : ApplicationContext
                 updated.CompatibilityLatencyMs = previous.CompatibilityLatencyMs;
                 updated.CompatibilityNoticeShown = previous.CompatibilityNoticeShown;
             }
-            Config.ReceiverSettings[key] = updated;
+            Config.SetReceiverPreferences(key, updated);
         }
         Config.Volume = null; // use the new speaker's own volume
         Config.Save();
@@ -253,7 +255,11 @@ internal sealed partial class TrayApp : ApplicationContext
         {
             selected.LatencyMs = ms; if (selected.Scene == Scene.Custom) selected.CustomLatencyMs = ms;
             SaveSelectedDestinationSettings();
-            if (_wantConnected) PostConnection(() => Mixer.ConnectAsync(Config, ConnectTrigger.Reconnect).GetAwaiter().GetResult());
+            if (_wantConnected)
+            {
+                var config = Config.Snapshot();
+                PostConnection(() => Mixer.ConnectAsync(config, ConnectTrigger.Reconnect).GetAwaiter().GetResult());
+            }
             return;
         }
         if (Config.Scene == Scene.Custom) Config.CustomLatencyMs = ms;

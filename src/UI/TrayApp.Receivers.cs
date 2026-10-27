@@ -29,9 +29,7 @@ internal sealed partial class TrayApp
             await ApplyMixerDelayAsync(destination, new(PlaybackConfig.Scene, milliseconds, PlaybackConfig.FifoTargetMs, PlaybackConfig.Volume));
             _form.UpdateState(); RaiseStateChanged(); return;
         }
-        string key = RaopPassword.Key(selection.Device.DeviceId);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(selection.Device);
+        var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(selection.Device.DeviceId), () => ReceiverPreferences.Of(selection.Device));
         selection.Save(settings, milliseconds);
         Config.Save();
         _form.UpdateState(); RaiseStateChanged();
@@ -43,9 +41,7 @@ internal sealed partial class TrayApp
         if (Controller.State != StreamState.Streaming || ReceiverSelection is not { } selection
             || ReferenceEquals(_rememberedReceiverSession, Controller.AudioSessionIdentity)) return;
         _rememberedReceiverSession = Controller.AudioSessionIdentity;
-        string key = RaopPassword.Key(selection.Device.DeviceId);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(selection.Device);
+        var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(selection.Device.DeviceId), () => ReceiverPreferences.Of(selection.Device));
         settings.LastSuccessfulProtocol = selection.Protocol;
         if ((Controller.ReceiverSession?.ArrivalToRenderMs ?? Controller.Client?.ArrivalToRenderMs) is { } processing)
             settings.ArrivalToRenderMs = processing;

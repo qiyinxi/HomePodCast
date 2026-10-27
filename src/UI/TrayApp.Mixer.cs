@@ -52,7 +52,9 @@ internal sealed partial class TrayApp
         }, null);
         Routing.Changed += () =>
         {
-            if (Mixer.IsConnected) PostConnection(() => Mixer.ConnectAsync(Config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
+            if (!Mixer.IsConnected) return;
+            var config = Config.Snapshot(); // on the UI thread, which changes the live one (Connect)
+            PostConnection(() => Mixer.ConnectAsync(config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
         };
     }
 
@@ -128,8 +130,7 @@ internal sealed partial class TrayApp
             controller.ReceiverProtocolConnected += (id, protocol, processing) => _ui.Post(_ =>
             {
                 if (_quitting || controller.ReceiverLookup?.Invoke(id) is not { } device) return;
-                string key = RaopPassword.Key(id);
-                if (!Config.ReceiverSettings.TryGetValue(key, out var settings)) Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+                var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(id), () => ReceiverPreferences.Of(device));
                 settings.LastSuccessfulProtocol = protocol; if (processing != null) settings.ArrivalToRenderMs = processing;
                 Config.TrySave();
             }, null);
@@ -178,7 +179,7 @@ internal sealed partial class TrayApp
         {
             using var dialog = new RaopPasswordDialog(request.Device.Name);
             if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || _quitting) return;
-            Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+            Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
             Config.Save(); PostConnection(() => Mixer!.ReconnectAsync(key, ConnectTrigger.Manual).GetAwaiter().GetResult());
         }
         finally { _raopDialog = false; }
@@ -271,9 +272,9 @@ internal sealed partial class TrayApp
             string receiverKey = RaopPassword.Key(receiverId);
             var old = Config.ReceiverSettings.GetValueOrDefault(receiverKey);
             var next = old == null ? ReceiverPreferences.Of(selection.Device) : old with { };
-            selection.Save(next, delay.LatencyMs); Config.ReceiverSettings[receiverKey] = next;
+            selection.Save(next, delay.LatencyMs); Config.SetReceiverPreferences(receiverKey, next);
             try { SaveMixerConfig(); }
-            catch { if (old == null) Config.ReceiverSettings.Remove(receiverKey); else Config.ReceiverSettings[receiverKey] = old; return new(MixerEditResult.SaveFailed); }
+            catch { Config.SetReceiverPreferences(receiverKey, old); return new(MixerEditResult.SaveFailed); }
             if (Mixer.IsConnected) await Mixer.ReconnectAsync(key, ConnectTrigger.Reconnect);
             return new(MixerEditResult.Applied);
         }

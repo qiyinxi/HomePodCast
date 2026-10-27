@@ -463,6 +463,41 @@ public sealed class AppConfig
         }
         File.Move(tmp, path, overwrite: true);
     }
+
+    /// <summary>
+    /// A deep copy (through JSON) for work on another thread: the UI thread changes the live config's lists and dictionaries,
+    /// and serializing or enumerating one while it changes throws.
+    /// </summary>
+    internal AppConfig Snapshot() => JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(this))!;
+
+    // ReceiverSettings, ManualDevices and RaopPasswordsProtected are read on the stream threads as well (StreamController's
+    // ReceiverLookup, ReceiverSettings and ReceiverPassword, which TrayApp gives it). So the UI thread never changes one in
+    // place: it puts a changed copy in its place (the methods below), and a reader never has one change under it.
+
+    /// <summary>The receiver's preferences; made by <paramref name="create"/> and added when it has none yet.</summary>
+    internal Net.ReceiverPreferences ReceiverPreferencesFor(string key, Func<Net.ReceiverPreferences> create)
+    {
+        if (ReceiverSettings.TryGetValue(key, out var existing)) return existing;
+        var made = create();
+        SetReceiverPreferences(key, made);
+        return made;
+    }
+
+    /// <summary>Sets one receiver's preferences (null: removes them).</summary>
+    internal void SetReceiverPreferences(string key, Net.ReceiverPreferences? preferences)
+    {
+        var next = new Dictionary<string, Net.ReceiverPreferences>(ReceiverSettings, ReceiverSettings.Comparer);
+        if (preferences == null) next.Remove(key);
+        else next[key] = preferences;
+        ReceiverSettings = next;
+    }
+
+    internal void SetRaopPassword(string key, string protectedPassword) =>
+        RaopPasswordsProtected = new(RaopPasswordsProtected, RaopPasswordsProtected.Comparer) { [key] = protectedPassword };
+
+    /// <summary>Adds an address typed in by the user, in place of one with the same address or device id.</summary>
+    internal void AddManualDevice(Net.ManualAirPlayDevice device) => ManualDevices =
+        [.. ManualDevices.Where(d => !(d.Host == device.Host && d.Port == device.Port || d.DeviceId == device.DeviceId)), device];
 }
 
 /// <summary>How 开机自动启动 works for this copy.</summary>

@@ -17,8 +17,7 @@ internal sealed partial class TrayApp
     {
         using var dialog = new ManualAirPlayDialog();
         if (dialog.ShowDialog(owner) != DialogResult.OK || dialog.Device is not { } device) return;
-        Config.ManualDevices.RemoveAll(d => d.Host == device.Host && d.Port == device.Port || d.DeviceId == device.DeviceId);
-        Config.ManualDevices.Add(device);
+        Config.AddManualDevice(device);
         Config.Save();
         LastScan = ManualAirPlayDevice.Include(LastScan.Where(d => !(d.Address.ToString() == device.Host && d.Port == device.Port)).ToList(), Config.ManualDevices);
         _form.SetDevices(StereoPairs.Merge(LastScan));
