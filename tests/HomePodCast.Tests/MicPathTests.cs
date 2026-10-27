@@ -47,8 +47,47 @@ public class MicPathTests(ITestOutputHelper output)
         // Channel 0 carries a ramp, the others carry a different constant that must not leak in.
         var data = Interleave(fmt, 100, (i, c) => c == 0 ? (i - 50) / 64.0 : -0.9);
         var mono = new float[100];
-        MicPipeline.FirstChannel(data, 100, fmt, mono);
+        MicPipeline.ReadChannel(data, 100, fmt, 0, mono);
         for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+    }
+
+    [Theory]
+    [MemberData(nameof(Formats))]
+    public void Any_input_channel_or_the_average_of_all_can_be_taken(int bits, int channels, bool isFloat)
+    {
+        // Two-input interfaces (Scarlett 2i2, UMC202HD) are one stereo endpoint: a mic on input 2 is channel 1.
+        var fmt = new WaveFormat(48000, channels, bits, channels * bits / 8, isFloat);
+        var data = Interleave(fmt, 100, (i, c) => c == channels - 1 ? (i - 50) / 64.0 : 0.25 * c - 0.5);
+        var mono = new float[100];
+        MicPipeline.ReadChannel(data, 100, fmt, channels - 1, mono);
+        for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+
+        // A channel the device does not have (another device with fewer inputs) is the last one it has.
+        MicPipeline.ReadChannel(data, 100, fmt, 7, mono);
+        for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+
+        MicPipeline.ReadChannel(data, 100, fmt, -1, mono);
+        for (int i = 0; i < 100; i++)
+        {
+            double others = Enumerable.Range(0, channels - 1).Sum(c => 0.25 * c - 0.5);
+            double want = ((i - 50) / 64.0 + others) / channels;
+            Assert.InRange(mono[i], want - 1e-4, want + 1e-4);
+        }
+    }
+
+    [Fact]
+    public void Pipeline_follows_a_channel_change_from_the_next_packet()
+    {
+        var fmt = Float32(44100, 2);
+        var pipeline = new MicPipeline(fmt, 44100);
+        var data = Interleave(fmt, 441, (_, c) => c == 0 ? 0 : 0.5);   // only input 2 has a signal
+        pipeline.Load(data, 441, false, 0, false, -50);
+        Assert.Equal(0, pipeline.Peak);
+        pipeline.Load(data, 441, false, 0, false, -50, channel: 1);
+        Assert.Equal(0.5f, pipeline.Peak, 3);
+        pipeline.Load(data, 441, false, 0, false, -50, channel: -1);
+        Assert.Equal(0.25f, pipeline.Peak, 3);
+        Assert.Equal(0, new MicCapture().Channel);   // input 1, as before there was a choice
     }
 
     [Fact]
