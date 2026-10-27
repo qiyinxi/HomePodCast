@@ -109,8 +109,12 @@ function flushSave() {
     if (isDefault) remove.push(k);
     else set[k] = v;
   }
-  if (remove.length) chrome.storage.sync.remove(remove);
-  if (Object.keys(set).length) chrome.storage.sync.set(set);
+  // A failed write (the sync quota) is only lost, as in the page: without a callback it would be an unhandled rejection.
+  const done = () => { void chrome.runtime.lastError; };
+  try {
+    if (remove.length) chrome.storage.sync.remove(remove, done);
+    if (Object.keys(set).length) chrome.storage.sync.set(set, done);
+  } catch (_) { /* ignore */ }
 }
 
 function saveSite() {
@@ -347,7 +351,11 @@ async function init() {
 
   const keys = [GLOBAL_KEY];
   if (state.host) keys.push(state.host);
-  const items = await chrome.storage.sync.get(keys);
+  // Unreadable settings keep the defaults: the status and the refresh below must start anyway.
+  let items = {};
+  try {
+    items = (await chrome.storage.sync.get(keys)) || {};
+  } catch (_) { /* ignore */ }
   const g = items[GLOBAL_KEY] || {};
   const s = (state.host && items[state.host]) || {};
   state.globalEnabled = g.enabled !== false;
