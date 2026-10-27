@@ -148,7 +148,10 @@ internal sealed class ThemeTransition : IDisposable
                 _cover?.DestroyHandle();
                 _cover = new Cover(window.Handle);
             }
-            if (!_cover.Show(image, window.RectangleToScreen(window.ClientRectangle).Location, Level(1))) return false;
+            // Windows 11 rounds the window's bottom corners (8 px at 100 %, not when maximized): a square cover would show
+            // the old theme in the corners beyond them for the length of the fade.
+            int corner = Theme.RoundedWindows && window.WindowState == FormWindowState.Normal ? Theme.Dp(8, window.DeviceDpi) : 0;
+            if (!_cover.Show(image, window.RectangleToScreen(window.ClientRectangle).Location, Level(1), corner)) return false;
         }
         catch (Exception ex) when (ex is ArgumentException or ExternalException or Win32Exception)
         {
@@ -215,8 +218,24 @@ internal sealed class ThemeTransition : IDisposable
 
         public IntPtr Owner { get; }
 
-        public bool Show(Bitmap image, Point at, byte alpha)
+        /// <summary>The bottom corners rounded with <paramref name="corner"/> pixels (0: square).</summary>
+        internal int Corner { get; private set; }
+
+        public bool Show(Bitmap image, Point at, byte alpha, int corner)
         {
+            if (corner != Corner || corner > 0)
+            {
+                IntPtr region = IntPtr.Zero;
+                if (corner > 0)
+                {
+                    region = CreateRoundRectRgn(0, 0, image.Width + 1, image.Height + 1, 2 * corner, 2 * corner);
+                    IntPtr top = CreateRectRgn(0, 0, image.Width, Math.Max(0, image.Height - corner));
+                    CombineRgn(region, region, top, RGN_OR); // only the bottom corners: the top is the title bar's edge
+                    DeleteObject(top);
+                }
+                if (SetWindowRgn(Handle, region, false) == 0 && region != IntPtr.Zero) DeleteObject(region); // else the window owns it
+                Corner = corner;
+            }
             IntPtr screen = GetDC(IntPtr.Zero), memory = CreateCompatibleDC(screen), bitmap = IntPtr.Zero, old = IntPtr.Zero;
             try
             {
@@ -337,4 +356,27 @@ internal sealed class ThemeTransition : IDisposable
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmFlush();
+
+    private const int RGN_OR = 2;
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRoundRectRgn(int left, int top, int right, int bottom, int widthEllipse, int heightEllipse);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+
+    [DllImport("gdi32.dll")]
+    private static extern int CombineRgn(IntPtr destination, IntPtr source1, IntPtr source2, int mode);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, [MarshalAs(UnmanagedType.Bool)] bool redraw);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetWindowRgnBox(IntPtr hwnd, out NativeRect rect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    /// <summary>Tests: the bottom-corner radius the cover was shown with.</summary>
+    internal int CoverCorner => _cover?.Corner ?? 0;
 }

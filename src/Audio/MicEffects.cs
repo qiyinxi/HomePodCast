@@ -264,6 +264,7 @@ public sealed class MicEffects : IDisposable
                 _mic.StatusChanged += RaiseChanged;
                 _mic.Start();
             }
+            _mic.Channel = s.MicChannel;
             _mic.GainDb = (float)s.MicGainDb;
             _mic.GateEnabled = s.GateEnabled;
             _mic.GateThresholdDb = (float)s.GateThresholdDb;

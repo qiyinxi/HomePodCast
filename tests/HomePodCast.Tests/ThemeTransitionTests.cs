@@ -39,6 +39,14 @@ public class ThemeTransitionTests(ITestOutputHelper output)
             cover = new Bitmap(transition.CoverImage!);
             atStart = ThemeTransition.Snapshot(window);
             AssertCover(window, transition);
+            // Windows 11 rounds the window's bottom corners: so is the cover, or the old theme shows beyond them.
+            int corner = Theme.RoundedWindows ? Theme.Dp(8, window.DeviceDpi) : 0;
+            Assert.Equal(corner, transition.CoverCorner);
+            if (corner > 0)
+            {
+                Assert.NotEqual(0, ThemeTransition.GetWindowRgnBox(transition.CoverHandle, out var box)); // a region is set
+                Assert.Equal((window.ClientSize.Width, window.ClientSize.Height), (box.Right - box.Left, box.Bottom - box.Top));
+            }
         };
         using (var work = new Work())
         {
