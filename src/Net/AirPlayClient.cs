@@ -89,7 +89,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     {
         _rtsp = rtsp;
         _timing = new TimingServer(rtsp.LocalIp);
-        _control = new UdpClient(new IPEndPoint(rtsp.LocalIp, 0));
+        // PtpRealtimeSender reads resend requests from this socket and ends the session on any error.
+        _control = new UdpClient(new IPEndPoint(rtsp.LocalIp, 0)).IgnorePortUnreachable();
     }
 
     public static async Task<AirPlayClient> ConnectAsync(IPAddress host, int port, StreamOptions options,
