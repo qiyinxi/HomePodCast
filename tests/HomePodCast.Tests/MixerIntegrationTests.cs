@@ -22,6 +22,40 @@ public sealed class MixerIntegrationTests
     }
 
     [Fact]
+    public async Task Local_API_names_why_a_mixer_caller_gets_no_picture_delay()
+    {
+        // The browser extension shows its own text for reason (in the browser's language); message stays for older ones.
+        using var api = new LocalApi(0, app => app switch
+        {
+            "unknown" => TrayApp.ApiUndelayedStatus(null, false, new[] { new { Key = "homepod", Name = "HomePod", State = "Streaming" } }),
+            "local" => TrayApp.ApiUndelayedStatus("local", true, null),
+            _ => TrayApp.ApiUndelayedStatus("homepod", false, null),
+        });
+        using var http = new HttpClient();
+        async Task<JsonElement> Status(string app) =>
+            JsonDocument.Parse(await http.GetStringAsync($"http://127.0.0.1:{api.Port}/v1/status?app={app}")).RootElement;
+
+        var unknown = await Status("unknown");
+        Assert.False(unknown.GetProperty("streaming").GetBoolean());
+        Assert.True(unknown.GetProperty("destinationRequired").GetBoolean());
+        Assert.Equal("destination-unknown", unknown.GetProperty("reason").GetString());
+        Assert.Equal("homepod", unknown.GetProperty("destinations")[0].GetProperty("key").GetString());
+        Assert.False(string.IsNullOrEmpty(unknown.GetProperty("message").GetString()));
+
+        var local = await Status("local");
+        Assert.Equal("local-output", local.GetProperty("reason").GetString());
+        Assert.True(local.GetProperty("local").GetBoolean());
+        Assert.False(local.GetProperty("destinationRequired").GetBoolean());
+
+        // A speaker destination without a running stream: unknown as well, not "not streaming" (the extension's idle).
+        var stopped = await Status("stopped");
+        Assert.Equal("homepod", stopped.GetProperty("destination").GetString());
+        Assert.False(stopped.GetProperty("local").GetBoolean());
+        Assert.True(stopped.GetProperty("destinationRequired").GetBoolean());
+        Assert.Equal("destination-unknown", stopped.GetProperty("reason").GetString());
+    }
+
+    [Fact]
     public async Task Players_follow_their_own_destinations_and_restore_only_the_unavailable_one()
     {
         var game = new Player("game", 12); var music = new Player("music", 24);

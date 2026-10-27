@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "未运行" },
   "statusIdle": { "message": "未推流" },
   "statusStreaming": { "message": "推流中" },
+  "statusDestinationUnknown": { "message": "无法确定浏览器的声音去处，同步暂不可用。" },
+  "statusLocalOutput": { "message": "浏览器在本机播放，画面不延迟。" },
   "siteLabel": { "message": "当前网站" },
   "localFile": { "message": "(本地文件)" },
   "minusLabel": { "message": "减少 1 毫秒" },

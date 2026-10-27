@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "未執行" },
   "statusIdle": { "message": "未串流" },
   "statusStreaming": { "message": "串流中" },
+  "statusDestinationUnknown": { "message": "無法確定瀏覽器的聲音去處，同步暫時無法使用。" },
+  "statusLocalOutput": { "message": "瀏覽器在本機播放，畫面不延遲。" },
   "siteLabel": { "message": "目前網站" },
   "localFile": { "message": "(本機檔案)" },
   "minusLabel": { "message": "減少 1 毫秒" },

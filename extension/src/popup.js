@@ -132,8 +132,20 @@ function effectiveDelay() {
   return clamp(Math.round(base + state.offset), 0, MAX_DELAY_MS);
 }
 
+// With the app's mixer, the browser's sound can go where the picture gets no speaker delay. The app says why in reason
+// (its message is in the app's language, not the browser's); older apps send only the flags and the message.
+function undelayedStatus(s) {
+  if (!s || s.running === false || s.streaming) return null;
+  const reason = s.reason || (s.destinationRequired ? 'destination-unknown' : s.local ? 'local-output' : '');
+  if (reason === 'destination-unknown') return { text: t('statusDestinationUnknown'), st: 'unknown' };
+  if (reason === 'local-output') return { text: t('statusLocalOutput'), st: 'idle' };
+  if (reason && typeof s.message === 'string') return { text: s.message, st: 'unknown' }; // a newer app's reason
+  return null;
+}
+
 function renderStatus() {
   const s = state.status;
+  const undelayed = undelayedStatus(s);
   let text;
   let st;
   if (!s) {
@@ -142,9 +154,8 @@ function renderStatus() {
   } else if (s.running === false) {
     text = t('statusNotRunning');
     st = 'off';
-  } else if ((s.destinationRequired || s.local) && typeof s.message === 'string') {
-    text = s.message;
-    st = s.destinationRequired ? 'unknown' : 'idle';
+  } else if (undelayed) {
+    ({ text, st } = undelayed);
   } else if (!s.streaming) {
     text = t('statusIdle');
     st = 'idle';
@@ -190,6 +201,8 @@ function renderSite() {
     hint = t('hintSiteOff');
   } else if (state.status === null) {
     el.effDelay.textContent = '—'; // the app's answer decides the hint
+  } else if (undelayedStatus(state.status)) {
+    el.effDelay.textContent = '—'; // the status says why; "not streaming" would contradict it (other apps may stream)
   } else if (eff === null) {
     el.effDelay.textContent = '—';
     hint = state.status.running === false ? t('hintNotRunning') : t('hintNotStreaming');

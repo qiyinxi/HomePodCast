@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "Non in esecuzione" },
   "statusIdle": { "message": "Nessuna trasmissione" },
   "statusStreaming": { "message": "In trasmissione" },
+  "statusDestinationUnknown": { "message": "La destinazione audio del browser è sconosciuta; la sincronizzazione non è temporaneamente disponibile." },
+  "statusLocalOutput": { "message": "Il browser riproduce l'audio in locale; l'immagine non viene ritardata." },
   "siteLabel": { "message": "Questo sito" },
   "localFile": { "message": "(file locale)" },
   "minusLabel": { "message": "1 ms in meno" },
