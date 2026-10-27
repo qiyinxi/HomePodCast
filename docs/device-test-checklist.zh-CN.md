@@ -298,6 +298,15 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 6. - [ ] 保存一组带名称的真实设备，重启后在首页选择再连接，确认实际去处正确；切到文件音源不会启用本机／DLNA，回到实时仍保留选择，原来单台 HomePod 的低延迟体验不变
 7. - [ ] LPCM／WAV 不可用时，只试设备声明支持的 MP3／AAC，记录启动等待和编码额外偏移；连接中静音／降低音量不会恢复旧音量。沿用现有专用网络和防火墙范围，不为本测试开放公用网络或另加规则
 
+#### 参数均衡与麦克风人声处理（首次发布于 1.3，实验性，尚未实机验证）
+
+开发和自动化只用了合成信号（正弦、噪声）测频率响应、无爆音和不分配内存，没有听过真实声音。有声测试的音量不超过 25%。
+
+1. - [ ] 均衡 → HomePod 输出均衡：拖动频段圆点、改类型、开关频段、增删频段时声音连续变化，没有咔哒声或爆音；低切 24/48 dB/oct 明显去掉低频；「开启均衡」关掉后和平直一样。改了 `src/Audio/Equalizer.cs`、`src/UI/Controls/EqGraph.cs` 或 `src/UI/Controls/EqEditor.cs` 才需要重测
+2. - [ ] 1.2 的配置（「低音增强」或自定义五段）升级后听起来和以前一样；出现「曲线最高提升…可能削波」时点「降低输出增益」，大音量的低音不再破音。改了 `src/Audio/Equalizer.cs` 才需要重测
+3. - [ ] 麦克风（没有麦克风，暂时测不了）：低切去掉嗡嗡声和碰麦声；压缩器让说话忽大忽小变平均，增益衰减表随说话跳动；齿音消除压低「s」「sh」音而不发闷；限制器开着时大喊不破音，输出电平不到红色。改了 `src/Audio/Dynamics.cs`、`src/Audio/MicEffects.cs` 或 `src/UI/Pages/EffectsPage.cs` 才需要重测
+4. - [ ] 多路输入的声卡（没有这类声卡，暂时测不了）：麦克风接在输入 2 时，选「声道 2」能听到，「全部声道混合」两路都有。改了 `src/Audio/MicCapture.cs` 才需要重测
+
 #### 每程序独立去处（首次发布于 1.3，实验性，尚未实机验证）
 
 维护者准备使用设备时自行决定何时测；没有足够设备的组合继续保留未验证。先确认没有 iPhone、Apple TV 或其他控制器正在使用目标音箱，
@@ -311,6 +320,8 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 5. - [ ] 所有程序切回同一台 HomePod、关闭独立推送音量后，回到「全部推送」的原体验。录真实画面／声音比较属于维护者的实机项目，不把软件帧／时间戳回归当作实测
 
 ## 已自动化（不用手测）
+
+- **ParametricEqTests / EqualizerTests / DynamicsTests / MicrophonePagesTests**：每种频段类型的实测频率响应和曲线一致；拖频率、改 Q、换类型、开关频段时没有不连续（二阶差分）；旧五段预设和旧配置得到同样的滤波器；关掉均衡后逐位不变；NaN 样本不会让之后全部静音；处理时不分配内存。压缩器静态曲线、齿音消除只压高频、限制器不超过上限；麦克风页的开关和滑块改到设置和引擎，不打开麦克风；配置档案恢复全部音效设置。gui-smoke 检查均衡页和麦克风页的新控件并截图。
 
 - **MixerRoutingV2Tests / MixerCaptureBusTests / MixerCoordinatorTests / MixerBoundaryTests / MixerIntegrationTests / MixerCallerIdentityTests / MixerEndToEndTests / MixerDestinationUiTests**：V2 幂等迁移与未知版本保留、纯解析、共享根采集、逐样本分流与独立音量、单读麦克风、generation 切换、退出和缓冲有界；物理设备／pair／组／协议别名原子租约、完整停止前保留占用、独立连接和延迟、单处丢失／重试不重启健康发送器、配置快照、播放器和 API 去处、校准及文件播放占用。去处切换期间保留采集、本机别名防重、独立时钟调节及取消／失败不保存；真实控制器接进程内假 AirPlay、假本机 render device 和假 DLNA；没有实机声音结论。
 - **MixerDestinationLatencyTests**：旧入口与协调器的单台 HomePod 旁路比较相同 FIFO、协商帧、marker 位置及 RTP 时间，额外一包缓冲的负对照会失败；保存许多高延迟组、迁移或刷新选项仍不创建共享 hub／组历史。原有延迟、FIFO、路由及 FanOut 回归原样保留。
