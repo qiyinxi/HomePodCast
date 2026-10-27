@@ -158,7 +158,7 @@ internal sealed class FluentComboBox : FluentControl
         for (int i = 0; i < Items.Count; i++)
         {
             int index = i;
-            var item = new ToolStripMenuItem(Items[i])
+            var item = new ListItem(Items[i])
             {
                 Checked = i == _selected,
                 Font = Theme.FontFor(TextStyle.Body, menuDpi, Items[i]),
@@ -177,6 +177,20 @@ internal sealed class FluentComboBox : FluentControl
         };
         menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
         return menu;
+    }
+
+    /// <summary>
+    /// An entry as wide as the list. The menu makes every entry as wide as its longest text, not as the list (MinimumSize):
+    /// 2026-10-27, the EQ presets in a 240 px list were 125 px wide, and the highlight ended in the middle of the list.
+    /// The width is read from the list when it lays out, so it follows the list when WinForms rescales it to its monitor.
+    /// </summary>
+    private sealed class ListItem(string text) : ToolStripMenuItem(text)
+    {
+        public override Size GetPreferredSize(Size constrainingSize)
+        {
+            var size = base.GetPreferredSize(constrainingSize);
+            return new Size(Math.Max(size.Width, Owner?.MinimumSize.Width ?? 0), size.Height);
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)

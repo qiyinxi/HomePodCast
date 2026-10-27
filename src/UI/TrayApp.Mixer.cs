@@ -102,7 +102,7 @@ internal sealed partial class TrayApp
         }
         if (!useLegacy)
         {
-            var eq = new Equalizer(44100); eq.Set(Config.Effects.OutputEq.Preset, Config.Effects.OutputEq.Gains);
+            var eq = new Equalizer(44100); eq.Set(Config.Effects.OutputEq);
             controller.Effects.Insert(0, eq); _mixerEqualizers[controller] = eq;
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
@@ -314,7 +314,7 @@ internal sealed partial class TrayApp
             if (_mixerEqualizers.TryGetValue(controller, out var eq))
             {
                 if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);
-                else eq.Set(Config.Effects.OutputEq.Preset, Config.Effects.OutputEq.Gains);
+                else eq.Set(Config.Effects.OutputEq);
             }
         }
     }
