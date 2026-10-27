@@ -279,6 +279,25 @@ test('a large desktop delay plus site adjustment remains limited to 2000 ms, and
   assert.equal(h.ctx.__hpcContentDebug.desiredDelay(), 2000);
 });
 
+test('a shortcut never moves a saved offset outside the bounds against its direction', async () => {
+  // A compatibility delay above 2000 ms: the picture is pinned at 2000 ms, so only offsets of −250 and lower count.
+  const h = harness({ content: true, status: { streaming: true, videoDelayMs: 2250 } }); await settled();
+  const debug = h.ctx.__hpcContentDebug;
+  h.fullscreen(h.container); h.key(); // Alt+→
+  assert.equal(debug.settings.offsetMs, 0); assert.equal(debug.desiredDelay(), 2000);
+  h.flush(250); assert.deepEqual(h.writes, []);
+  h.key({ key: 'ArrowLeft' }); assert.equal(debug.settings.offsetMs, -250); // the first step that changes the picture
+  h.key({ key: 'ArrowLeft' }); assert.equal(debug.settings.offsetMs, -255);
+  assert.equal(debug.desiredDelay(), 1995);
+
+  // −400 saved in another scene, now at 141 ms: Alt+← keeps it, Alt+→ moves it up to where the delay changes again.
+  const scene = harness({ content: true, stored: { 'example.test': { offsetMs: -400 } } }); await settled();
+  scene.fullscreen(scene.container); scene.key({ key: 'ArrowLeft' });
+  assert.equal(scene.ctx.__hpcContentDebug.settings.offsetMs, -400);
+  scene.flush(250); assert.deepEqual(scene.writes, []);
+  scene.key(); assert.equal(scene.ctx.__hpcContentDebug.settings.offsetMs, -141);
+});
+
 test('the controls stay hidden until the pointer moves over the video and hide again 2.5 s after the last move', () => {
   const h = harness(); const { ui, entry } = manager(h);
   assert.equal(entry.host.hidden, true);

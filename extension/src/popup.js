@@ -247,7 +247,9 @@ function step(delta) {
   if (!state.host) return;
   const [lo, hi] = offsetBounds();
   const next = clamp(state.offset + delta, lo, hi);
-  if (next === state.offset) return;
+  // An offset saved at another delay can lie outside the bounds, and the clamp would then move it to the far bound:
+  // never against the button pressed (+ at a 2250 ms delay would save −250, and at 141 ms that site loses its delay).
+  if (next === state.offset || Math.sign(next - state.offset) !== Math.sign(delta)) return;
   state.offset = next;
   saveSite();
   renderSite();
