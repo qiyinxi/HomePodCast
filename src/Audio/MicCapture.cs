@@ -279,7 +279,7 @@ internal sealed class MicPipeline
     public NoiseGate Gate { get; }
     public float Peak { get; private set; }
     public float Rms { get; private set; }
-    public double ResamplerDelayMs => _resampler == null ? 0 : 32 * 1000.0 / _fmt.SampleRate;
+    public double ResamplerDelayMs => _resampler == null ? 0 : _resampler.DelayFrames * 1000.0 / _fmt.SampleRate;
 
     public MicPipeline(WaveFormat fmt, int outRate)
     {
@@ -353,7 +353,8 @@ internal sealed class MicPipeline
         if (calibration != null)
         {
             long first = packetTicks == 0 ? 0 : packetTicks + (long)((_outputFrames / (double)_outRate
-                - (_inputFrames - _frames) / (double)_fmt.SampleRate + (_resampler == null ? 0 : 31.0 / _fmt.SampleRate)) * Stopwatch.Frequency);
+                - (_inputFrames - _frames) / (double)_fmt.SampleRate
+                + (_resampler == null ? 0 : (_resampler.DelayFrames - 1.0) / _fmt.SampleRate)) * Stopwatch.Frequency);
             calibration(output, first);
         }
         _outputFrames += frames;

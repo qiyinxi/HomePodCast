@@ -65,7 +65,7 @@ public sealed class AudioTap
     public double AverageDepth => _avgDepth;
 
     /// <summary>Delay added by the resampler (≈ half its kernel), in ms.</summary>
-    public double ResamplerDelayMs => 32 * 1000.0 / InputRate;
+    public double ResamplerDelayMs => _resampler.DelayFrames * 1000.0 / InputRate;
 
     /// <summary>True when the consumer read in the last second (e.g. the HomePod is actually streaming).</summary>
     public bool IsBeingRead => Clock() - Volatile.Read(ref _lastRead) < Stopwatch.Frequency;

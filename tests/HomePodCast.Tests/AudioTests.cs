@@ -54,6 +54,43 @@ public class ResamplerTests
         Assert.True(alias < 0.5 * 0.01, $"alias amplitude {alias}");  // at least -40 dB
     }
 
+    [Theory]
+    [InlineData(96000)]
+    [InlineData(192000)]
+    public void High_rate_input_keeps_the_treble_and_removes_what_would_fold_back(int rate)
+    {
+        // 2026-10-27 review: with the fixed 64-tap kernel a 192 kHz input rolled off from about 12 kHz (-2.5 dB at
+        // 18 kHz) and let 22-28 kHz fold back into the treble.
+        foreach (double freq in new[] { 1000.0, 16000, 18000 })
+        {
+            var r = new Resampler(rate, 44100);
+            var output = new List<float>();
+            var input = Sine(rate, freq, 0.5);
+            int chunk = rate / 100 * 2; // 10 ms, like WASAPI
+            for (int i = 0; i < input.Length; i += chunk)
+                r.Process(input.AsSpan(i, Math.Min(chunk, input.Length - i)), output);
+            var steady = output.Skip(2205 * 2).ToList();
+            Assert.InRange(Tone(steady, 44100, freq), 0.5 * 0.99, 0.5 * 1.01); // within 0.1 dB
+        }
+        var fold = new Resampler(rate, 44100);
+        var folded = new List<float>();
+        fold.Process(Sine(rate, 26000, 0.5), folded);
+        double alias = Tone(folded.Skip(2205 * 2).ToList(), 44100, 44100 - 26000);
+        Assert.True(alias < 0.5 * 0.01, $"alias amplitude {alias}");  // at least -40 dB
+    }
+
+    [Fact]
+    public void Kernel_grows_only_when_decimating_by_one_and_a_half_or_more()
+    {
+        // The realtime path (44.1/48 kHz in, drift resamplers) keeps its 64-tap kernel and latency.
+        Assert.Equal(32, new Resampler(44100, 44100).DelayFrames);
+        Assert.Equal(32, new Resampler(48000, 44100).DelayFrames);
+        Assert.Equal(32, new Resampler(44100, 48000).DelayFrames);
+        Assert.Equal(70, new Resampler(96000, 44100).DelayFrames);
+        Assert.Equal(140, new Resampler(192000, 44100).DelayFrames);
+        Assert.Equal(70 * 1000.0 / 96000, new AudioTap(96000, 44100, 20, 80).ResamplerDelayMs, 6);
+    }
+
     [Fact]
     public void Adjust_changes_the_output_rate_by_the_requested_ppm()
     {
