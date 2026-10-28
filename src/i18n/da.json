@@ -832,5 +832,6 @@
   "峰值过后多快恢复原来的音量。": "Hvor hurtigt lydstyrken vender tilbage efter en top.",
   "声道 {0}": "Kanal {0}",
   "全部声道混合": "Alle kanaler mikset",
-  "Windows 的 AAC 编码器不支持 5.1": "Windows' AAC-encoder understøtter ikke 5.1"
+  "Windows 的 AAC 编码器不支持 5.1": "Windows' AAC-encoder understøtter ikke 5.1",
+  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "Windows' outputenhed er ikke sat til 5.1 eller 7.1: den har {0} kanaler"
 }

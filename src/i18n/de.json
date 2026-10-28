@@ -832,5 +832,6 @@
   "峰值过后多快恢复原来的音量。": "Wie schnell nach einer Pegelspitze wieder die ursprüngliche Lautstärke erreicht wird.",
   "声道 {0}": "Kanal {0}",
   "全部声道混合": "Alle Kanäle gemischt",
-  "Windows 的 AAC 编码器不支持 5.1": "Der AAC-Encoder von Windows unterstützt kein 5.1"
+  "Windows 的 AAC 编码器不支持 5.1": "Der AAC-Encoder von Windows unterstützt kein 5.1",
+  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "das Windows-Ausgabegerät ist nicht auf 5.1 oder 7.1 eingestellt: es hat {0} Kanäle"
 }

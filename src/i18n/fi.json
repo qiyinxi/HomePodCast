@@ -832,5 +832,6 @@
   "峰值过后多快恢复原来的音量。": "Kuinka nopeasti äänenvoimakkuus palautuu huipun jälkeen.",
   "声道 {0}": "Kanava {0}",
   "全部声道混合": "Kaikki kanavat miksattuina",
-  "Windows 的 AAC 编码器不支持 5.1": "Windowsin AAC-kooderi ei tue 5.1-ääntä"
+  "Windows 的 AAC 编码器不支持 5.1": "Windowsin AAC-kooderi ei tue 5.1-ääntä",
+  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "Windowsin toistolaite ei ole 5.1- tai 7.1-tilassa: siinä on {0} kanavaa"
 }

@@ -832,5 +832,6 @@
   "峰值过后多快恢复原来的音量。": "Quanto velocemente torna il volume originale dopo un picco.",
   "声道 {0}": "Canale {0}",
   "全部声道混合": "Mix di tutti i canali",
-  "Windows 的 AAC 编码器不支持 5.1": "L'encoder AAC di Windows non supporta il 5.1"
+  "Windows 的 AAC 编码器不支持 5.1": "L'encoder AAC di Windows non supporta il 5.1",
+  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "il dispositivo di uscita di Windows non è impostato su 5.1 o 7.1: ha {0} canali"
 }
