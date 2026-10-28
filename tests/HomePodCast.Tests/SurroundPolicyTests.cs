@@ -74,14 +74,6 @@ public sealed class SurroundPolicyTests
         Assert.Equal(blocked, request.Blocked());
     }
 
-    [Fact]
-    public void The_picture_delay_stays_under_the_extensions_2000_ms_clamp()
-    {
-        // SoundLagMs adds the capture-to-picture extra (36 ms) and the FIFO target above 20 ms (the 5.1 FIFO's 40 ms).
-        int lag = SurroundPolicy.LatencyMs + SurroundPolicy.EncoderDelayMs + new AppConfig().VideoDelayExtraMs + (40 - 20);
-        Assert.True(lag < 2000, $"{lag} ms");
-    }
-
     /// <summary>
     /// The mixer restarts a destination on a toggle only when <see cref="SurroundPolicy.Reaches"/>: it must name exactly the
     /// speakers StreamController.Start runs in RunAsync, the only path that asks for 5.1, for every protocol setting.

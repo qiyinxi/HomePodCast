@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using HomePodCast.Audio;
 using HomePodCast.Net;
+using HomePodCast.UI;
 
 namespace HomePodCast.Tests;
 
@@ -226,6 +227,21 @@ public sealed class SurroundControllerTests
         Assert.False(c.SurroundActive);
         Assert.Equal(2, c.Fifo.Channels);
         Assert.Empty(rig.Fake.Errors);
+    }
+
+    [Fact]
+    public async Task The_picture_delay_of_a_5_1_session_stays_under_the_extensions_2000_ms_clamp()
+    {
+        using var rig = new Rig(bit39: true, _ => On());
+        rig.Start();
+        await rig.Streaming();
+        var c = rig.Controller;
+        Assert.True(c.SurroundActive);
+        // What the local API (browser extension) and the players get, computed as TrayApp does from this controller: its
+        // latency, capture and FIFO. 5.1 has no calibration (CalibrationContextFor gives null for a 5.1 capture).
+        int delay = TrayApp.VideoDelayFor(new AppConfig(), c.State, c.EffectiveLatencyMs, c.Capture?.ExtraLatencyMs ?? 0,
+            c.Fifo.TargetMs, null);
+        Assert.True(delay is > SurroundPolicy.LatencyMs and < 2000, $"{delay} ms");
     }
 
     [Fact]
