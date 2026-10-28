@@ -171,44 +171,22 @@ internal sealed unsafe class AacEncoder : IAacEncoder
     /// <summary>The AudioSpecificConfig after the 12-byte HEAACWAVEINFO tail: 12 10 for 44.1 kHz stereo, 11 B0 for 48 kHz 5.1.</summary>
     internal byte[] AudioSpecificConfig() => UserData() is { Length: > 12 } data ? data[12..] : [];
 
-    private static readonly object SurroundCheckLock = new();
-    private static bool? _surroundOk;
+    private static readonly BackgroundCheck SurroundCheck = new("AAC 5.1 encoder", ProbeSurround, TimeSpan.FromSeconds(5));
 
     /// <summary>
     /// Whether this PC can encode the HomePod's 5.1 stream, checked once per process before any network traffic: null when
     /// it can, otherwise the translated reason. Windows N/KN without the Media Feature Pack, or a runner whose transform
-    /// refuses 6-channel types, can't. The first call builds a (6, 48000) encoder on its own MTA thread (at most 5 s) and
-    /// requires the verified ASC; the detail goes to the log once.
+    /// refuses 6-channel types, can't. The first call builds a (6, 48000) encoder on its own MTA thread and requires the
+    /// verified ASC. A probe still running after 5 s (a cold Media Foundation at sign-in) refuses only that attempt: its
+    /// answer, when it comes, is kept for the next one (<see cref="BackgroundCheck"/>).
     /// </summary>
-    internal static string? SurroundProblem()
+    internal static string? SurroundProblem() => SurroundCheck.Passed() ? null : L.T("Windows 的 AAC 编码器不支持 5.1");
+
+    private static (bool Ok, string Detail) ProbeSurround()
     {
-        lock (SurroundCheckLock)
-        {
-            if (_surroundOk == null)
-            {
-                string? detail = null;
-                bool ok = false;
-                var probe = new Thread(() =>
-                {
-                    try
-                    {
-                        using var encoder = new AacEncoder(6, 48000);
-                        byte[] asc = encoder.AudioSpecificConfig();
-                        ok = asc.AsSpan().SequenceEqual(Surround51Asc);
-                        detail = $"{encoder.Settings}, AudioSpecificConfig {Convert.ToHexString(asc)}";
-                    }
-                    catch (Exception ex) { detail = $"{ex.GetType().Name}: {ex.Message}"; }
-                }) { IsBackground = true, Name = "AAC 5.1 check" };
-                probe.SetApartmentState(ApartmentState.MTA);
-                probe.Start();
-                bool finished = probe.Join(TimeSpan.FromSeconds(5));
-                _surroundOk = finished && ok;
-                string what = finished ? detail ?? "" : "no answer within 5 s";
-                if (_surroundOk == true) Log.Info($"AAC 5.1 encoder: {what}");
-                else Log.Warn($"AAC 5.1 encoder unavailable, 5.1 surround falls back to stereo: {what}");
-            }
-            return _surroundOk == true ? null : L.T("Windows 的 AAC 编码器不支持 5.1");
-        }
+        using var encoder = new AacEncoder(6, 48000);
+        byte[] asc = encoder.AudioSpecificConfig();
+        return (asc.AsSpan().SequenceEqual(Surround51Asc), $"{encoder.Settings}, AudioSpecificConfig {Convert.ToHexString(asc)}");
     }
 
     private byte[]? ReadOutput()
