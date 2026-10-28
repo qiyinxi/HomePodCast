@@ -840,15 +840,15 @@
   "这台音箱不支持 5.1": "tämä kaiutin ei tue 5.1-ääntä",
   "没有收到 HomePod 的 PTP 对时，可能被防火墙拦截": "HomePodilta ei tule PTP-aikasynkronointia, ehkä palomuuri estää sen",
   "5.1 连接失败：{0}": "5.1-yhteys epäonnistui: {0}",
-  "5.1 环绕声中断：{0}": "5.1-tilaääni katkesi: {0}",
+  "5.1 环绕声中断：{0}": "5.1-surround katkesi: {0}",
   "HomePod 关闭了音频连接": "HomePod sulki ääniyhteyden",
   "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "ääntä ei saatu lähetettyä ajoissa: tietokone voi olla kuormitettu tai juuri herännyt lepotilasta",
   "Windows 输出设备不可用": "Windowsin toistolaite ei ole käytettävissä",
-  "已连接 · {0} · 实验性 5.1 环绕声": "Yhdistetty · {0} · kokeellinen 5.1-tilaääni",
-  "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Yhdistetty · {0} · stereo. 5.1-tilaääntä ei käytetty: {1}",
+  "已连接 · {0} · 实验性 5.1 环绕声": "Yhdistetty · {0} · kokeellinen 5.1-surround",
+  "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Yhdistetty · {0} · stereo. 5.1-surroundia ei käytetty: {1}",
   "多个去处同时播放时不能用": "ei käytettävissä, kun ääntä toistetaan useaan kohteeseen",
   "按程序分流开启时不能用": "ei käytettävissä sovelluskohtaisen reitityksen kanssa",
-  "5.1 环绕声": "5.1-tilaääni",
-  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声；7.1 会合并成 5.1。需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏；这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。低频效果声道 LFE 可能没有声音；这不是杜比全景声。按程序分流、多个去处或多音箱时，以及条件不满足时，照常推送立体声，状态里会写明原因。实验性功能。": "Lähettää Windowsin 5.1-äänen muuttamattomana yksinään toistavaan HomePodiin; HomePod toistaa tilaäänen itse, ja 7.1 yhdistetään 5.1:ksi. Määritä ensin Windowsin ääniasetuksissa toistolaitteeksi 5.1 tai 7.1 ja poista spatiaalinen ääni käytöstä. Viive on kiinteä, noin {0:F1} s: videoille, ei peleille; profiilit, viiveasetus, taajuuskorjain, yötila ja mikrofonin miksaus eivät silloin vaikuta. LFE-kanava voi jäädä hiljaiseksi, eikä tämä ole Dolby Atmos. Sovelluskohtaisen reitityksen, useiden kohteiden tai useiden kaiuttimien kanssa sekä silloin, kun jokin edellytys puuttuu, ääni lähetetään tavalliseen tapaan stereona ja tila kertoo syyn. Kokeellinen toiminto.",
-  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkronointitestiä ei voi vielä tehdä, kun 5.1-tilaääni on käytössä."
+  "5.1 环绕声": "5.1-surround",
+  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n这时状态里会写明原因。\n立体声对和多房间照常推送立体声，无线影院不受影响。\n实验性功能。": "Lähettää Windowsin 5.1-äänen muuttamattomana yksinään toistavaan HomePodiin; HomePod toistaa surround-äänen itse.\n7.1 yhdistetään 5.1:ksi. LFE-kanava voi jäädä hiljaiseksi, eikä tämä ole Dolby Atmos.\nMääritä ensin Windowsin ääniasetuksissa toistolaitteeksi 5.1 tai 7.1 ja poista Windowsin Tilaääni käytöstä.\nViive on kiinteä, noin {0:F1} s: videoille, ei peleille.\nProfiilit, viiveasetus, taajuuskorjain, yötila ja mikrofonin miksaus eivät silloin vaikuta.\nKun käytössä on sovelluskohtainen reititys tai useita kohteita tai jokin edellytys puuttuu, ääni lähetetään tavalliseen tapaan stereona.\nTila kertoo silloin syyn.\nStereoparit ja monihuone toistavat stereota tavalliseen tapaan; langaton elokuvateatteri ei muutu.\nKokeellinen toiminto.",
+  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkronointitestiä ei voi vielä tehdä, kun 5.1-surround on käytössä."
 }

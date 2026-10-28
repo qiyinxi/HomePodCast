@@ -591,5 +591,11 @@ public class PlayerSyncTests
             UI.TrayApp.PlayerInputFor(game, StreamState.Streaming, 1899, surround: true));
         game.MoviePlayerSync = false;
         Assert.False(UI.TrayApp.PlayerInputFor(game, StreamState.Streaming, 1899, surround: true).Enabled);
+
+        // 首页's player hint shows exactly when the players follow: what they were set to is never hidden in 5.1.
+        Assert.True(UI.TrayApp.PlayersFollow(Scene.Movie, surround: false));
+        Assert.True(UI.TrayApp.PlayersFollow(Scene.Game, surround: true));
+        Assert.True(UI.TrayApp.PlayersFollow(Scene.Custom, surround: true));
+        Assert.False(UI.TrayApp.PlayersFollow(Scene.Game, surround: false));
     }
 }

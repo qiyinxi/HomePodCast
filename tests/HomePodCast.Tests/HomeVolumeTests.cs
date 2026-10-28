@@ -133,6 +133,35 @@ public class HomeVolumeTests
         finally { L.Use(before); }
     });
 
+    /// <summary>
+    /// A WinForms tooltip may be as wide as the screen: in one piece the 5.1 description (experimental since 1.4) ran across
+    /// a whole monitor. Every line stays under about 800 px at 100 % in every language, in the tooltip's own font.
+    /// </summary>
+    [Fact]
+    public void The_surround_description_keeps_every_line_narrow_in_every_language()
+    {
+        string before = L.Language;
+        try
+        {
+            using var screen = Graphics.FromHwnd(IntPtr.Zero);
+            // Windows' tooltip font, Segoe UI 9 pt (CJK falls back as in the tooltip), measured on this DC and scaled to 100 %.
+            using var font = new Font("Segoe UI", 9f);
+            float scale = 96f / screen.DpiX;
+            foreach (var language in L.Languages)
+            {
+                L.Use(language);
+                var lines = HomePage.SurroundDescription().Split('\n');
+                Assert.True(lines.Length >= 8, $"{language}: {lines.Length} lines");
+                foreach (var line in lines)
+                {
+                    int width = (int)(TextRenderer.MeasureText(screen, line, font).Width * scale);
+                    Assert.True(width <= 820, $"{language}: {width} px at 100 %: {line}");
+                }
+            }
+        }
+        finally { L.Use(before); }
+    }
+
     [Fact]
     public void The_surround_switch_is_saved_and_described_as_experimental() => Sta.Run(() =>
     {

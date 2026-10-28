@@ -832,7 +832,7 @@
   "峰值过后多快恢复原来的音量。": "Rapidez com que o volume original volta depois de um pico.",
   "声道 {0}": "Canal {0}",
   "全部声道混合": "Mistura de todos os canais",
-  "Windows 的 AAC 编码器不支持 5.1": "O codificador AAC do Windows não suporta 5.1",
+  "Windows 的 AAC 编码器不支持 5.1": "o codificador AAC do Windows não suporta 5.1",
   "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "o dispositivo de saída do Windows não está em 5.1 nem 7.1: tem {0} canais",
   "UDP 端口 319 和 320 被其他程序占用": "as portas UDP 319 e 320 estão em uso por outro programa",
   "HomePod 的 PTP 对时中断了": "a sincronização PTP do HomePod parou",
@@ -849,6 +849,6 @@
   "多个去处同时播放时不能用": "indisponível ao reproduzir em vários destinos",
   "按程序分流开启时不能用": "indisponível com o encaminhamento por aplicação",
   "5.1 环绕声": "Som surround 5.1",
-  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声；7.1 会合并成 5.1。需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏；这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。低频效果声道 LFE 可能没有声音；这不是杜比全景声。按程序分流、多个去处或多音箱时，以及条件不满足时，照常推送立体声，状态里会写明原因。实验性功能。": "Envia a saída 5.1 do Windows sem alterações para um HomePod que reproduz sozinho; é o próprio HomePod que reproduz o som surround, e o 7.1 é combinado em 5.1. Primeiro configure o dispositivo de saída para 5.1 ou 7.1 nas definições de som do Windows e desative o som espacial. A latência é fixa, cerca de {0:F1} s: para vídeo, não para jogos; os cenários, a definição de latência, o equalizador, o modo noturno e a mistura do microfone não têm efeito nesse caso. O canal LFE pode ficar em silêncio, e isto não é Dolby Atmos. Com o encaminhamento por aplicação, vários destinos ou vários altifalantes, ou quando falta um requisito, transmite-se em estéreo como habitualmente e o estado indica o motivo. Funcionalidade experimental.",
+  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n这时状态里会写明原因。\n立体声对和多房间照常推送立体声，无线影院不受影响。\n实验性功能。": "Envia a saída 5.1 do Windows sem alterações para um HomePod que reproduz sozinho; é o próprio HomePod que reproduz o som surround.\nO 7.1 é combinado em 5.1. O canal LFE pode ficar em silêncio, e isto não é Dolby Atmos.\nPrimeiro configure o dispositivo de saída para 5.1 ou 7.1 nas definições de som do Windows e desative o som espacial.\nA latência é fixa, cerca de {0:F1} s: para vídeo, não para jogos.\nOs cenários, a definição de latência, o equalizador, o modo noturno e a mistura do microfone não têm efeito nesse caso.\nCom encaminhamento por aplicação, vários destinos em simultâneo ou um requisito em falta, transmite-se em estéreo como habitualmente.\nO estado indica então o motivo.\nOs pares estéreo e a multissala transmitem em estéreo como habitualmente; o cinema sem fios não é afetado.\nFuncionalidade experimental.",
   "5.1 环绕声模式下还不能做音画同步测试。": "O teste de sincronização A/V ainda não está disponível no modo de som surround 5.1."
 }
