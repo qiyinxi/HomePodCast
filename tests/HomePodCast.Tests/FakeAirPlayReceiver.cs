@@ -71,6 +71,12 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     }
     public int? BufferedDataPort { get; init; }
 
+    /// <summary>/info's "supportedFormats" (a HomePod 2 on OS 27 lists bufferStream bit 39, 5.1); null: none.</summary>
+    public Dictionary<string, object?>? SupportedFormats { get; init; }
+
+    /// <summary>As a HomePod (2026-10-28): a SETRATEANCHORTIME without networkTimeFlags gets 400.</summary>
+    public bool RequireAnchorFlags { get; init; }
+
     // ---------------------------------------------------------------- fake HomePod grandmaster (5.1 surround)
 
     private readonly object _gmLock = new();
@@ -175,6 +181,9 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public byte[]? StreamKey { get; private set; }
 
     public ConcurrentQueue<string> Requests { get; } = new();
+
+    /// <summary>The bodies of the SET_PARAMETER requests ("volume: -27.000000"), in order.</summary>
+    public ConcurrentQueue<string> Parameters { get; } = new();
 
     /// <summary>The headers of the pairing requests: (request, X-Apple-HKP, User-Agent, Content-Type).</summary>
     public ConcurrentQueue<(string What, string Hkp, string UserAgent, string ContentType)> PairingHeaders { get; } = new();
@@ -345,14 +354,16 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         {
             case ("GET", "/info"):
                 Record("GET /info", encrypted);
-                return new Reply("200 OK", BPlist.Write(new Dictionary<string, object?>
+                var info = new Dictionary<string, object?>
                 {
                     ["name"] = Name,
                     ["model"] = ModelOverride ?? (AppleTv ? "AppleTV14,1" : "AudioAccessory6,1"),
                     ["deviceID"] = DeviceId,
                     ["statusFlags"] = StatusFlags,
                     ["sourceVersion"] = AppleTv ? "980.77.2" : "900.7.1",
-                }), "application/x-apple-binary-plist");
+                };
+                if (SupportedFormats != null) info["supportedFormats"] = SupportedFormats;
+                return new Reply("200 OK", BPlist.Write(info), "application/x-apple-binary-plist");
             case ("POST", "/pair-pin-start"):
                 RecordPairing("POST /pair-pin-start", req, encrypted);
                 return Ok;
@@ -374,7 +385,13 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 Record(method, true);
                 return Ok;
             case "SETRATEANCHORTIME":
-                RateAnchor = BPlist.ReadDict(req.Body);
+                var anchor = BPlist.ReadDict(req.Body);
+                if (RequireAnchorFlags && !anchor.ContainsKey("networkTimeFlags"))
+                {
+                    Record("SETRATEANCHORTIME refused", true);
+                    return new Reply("400 Bad Request", []);
+                }
+                RateAnchor = anchor;
                 Record(method, true);
                 return Ok;
             case "FLUSHBUFFERED":
@@ -383,6 +400,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return Ok;
             case "RECORD" or "FLUSH" or "SET_PARAMETER" or "TEARDOWN":
                 Record(method, true);
+                if (method == "SET_PARAMETER") Parameters.Enqueue(Encoding.UTF8.GetString(req.Body));
                 return Ok;
             case "POST" when path == "/feedback":
                 Record("POST /feedback", true);

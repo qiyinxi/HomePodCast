@@ -836,5 +836,11 @@
   "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "das Windows-Ausgabegerät ist nicht auf 5.1 oder 7.1 eingestellt: es hat {0} Kanäle",
   "UDP 端口 319 和 320 被其他程序占用": "die UDP-Ports 319 und 320 sind von einem anderen Programm belegt",
   "HomePod 的 PTP 对时中断了": "der PTP-Zeitabgleich des HomePod ist ausgefallen",
-  "HomePod 的 PTP 时钟变了": "die PTP-Uhr des HomePod hat gewechselt"
+  "HomePod 的 PTP 时钟变了": "die PTP-Uhr des HomePod hat gewechselt",
+  "这台音箱不支持 5.1": "dieser Lautsprecher unterstützt kein 5.1",
+  "没有收到 HomePod 的 PTP 对时，可能被防火墙拦截": "kein PTP-Zeitabgleich vom HomePod, vielleicht blockiert eine Firewall ihn",
+  "5.1 连接失败：{0}": "5.1-Verbindung fehlgeschlagen: {0}",
+  "5.1 环绕声中断：{0}": "5.1-Surround unterbrochen: {0}",
+  "HomePod 关闭了音频连接": "der HomePod hat die Audioverbindung geschlossen",
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "der Ton konnte nicht rechtzeitig gesendet werden: der PC ist vielleicht ausgelastet oder gerade aus dem Energiesparmodus erwacht"
 }

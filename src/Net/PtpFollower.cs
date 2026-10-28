@@ -401,6 +401,3 @@ internal sealed class PtpClockObserver(IPAddress peer, ulong ownClockId)
 
     private static long Timestamp(byte[] packet, int offset) => (long)PtpPackets.ReadTimestamp(packet.AsSpan(offset));
 }
-
-/// <summary>5.1 surround can't be used with this speaker or on this PC right now; the message (translated) says why.</summary>
-public sealed class SurroundUnavailableException(string message) : AirPlayException(message);

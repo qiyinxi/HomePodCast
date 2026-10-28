@@ -836,5 +836,11 @@
   "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "Windowsin toistolaite ei ole 5.1- tai 7.1-tilassa: siinä on {0} kanavaa",
   "UDP 端口 319 和 320 被其他程序占用": "UDP-portit 319 ja 320 ovat toisen ohjelman käytössä",
   "HomePod 的 PTP 对时中断了": "HomePodin PTP-aikasynkronointi katkesi",
-  "HomePod 的 PTP 时钟变了": "HomePodin PTP-kello vaihtui"
+  "HomePod 的 PTP 时钟变了": "HomePodin PTP-kello vaihtui",
+  "这台音箱不支持 5.1": "tämä kaiutin ei tue 5.1-ääntä",
+  "没有收到 HomePod 的 PTP 对时，可能被防火墙拦截": "HomePodilta ei tule PTP-aikasynkronointia, ehkä palomuuri estää sen",
+  "5.1 连接失败：{0}": "5.1-yhteys epäonnistui: {0}",
+  "5.1 环绕声中断：{0}": "5.1-tilaääni katkesi: {0}",
+  "HomePod 关闭了音频连接": "HomePod sulki ääniyhteyden",
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "ääntä ei saatu lähetettyä ajoissa: tietokone voi olla kuormitettu tai juuri herännyt lepotilasta"
 }
