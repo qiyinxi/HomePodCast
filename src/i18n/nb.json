@@ -831,5 +831,6 @@
   "人声的峰值不会超过这个电平，防止削波失真。": "Toppene i stemmen går aldri over dette nivået, så forvrengning fra overstyring unngås.",
   "峰值过后多快恢复原来的音量。": "Hvor raskt volumet går tilbake etter en topp.",
   "声道 {0}": "Kanal {0}",
-  "全部声道混合": "Alle kanaler mikset"
+  "全部声道混合": "Alle kanaler mikset",
+  "Windows 的 AAC 编码器不支持 5.1": "AAC-koderen i Windows støtter ikke 5.1"
 }

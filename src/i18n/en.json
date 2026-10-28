@@ -831,5 +831,6 @@
   "人声的峰值不会超过这个电平，防止削波失真。": "Voice peaks never go above this level, which prevents clipping distortion.",
   "峰值过后多快恢复原来的音量。": "How fast the volume returns to normal after a peak.",
   "声道 {0}": "Channel {0}",
-  "全部声道混合": "All channels mixed"
+  "全部声道混合": "All channels mixed",
+  "Windows 的 AAC 编码器不支持 5.1": "Windows' AAC encoder can't do 5.1"
 }

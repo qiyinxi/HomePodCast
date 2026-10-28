@@ -831,5 +831,6 @@
   "人声的峰值不会超过这个电平，防止削波失真。": "Les crêtes de la voix ne dépassent jamais ce niveau, ce qui évite la distorsion par écrêtage.",
   "峰值过后多快恢复原来的音量。": "Rapidité du retour au volume normal après une crête.",
   "声道 {0}": "Canal {0}",
-  "全部声道混合": "Tous les canaux mixés"
+  "全部声道混合": "Tous les canaux mixés",
+  "Windows 的 AAC 编码器不支持 5.1": "L'encodeur AAC de Windows ne prend pas en charge le 5.1"
 }

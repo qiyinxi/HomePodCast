@@ -831,5 +831,6 @@
   "人声的峰值不会超过这个电平，防止削波失真。": "Los picos de la voz nunca superan este nivel, lo que evita la distorsión por recorte.",
   "峰值过后多快恢复原来的音量。": "Rapidez con la que vuelve el volumen original después de un pico.",
   "声道 {0}": "Canal {0}",
-  "全部声道混合": "Mezcla de todos los canales"
+  "全部声道混合": "Mezcla de todos los canales",
+  "Windows 的 AAC 编码器不支持 5.1": "El codificador AAC de Windows no admite 5.1"
 }
