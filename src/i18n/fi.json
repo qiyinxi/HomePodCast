@@ -842,5 +842,6 @@
   "5.1 连接失败：{0}": "5.1-yhteys epäonnistui: {0}",
   "5.1 环绕声中断：{0}": "5.1-tilaääni katkesi: {0}",
   "HomePod 关闭了音频连接": "HomePod sulki ääniyhteyden",
-  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "ääntä ei saatu lähetettyä ajoissa: tietokone voi olla kuormitettu tai juuri herännyt lepotilasta"
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "ääntä ei saatu lähetettyä ajoissa: tietokone voi olla kuormitettu tai juuri herännyt lepotilasta",
+  "Windows 输出设备不可用": "Windowsin toistolaite ei ole käytettävissä"
 }

@@ -842,5 +842,6 @@
   "5.1 连接失败：{0}": "5.1-forbindelsen mislykkedes: {0}",
   "5.1 环绕声中断：{0}": "5.1-surround afbrudt: {0}",
   "HomePod 关闭了音频连接": "HomePod lukkede lydforbindelsen",
-  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "lyden kunne ikke sendes i tide: pc'en er måske optaget eller er lige vågnet fra dvale"
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "lyden kunne ikke sendes i tide: pc'en er måske optaget eller er lige vågnet fra dvale",
+  "Windows 输出设备不可用": "Windows' outputenhed er ikke tilgængelig"
 }

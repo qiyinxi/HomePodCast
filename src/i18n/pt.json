@@ -842,5 +842,6 @@
   "5.1 连接失败：{0}": "a ligação 5.1 falhou: {0}",
   "5.1 环绕声中断：{0}": "Som surround 5.1 interrompido: {0}",
   "HomePod 关闭了音频连接": "o HomePod fechou a ligação de áudio",
-  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "não foi possível enviar o áudio a tempo: o PC pode estar ocupado ou ter acabado de sair da suspensão"
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "não foi possível enviar o áudio a tempo: o PC pode estar ocupado ou ter acabado de sair da suspensão",
+  "Windows 输出设备不可用": "o dispositivo de saída do Windows não está disponível"
 }

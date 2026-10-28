@@ -842,5 +842,6 @@
   "5.1 连接失败：{0}": "połączenie 5.1 nie powiodło się: {0}",
   "5.1 环绕声中断：{0}": "Dźwięk przestrzenny 5.1 przerwany: {0}",
   "HomePod 关闭了音频连接": "HomePod zamknął połączenie audio",
-  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "nie udało się wysłać dźwięku na czas: komputer może być zajęty lub właśnie wybudził się z uśpienia"
+  "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "nie udało się wysłać dźwięku na czas: komputer może być zajęty lub właśnie wybudził się z uśpienia",
+  "Windows 输出设备不可用": "urządzenie wyjściowe Windows jest niedostępne"
 }
