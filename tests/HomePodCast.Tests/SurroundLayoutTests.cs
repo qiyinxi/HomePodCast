@@ -6,7 +6,7 @@ namespace HomePodCast.Tests;
 /// <summary>Windows speaker layouts to the HomePod's 5.1 slots FL FR FC LFE Ls Rs (experimental since 1.4).</summary>
 public sealed class SurroundLayoutTests
 {
-    private const float Fold = 0.70710678f;
+    private const float Split = 0.70710678f;
 
     private static float[] Convert(SurroundLayout layout, params float[] frame)
     {
@@ -46,20 +46,34 @@ public sealed class SurroundLayoutTests
     }
 
     [Fact]
-    public void Seven_point_one_folds_back_and_side_at_constant_power()
+    public void Seven_point_one_sums_back_and_side_into_the_surround_pair()
     {
         // FL FR FC LFE BL BR SL SR
         var layout = Accept(8, 0x63F);
-        Near([.1f, .2f, .3f, .4f, Fold * (.5f + .7f), Fold * (.6f + .8f)], Convert(layout, .1f, .2f, .3f, .4f, .5f, .6f, .7f, .8f));
+        Near([.1f, .2f, .3f, .4f, .2f + .3f, .1f + .4f], Convert(layout, .1f, .2f, .3f, .4f, .2f, .1f, .3f, .4f));
         Assert.Contains("7.1 folded", layout.Describe);
     }
 
     [Fact]
-    public void Front_centre_pair_folds_into_the_front_pair()
+    public void A_5_1_film_on_a_7_1_endpoint_keeps_its_surround_level()
+    {
+        // Players put 5.1 on a 7.1 endpoint's side pair and leave the back pair silent: the same as on a 5.1 endpoint.
+        var film = new float[] { .1f, .2f, .3f, .4f, .5f, .6f };
+        var sevenOne = Convert(Accept(8, 0x63F), .1f, .2f, .3f, .4f, 0, 0, .5f, .6f);
+        Assert.Equal(Convert(Accept(6, 0x60F), film), sevenOne);
+        Assert.Equal(film, sevenOne);
+    }
+
+    [Fact]
+    public void Front_centre_pair_is_split_between_the_front_pair_and_the_centre()
     {
         // FL FR FC LFE BL BR FLC FRC
         var layout = Accept(8, 0xFF);
-        Near([Fold * (.1f + .7f), Fold * (.2f + .8f), .3f, .4f, .5f, .6f], Convert(layout, .1f, .2f, .3f, .4f, .5f, .6f, .7f, .8f));
+        Near([.1f + Split *.7f, .2f + Split *.8f, .3f + Split *(.7f + .8f), .4f, .5f, .6f],
+            Convert(layout, .1f, .2f, .3f, .4f, .5f, .6f, .7f, .8f));
+        // The front pair itself stays at unity: dialogue and music keep their balance.
+        Assert.Equal(new float[] { .5f, .5f, .5f, 0, 0, 0 }, Convert(layout, .5f, .5f, .5f, 0, 0, 0, 0, 0));
+        Assert.Contains("front-centre pair→front+centre", layout.Describe);
     }
 
     [Fact]
@@ -67,7 +81,7 @@ public sealed class SurroundLayoutTests
     {
         // FL FR FC LFE BC SL SR (6.1)
         var layout = Accept(7, 0x70F);
-        Near([.1f, .2f, .3f, .4f, Fold * (.5f + .6f), Fold * (.5f + .7f)], Convert(layout, .1f, .2f, .3f, .4f, .5f, .6f, .7f));
+        Near([.1f, .2f, .3f, .4f, Split *.5f + .6f, Split *.5f + .7f], Convert(layout, .1f, .2f, .3f, .4f, .5f, .6f, .7f));
     }
 
     [Theory]
