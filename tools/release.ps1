@@ -418,6 +418,25 @@ function Wait-PrCheck([int] $number) {
     Write-Info "waiting for the checks of PR #${number}: https://github.com/$Repo/pull/$number/checks"
     & gh pr checks $number @R --watch --interval 30 | Out-Host
     if ($LASTEXITCODE) { throw "a check of PR #$number failed: https://github.com/$Repo/pull/$number/checks. Nothing was merged; if it was flaky infrastructure, re-run it and run this again" }
+    # The PR's own pull_request run is registered some seconds after the PR opens. Until then GitHub calls the PR clean on
+    # the push run of the same commit (the same check names), and the merge meets the new run: 2026-10-28, Release 1.3.0
+    # was refused "the base branch policy prohibits the merge" while it ran. So wait for that run to exist and pass.
+    $head = (Invoke-GhJson pr view $number @R --json headRefOid).headRefOid
+    $deadline = (Get-Date).AddMinutes(5)
+    while ($true) {
+        $runs = @(Invoke-GhJson run list @R --workflow build.yml --event pull_request --commit $head --json 'databaseId,status,conclusion')
+        if ($runs) { break }
+        if ((Get-Date) -gt $deadline) { throw "PR #$number has no pull_request run of build.yml after 5 minutes: see https://github.com/$Repo/pull/$number/checks. Nothing was merged" }
+        Write-Info "waiting for the PR's own CI run to start..."
+        Start-Sleep -Seconds 15
+    }
+    $run = $runs | Sort-Object databaseId -Descending | Select-Object -First 1
+    if ($run.status -ne 'completed') {
+        Write-Info "waiting for the PR's own CI run: https://github.com/$Repo/actions/runs/$($run.databaseId)"
+        & gh run watch $run.databaseId @R --interval 30 | Out-Host
+        $run = Invoke-GhJson run view $run.databaseId @R --json 'databaseId,status,conclusion'
+    }
+    if ($run.conclusion -ne 'success') { throw "the PR's own CI run ended with $($run.conclusion): https://github.com/$Repo/actions/runs/$($run.databaseId). Nothing was merged; if it was flaky infrastructure, re-run it and run this again" }
     # gh pr checks can call it passed before GitHub lists every run of a required check (Release 0.2.2: a second
     # build of PR #13 was still pending and the merge was refused), so merge only once GitHub says the PR is clean.
     $deadline = (Get-Date).AddMinutes(20)
