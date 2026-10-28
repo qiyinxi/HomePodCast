@@ -29,6 +29,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     private readonly TcpListener _events = new(IPAddress.Loopback, 0);
     private readonly ConcurrentDictionary<string, byte[]> _controllers = new();
     private readonly List<TcpClient> _connections = [];
+    private readonly List<TcpClient> _eventConnections = [];
     private volatile bool _closed;
     private int _verifications;
 
@@ -112,6 +113,16 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         }
     }
 
+    /// <summary>Closes every event channel and nothing else, as a speaker ending the session does.</summary>
+    internal void CloseEventChannels()
+    {
+        lock (_eventConnections)
+        {
+            foreach (var connection in _eventConnections) connection.Dispose();
+            _eventConnections.Clear();
+        }
+    }
+
     /// <summary>A factory reset: a new identity and no pairings.</summary>
     public void Reset()
     {
@@ -136,6 +147,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return;
             }
             lock (_connections) _connections.Add(tcp);
+            if (listener == _events) lock (_eventConnections) _eventConnections.Add(tcp);
             new Thread(() => serve(tcp)) { IsBackground = true, Name = "fake AirPlay receiver connection" }.Start();
         }
     }

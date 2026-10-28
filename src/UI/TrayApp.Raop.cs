@@ -22,7 +22,7 @@ internal sealed partial class TrayApp
             if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
             {
                 if (Controller.ReceiverLookup?.Invoke(id) is not { } device) return;
-                Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+                Config.SetReceiverPreferences(key, settings = ReceiverPreferences.Of(device));
             }
             settings.LastSuccessfulProtocol = protocol;
             if (processing != null) settings.ArrivalToRenderMs = processing;
@@ -40,7 +40,7 @@ internal sealed partial class TrayApp
             {
                 using var dialog = new RaopPasswordDialog(request.Device.Name);
                 if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || _quitting) return;
-                Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+                Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
                 Config.Save();
                 Connect(request.Trigger);
             }
@@ -69,8 +69,7 @@ internal sealed partial class TrayApp
     {
         if (Controller.ReceiverLookup?.Invoke(id) is not { } device || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv) return;
         string key = RaopPassword.Key(id);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+        var settings = Config.ReceiverPreferencesFor(key, () => ReceiverPreferences.Of(device));
         if (settings.ProtocolOverride == protocol) return;
         settings.ProtocolOverride = protocol;
         Config.Save();

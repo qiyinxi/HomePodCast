@@ -57,13 +57,11 @@ internal sealed partial class TrayApp
         if (app == null && pid is { } process && Audio.ProcessTree.Snapshot().TryGetValue(process, out var caller) &&
             MixerRoutes.Read(Config).Settings?.For(caller.Key).Output.Kind == MixerOutputKind.Local) app = caller.Key;
         var destination = mixer.DestinationForApp(app, pid);
-        if (destination == null) return new { app = "HomePodCast", streaming = false, destinationRequired = true,
-            message = L.T("无法确定此程序的声音去处，同步暂不可用。"),
-            destinations = mixer.Statuses.Select(s => new { s.Key, s.Name, s.State }) };
+        if (destination == null)
+            return ApiUndelayedStatus(null, false, mixer.Statuses.Select(s => new { s.Key, s.Name, s.State }));
         var controller = mixer.ControllerForApp(app, pid);
         if (destination.Config is not { } config || controller == null)
-            return new { app = "HomePodCast", streaming = false, destination = destination.Key, local = destination.IsLocal,
-                message = destination.IsLocal ? L.T("此程序在本机播放，不使用音箱画面延迟。") : L.T("无法确定此程序的声音去处，同步暂不可用。") };
+            return ApiUndelayedStatus(destination.Key, destination.IsLocal, null);
         config.SyncCalibrations = Config.SyncCalibrations;
         config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
         var context = MixerCalibrationContext(config, controller, destination.Key);
@@ -71,6 +69,20 @@ internal sealed partial class TrayApp
             controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context);
         return ApiStatus(controller.State == StreamState.Streaming, destination.Name, controller.EffectiveLatencyMs,
             delay, AvCalibrations.Get(Config, context) != null);
+    }
+
+    /// <summary>
+    /// GET /v1/status for a caller whose sound gets no speaker delay: its destination is unknown (<paramref name="destination"/>
+    /// null; <paramref name="destinations"/> lists them) or has no stream running, or the caller plays locally.
+    /// reason lets the browser extension say so in the browser's language; message (the app's) is for older extensions.
+    /// </summary>
+    internal static object ApiUndelayedStatus(string? destination, bool local, object? destinations)
+    {
+        string reason = local ? "local-output" : "destination-unknown";
+        string message = local ? L.T("此程序在本机播放，不使用音箱画面延迟。") : L.T("无法确定此程序的声音去处，同步暂不可用。");
+        return destination == null
+            ? new { app = "HomePodCast", streaming = false, destinationRequired = true, reason, message, destinations }
+            : new { app = "HomePodCast", streaming = false, destination, local, destinationRequired = !local, reason, message };
     }
 
     /// <summary>What the players follow: on only in the 影视 scene with the setting on.</summary>

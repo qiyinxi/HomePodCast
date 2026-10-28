@@ -8,6 +8,12 @@ namespace HomePodCast.Audio;
 public interface IMixSource
 {
     void Read(Span<float> dest);
+
+    /// <summary>
+    /// False while the source has nothing to add (e.g. the mic is off): a capture that has captured nothing then
+    /// writes no frames for the extra sources alone.
+    /// </summary>
+    bool HasAudio => true;
 }
 
 /// <summary>

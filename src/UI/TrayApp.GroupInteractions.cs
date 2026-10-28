@@ -25,7 +25,7 @@ internal sealed partial class TrayApp
                         using (var dialog = new RaopPasswordDialog(request.Device.Name))
                         {
                             if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || !Current()) break;
-                            Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+                            Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
                             Config.Save(); resume = true;
                         }
                         break;

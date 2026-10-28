@@ -5,7 +5,7 @@ using HomePodCast.Update;
 namespace HomePodCast.Tests;
 
 /// <summary>
-/// What 设置 → 软件更新 and 首页 show after a check, and when checks run (device checklist 「软件更新」): the decisions in
+/// What 关于 → 软件更新 and 首页 show after a check, and when checks run (device checklist 「软件更新」): the decisions in
 /// TrayApp.Update.cs on top of GitHubReleases.Pick, without a request, a timer or a window. Installing is not here.
 /// </summary>
 public class UpdateViewTests

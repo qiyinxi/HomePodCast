@@ -142,11 +142,14 @@ public sealed class MixerOutputCoordinator : IAsyncDisposable
 
     public async Task<MixerEditOutcome> ConnectAsync(AppConfig config, ConnectTrigger trigger, string? takeOverKey = null)
     {
+        // Copied before waiting for the turn, still on the caller's thread: the UI thread passes its live config (连接,
+        // a destination's delay), and after waiting for a queued change the copy was taken on the thread pool while the
+        // UI thread may change the config's lists.
+        config = Snapshot(config);
         await _changes.WaitAsync().ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            config = Snapshot(config);
             var read = MixerRoutes.Read(config);
             if (read.Settings == null) return new(MixerEditResult.InvalidConfig);
             var desired = Desired(config, read.Settings, _roots);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace HomePodCast.Audio;
@@ -35,6 +36,12 @@ public static class MixerCapturePlanner
 /// thread. Contributions are bounded before entering StreamMixer; route changes remove only the moving root,
 /// including its unsent FIFO samples. All mutation and each complete capture cycle share a generation boundary.
 /// </summary>
+/// <remarks>
+/// The extra sources (the mic) are read once for every bus, as far as the bus that has written the most needs them;
+/// each bus takes the next frames from its own position, as many as it writes. 2026-10-27 review: a fixed 441 frames
+/// per cycle (cycles run 10-20 ms apart) drained the mic below real time, so its tap dropped 60 ms at a time, and a
+/// bus that wrote two packets in one cycle got a 10 ms hole in the voice.
+/// </remarks>
 public sealed class MixerCaptureHub : IDisposable
 {
     public const int MaxPacketFrames = 4410;
@@ -48,8 +55,12 @@ public sealed class MixerCaptureHub : IDisposable
     private readonly bool _steerClock;
     private readonly List<float> _drained = new(MaxPacketFrames * 2);
     private float[] _sourceScratch = new float[MaxPacketFrames * 2];
-    private readonly float[] _extras = new float[MaxPacketFrames * 2];
+    private float[] _extras = new float[MaxPacketFrames * 3 * 2]; // read from the sources, not yet used by every bus
+    private int _extrasFrames;
     private bool _disposed;
+
+    /// <summary>Time source (QPC ticks) for the buses that carry the extras alone; tests replace it.</summary>
+    internal Func<long> Clock { get; set; } = Stopwatch.GetTimestamp;
     public long Generation { get; private set; } = -1;
     public long DroppedInputFrames { get; private set; }
     public int InputCount { get { lock (_gate) return _inputs.Count; } }
@@ -73,7 +84,8 @@ public sealed class MixerCaptureHub : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_buses.ContainsKey(destination)) throw new InvalidOperationException("A destination already owns its capture bus");
-            var bus = new Bus(destination, fifo, _rate, _outRate, _steerClock, () => Unsubscribe(destination));
+            var bus = new Bus(destination, fifo, _rate, _outRate, _steerClock, () => Unsubscribe(destination), Clock())
+            { ExtrasPosition = _extrasFrames };
             _buses.Add(destination, bus);
             foreach (var input in _inputs.Values.Where(i => i.Root.Destination == destination)) bus.Add(input.Root.Target.RootPid);
             return bus;
@@ -175,11 +187,30 @@ public sealed class MixerCaptureHub : IDisposable
                     destination.Push(pid, samples, _gain(input.Root.Target, samples));
             }
             if (broken is { } failed) Remove(failed);
-            int extraFrames = Math.Min(MaxPacketFrames, _outRate / 100);
-            var extras = _extras.AsSpan(0, extraFrames * 2);
-            extras.Clear();
-            if (_buses.Count > 0) StreamMixer.AddSources(extras, _sources.Snapshot, ref _sourceScratch);
-            foreach (var bus in _buses.Values) bus.Flush(extras, _sources.Snapshot.Count > 0);
+            if (_buses.Count == 0) return;
+            long now = Clock();
+            var sources = _sources.Snapshot;
+            bool hasExtras = MixSources.HasAudio(sources);
+            int need = 0;
+            foreach (var bus in _buses.Values) need = Math.Max(need, bus.Mix(now, hasExtras));
+            if (!hasExtras) _extrasFrames = 0;
+            else if (need > _extrasFrames)
+            {
+                if (_extras.Length < need * 2) Array.Resize(ref _extras, need * 2);
+                var fresh = _extras.AsSpan(_extrasFrames * 2, (need - _extrasFrames) * 2);
+                fresh.Clear();
+                StreamMixer.AddSources(fresh, sources, ref _sourceScratch);
+                _extrasFrames = need;
+            }
+            int used = _extrasFrames;
+            foreach (var bus in _buses.Values) used = Math.Min(used, bus.Write(_extras, _extrasFrames, hasExtras));
+            if (used > 0)
+            {
+                // Every bus is past these frames.
+                _extrasFrames -= used;
+                Array.Copy(_extras, used * 2, _extras, 0, _extrasFrames * 2);
+                foreach (var bus in _buses.Values) bus.ExtrasPosition -= used;
+            }
         }
     }
 
@@ -196,6 +227,9 @@ public sealed class MixerCaptureHub : IDisposable
 
     private sealed class Bus : ICaptureSource
     {
+        /// <summary>As RoutedCapture: a bus that captured nothing for this long carries the extras alone.</summary>
+        private static readonly long SourceClockGap = Stopwatch.Frequency / 50; // 20 ms
+
         private readonly AudioFifo _fifo;
         private readonly StreamMixer _mixer;
         private readonly Dictionary<uint, Resampler> _resamplers = [];
@@ -204,20 +238,32 @@ public sealed class MixerCaptureHub : IDisposable
         private readonly Dictionary<uint, int> _counts = [];
         private readonly List<float> _mix = new(MaxPacketFrames * 2);
         private readonly float[] _padded;
+        private readonly int _contributionLength;
         private readonly Action _release;
         private readonly Action<int, float[], int, int> _observe;
         private readonly int _rate, _outRate;
+        private readonly int _trimLag;
+        private readonly long _maxFillTicks;
         private readonly bool _steerClock;
         private double _averageDepth;
         private int _frames;
+        private long _lastOutput;
+        private bool _extrasOnly;
         private bool _started, _disposed;
         internal bool Started => _started && !_disposed;
-        public Bus(string name, AudioFifo fifo, int rate, int outRate, bool steerClock, Action release)
+
+        /// <summary>The bus's next frame in the hub's extras.</summary>
+        internal int ExtrasPosition;
+
+        public Bus(string name, AudioFifo fifo, int rate, int outRate, bool steerClock, Action release, long now)
         {
             DeviceName = name; _fifo = fifo; _rate = rate; _outRate = outRate; _release = release;
-            _steerClock = steerClock; _averageDepth = fifo.TargetFrames;
+            _steerClock = steerClock; _averageDepth = fifo.TargetFrames; _lastOutput = now;
             _mixer = new(rate * 30 / 1000); _observe = Observe;
             _padded = new float[(MaxPacketFrames + rate * 30 / 1000) * 2];
+            _contributionLength = _padded.Length * Math.Max(1, (_outRate + _rate - 1) / _rate);
+            _trimLag = outRate * 30 / 1000;
+            _maxFillTicks = MaxPacketFrames * Stopwatch.Frequency / outRate;
         }
         public string? DeviceName { get; }
         public double DriftPpm { get; private set; }
@@ -231,7 +277,7 @@ public sealed class MixerCaptureHub : IDisposable
             _mixer.Add(unchecked((int)pid));
             _resamplers[pid] = new(_rate, _outRate);
             _resampled[pid] = new(MaxPacketFrames * 2);
-            _contributions[pid] = new float[_padded.Length * Math.Max(1, (_outRate + _rate - 1) / _rate)];
+            _contributions[pid] = new float[_contributionLength];
         }
         public void Remove(uint pid)
         {
@@ -256,17 +302,60 @@ public sealed class MixerCaptureHub : IDisposable
             _counts[pid] = resampled.Count / 2;
             _frames = Math.Max(_frames, resampled.Count / 2);
         }
-        public void Flush(ReadOnlySpan<float> extras, bool hasExtras)
+        /// <summary>
+        /// Mixes and resamples what this cycle captured for the bus and decides how many frames it writes. Returns
+        /// how far into the hub's extras it reads (its position plus those frames).
+        /// </summary>
+        public int Mix(long now, bool hasExtras)
         {
             _mix.Clear(); _frames = 0;
             _mixer.Mix(_mix, _observe);
-            if (!_started) return;
-            if (_frames == 0 && hasExtras)
+            if (!_started || !hasExtras || _frames > 0)
             {
-                _frames = extras.Length / 2;
-                foreach (var (id, samples) in _contributions) if (id != 0) samples.AsSpan(0, _frames * 2).Clear();
+                _lastOutput = now;
+                _extrasOnly = false;
             }
-            if (_frames == 0) return;
+            else if (_extrasOnly || now - _lastOutput > SourceClockGap)
+            {
+                // Nothing captured (no app is playing to this destination): carry the extras alone on the wall
+                // clock, as RoutedCapture does. Only after a real gap, never on every empty cycle: an input that is
+                // merely a cycle late would get silence in front of its audio. Whole frames are counted from the
+                // last one written, so the fractions add up instead of getting lost.
+                _extrasOnly = true;
+                long elapsed = now - _lastOutput;
+                if (elapsed >= _maxFillTicks)
+                {
+                    _frames = MaxPacketFrames;
+                    _lastOutput = now;
+                }
+                else
+                {
+                    _frames = (int)(elapsed * _outRate / Stopwatch.Frequency);
+                    _lastOutput += _frames * Stopwatch.Frequency / _outRate;
+                }
+            }
+            return _started ? ExtrasPosition + _frames : ExtrasPosition;
+        }
+
+        /// <summary>
+        /// Writes the frames <see cref="Mix"/> decided on, with the next of them from the extras (frames up to
+        /// <paramref name="head"/> are valid). Returns the bus's new position in the extras.
+        /// </summary>
+        public int Write(float[] extras, int head, bool hasExtras)
+        {
+            if (!hasExtras) ExtrasPosition = 0;
+            if (!_started) return ExtrasPosition = head; // nothing sent: no claim on the extras
+            if (_frames > 0) WriteFrames(extras, hasExtras);
+            int lag = head - ExtrasPosition;
+            // Behind the bus that used the most extras: a stall skips at once; otherwise one frame per cycle trims
+            // inaudibly what drift between two receivers' clocks adds up, so this destination's mic delay stays low.
+            if (lag > MaxPacketFrames) ExtrasPosition = head - MaxPacketFrames;
+            else if (lag > _trimLag) ExtrasPosition++;
+            return ExtrasPosition;
+        }
+
+        private void WriteFrames(float[] extras, bool hasExtras)
+        {
             foreach (var (pid, resampled) in _resampled)
             {
                 var dest = _contributions[pid].AsSpan(0, _frames * 2);
@@ -276,9 +365,9 @@ public sealed class MixerCaptureHub : IDisposable
             }
             if (hasExtras)
             {
-                if (!_contributions.TryGetValue(0, out var mic)) _contributions[0] = mic = new float[MaxPacketFrames * 2];
-                mic.AsSpan(0, _frames * 2).Clear();
-                extras[..Math.Min(extras.Length, _frames * 2)].CopyTo(mic);
+                if (!_contributions.TryGetValue(0, out var mic)) _contributions[0] = mic = new float[_contributionLength];
+                extras.AsSpan(ExtrasPosition * 2, _frames * 2).CopyTo(mic);
+                ExtrasPosition += _frames;
             }
             else _contributions.Remove(0);
             _fifo.WriteMixer(_contributions, _frames);

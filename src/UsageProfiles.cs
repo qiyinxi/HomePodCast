@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Text.Json;
 using HomePodCast.Audio;
 using HomePodCast.Net;
@@ -35,6 +36,10 @@ public sealed class UsageSettings
     public JsonElement? MixerRouting { get; set; }
     public Dictionary<string, int> AppSendVolumes { get; set; } = [];
     public EffectsSettings Effects { get; set; } = new();
+
+    /// <summary>Which mic and EQ settings <see cref="Effects"/> holds (<see cref="UsageProfiles.EffectsVersion"/>; 0: before 1.3).</summary>
+    public int EffectsVersion { get; set; }
+
     public bool GroupSplitChannels { get; set; }
     public bool GroupSwapChannels { get; set; }
     public bool GroupPairLeaderOnly { get; set; }
@@ -63,6 +68,24 @@ public static class UsageProfiles
 
     private static T Clone<T>(T value) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value))!;
 
+    /// <summary>2: the input channel and the voice chain (low cut, compressor, de-esser, limiter) are saved too (1.3).</summary>
+    public const int EffectsVersion = 2;
+
+    /// <summary>
+    /// The settings a profile saved before <see cref="EffectsVersion"/> 2 knows nothing about. Applying such a profile keeps
+    /// them as they are: read as defaults, they switched the voice chain off and the mic back to the first input (silent
+    /// for a mic on input 2 of an interface), as a profile without speakers keeps the speaker selection.
+    /// </summary>
+    private static readonly string[] SinceVersion2 =
+    [
+        nameof(EffectsSettings.MicChannel), nameof(EffectsSettings.LowCutEnabled), nameof(EffectsSettings.LowCutHz), nameof(EffectsSettings.LowCutSlope),
+        nameof(EffectsSettings.CompressorEnabled), nameof(EffectsSettings.CompressorThresholdDb), nameof(EffectsSettings.CompressorRatio),
+        nameof(EffectsSettings.CompressorAttackMs), nameof(EffectsSettings.CompressorReleaseMs), nameof(EffectsSettings.CompressorKneeDb),
+        nameof(EffectsSettings.CompressorMakeupDb), nameof(EffectsSettings.DeEsserEnabled), nameof(EffectsSettings.DeEsserFrequencyHz),
+        nameof(EffectsSettings.DeEsserThresholdDb), nameof(EffectsSettings.DeEsserRangeDb), nameof(EffectsSettings.LimiterEnabled),
+        nameof(EffectsSettings.LimiterCeilingDb), nameof(EffectsSettings.LimiterReleaseMs),
+    ];
+
     public static UsageSettings Capture(AppConfig c) => new()
     {
         DeviceId = c.DeviceId, DeviceName = c.DeviceName, Host = c.Host,
@@ -71,7 +94,8 @@ public static class UsageProfiles
         MoviePlayerSync = c.MoviePlayerSync, CaptureDeviceId = c.CaptureDeviceId, CaptureDeviceName = c.CaptureDeviceName,
         RouteDefault = c.RouteDefault, AppRoutes = new(c.AppRoutes), AppSendVolumes = new(c.AppSendVolumes),
         MixerRouting = c.MixerRouting?.Clone(),
-        Effects = Clone(c.Effects), GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
+        Effects = Clone(c.Effects), EffectsVersion = EffectsVersion,
+        GroupSplitChannels = c.GroupSplitChannels, GroupSwapChannels = c.GroupSwapChannels,
         GroupPairLeaderOnly = c.GroupPairLeaderOnly,
         GroupVolumeOffsets = c.GroupVolumeOffsets == null ? null : new(c.GroupVolumeOffsets),
         GroupSpeakers = c.GroupSpeakers == null ? null : GroupSettings.Copy(c.GroupSpeakers),
@@ -129,6 +153,9 @@ public static class UsageProfiles
         c.MixerRouting = mixerConfig.MixerRouting;
         // Never raise the saved loudness.
         if (c.Volume is { } v) c.Volume = Math.Min(v, s.VolumeCapPercent);
+        if (s.EffectsVersion < 2)
+            foreach (string name in SinceVersion2)
+                typeof(EffectsSettings).GetProperty(name)!.SetValue(s.Effects, typeof(EffectsSettings).GetProperty(name)!.GetValue(c.Effects));
         CopyEffects(c.Effects, s.Effects);
         Scenes.Reconcile(c);
     }
@@ -170,14 +197,14 @@ public static class UsageProfiles
     public static bool NameTaken(IEnumerable<UsageProfile> profiles, string name, string? exceptId) =>
         profiles.Any(p => p.Id != exceptId && string.Equals(p.Name.Trim(), name.Trim(), StringComparison.CurrentCultureIgnoreCase));
 
-    private static void CopyEffects(EffectsSettings target, EffectsSettings source)
+    /// <summary>
+    /// Every setting of <paramref name="source"/> into the object MicEffects keeps. All properties, not a hand-kept list: a
+    /// new mic or EQ setting would otherwise be saved in profiles but never restored. The EQs are copies.
+    /// </summary>
+    internal static void CopyEffects(EffectsSettings target, EffectsSettings source)
     {
-        target.MicDeviceId = source.MicDeviceId; target.MicGainDb = source.MicGainDb;
-        target.GateEnabled = source.GateEnabled; target.GateThresholdDb = source.GateThresholdDb;
-        target.Destination = source.Destination; target.MonitorDeviceId = source.MonitorDeviceId;
-        target.ReverbEnabled = source.ReverbEnabled; target.ReverbRoomSize = source.ReverbRoomSize;
-        target.ReverbDamping = source.ReverbDamping; target.ReverbMix = source.ReverbMix;
-        target.ReverbPreDelayMs = source.ReverbPreDelayMs; target.MicEq = source.MicEq; target.OutputEq = source.OutputEq;
+        foreach (var p in typeof(EffectsSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (p.CanRead && p.CanWrite) p.SetValue(target, p.GetValue(source) is EqSettings eq ? eq.Clone() : p.GetValue(source));
     }
 
     public static void Normalize(AppConfig c)

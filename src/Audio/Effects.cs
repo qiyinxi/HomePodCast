@@ -11,6 +11,19 @@ public interface IAudioEffect
 }
 
 /// <summary>
+/// Captured samples are made finite and bounded where they enter (the mic, every loopback drain), before any
+/// stateful effect sees them. 2026-10-27 review: one NaN or Inf from a driver, an APO or a virtual mic stayed in the
+/// state of an EQ, the reverb or the gate for good, and the senders turned everything after it into silence.
+/// </summary>
+internal static class SampleGuard
+{
+    /// <summary>+12 dBFS: far above any real signal (a float mix may exceed 1), low enough that no filter overflows.</summary>
+    public const float Limit = 4f;
+
+    public static float Clean(float v) => float.IsFinite(v) ? Math.Clamp(v, -Limit, Limit) : 0f;
+}
+
+/// <summary>
 /// The effects applied to every packet just before it is encoded (the hook in RtpSender.SendLoop).
 /// Order matters: tone shaping (an output EQ) belongs in front of dynamics (the night-mode compressor),
 /// so the compressor sees the final spectrum and its ceiling still holds — insert an EQ at index 0.

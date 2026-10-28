@@ -80,6 +80,29 @@ public sealed class MixerBoundaryTests
     }
 
     [Fact]
+    public async Task A_destination_created_in_night_mode_starts_with_reduce_bass()
+    {
+        var config = MixerRoutingV2Tests.Speaker();
+        config.Effects.OutputEq = new EqSettings { Preset = "bass-boost" };
+        var app = TestApp.Create(config);
+        var create = typeof(TrayApp).GetMethod("CreateMixerSession", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await using var coordinator = new MixerOutputCoordinator(new(), (d, capture) =>
+            new DormantSession((IMixerDestinationSession)create.Invoke(app, [d, capture])!),
+            (_, _) => new MixerCoordinatorTests.FakeCapture(), () => new DormantHost());
+        typeof(TrayApp).GetField("<Mixer>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(app, coordinator);
+        await coordinator.ConnectAsync(config, ConnectTrigger.Manual);
+        config.NightMode = true;
+        config.DeviceId = "112233445566"; config.DeviceName = "new Current";
+        config.GroupSpeakers!.Add(new() { DeviceId = config.DeviceId, Name = config.DeviceName });
+        MixerRoutes.Write(config, new() { Apps = new() { ["old"] = MixerRoutingV2Tests.Named("airplay:AABBCCDDEEFF") } });
+        await coordinator.RefreshRootsAsync([new(1, "old", false)]);
+        await coordinator.ConnectAsync(config, ConnectTrigger.Automatic);
+        var created = coordinator.ControllerForKey("speaker:airplay:112233445566")!;
+        var equalizers = TestApp.Field<System.Collections.Concurrent.ConcurrentDictionary<StreamController, Equalizer>>(app, "_mixerEqualizers");
+        Assert.Equal(EqPreset.ReduceBass, equalizers[created].Preset);
+    }
+
+    [Fact]
     public void Named_single_destination_bypass_uses_the_live_routing_policy()
     {
         var config = MixerRoutingV2Tests.Speaker(); var app = TestApp.Create(config);

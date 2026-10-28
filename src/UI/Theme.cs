@@ -65,19 +65,43 @@ internal static partial class Theme
         {
             if (e.Category is UserPreferenceCategory.General or UserPreferenceCategory.Color or UserPreferenceCategory.VisualStyle)
             {
-                if (_ui != null) _ui.Post(_ => Refresh(), null);
-                else Refresh();
+                if (_ui != null) _ui.Post(_ => SystemChange(), null);
+                else SystemChange();
             }
         };
     }
 
+    /// <summary>
+    /// Windows' light/dark, accent or visual style may have changed (on the UI thread). A handler applies it itself with
+    /// <see cref="Refresh"/>: the main window, faded like its own theme switch (until 2026-10-27, 跟随 Windows switched at once,
+    /// and the window repainted one control at a time). Without one it applies at once.
+    /// </summary>
+    public static event Action? SystemChanged;
+
+    internal static void SystemChange()
+    {
+        if (SystemChanged is { } handlers) handlers();
+        else Refresh();
+    }
+
     public static void Refresh()
     {
-        bool dark = _mode == Dark || _mode == Auto && SystemUsesDark();
-        var p = Build(dark, ReadAccent(dark));
+        var p = Current(_mode);
         if (p == P) return;
         P = p;
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// <see cref="Mode"/> set to <paramref name="mode"/> (or <see cref="Refresh"/> with it) would change the colours. Windows
+    /// sends General for many unrelated settings, and 跟随 Windows can give the theme already shown: nothing to fade then.
+    /// </summary>
+    public static bool Changes(string mode) => Current(Normalize(mode)) != P;
+
+    private static Palette Current(string mode)
+    {
+        bool dark = mode == Dark || mode == Auto && SystemUsesDark();
+        return Build(dark, ReadAccent(dark));
     }
 
     /// <summary>HKCU\…\Themes\Personalize AppsUseLightTheme (0 = dark).</summary>
@@ -143,6 +167,20 @@ internal static partial class Theme
 
     public static Color Blend(Color a, Color b, double t) => Color.FromArgb(
         (int)Math.Round(a.R + (b.R - a.R) * t), (int)Math.Round(a.G + (b.G - a.G) * t), (int)Math.Round(a.B + (b.B - a.B) * t));
+
+    // Hover, pressed and selected fills over a surface are a share of the text colour on that surface, the way WinUI's
+    // translucent SubtleFill brushes work, so they show on every surface. Fixed palette fills did not: 2026-10-27, Subtle
+    // (0x353535) on a dark segmented control (Control, 0x373737) made hover invisible, and NavSelected (E5E5E5) on the
+    // light navigation rail (E6E6E6) left the selected page without a visible box.
+
+    /// <summary>Hover (or pressed) fill of a quiet control: segments, subtle buttons.</summary>
+    public static Color SubtleOn(Color surface, bool pressed = false) => Blend(surface, P.Text, pressed ? 0.04 : 0.07);
+
+    /// <summary>Hover fill of a navigation entry (also of the selected one under the mouse).</summary>
+    public static Color NavHoverOn(Color surface) => Blend(surface, P.Text, P.IsDark ? 0.08 : 0.05);
+
+    /// <summary>Fill of the selected (or pressed) navigation entry.</summary>
+    public static Color NavSelectedOn(Color surface) => Blend(surface, P.Text, P.IsDark ? 0.10 : 0.08);
 
     // ---------------------------------------------------------------- sizes and fonts
 
@@ -289,8 +327,13 @@ internal static partial class Theme
     /// <summary>Scroll bars (and other common-control parts) in the light or dark system style.</summary>
     public static void StyleScrollBars(Control control)
     {
-        if (control.IsHandleCreated) SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : "Explorer", null);
+        if (!control.IsHandleCreated) return;
+        SetWindowTheme(control.Handle, IsDark ? "DarkMode_Explorer" : "Explorer", null);
+        ScrollBarsStyled?.Invoke(control.Handle, IsDark);
     }
+
+    /// <summary>Tests: a window whose scroll bars were styled on this thread, and whether dark.</summary>
+    [ThreadStatic] internal static Action<IntPtr, bool>? ScrollBarsStyled;
 
     [LibraryImport("dwmapi.dll")]
     private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);

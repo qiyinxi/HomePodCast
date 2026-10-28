@@ -959,6 +959,31 @@ public class LayoutWorkTests
         });
     }));
 
+    [Fact]
+    public void A_dropdown_list_s_highlight_spans_the_whole_list() => Sta.Run(() => PerMonitor(() =>
+    {
+        using var form = new Form();
+        var combo = new FluentComboBox { Width = 240 };
+        combo.Items.AddRange(["平直", "低音增强", "人声增强", "减弱低音", "自定义"]);
+        form.Controls.Add(combo);
+        ShowHidden(form);
+        int dpi = combo.DeviceDpi;
+        foreach (int system in new[] { dpi, dpi == 144 ? 96 : 144 }) // also made at the other monitor's scale
+        {
+            WithSystemDpi(system, () =>
+            {
+                using var menu = combo.BuildMenu();
+                _ = menu.Handle;
+                menu.PerformLayout();
+                output.WriteLine($"system {system}: menu {menu.Size} items {string.Join(", ", menu.Items.Cast<ToolStripItem>().Select(i => i.Bounds))}");
+                Assert.Equal(combo.Width, menu.Width); // the list as wide as the dropdown, not wider
+                // The highlight is inset equally on both sides of the entry: the entry spans the list.
+                foreach (ToolStripItem item in menu.Items)
+                    Assert.Equal((0, menu.ClientSize.Width), (item.Bounds.Left, item.Bounds.Right));
+            });
+        }
+    }));
+
     /// <summary>The DPI a window made here gets, per-monitor: its monitor's (off-screen: the main monitor's, 2026-10-16).</summary>
     private static int WindowDpi()
     {

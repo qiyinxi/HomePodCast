@@ -39,6 +39,12 @@ public sealed class AudioTap
     private volatile bool _resetResampler;
     private double _avgDepth, _integral;
     private long _lastSteer, _lastWrite, _lastRead;
+    private double _writeFrames;                // average write, in output frames (0 = none yet)
+    private int _configuredTarget = -1, _configuredCap; // while EnsureReadFrames has raised the target
+    private int _windowNeed;                    // the largest need EnsureReadFrames saw since _windowStart
+    private long _windowStart;
+    private long _lastEnsure;                   // the consumer's previous EnsureReadFrames
+    private double _readInterval;               // its typical interval between them, in output frames (0 = not known)
 
     /// <summary>Time source (QPC ticks); tests replace it to simulate hours of drift in milliseconds.</summary>
     internal Func<long> Clock = Stopwatch.GetTimestamp;
@@ -65,7 +71,7 @@ public sealed class AudioTap
     public double AverageDepth => _avgDepth;
 
     /// <summary>Delay added by the resampler (≈ half its kernel), in ms.</summary>
-    public double ResamplerDelayMs => 32 * 1000.0 / InputRate;
+    public double ResamplerDelayMs => _resampler.DelayFrames * 1000.0 / InputRate;
 
     /// <summary>True when the consumer read in the last second (e.g. the HomePod is actually streaming).</summary>
     public bool IsBeingRead => Clock() - Volatile.Read(ref _lastRead) < Stopwatch.Frequency;
@@ -113,6 +119,7 @@ public sealed class AudioTap
             data[..(first * 2)].CopyTo(_buf.AsSpan(write * 2));
             data[(first * 2)..].CopyTo(_buf);
             _count += frames;
+            if (frames > 0) _writeFrames = _writeFrames == 0 ? frames : _writeFrames + 0.1 * (frames - _writeFrames);
             if (_count > CapFrames)
             {
                 int drop = _count - TargetFrames;
@@ -171,6 +178,73 @@ public sealed class AudioTap
         }
     }
 
+    /// <summary>
+    /// Consumer: it is about to read <paramref name="frames"/> at once. While that is more than the target covers
+    /// (one read, half an average write and 2 ms of jitter), raises <see cref="TargetFrames"/> to it, and the cap to
+    /// at least 40 ms above. Once a second a raised target comes down to what the last second's reads needed, at
+    /// most to the configured values, which <see cref="Clear"/> restores as well; the cap comes down with it. 2026-10-27
+    /// review: a buffered AirPlay 2 session reads 1024 frames per packet from the mic's 20 ms (882-frame) tap and
+    /// underran on every packet (~3 ms of silence and ~3 ms of voice lost each time); a fixed larger target would add
+    /// that latency to the realtime path's 352-frame reads too.
+    /// <para>
+    /// A read that comes more than two typical intervals after the previous one counts as one read on time: the
+    /// producer filled the tap while the consumer was late, so the catch-up needs no more depth than a normal read.
+    /// 2026-10-27 review: after a 70 ms stall of the mixer hub's thread, its catch-up read (3087 frames) raised the
+    /// target to ~77 ms; the tap had overflowed during the stall, re-primed at that depth, and the voice stayed ~50 ms
+    /// late for about a minute while the drift control drained it at 1000 ppm.
+    /// </para>
+    /// </summary>
+    public void EnsureReadFrames(int frames)
+    {
+        lock (_lock)
+        {
+            long now = Clock();
+            double write = _writeFrames > 0 ? _writeFrames : OutputRate / 100.0; // a 10 ms packet until one came
+            int need = frames - LateFrames(now) + (int)Math.Ceiling(write / 2) + OutputRate / 500;
+            if (now - _windowStart > Stopwatch.Frequency)
+            {
+                if (_configuredTarget >= 0 && _windowNeed < TargetFrames)
+                {
+                    // A surplus under the cap drains through the drift control (≤ 1000 ppm), without a skip. The cap
+                    // comes down with the target: a larger surplus (a re-prime at a target one big read raised) is
+                    // cut once by the next write instead of draining for over a minute.
+                    if (_windowNeed <= _configuredTarget) RestoreTarget();
+                    else (TargetFrames, CapFrames) = (_windowNeed, Math.Max(_configuredCap, _windowNeed + OutputRate / 25));
+                }
+                _windowStart = now;
+                _windowNeed = 0;
+            }
+            _windowNeed = Math.Max(_windowNeed, need);
+            if (need <= TargetFrames) return;
+            if (_configuredTarget < 0) (_configuredTarget, _configuredCap) = (TargetFrames, CapFrames);
+            TargetFrames = need;
+            CapFrames = Math.Max(CapFrames, need + OutputRate / 25);
+        }
+    }
+
+    /// <summary>
+    /// For a read more than two typical intervals after the previous one, the frames beyond one interval, else 0.
+    /// Reads up to two intervals apart (the mixer hub's two packets at once, a sender's jitter) count in full.
+    /// </summary>
+    private int LateFrames(long now)
+    {
+        double elapsed = _lastEnsure == 0 ? 0 : (now - _lastEnsure) * (double)OutputRate / Stopwatch.Frequency;
+        _lastEnsure = now;
+        double typical = _readInterval;
+        if (elapsed > OutputRate) _readInterval = 0; // idle for a second: the next session may read at another pace
+        else if (typical == 0) _readInterval = elapsed;
+        // Clamped at two intervals: a stall moves the average by at most 10 %, and a consumer that now reads less
+        // often is still followed within a few reads.
+        else _readInterval += 0.1 * (Math.Min(elapsed, 2 * typical) - typical);
+        return typical > 0 && elapsed > 2 * typical ? (int)Math.Min(elapsed - typical, OutputRate) : 0;
+    }
+
+    private void RestoreTarget()
+    {
+        (TargetFrames, CapFrames) = (_configuredTarget, _configuredCap);
+        _configuredTarget = -1;
+    }
+
     public void Clear()
     {
         lock (_lock)
@@ -178,6 +252,9 @@ public sealed class AudioTap
             _read = 0;
             _count = 0;
             _priming = true;
+            _writeFrames = 0;
+            _windowNeed = 0;
+            if (_configuredTarget >= 0) RestoreTarget();
             _avgDepth = TargetFrames;
         }
         _resetResampler = true;
@@ -192,7 +269,12 @@ public sealed class AudioTap
         if (!IsBeingRead || _priming) return; // nobody consuming: nothing to track
 
         double error = (_avgDepth - TargetFrames) / OutputRate; // seconds; > 0 = too much buffered
-        _integral = Math.Clamp(_integral + error * dt, -MaxAdjust / Ki, MaxAdjust / Ki);
+        // The integral holds the clock drift. It is left alone while the output is already at its limit in the
+        // error's direction. 2026-10-27 review: draining a ~47 ms surplus at 1000 ppm wound it up to its clamp, and
+        // the depth then undershot the target by ~7 ms and underran.
+        double integral = Math.Clamp(_integral + error * dt, -MaxAdjust / Ki, MaxAdjust / Ki);
+        double adjust = Kp * error + Ki * integral;
+        if (Math.Abs(adjust) < MaxAdjust || Math.Sign(adjust) != Math.Sign(error)) _integral = integral;
         _resampler.Adjust = Math.Clamp(Kp * error + Ki * _integral, -MaxAdjust, MaxAdjust);
         DriftPpm = _resampler.Adjust * 1e6;
     }

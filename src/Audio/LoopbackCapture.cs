@@ -215,7 +215,7 @@ public sealed class LoopbackCapture : ICaptureSource
     {
         int bytes = fmt.BitsPerSample / 8;
         byte* s = frame + channel * bytes;
-        if (fmt.IsFloat) return *(float*)s;
+        if (fmt.IsFloat) return SampleGuard.Clean(*(float*)s); // an app may render a NaN into the shared mix
         return bytes switch
         {
             2 => *(short*)s / 32768f,

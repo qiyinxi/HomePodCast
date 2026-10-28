@@ -65,15 +65,18 @@ public sealed partial class StreamController
                 reason = await lost.Task.WaitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (PairingRequiredException ex)
+            // Only a loop still current acts on a refusal. The realtime trial's RTSP setup ignores ct, so a receiver can
+            // answer after Stop gave up waiting (3 s) and a new loop owns the capture: a cancelled loop just ends below,
+            // never disposing that capture, setting Idle or asking the user about a connection that no longer exists.
+            catch (PairingRequiredException ex) when (!ct.IsCancellationRequested)
             {
                 StopForPairing(device.DeviceId, device.Address, ex, trigger, device.Port, thirdParty: true); return;
             }
-            catch (RaopPasswordRequiredException ex)
+            catch (RaopPasswordRequiredException ex) when (!ct.IsCancellationRequested)
             {
                 DisposeCapture(); Set(StreamState.Idle, ex.Message); RaopPasswordRequired?.Invoke(new(device, trigger)); return;
             }
-            catch (RaopBusyException ex)
+            catch (RaopBusyException ex) when (!ct.IsCancellationRequested)
             {
                 if (trigger is ConnectTrigger.Manual or ConnectTrigger.TakeOver)
                 {

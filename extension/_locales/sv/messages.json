@@ -27,6 +27,14 @@
     "message": "Strömmar",
     "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
   },
+  "statusDestinationUnknown": {
+    "message": "Webbläsarens ljudmål är okänt; synkronisering är tillfälligt inte tillgänglig.",
+    "description": "Status: HomePodCast's per-app outputs can't tell where the browser's sound goes, or that output isn't streaming; no picture delay."
+  },
+  "statusLocalOutput": {
+    "message": "Webbläsaren spelar lokalt; bilden fördröjs inte.",
+    "description": "Status: HomePodCast's per-app outputs play the browser's sound on this PC, not on a speaker; no picture delay."
+  },
   "siteLabel": {
     "message": "Den här webbplatsen",
     "description": "Label in front of the current site's host name."

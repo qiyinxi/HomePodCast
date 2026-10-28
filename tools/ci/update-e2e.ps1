@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  End-to-end test of the MSI install's in-app update (设置 → 软件更新 「更新」), for CI (build.yml job update-e2e).
+  End-to-end test of the MSI install's in-app update (关于 → 软件更新 「更新」), for CI (build.yml job update-e2e).
 
 .DESCRIPTION
   What a person did by hand for each release, on a throwaway CI runner:

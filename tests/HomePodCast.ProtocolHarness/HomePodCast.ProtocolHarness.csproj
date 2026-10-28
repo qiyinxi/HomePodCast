@@ -40,6 +40,7 @@
     <Compile Include="../../src/Net/BufferedSender.cs" Link="Net/BufferedSender.cs" />
     <Compile Include="../../src/Net/PtpRealtimeSender.cs" Link="Net/PtpRealtimeSender.cs" />
     <Compile Include="../../src/Net/PtpMaster.cs" Link="Net/PtpMaster.cs" />
+    <Compile Include="../../src/Net/UdpSockets.cs" Link="Net/UdpSockets.cs" />
     <Compile Include="../../src/Net/PtpClockPool.cs" Link="Net/PtpClockPool.cs" />
     <Compile Include="../../src/Net/PtpPackets.cs" Link="Net/PtpPackets.cs" />
     <Compile Include="../../src/Net/ReceiverSession.cs" Link="Net/ReceiverSession.cs" />

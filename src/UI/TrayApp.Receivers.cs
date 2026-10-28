@@ -29,9 +29,7 @@ internal sealed partial class TrayApp
             await ApplyMixerDelayAsync(destination, new(PlaybackConfig.Scene, milliseconds, PlaybackConfig.FifoTargetMs, PlaybackConfig.Volume));
             _form.UpdateState(); RaiseStateChanged(); return;
         }
-        string key = RaopPassword.Key(selection.Device.DeviceId);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(selection.Device);
+        var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(selection.Device.DeviceId), () => ReceiverPreferences.Of(selection.Device));
         selection.Save(settings, milliseconds);
         Config.Save();
         _form.UpdateState(); RaiseStateChanged();
@@ -43,14 +41,12 @@ internal sealed partial class TrayApp
         if (Controller.State != StreamState.Streaming || ReceiverSelection is not { } selection
             || ReferenceEquals(_rememberedReceiverSession, Controller.AudioSessionIdentity)) return;
         _rememberedReceiverSession = Controller.AudioSessionIdentity;
-        string key = RaopPassword.Key(selection.Device.DeviceId);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(selection.Device);
+        var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(selection.Device.DeviceId), () => ReceiverPreferences.Of(selection.Device));
         settings.LastSuccessfulProtocol = selection.Protocol;
         if ((Controller.ReceiverSession?.ArrivalToRenderMs ?? Controller.Client?.ArrivalToRenderMs) is { } processing)
             settings.ArrivalToRenderMs = processing;
         bool notice = selection.TakeCompatibilityNotice(settings);
-        Config.Save();
+        Config.TrySave(); // part of OnControllerChanged, which has to go on
         if (notice) _tray.ShowBalloonTip(8000, L.T("AirPlay 兼容模式（实验性）"), // experimental since 1.1
             L.T("兼容模式延迟约 2 秒，适合听音乐"), ToolTipIcon.Info);
     }

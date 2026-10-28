@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "No se está ejecutando" },
   "statusIdle": { "message": "Sin transmisión" },
   "statusStreaming": { "message": "Transmitiendo" },
+  "statusDestinationUnknown": { "message": "Se desconoce el destino de audio del navegador; la sincronización no está disponible temporalmente." },
+  "statusLocalOutput": { "message": "El navegador reproduce el sonido localmente; la imagen no se retrasa." },
   "siteLabel": { "message": "Este sitio" },
   "localFile": { "message": "(archivo local)" },
   "minusLabel": { "message": "1 ms menos" },

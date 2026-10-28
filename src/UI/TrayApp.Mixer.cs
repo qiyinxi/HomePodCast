@@ -8,11 +8,16 @@ internal sealed partial class TrayApp
     private StreamController? _legacyController;
     private string? _legacyDestinationKey;
     internal MixerOutputCoordinator? Mixer { get; private set; }
+    /// <summary>
+    /// The config of what plays now: the selected mixer destination's, with the app-wide settings laid over it, or the app's
+    /// own. Read on other threads too (PlayerSync's poll, the local API), so the app's own is returned as it is: 2026-10-27,
+    /// writing the routing's capture device back into it undid a usage profile's device between its apply and Routing.Reload.
+    /// </summary>
     internal AppConfig PlaybackConfig
     {
         get
         {
-            var selected = Mixer?.SelectedConfig ?? Config;
+            if (Mixer?.SelectedConfig is not { } selected) return Config;
             selected.SyncCalibrations = Config.SyncCalibrations;
             selected.ReceiverSettings = Config.ReceiverSettings;
             selected.VideoDelayExtraMs = Config.VideoDelayExtraMs;
@@ -47,7 +52,9 @@ internal sealed partial class TrayApp
         }, null);
         Routing.Changed += () =>
         {
-            if (Mixer.IsConnected) PostConnection(() => Mixer.ConnectAsync(Config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
+            if (!Mixer.IsConnected) return;
+            var config = Config.Snapshot(); // on the UI thread, which changes the live one (Connect)
+            PostConnection(() => Mixer.ConnectAsync(config, ConnectTrigger.Automatic).GetAwaiter().GetResult());
         };
     }
 
@@ -102,28 +109,30 @@ internal sealed partial class TrayApp
         }
         if (!useLegacy)
         {
-            var eq = new Equalizer(44100); eq.Set(Config.Effects.OutputEq.Preset, Config.Effects.OutputEq.Gains);
+            var eq = new Equalizer(44100); ConfigureOutputEq(eq);
             controller.Effects.Insert(0, eq); _mixerEqualizers[controller] = eq;
             if (Mixer?.UsesHub != true) controller.Effects.Insert(0, new MixIn(Fx.HomePodSource));
             controller.Effects.Add(_soundActivity);
             controller.Changed += () => _ui.Post(_ => { if (!_quitting) RememberMixerSession(destination.Key, config, controller); }, null);
+            // The startup controller's are wired in InitFirewall and InitTakeover; one made here needs its own.
+            WatchFirewall(controller, () => config.Host);
+            WatchOwnSession(controller);
             controller.HostResolved += host =>
             {
                 config.Host = host;
                 _ui.Post(_ =>
                 {
                     if (!_quitting && config.DeviceId != null && GroupPlan.Key(Config.DeviceId ?? "") == GroupPlan.Key(config.DeviceId))
-                    { Config.Host = host; Config.Save(); }
+                    { Config.Host = host; Config.TrySave(); }
                 }, null);
             };
             controller.ArrivalToRenderChanged += ms => config.ArrivalToRenderMs = ms;
             controller.ReceiverProtocolConnected += (id, protocol, processing) => _ui.Post(_ =>
             {
                 if (_quitting || controller.ReceiverLookup?.Invoke(id) is not { } device) return;
-                string key = RaopPassword.Key(id);
-                if (!Config.ReceiverSettings.TryGetValue(key, out var settings)) Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+                var settings = Config.ReceiverPreferencesFor(RaopPassword.Key(id), () => ReceiverPreferences.Of(device));
                 settings.LastSuccessfulProtocol = protocol; if (processing != null) settings.ArrivalToRenderMs = processing;
-                Config.Save();
+                Config.TrySave();
             }, null);
             controller.PairingRequired += request => _ui.Post(_ => ShowMixerPairing(destination.Key, controller, request), null);
             controller.RaopPasswordRequired += request => _ui.Post(_ => ShowMixerPassword(destination.Key, controller, request), null);
@@ -145,7 +154,7 @@ internal sealed partial class TrayApp
         // Per-device measurements live with that receiver, never in the selected HomePod's global slot.
         if (projection.DeviceId is { } id && projection.ArrivalToRenderMs is { } ms &&
             Config.ReceiverSettings.TryGetValue(RaopPassword.Key(id), out var preferences) && preferences.ArrivalToRenderMs != ms)
-        { preferences.ArrivalToRenderMs = ms; Config.Save(); }
+        { preferences.ArrivalToRenderMs = ms; Config.TrySave(); }
     }
 
     private void ShowMixerPairing(string key, StreamController controller, PairingRequest request)
@@ -170,7 +179,7 @@ internal sealed partial class TrayApp
         {
             using var dialog = new RaopPasswordDialog(request.Device.Name);
             if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || _quitting) return;
-            Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+            Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
             Config.Save(); PostConnection(() => Mixer!.ReconnectAsync(key, ConnectTrigger.Manual).GetAwaiter().GetResult());
         }
         finally { _raopDialog = false; }
@@ -263,9 +272,9 @@ internal sealed partial class TrayApp
             string receiverKey = RaopPassword.Key(receiverId);
             var old = Config.ReceiverSettings.GetValueOrDefault(receiverKey);
             var next = old == null ? ReceiverPreferences.Of(selection.Device) : old with { };
-            selection.Save(next, delay.LatencyMs); Config.ReceiverSettings[receiverKey] = next;
+            selection.Save(next, delay.LatencyMs); Config.SetReceiverPreferences(receiverKey, next);
             try { SaveMixerConfig(); }
-            catch { if (old == null) Config.ReceiverSettings.Remove(receiverKey); else Config.ReceiverSettings[receiverKey] = old; return new(MixerEditResult.SaveFailed); }
+            catch { Config.SetReceiverPreferences(receiverKey, old); return new(MixerEditResult.SaveFailed); }
             if (Mixer.IsConnected) await Mixer.ReconnectAsync(key, ConnectTrigger.Reconnect);
             return new(MixerEditResult.Applied);
         }
@@ -286,8 +295,14 @@ internal sealed partial class TrayApp
         private sealed class Shared(MixSources sources, AudioTap mic) : IMixSource
         {
             private float[] _scratch = new float[8820];
+            // A closed mic adds nothing: an idle destination then writes no silence of its own.
+            public bool HasAudio => mic.IsBeingWritten || MixSources.HasAudio(sources.Snapshot);
             public void Read(Span<float> dest)
-            { mic.Read(dest); StreamMixer.AddSources(dest, sources.Snapshot, ref _scratch); }
+            {
+                // The hub reads what its destinations wrote this cycle: two packets at once now and then.
+                mic.EnsureReadFrames(dest.Length / 2);
+                mic.Read(dest); StreamMixer.AddSources(dest, sources.Snapshot, ref _scratch);
+            }
         }
     }
 
@@ -311,11 +326,18 @@ internal sealed partial class TrayApp
         {
             controller.NightMode.Enabled = Config.NightMode;
             if (controller.VolumeCapPercent != Config.VolumeCapPercent) controller.SetVolumeCap(Config.VolumeCapPercent);
-            if (_mixerEqualizers.TryGetValue(controller, out var eq))
-            {
-                if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);
-                else eq.Set(Config.Effects.OutputEq.Preset, Config.Effects.OutputEq.Gains);
-            }
+            if (_mixerEqualizers.TryGetValue(controller, out var eq)) ConfigureOutputEq(eq);
         }
+    }
+
+    /// <summary>
+    /// A mixer destination's output EQ: the saved one, or 「减弱低音」 while night mode is on (MicEffects.OutputPresetOverride
+    /// does the same for the startup speaker). Also when the destination is created: 2026-10-27, a speaker connected while
+    /// night mode was on played the saved EQ (e.g. 低音增强) with the night compressor until some setting changed.
+    /// </summary>
+    private void ConfigureOutputEq(Equalizer eq)
+    {
+        if (Config.NightMode) eq.SetPreset(EqPreset.ReduceBass);
+        else eq.Set(Config.Effects.OutputEq);
     }
 }
