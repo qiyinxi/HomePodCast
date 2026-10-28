@@ -8,11 +8,11 @@ TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a nativ
 
 ## Supported outputs — experimental
 
-Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged.
+Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged unless 5.1 surround is turned on.
 
 | Output type | Connection | Verification |
 | --- | --- | --- |
-| HomePod | Existing AirPlay 2 realtime | One HomePod 2 on real hardware |
+| HomePod | AirPlay 2 realtime; 5.1 surround over buffered AirPlay 2 (experimental since 1.4) | One HomePod 2 on real hardware (5.1: protocol and channels with test tones only) |
 | Apple TV HD / 4K | AirPlay 2 realtime after PIN pairing | Simulated receiver; hardware untested |
 | Older Apple AirPlay receivers | AirPlay 1 compatibility | shairport-sync in CI; hardware untested |
 | Third-party AirPlay 2 | Realtime, then advertised AirPlay 1, then buffered; remembers the last working mode | shairport-sync AirPlay 2 + nqptp in CI; hardware untested |
@@ -81,6 +81,53 @@ Browser/player synchronization follows the app’s destination; an unknown desti
 DLNA retain their hardware limitations and calibration needs. Keep a pre-upgrade configuration copy before downgrading:
 older versions cannot represent named destinations. See the [hardware checklist](docs/device-test-checklist.zh-CN.md).
 
+## 5.1 surround to one HomePod — experimental since 1.4
+
+Turn on Home → **5.1 surround** (on the volume card, below **HomePod only** and **Night mode**; off by default). Windows'
+5.1 output then goes unchanged to a HomePod played on its own, and the HomePod renders the surround sound itself. While
+the switch is off nothing changes: realtime stereo, its latency and the scenes work exactly as before.
+
+Requirements:
+
+- The captured Windows output device is configured as 5.1 or 7.1: Control Panel → Sound → Playback → select the device →
+  **Configure** → 5.1 or 7.1 Surround. A virtual sound card such as VB-CABLE can be set to 5.1 as well and captured with
+  [Routing by sound card](#routing-by-sound-card-capture-device).
+- Spatial sound (Windows Sonic, Dolby Atmos for Headphones and the like) is off for that device.
+- A single HomePod that reports 5.1, such as a HomePod (2nd generation) on HomePod software 27. A HomePod mini, an Apple TV
+  or another speaker without 5.1 is turned down before pairing, with no PIN.
+
+What to expect:
+
+- The delay is fixed at about 1.8 s: for films and videos, not for games. Scenes and the latency setting have no effect
+  while 5.1 is in use. The browser extension and mpv/VLC with **Adjust players in the Movies scene** on delay the picture
+  to match, whatever the scene; the picture delay of about 1.9 s stays under the extension's 2000 ms limit.
+- 7.1 is folded into 5.1: side and back surround share the two surround channels. The LFE (subwoofer) channel may stay
+  silent. This is 5.1 AAC, not Dolby Atmos.
+- The equalizer, night mode and the microphone mix are not applied to 5.1, and there is no A/V sync test or calibration
+  for it. Night disconnect still hears the sound, so it never cuts off a film.
+- With per-app routing or several destinations playing at once, a HomePod streams stereo. Groups, stereo pairs and
+  multi-room stay stereo too, and the wireless cinema is not affected by the switch.
+- Whenever a single HomePod can't use 5.1, the same connection streams stereo as usual and Home says why, for example
+  "Connected · Bedroom · stereo. 5.1 surround not used: the Windows output device is not 5.1 or 7.1: it has 2 channels".
+  With 5.1 running it says "Connected · Bedroom · experimental 5.1 surround". A speaker configuration changed in Windows
+  during a stereo session takes effect at the next connection.
+
+A silent protocol check from the command line sends digital silence only, at 10 % volume at most, and never takes over a
+speaker that another device is using (disconnect in HomePodCast first: it counts as using the speaker too):
+
+```
+HomePodCast.exe stream --surround --host <IP> --silent --cap 10 --seconds 30
+```
+
+It ends with `SURROUND OK` (exit code 0), `SURROUND REFUSED: …` (2), or `SURROUND LOST: …` / `SURROUND FAILED: …` (1).
+REFUSED means 5.1 was turned down before any audio, and the reason follows: a speaker without 5.1 or one in use, UDP
+ports 319 and 320 taken on this PC, no PTP timing from the HomePod, Windows' AAC encoder without 5.1, or a step or the
+rate anchor refused (try `--latency 2000` then). Invalid arguments exit with 2 as well, with the usage instead of a
+`SURROUND` line.
+
+The protocol was verified on a HomePod (2nd generation) with software 27.0 on 2026-10-28, with test tones on the five main
+channels. The app's 5.1 path has not been listened to on real hardware yet.
+
 ## Measurements
 
 | Scenario | Value |
@@ -102,6 +149,7 @@ Not tested on real hardware:
 - HomePod mini, HomePod (1st generation), Apple TV, and AirPlay speakers from other brands
 - **Stereo pairs and multi-room**: built from protocol research and tested only against simulated speakers
 - **Wireless cinema** (one HomePod per channel): tested only against simulated speakers and generated files
+- **5.1 surround to one HomePod**: the protocol and the channels were checked with test tones; the app's 5.1 path has not been listened to yet
 - Physical sound cards and headsets, other Windows versions, and how a wired vs Wi-Fi PC behaves
 
 If you try it on other hardware, please open an issue with the device model, its software version, the lowest latency setting that plays cleanly, and a diagnostic report (Diagnostics → Diagnostic report → **Export diagnostics**: a ZIP with the redacted logs and the measurements; you can check its contents before attaching it). The raw log, `homepodcast.log`, is for your own troubleshooting: it names your speakers and holds IP addresses, so don't attach it to a public issue. Diagnostics → Log → **Open log folder** shows it; it is in `%APPDATA%\HomePodCast`, or for the Microsoft Store version in `%LOCALAPPDATA%\Packages\qiyinxi.HomePodCast_21rkx5qfj0b6t\LocalCache\Roaming\HomePodCast`.
@@ -122,6 +170,7 @@ If you try it on other hardware, please open an issue with the device model, its
 - Parametric EQ for all sound streamed to the speaker, on its own Equalizer page (experimental since 1.3): up to 12 bands of peak, low/high shelf, low/high cut (12 to 48 dB/oct) or notch, dragged on the response curve or set by type, frequency, gain and Q; output gain with a clipping hint. The built-in presets and EQ settings from earlier versions sound as before
 - Stereo pair and multi-room sync (experimental, not yet tested on real speakers)
 - Wireless cinema (experimental, not yet tested on real speakers): the audio track of a local 5.1 or 7.1 file with each channel on a HomePod of its own, up to seven plus one for the LFE channel; channels without a speaker fold into the neighboring ones, and speaker delays can be measured with a microphone (at most 25 % volume). See [Wireless cinema](docs/WIRELESS_CINEMA.md#english)
+- 5.1 surround to one HomePod (experimental since 1.4): Windows' 5.1 or 7.1 output goes as 5.1 to a single HomePod, which renders the surround sound itself; about 1.8 s of delay, for videos rather than games. See [5.1 surround to one HomePod](#51-surround-to-one-homepod--experimental-since-14)
 - Apple TV after a one-time PIN pairing: click Connect and type the 4 digits the TV shows; with HomePods as its home theater speakers, they play the sound (experimental, not yet tested on a real Apple TV)
 - Diagnostics → A/V sync test: a screen flash plus a click show at a glance how far the sound lags the picture
 - Speaker info: model, system and AirPlay version, IP address, Wi-Fi MAC address (find the HomePod in your router's client list by it to see its band or give it a fixed IP), Bluetooth address and device ID
