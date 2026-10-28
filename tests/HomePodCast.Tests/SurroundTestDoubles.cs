@@ -13,6 +13,9 @@ internal sealed class FakeAacEncoder : IAacEncoder
     /// <summary>The largest |sample| seen: 0 for a FIFO nobody wrote to.</summary>
     public int Peak { get; private set; }
 
+    /// <summary>The samples of the first block, as the sender read them from the FIFO.</summary>
+    public short[]? FirstBlock { get; private set; }
+
     public static byte[] Unit(int block)
     {
         var unit = new byte[48];
@@ -24,6 +27,7 @@ internal sealed class FakeAacEncoder : IAacEncoder
     {
         if (pcm.Length != 1024 * 6) throw new ArgumentException($"expected 1024 x 6 samples, got {pcm.Length}", nameof(pcm));
         foreach (short s in pcm) Peak = Math.Max(Peak, Math.Abs((int)s));
+        if (Blocks == 0) FirstBlock = pcm.ToArray();
         return [Unit(Blocks++)];
     }
 

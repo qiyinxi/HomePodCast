@@ -42,6 +42,10 @@ public sealed class SurroundControllerTests
         public FakeAacEncoder Encoder { get; } = new();
         public ConcurrentQueue<FakeSurroundCapture> Captures { get; } = new();
 
+        /// <summary>The 6-channel FIFO the controller gave its 5.1 captures, and its depth when each was created.</summary>
+        public AudioFifo? SurroundFifo { get; private set; }
+        public ConcurrentQueue<int> DepthsAtCreate { get; } = new();
+
         /// <summary>What every new fake 5.1 capture answers when asked whether it captures 5.1.</summary>
         public string? CaptureReady { get; init; }
 
@@ -77,6 +81,8 @@ public sealed class SurroundControllerTests
                 {
                     Assert.Equal(6, fifo.Channels);
                     Assert.Equal(48000, fifo.SampleRate);
+                    SurroundFifo = fifo;
+                    DepthsAtCreate.Enqueue(fifo.Depth);
                     Interlocked.Increment(ref _surroundCaptures);
                     var capture = new FakeSurroundCapture { Ready = CaptureReady };
                     Captures.Enqueue(capture);
@@ -220,6 +226,27 @@ public sealed class SurroundControllerTests
         Assert.False(c.SurroundActive);
         Assert.Equal(2, c.Fifo.Channels);
         Assert.Empty(rig.Fake.Errors);
+    }
+
+    [Fact]
+    public async Task A_new_5_1_capture_never_sends_what_an_earlier_one_left()
+    {
+        using var rig = new Rig(bit39: true, _ => On());
+        var c = rig.Controller;
+        rig.Start();
+        await rig.Streaming();
+        Assert.True(c.SurroundActive);
+        c.Stop();
+
+        var leftover = new float[100 * 48 * 6]; // 100 ms the old capture wrote after the last block went out
+        leftover.AsSpan().Fill(.5f);
+        rig.SurroundFifo!.Write(leftover);
+        Assert.True(rig.SurroundFifo.Depth > 0);
+        rig.Start();
+        await rig.Streaming();
+        Assert.True(c.SurroundActive);
+        Assert.Equal(new[] { 0, 0 }, rig.DepthsAtCreate);
+        Assert.Same(rig.SurroundFifo, c.Fifo); // the same FIFO, emptied
     }
 
     [Fact]

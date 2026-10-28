@@ -153,6 +153,31 @@ public sealed class SurroundSessionTests
         Assert.Null(client.LostReason);
     }
 
+    /// <summary>
+    /// The capture writes all through the connect, so the FIFO can hold up to its 250 ms cap when the first block goes out.
+    /// The A/V sync counts only the 40 ms target: the first block must come from the newest 40 ms.
+    /// </summary>
+    [Fact]
+    public async Task The_first_block_starts_at_the_FIFO_target_not_at_its_backlog()
+    {
+        using var rig = Start();
+        const int Old = 160, New = 40; // ms: 200 ms buffered while connecting, below the cap so nothing trims it
+        var backlog = new float[(Old + New) * 48 * 6];
+        backlog.AsSpan(0, Old * 48 * 6).Fill(.5f);
+        backlog.AsSpan(Old * 48 * 6).Fill(.25f);
+        rig.Fifo.Write(backlog);
+        Assert.Equal((Old + New) * 48, rig.Fifo.Depth);
+
+        var accept = rig.Data.AcceptTcpClientAsync(rig.Timeout.Token).AsTask();
+        using var client = await rig.Connect();
+        using var data = await accept;
+        byte[] size = new byte[2];
+        await data.GetStream().ReadExactlyAsync(size, rig.Timeout.Token); // the first block is encoded and on its way
+
+        var first = rig.Encoder.FirstBlock!;
+        Assert.All(first, s => Assert.Equal((short)Math.Round(.25 * 32767), s));
+    }
+
     [Fact]
     public async Task Dispose_tears_the_session_down()
     {

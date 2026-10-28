@@ -177,7 +177,14 @@ internal sealed class SurroundSender : IDisposable
                 continue;
             }
             if (late > Interlocked.Read(ref _maxLateTicks)) Interlocked.Exchange(ref _maxLateTicks, late);
-            begun = true;
+            if (!begun)
+            {
+                // The capture wrote through the whole connect (pairing, SETUPs, a 1 s wait, the anchor) or a reconnect's
+                // backoff, so the FIFO saws between its target and its 250 ms cap. Start at the target: the A/V sync
+                // counts 40 ms, and the drift steering (at most 500 ppm) would need minutes to drain the rest.
+                _setup.Fifo.DiscardToTarget();
+                begun = true;
+            }
             _setup.Fifo.Read(audio);
             _setup.Activity?.Observe(audio);
             for (int i = 0; i < pcm.Length; i++)

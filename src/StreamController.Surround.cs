@@ -91,6 +91,7 @@ public sealed partial class StreamController
         {
             if (_capture is ISurroundCapture running) return running;
             ct.ThrowIfCancellationRequested();
+            fifo.Clear(); // what an earlier capture left is another session's sound
             var capture = SurroundCaptureFactory(fifo, r);
             _capture = capture;
             capture.DeviceChanged += _ => Changed?.Invoke();
