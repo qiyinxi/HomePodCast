@@ -29,3 +29,33 @@ internal sealed class FakeAacEncoder : IAacEncoder
 
     public void Dispose() { }
 }
+
+/// <summary>
+/// The controller's 5.1 capture without a 5.1 endpoint (experimental since 1.4): <see cref="WaitReadyAsync"/> answers
+/// <see cref="Problem"/>, else <see cref="Ready"/> (null: capturing 5.1). Writes nothing, so the FIFO gives silence.
+/// </summary>
+internal sealed class FakeSurroundCapture : ISurroundCapture
+{
+    private volatile string? _problem, _ready;
+    private int _started, _disposed;
+
+    /// <summary>What WaitReadyAsync answers while there is no <see cref="Problem"/>: null, or the refusal (R4, R5).</summary>
+    public string? Ready { get => _ready; set => _ready = value; }
+
+    public string? Problem { get => _problem; set => _problem = value; }
+
+    public bool Started => Volatile.Read(ref _started) != 0;
+    public bool Disposed => Volatile.Read(ref _disposed) != 0;
+
+    public string? DeviceName => "fake 5.1 output";
+    public double DriftPpm => 0;
+    public float Peak => 0;
+    public int ExtraLatencyMs => 0;
+    public event Action<string>? DeviceChanged { add { } remove { } }
+
+    public void Start() => Interlocked.Exchange(ref _started, 1);
+
+    public Task<string?> WaitReadyAsync(TimeSpan timeout, CancellationToken ct) => Task.FromResult(Problem ?? Ready);
+
+    public void Dispose() => Interlocked.Exchange(ref _disposed, 1);
+}

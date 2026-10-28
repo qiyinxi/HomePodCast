@@ -510,7 +510,9 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                     new Dictionary<string, object?>
                     {
                         ["type"] = stream.GetValueOrDefault("type") ?? 96L,
-                        ["dataPort"] = (long)(BufferedDataPort ?? Rtp.DataPort),
+                        // The buffered port only for a buffered (type 103) stream: a HomePod that refused 5.1 gets the
+                        // stereo realtime stream's RTP next.
+                        ["dataPort"] = (long)(BufferedDataPort is { } buffered && Equals(stream.GetValueOrDefault("type"), 103L) ? buffered : Rtp.DataPort),
                         ["controlPort"] = (long)Rtp.ControlPort,
                         ["arrivalToRenderLatencyMs"] = (long)ArrivalToRenderMs,
                     },

@@ -56,7 +56,8 @@ public sealed partial class StreamController : IDisposable
     public StreamState State { get; private set; } = StreamState.Idle;
     public string StatusText { get; private set; } = L.T("未连接");
     public AirPlayClient? Client => _client;
-    public AudioFifo Fifo => _fifo;
+    /// <summary>The FIFO in use: the 6-channel one while the 5.1 capture runs (experimental since 1.4), else the stereo one.</summary>
+    public AudioFifo Fifo => _capture is ISurroundCapture && _surroundFifo is { } surround ? surround : _fifo;
     public ICaptureSource? Capture => _capture;
 
     /// <summary>Creates the capture that feeds the FIFO (the UI swaps in per-app routing).</summary>
@@ -184,6 +185,7 @@ public sealed partial class StreamController : IDisposable
         int attempt = 0;
         bool streamed = false, endedBySpeaker = false;
         string key = OwnSession.KeyOf(deviceId);
+        string? surroundRefusal = null; // 5.1 refused in this Start: reconnects go straight to stereo (experimental since 1.4)
         TakeStartVolume(volume, volumeAsOf);
         while (!ct.IsCancellationRequested)
         {
@@ -204,17 +206,29 @@ public sealed partial class StreamController : IDisposable
                     [new BusyTarget(deviceId, host, address)], ct, endedBySpeaker, takenFrom);
                 started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
-                EnsureCapture(ct);
+                AirPlayClient? client = null;
+                StreamOptions? options = null;
+                var surround = surroundRefusal == null ? SurroundFor?.Invoke(deviceId) : null;
+                if (surround != null)
+                {
+                    (client, options, surroundRefusal) = await TrySurroundAsync(deviceId, address, surround, ct);
+                    if (surroundRefusal != null) Log.Info($"surround: not used: {surroundRefusal}; stereo realtime");
+                }
+                if (client == null)
+                {
+                    EnsureCapture(ct);
+
+                    EffectiveLatencyMs = SafeLatency(latencyMs);
+                    if (EffectiveLatencyMs != latencyMs)
+                        Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
+                    options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume)
+                    {
+                        VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,
+                    };
+                    client = await AirPlayClient.ConnectAsync(address, AirPlayPort, options, _fifo, ct);
+                }
 
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-                EffectiveLatencyMs = SafeLatency(latencyMs);
-                if (EffectiveLatencyMs != latencyMs)
-                    Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
-                var options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume)
-                {
-                    VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,
-                };
-                var client = await AirPlayClient.ConnectAsync(address, AirPlayPort, options, _fifo, ct);
                 client.Lost += r => lost.TrySetResult(r);
                 if (client.LostReason is { } early) lost.TrySetResult(early);
                 // The RTSP setup ignores ct, so Stop may have given up waiting and a newer loop may own _client
@@ -229,7 +243,7 @@ public sealed partial class StreamController : IDisposable
                     break;
                 }
                 client.VolumeCapPercent = VolumeCapPercent;
-                if (options.VolumeCapPercent != VolumeCapPercent || options.VolumePercent != (Muted ? 0 : Volume))
+                if (options!.VolumeCapPercent != VolumeCapPercent || options.VolumePercent != (Muted ? 0 : Volume))
                     PushVolume(); // cap or volume changed while connecting (PushVolume had no client then)
                 if (client.ArrivalToRenderMs is { } a2r && a2r != ArrivalToRenderMs)
                 {
@@ -240,7 +254,7 @@ public sealed partial class StreamController : IDisposable
                 attempt = 0;
                 OwnSession.Began(key, UtcNow()); // before the change is announced: the UI saves it
                 live = streamed = true;
-                Set(StreamState.Streaming, ConnectedText(client.Info.GetValueOrDefault("name")));
+                Set(StreamState.Streaming, StreamingText(client.Info.GetValueOrDefault("name"), client, surroundRefusal));
 
                 using (var net = new NetworkWatch(address))
                 {
@@ -319,6 +333,7 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     private void EnsureCapture(CancellationToken ct)
     {
+        if (_capture is ISurroundCapture) DisposeCapture(); // stereo now: the 5.1 capture would capture the same output twice
         _fifo.BeginSession(); // every connect attempt: the wait and the new sender's start are not dropouts
         lock (_lock)
         {
@@ -367,6 +382,11 @@ public sealed partial class StreamController : IDisposable
     private void LogStats()
     {
         var client = _client;
+        if (client?.SurroundSender is { } surround)
+        {
+            LogSurroundStats(client, surround);
+            return;
+        }
         var s = client?.Sender;
         if (s == null) return;
         Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +

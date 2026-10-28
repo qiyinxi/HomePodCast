@@ -4,7 +4,8 @@ namespace HomePodCast;
 
 public sealed partial class StreamController
 {
-    public object? AudioSessionIdentity => (object?)_receiverSession ?? _raopClient ?? (object?)_groupRunner?.Current ?? ActiveSender;
+    public object? AudioSessionIdentity => (object?)_receiverSession ?? _raopClient ?? (object?)_groupRunner?.Current ?? ActiveSender
+        ?? (object?)_client?.SurroundSender; // 5.1 (experimental since 1.4): no realtime sender, but a session to show
 
     public void ObserveAudioOnset(Action<long>? observer)
     {

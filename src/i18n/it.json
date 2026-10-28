@@ -843,5 +843,9 @@
   "5.1 环绕声中断：{0}": "Audio surround 5.1 interrotto: {0}",
   "HomePod 关闭了音频连接": "HomePod ha chiuso la connessione audio",
   "音频没能及时发出，电脑可能太忙或刚从睡眠恢复": "l'audio non è stato inviato in tempo: il PC potrebbe essere occupato o appena uscito dalla sospensione",
-  "Windows 输出设备不可用": "il dispositivo di uscita di Windows non è disponibile"
+  "Windows 输出设备不可用": "il dispositivo di uscita di Windows non è disponibile",
+  "已连接 · {0} · 实验性 5.1 环绕声": "Connesso · {0} · audio surround 5.1 sperimentale",
+  "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Connesso · {0} · stereo. Audio surround 5.1 non usato: {1}",
+  "多个去处同时播放时不能用": "non disponibile durante la riproduzione su più destinazioni",
+  "按程序分流开启时不能用": "non disponibile con l'instradamento per app"
 }

@@ -283,6 +283,7 @@ public class UsageProfileTests
         [nameof(AppConfig.MutePcWhileStreaming)] = "about this PC's speakers, not a use; a profile's FollowWindows is handled as WhileStreaming while it is on (VolumeKeyRules.Effective)",
         [nameof(AppConfig.PcSoundHintDismissed)] = "asked once",
         [nameof(AppConfig.PcMutedEndpointId)] = "a record of this PC's own mute, given back at the next start after a crash",
+        [nameof(AppConfig.Surround51)] = "experimental output format of one HomePod (since 1.4); not part of a use until tested",
     };
 
     /// <summary>The profile's settings: every property but EffectsVersion, which says what its Effects hold (no setting).</summary>

@@ -498,9 +498,6 @@ internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, dou
     /// <summary>Silence still goes out at a volume: never more than this.</summary>
     public const double MaxCapPercent = 10;
 
-    /// <summary>The app's 5.1 latency (1800 ms: the picture delay stays under the browser extension's 2000 ms clamp).</summary>
-    public const int DefaultLatencyMs = 1800;
-
     /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
     public static SurroundCliOptions? Parse(string[] args, out string? error)
     {
@@ -521,7 +518,7 @@ internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, dou
         else if (cap > MaxCapPercent) error = $"--cap {cap} refused: at most {MaxCapPercent} %";
         else if (!Number("--volume", cap, out double volume) || volume < 0) error = "--volume: a percentage";
         else if (volume > cap) error = $"--volume {volume} refused: above --cap {cap}";
-        else if (!Number("--latency", DefaultLatencyMs, out double latency)) error = "--latency: milliseconds";
+        else if (!Number("--latency", SurroundPolicy.LatencyMs, out double latency)) error = "--latency: milliseconds"; // the app's 5.1 latency
         else if (!Number("--seconds", 30, out double seconds) || seconds < 1) error = "--seconds: at least 1";
         else return new(IPAddress.Parse(hostText), cap, volume, (int)Math.Clamp(latency, 1000, 4000), (int)Math.Min(seconds, 3600));
         return null;
