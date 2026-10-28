@@ -30,6 +30,13 @@ public static class SurroundPolicy
     public static bool Applies(AppConfig c) => c.Surround51 && c.DeviceId != null && GroupPlan.FromConfig(c) == null;
 
     /// <summary>
+    /// Whether this speaker's connection asks for 5.1 at all: only <c>StreamController.RunAsync</c> does, and Start runs
+    /// it for a HomePod, an Apple TV or a speaker not found yet (null). Third-party AirPlay 2 and AirPlay 1 receivers go
+    /// to RunThirdPartyAsync or RunRaopAsync whatever their protocol setting, so they stream stereo either way.
+    /// </summary>
+    public static bool Reaches(Net.AirPlayDevice? device) => device == null || device.Kind is Net.ReceiverKind.HomePod or Net.ReceiverKind.AppleTv;
+
+    /// <summary>
     /// Null: stereo as always (switch off, a group, no speaker). Otherwise a request; its <see cref="SurroundRequest.Refusal"/>
     /// is set when the mixer hub (several destinations, or this PC plus a speaker) or per-app routing rules 5.1 out, since
     /// both capture apps one by one, in stereo.

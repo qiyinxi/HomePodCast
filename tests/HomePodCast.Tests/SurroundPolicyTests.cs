@@ -1,3 +1,7 @@
+using System.Net;
+using System.Reflection;
+using HomePodCast.Net;
+
 namespace HomePodCast.Tests;
 
 /// <summary>When a connection tries 5.1 surround (experimental since 1.4), and why not.</summary>
@@ -76,5 +80,41 @@ public sealed class SurroundPolicyTests
         // SoundLagMs adds the capture-to-picture extra (36 ms) and the FIFO target above 20 ms (the 5.1 FIFO's 40 ms).
         int lag = SurroundPolicy.LatencyMs + SurroundPolicy.EncoderDelayMs + new AppConfig().VideoDelayExtraMs + (40 - 20);
         Assert.True(lag < 2000, $"{lag} ms");
+    }
+
+    /// <summary>
+    /// The mixer restarts a destination on a toggle only when <see cref="SurroundPolicy.Reaches"/>: it must name exactly the
+    /// speakers StreamController.Start runs in RunAsync, the only path that asks for 5.1, for every protocol setting.
+    /// </summary>
+    [Fact]
+    public void Only_speakers_that_Start_runs_on_the_HomePod_path_ask_for_5_1()
+    {
+        var address = IPAddress.Parse("192.0.2.30");
+        AirPlayDevice[] devices =
+        [
+            new("HomePod", "02:01", address, 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
+            new("Apple TV", "02:02", address, 7000, "AppleTV14,1", new Dictionary<string, string>()),
+            new("AirPort", "02:03", address, 7000, "AirPort10,115", new Dictionary<string, string>()),
+            new("Sonos", "02:04", address, 7000, "Speaker1,1", new Dictionary<string, string> { ["srcvers"] = "377.40.00" }),
+            new("shairport", "02:05", address, 7001, "ShairportSync", new Dictionary<string, string>()) { HasAirPlay = false, RaopPort = 7001 },
+            new("Mystery", "02:06", address, 7000, "Mystery1,1", new Dictionary<string, string>()),
+        ];
+        Assert.Equal(Enum.GetValues<ReceiverKind>().Order(), devices.Select(d => d.Kind).Order());
+        var thirdParty = typeof(StreamController).GetMethod("UsesThirdPartyPath", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        foreach (var forced in Enum.GetValues<ReceiverProtocol>())
+        {
+            using var controller = new StreamController();
+            controller.ReceiverSettings = id =>
+            {
+                var preferences = ReceiverPreferences.Of(devices.Single(d => d.DeviceId == id));
+                preferences.ProtocolOverride = forced;
+                return preferences;
+            };
+            foreach (var device in devices.Cast<AirPlayDevice?>().Append(null))
+            {
+                bool homePodPath = !(bool)thirdParty.Invoke(controller, [device])! && !StreamController.UsesRaop(device);
+                Assert.True(homePodPath == SurroundPolicy.Reaches(device), $"{device?.Kind.ToString() ?? "not found"}, {forced}");
+            }
+        }
     }
 }
