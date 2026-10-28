@@ -577,4 +577,19 @@ public class PlayerSyncTests
         Assert.False(back.MoviePlayerSync);
         Assert.True(JsonSerializer.Deserialize<AppConfig>("{}")!.MoviePlayerSync); // configs from before the setting
     }
+
+    [Fact]
+    public void Players_follow_the_movie_scene_and_any_scene_in_surround()
+    {
+        var game = new AppConfig { Scene = Scene.Game };
+        Assert.False(UI.TrayApp.PlayerInputFor(game, StreamState.Streaming, 120).Enabled); // as before 1.4
+        Assert.Equal(new PlayerSyncInput(true, StreamState.Streaming, 236),
+            UI.TrayApp.PlayerInputFor(new AppConfig { Scene = Scene.Movie }, StreamState.Streaming, 236));
+
+        // 5.1 (experimental since 1.4): its fixed ~1.9 s lag needs the players whatever the scene; the setting still rules.
+        Assert.Equal(new PlayerSyncInput(true, StreamState.Streaming, 1899),
+            UI.TrayApp.PlayerInputFor(game, StreamState.Streaming, 1899, surround: true));
+        game.MoviePlayerSync = false;
+        Assert.False(UI.TrayApp.PlayerInputFor(game, StreamState.Streaming, 1899, surround: true).Enabled);
+    }
 }

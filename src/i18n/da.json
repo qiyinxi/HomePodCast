@@ -847,5 +847,8 @@
   "已连接 · {0} · 实验性 5.1 环绕声": "Forbundet · {0} · eksperimentel 5.1-surround",
   "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Forbundet · {0} · stereo. 5.1-surround ikke brugt: {1}",
   "多个去处同时播放时不能用": "ikke tilgængelig, mens der afspilles til flere lydmål",
-  "按程序分流开启时不能用": "ikke tilgængelig med routing pr. app"
+  "按程序分流开启时不能用": "ikke tilgængelig med routing pr. app",
+  "5.1 环绕声": "5.1-surround",
+  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声；7.1 会合并成 5.1。需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏；这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。低频效果声道 LFE 可能没有声音；这不是杜比全景声。按程序分流、多个去处或多音箱时，以及条件不满足时，照常推送立体声，状态里会写明原因。实验性功能。": "Sender Windows' 5.1-lyd uændret til en HomePod, der afspiller alene; HomePod gengiver selv surroundlyden, og 7.1 lægges sammen til 5.1. Indstil først outputenheden til 5.1 eller 7.1 i Windows' lydindstillinger, og slå rumlig lyd fra. Forsinkelsen er fast på cirka {0:F1} s: til video, ikke til spil; scener, forsinkelsesindstillingen, equalizeren, nattilstand og mikrofonmiks virker ikke imens. LFE-kanalen kan være lydløs, og dette er ikke Dolby Atmos. Med routing pr. app, flere lydmål eller flere højttalere, eller når et krav ikke er opfyldt, streames der stereo som normalt, og status viser hvorfor. Eksperimentel funktion.",
+  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkroniseringstesten er endnu ikke tilgængelig i 5.1-surroundtilstand."
 }

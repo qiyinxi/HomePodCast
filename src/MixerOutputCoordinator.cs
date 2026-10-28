@@ -327,8 +327,13 @@ public sealed class MixerOutputCoordinator : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// What a running destination is restarted for. The 5.1 switch (experimental since 1.4) counts only where it applies,
+    /// so toggling it restarts a single speaker and never a group, which streams stereo either way.
+    /// </summary>
     private static string Signature(ResolvedMixerDestination d, bool hub) =>
-        JsonSerializer.Serialize(OutputGroups.Capture(d.Config!)) + $"|{d.Config!.Scene}|{d.Config.LatencyMs}|{d.Config.FifoTargetMs}|{hub}";
+        JsonSerializer.Serialize(OutputGroups.Capture(d.Config!)) + $"|{d.Config!.Scene}|{d.Config.LatencyMs}|{d.Config.FifoTargetMs}|{hub}" +
+        $"|{SurroundPolicy.Applies(d.Config)}";
 
     private void OnRootsChanged()
     {

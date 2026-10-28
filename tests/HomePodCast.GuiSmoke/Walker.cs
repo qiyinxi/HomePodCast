@@ -10,7 +10,8 @@ namespace HomePodCast.GuiSmoke;
 /// <summary>
 /// One run of the app: <c>idle</c> (a fresh config, no speaker), <c>retrying</c> (a speaker address nobody answers, with
 /// automatic connect: 「找不到音箱…，N 秒后重试」), <c>streaming</c> (connected to the tests' fake HomePod on 127.0.0.1:7000)
-/// <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs), or
+/// <c>runtime</c> (streaming on a private .NET that an update then replaces: 立即重启, Walker.Runtime.cs),
+/// <c>surround-fallback</c> (5.1 环绕声 on, connected to that fake HomePod: stereo with the reason in the status), or
 /// <c>group-outputs</c> (offline saved output settings, without starting audio), in a UI language, at a display scale,
 /// in a theme. <see cref="Narrow"/> walks the pages again at the window's minimum width;
 /// <see cref="DpiChange"/> changes the display scale to 100 % and back while the app runs (as a move to another monitor).
@@ -85,6 +86,7 @@ internal sealed partial class Walker
                 case "idle": RunIdle(); break;
                 case "retrying": RunRetrying(); break;
                 case "streaming": RunStreaming(); break;
+                case "surround-fallback": RunSurroundFallback(); break;
                 case "compatibility": RunCompatibility(); break;
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
                 case "update-notes": RunUpdateNotes(); break;
@@ -241,6 +243,50 @@ internal sealed partial class Walker
 
     private void RunStreaming()
     {
+        Start(FakeHomePodConfig());
+
+        var connected = _t.Pattern("已连接 · {0}");
+        var (status, button) = WaitForStatus(MainWindow, "首页", s => connected.IsMatch(s), 60_000);
+        Expect(button == T("断开"), "首页", $"the button reads 「{button}」 while 「{status}」 (expected 「{T("断开")}」)");
+        _report.Pass(Where("首页"), status);
+        WalkEverything(connected: true);
+        Quit();
+        CheckLog(idle: false);
+        CheckFakeSession();
+    }
+
+    /// <summary>
+    /// 5.1 环绕声 on (experimental since 1.4) with the fake HomePod: the runner can't give 5.1 (no output device or a stereo
+    /// one, maybe no 6-channel AAC encoder) and the fake offers none either (no supportedFormats in /info), so whichever
+    /// refusal comes first, the same attempt streams stereo realtime and the status says why, with no ERROR in the log.
+    /// The switch is only looked at here, never flipped.
+    /// </summary>
+    private void RunSurroundFallback()
+    {
+        var config = FakeHomePodConfig();
+        config["Surround51"] = true;
+        Start(config);
+
+        var fallback = _t.Pattern("已连接 · {0} · 立体声。未用 5.1 环绕声：{1}");
+        var (status, button) = WaitForStatus(MainWindow, "首页", s => fallback.IsMatch(s), 60_000);
+        Expect(button == T("断开"), "首页", $"the button reads 「{button}」 while 「{status}」 (expected 「{T("断开")}」)");
+        _report.Pass(Where("首页"), status);
+        Navigate("首页");
+        var tree = Uia.Snapshot(MainWindow());
+        CheckHome(tree, connected: true);
+        Layout(tree, "首页");
+        ShootPage("首页", "surround-fallback");
+        Quit();
+        CheckLog(idle: false);
+
+        var requests = CheckFakeSession();
+        Expect(!requests.Any(r => r.StartsWith("SETRATEANCHORTIME", StringComparison.Ordinal)), "fake HomePod",
+            $"a 5.1 session was anchored although it must have been refused: {string.Join(", ", requests.Distinct())}");
+    }
+
+    /// <summary>The tests' fake HomePod on 127.0.0.1:7000, and a config that connects to it at start.</summary>
+    private Dictionary<string, object?> FakeHomePodConfig()
+    {
         try
         {
             // 85 ms in the speaker, as a real HomePod 2 reports it (the fake's 140 would raise 首页's latency floor to 155 ms).
@@ -257,22 +303,20 @@ internal sealed partial class Walker
         config["Host"] = "127.0.0.1";
         config["Volume"] = 20.0;
         _userData.Add(_fake.Name);
-        Start(config);
+        return config;
+    }
 
-        var connected = _t.Pattern("已连接 · {0}");
-        var (status, button) = WaitForStatus(MainWindow, "首页", s => connected.IsMatch(s), 60_000);
-        Expect(button == T("断开"), "首页", $"the button reads 「{button}」 while 「{status}」 (expected 「{T("断开")}」)");
-        _report.Pass(Where("首页"), status);
-        WalkEverything(connected: true);
-        Quit();
-        CheckLog(idle: false);
-
-        var requests = _fake.Requests.ToArray();
+    /// <summary>After quitting: the fake saw a stereo realtime session set up, audio and a TEARDOWN; returns its requests.</summary>
+    private string[] CheckFakeSession()
+    {
+        var fake = _fake ?? throw new StepFailed("no fake HomePod");
+        var requests = fake.Requests.ToArray();
         Expect(requests.Contains("SETUP stream [encrypted]") && requests.Contains("RECORD [encrypted]"), "fake HomePod",
             $"the session was not set up: {string.Join(", ", requests.Distinct())}");
         Expect(requests.Contains("TEARDOWN [encrypted]"), "fake HomePod", "quitting sent no TEARDOWN");
-        Expect(!_fake.Rtp.Audio.IsEmpty, "fake HomePod", "no audio packets arrived");
-        foreach (var error in _fake.Errors) _report.Fail(Where("fake HomePod"), error);
+        Expect(!fake.Rtp.Audio.IsEmpty, "fake HomePod", "no audio packets arrived");
+        foreach (var error in fake.Errors) _report.Fail(Where("fake HomePod"), error);
+        return requests;
     }
 
     /// <summary>Every page (scrolled through), the tray flyout and the dialogs; the narrow window if asked.</summary>
@@ -507,6 +551,13 @@ internal sealed partial class Walker
             $"「{onlyHomePodTitle}」 is not off on a fresh config (state {onlyHomePodState?.ToString("X") ?? "not found"})");
         Expect(Find(page, n => n.Name == T("夜间模式") && n.Type == "CheckBox") != null, "首页",
             "the night-mode switch beside HomePod only is missing");
+        // 5.1 环绕声 (experimental since 1.4): off on a fresh config, on where the scenario turned it on. Never flipped here.
+        string surroundTitle = T("5.1 环绕声");
+        bool surroundOn = _s.Kind == "surround-fallback";
+        var surround = Find(page, n => n.Name == surroundTitle && n.Type == "CheckBox" && n.Hwnd != IntPtr.Zero);
+        var surroundState = surround == null ? null : Native.MsaaState(surround.Hwnd);
+        Expect(surroundState is { } ss && ((ss & Native.STATE_SYSTEM_CHECKED) != 0) == surroundOn, "首页",
+            $"「{surroundTitle}」 is not {(surroundOn ? "on" : "off")} (state {surroundState?.ToString("X") ?? "not found"})");
         if (!connected)
         {
             Expect(Has(page, T("未连接")), "首页", $"the status doesn't say 「{T("未连接")}」");

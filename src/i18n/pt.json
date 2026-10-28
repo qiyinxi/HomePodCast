@@ -847,5 +847,8 @@
   "已连接 · {0} · 实验性 5.1 环绕声": "Ligado · {0} · som surround 5.1 experimental",
   "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Ligado · {0} · estéreo. Som surround 5.1 não usado: {1}",
   "多个去处同时播放时不能用": "indisponível ao reproduzir em vários destinos",
-  "按程序分流开启时不能用": "indisponível com o encaminhamento por aplicação"
+  "按程序分流开启时不能用": "indisponível com o encaminhamento por aplicação",
+  "5.1 环绕声": "Som surround 5.1",
+  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声；7.1 会合并成 5.1。需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏；这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。低频效果声道 LFE 可能没有声音；这不是杜比全景声。按程序分流、多个去处或多音箱时，以及条件不满足时，照常推送立体声，状态里会写明原因。实验性功能。": "Envia a saída 5.1 do Windows sem alterações para um HomePod que reproduz sozinho; é o próprio HomePod que reproduz o som surround, e o 7.1 é combinado em 5.1. Primeiro configure o dispositivo de saída para 5.1 ou 7.1 nas definições de som do Windows e desative o som espacial. A latência é fixa, cerca de {0:F1} s: para vídeo, não para jogos; os cenários, a definição de latência, o equalizador, o modo noturno e a mistura do microfone não têm efeito nesse caso. O canal LFE pode ficar em silêncio, e isto não é Dolby Atmos. Com o encaminhamento por aplicação, vários destinos ou vários altifalantes, ou quando falta um requisito, transmite-se em estéreo como habitualmente e o estado indica o motivo. Funcionalidade experimental.",
+  "5.1 环绕声模式下还不能做音画同步测试。": "O teste de sincronização A/V ainda não está disponível no modo de som surround 5.1."
 }

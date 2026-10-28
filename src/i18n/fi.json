@@ -847,5 +847,8 @@
   "已连接 · {0} · 实验性 5.1 环绕声": "Yhdistetty · {0} · kokeellinen 5.1-tilaääni",
   "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}": "Yhdistetty · {0} · stereo. 5.1-tilaääntä ei käytetty: {1}",
   "多个去处同时播放时不能用": "ei käytettävissä, kun ääntä toistetaan useaan kohteeseen",
-  "按程序分流开启时不能用": "ei käytettävissä sovelluskohtaisen reitityksen kanssa"
+  "按程序分流开启时不能用": "ei käytettävissä sovelluskohtaisen reitityksen kanssa",
+  "5.1 环绕声": "5.1-tilaääni",
+  "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声；7.1 会合并成 5.1。需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏；这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。低频效果声道 LFE 可能没有声音；这不是杜比全景声。按程序分流、多个去处或多音箱时，以及条件不满足时，照常推送立体声，状态里会写明原因。实验性功能。": "Lähettää Windowsin 5.1-äänen muuttamattomana yksinään toistavaan HomePodiin; HomePod toistaa tilaäänen itse, ja 7.1 yhdistetään 5.1:ksi. Määritä ensin Windowsin ääniasetuksissa toistolaitteeksi 5.1 tai 7.1 ja poista spatiaalinen ääni käytöstä. Viive on kiinteä, noin {0:F1} s: videoille, ei peleille; profiilit, viiveasetus, taajuuskorjain, yötila ja mikrofonin miksaus eivät silloin vaikuta. LFE-kanava voi jäädä hiljaiseksi, eikä tämä ole Dolby Atmos. Sovelluskohtaisen reitityksen, useiden kohteiden tai useiden kaiuttimien kanssa sekä silloin, kun jokin edellytys puuttuu, ääni lähetetään tavalliseen tapaan stereona ja tila kertoo syyn. Kokeellinen toiminto.",
+  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkronointitestiä ei voi vielä tehdä, kun 5.1-tilaääni on käytössä."
 }

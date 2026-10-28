@@ -190,6 +190,48 @@ public sealed class MixerCoordinatorTests
     }
 
     [Fact]
+    public async Task The_surround_switch_restarts_a_single_speaker_but_never_a_group()
+    {
+        const string speakerKey = "speaker:airplay:AABBCCDDEEFF", groupKey = "group:room";
+        var harness = new Harness(); await using var coordinator = harness.Coordinator;
+        var config = Config();
+        // A real multi-room group (Routes' "music" preset holds one speaker, which plays as a single speaker would).
+        OutputGroups.Save(config, "room", new() { DeviceId = "112233445566", DeviceName = "music", MultiRoomDeviceId = "665544332211",
+            MultiRoomDeviceName = "study", GroupDelayMs = 2000 }, "room");
+        MixerRoutes.Write(config, new MixerRoutingSettings { Apps = new() { ["music"] = new(new MixerOutput(MixerOutputKind.Group, "room")) },
+            DestinationSettings = new() { [groupKey] = new(Scene.Music, 2000) } });
+        await coordinator.ConnectAsync(config, ConnectTrigger.Manual);
+        await coordinator.RefreshRootsAsync([new(2, "music", false)]);
+        var speaker = harness.Sessions[speakerKey];
+        var group = harness.Sessions[groupKey];
+        Assert.NotNull(GroupPlan.FromConfig(group.Config));
+
+        // Off and unchanged: the signature is the same, so a reconnect restarts nothing.
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Same(speaker, harness.Sessions[speakerKey]); Assert.Equal(0, speaker.Stops);
+
+        // 5.1 (experimental since 1.4) on: the single speaker restarts with it; the group streams stereo either way.
+        config.Surround51 = true;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(1, speaker.Stops);
+        var surround = harness.Sessions[speakerKey];
+        Assert.NotSame(speaker, surround);
+        Assert.True(surround.Config.Surround51);
+        Assert.Equal(1, surround.Starts);
+        Assert.Same(group, harness.Sessions[groupKey]);
+        Assert.Equal(0, group.Stops); Assert.Equal(1, group.Starts);
+
+        // On and unchanged: nothing restarts; off again: the speaker restarts once more, the group still not.
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Same(surround, harness.Sessions[speakerKey]); Assert.Equal(0, surround.Stops);
+        config.Surround51 = false;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(1, surround.Stops);
+        Assert.False(harness.Sessions[speakerKey].Config.Surround51);
+        Assert.Equal(0, group.Stops);
+    }
+
+    [Fact]
     public async Task Unknown_formats_are_preserved_and_ambiguous_app_delay_has_no_fallback()
     {
         var harness = new Harness(); await using var coordinator = harness.Coordinator;

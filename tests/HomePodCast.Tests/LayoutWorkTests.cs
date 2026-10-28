@@ -400,10 +400,11 @@ public class LayoutWorkTests
         var panels = All(page).OfType<LayoutPanel>().Where(panel => panel != page.Content).ToArray();
         var inputs = All(page).Where(control => LogicalLayout.IsInput(control) && control.IsHandleCreated).ToArray();
         output.WriteLine($"Home: {Handles(before.Page)} -> {Handles(page)} HWNDs, {panels.Length} logical layout nodes, {inputs.Length} native inputs");
-        Assert.Equal(29, Handles(before.Page));
-        Assert.Equal(16, Handles(page));
-        Assert.Equal(34, panels.Length);
-        Assert.Equal(14, inputs.Length);
+        // The 5.1 switch on its own row (experimental since 1.4): one more input and layout node, natively two more windows.
+        Assert.Equal(31, Handles(before.Page));
+        Assert.Equal(17, Handles(page));
+        Assert.Equal(35, panels.Length);
+        Assert.Equal(15, inputs.Length);
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
         Assert.All(inputs, input => Assert.Same(page.Content, input.Parent));
         Assert.Equal(2 + inputs.Length, Handles(page));

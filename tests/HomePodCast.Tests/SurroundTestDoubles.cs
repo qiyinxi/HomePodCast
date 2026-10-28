@@ -48,6 +48,7 @@ internal sealed class FakeSurroundCapture : ISurroundCapture
     public bool Disposed => Volatile.Read(ref _disposed) != 0;
 
     public string? DeviceName => "fake 5.1 output";
+    public string? EndpointId { get; init; }
     public double DriftPpm => 0;
     public float Peak => 0;
     public int ExtraLatencyMs => 0;

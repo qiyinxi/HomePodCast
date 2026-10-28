@@ -109,6 +109,57 @@ public class HomeVolumeTests
         finally { L.Use(before); }
     });
 
+    /// <summary>5.1 环绕声 (experimental since 1.4) has a row of its own: beside the other two it wrapped outside theirs.</summary>
+    [Theory]
+    [InlineData("zh-CN")]
+    [InlineData("de")]
+    [InlineData("en")]
+    public void The_surround_switch_fits_its_own_row_in_a_narrow_volume_card(string language) => Sta.Run(() =>
+    {
+        string before = L.Language;
+        try
+        {
+            L.Use(language);
+            using var host = new Host();
+            var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
+            var only = TestApp.Field<ToggleSwitch>(host.Page, "_onlyHomePod");
+            var row = Assert.IsType<RowPanel>(LogicalLayout.Parent(surround));
+            Assert.NotSame(row, LogicalLayout.Parent(only));
+            row.Width = Theme.Dp(298, row.DeviceDpi);
+            row.PerformLayout();
+            Assert.True(row.ClientRectangle.Contains(LogicalLayout.Bounds(surround)), $"{language}: {surround.Text} outside row");
+            Assert.True(surround.Width >= surround.GetPreferredSize(Size.Empty).Width, $"{language}: {surround.Text} clipped");
+        }
+        finally { L.Use(before); }
+    });
+
+    [Fact]
+    public void The_surround_switch_is_saved_and_described_as_experimental() => Sta.Run(() =>
+    {
+        using var host = new Host();
+        var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
+        var tips = TestApp.Field<ToolTip>(host.Page, "_tips");
+        Assert.Equal("5.1 环绕声", surround.Text);
+        Assert.False(surround.Checked); // off on a fresh config
+        Assert.Contains($"约 {SurroundPolicy.LatencyMs / 1000.0:F1} 秒", surround.AccessibleDescription);
+        Assert.EndsWith("实验性功能。", surround.AccessibleDescription);
+        Assert.Equal(surround.AccessibleDescription, tips.GetToolTip(surround));
+
+        // The unit-tests profile's file, which other test classes save to meanwhile: only that a save happened is certain.
+        string file = Path.Combine(AppConfig.Directory, "config.json");
+        var longAgo = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        try { if (File.Exists(file)) File.SetLastWriteTimeUtc(file, longAgo); }
+        catch (IOException) { } // being replaced by another test's save right now
+        surround.Flip();
+        Assert.True(host.App.Config.Surround51);
+        Assert.True(File.Exists(file) && File.GetLastWriteTimeUtc(file) > longAgo, "the switch was not saved");
+        Assert.Equal(StreamState.Idle, host.App.Controller.State); // not connected: nothing to reconnect
+
+        host.App.SetSurround51(false); // as from elsewhere: the switch follows
+        Assert.False(surround.Checked);
+        Assert.False(host.App.Config.Surround51);
+    });
+
     private sealed class Host : IDisposable
     {
         private readonly MainWindow _window;
