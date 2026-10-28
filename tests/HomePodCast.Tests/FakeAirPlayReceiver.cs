@@ -29,6 +29,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     private readonly TcpListener _events = new(IPAddress.Loopback, 0);
     private readonly ConcurrentDictionary<string, byte[]> _controllers = new();
     private readonly List<TcpClient> _connections = [];
+    private readonly List<TcpClient> _eventConnections = [];
     private volatile bool _closed;
     private int _verifications;
 
@@ -52,7 +53,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     public long StatusFlags { get; set; }
 
     public string Pin { get; set; } = "0482";
-    public string DeviceId { get; } = "3E:B7:8E:9F:64:72";
+    public string DeviceId { get; init; } = "3E:B7:8E:9F:64:72";
     public string? ModelOverride { get; init; }
     public Func<HttpMessage, int?>? RefuseRequest { get; init; }
     public string Name { get; init; } = "客厅 Apple TV";
@@ -103,6 +104,25 @@ internal sealed class FakeAirPlayReceiver : IDisposable
     /// <summary>The TV drops every pairing (this PC removed in its settings) but keeps its identity.</summary>
     public void ForgetControllers() => _controllers.Clear();
 
+    internal void EndSessions()
+    {
+        lock (_connections)
+        {
+            foreach (var connection in _connections) connection.Dispose();
+            _connections.Clear();
+        }
+    }
+
+    /// <summary>Closes every event channel and nothing else, as a speaker ending the session does.</summary>
+    internal void CloseEventChannels()
+    {
+        lock (_eventConnections)
+        {
+            foreach (var connection in _eventConnections) connection.Dispose();
+            _eventConnections.Clear();
+        }
+    }
+
     /// <summary>A factory reset: a new identity and no pairings.</summary>
     public void Reset()
     {
@@ -127,6 +147,7 @@ internal sealed class FakeAirPlayReceiver : IDisposable
                 return;
             }
             lock (_connections) _connections.Add(tcp);
+            if (listener == _events) lock (_eventConnections) _eventConnections.Add(tcp);
             new Thread(() => serve(tcp)) { IsBackground = true, Name = "fake AirPlay receiver connection" }.Start();
         }
     }

@@ -46,7 +46,7 @@ internal sealed partial class TrayApp
     {
         if (Config.PcMutedEndpointId == id) return;
         Config.PcMutedEndpointId = id;
-        Config.Save();
+        Config.TrySave(); // called inside PcMute.Update (OnControllerChanged), which has to go on
     }
 
     /// <summary>Quitting (also for Windows: QuitForSystem): the PC's sound comes back, if the mute is ours and still there.</summary>
@@ -115,7 +115,8 @@ internal sealed partial class TrayApp
 
     /// <summary>What is sent now: the system capture or the cinema's file, from which device, and a group's outputs on this PC.</summary>
     private PcCapture PcCaptureNow() => new(Controller.GroupSource == null, Routing.CaptureDeviceId,
-        GroupPlan.FromConfig(Config)?.LocalOutputs.Select(o => o.DeviceId).ToArray());
+        Mixer != null ? Mixer.LocalOutputIds.ToArray()
+        : GroupPlan.FromConfig(Config)?.LocalOutputs.Select(o => o.DeviceId).ToArray());
 
     /// <summary>
     /// The stream's state, 推流时电脑静音, the captured device or the default output may have changed: PcMute acts on it,
@@ -130,7 +131,9 @@ internal sealed partial class TrayApp
         else if (_idleSince == 0) _idleSince = now;
         double idleMs = _idleSince == 0 ? 0 : Stopwatch.GetElapsedTime(_idleSince, now).TotalMilliseconds;
         var phase = PcMute.PhaseFor(state, idleMs);
-        _pcMute.Update(phase, Config.MutePcWhileStreaming, PcCaptureNow());
+        bool localIntent = Mixer != null && Routing.Active && MixerRoutes.Read(Config).Settings is { } routes &&
+            new[] { routes.Default }.Concat(routes.Apps.Values).Any(r => r.Output.Kind == MixerOutputKind.Local || r.AlsoLocal);
+        _pcMute.Update(phase, Config.MutePcWhileStreaming && !localIntent, PcCaptureNow());
         // Idle with our mute in place: look again once the Idle has lasted, then the session is over.
         if (phase == PcMutePhase.Between && state == StreamState.Idle && _pcMute.Holding != null && _pcMuteCheck is { Enabled: false } check)
             check.Restart();

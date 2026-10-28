@@ -474,9 +474,9 @@ public class PlayerSyncTests
         }, _sync.Statuses);
         Assert.Equal(new[]
         {
-            "VLC：密码错误，请在设置里重新输入",
+            "VLC：密码错误，请在「音画同步」里重新输入",
             "mpv：调整失败",
-            "mpv：未开启 IPC（见「设置」）",
+            "mpv：未开启 IPC（见「音画同步」）",
             "PotPlayer：请手动设为 -236 ms",
         }, _sync.Statuses.Select(PlayerText.Line));
     }
@@ -546,7 +546,7 @@ public class PlayerSyncTests
         Assert.Equal("没有发现开着的 mpv、VLC。\n其他播放器：把音频延迟设为 -236 ms；网页视频：用浏览器插件自动对齐。",
             PlayerText.MovieHint(enabled: true, streaming: true, [], 236));
         var vlcOff = new PlayerStatus(PlayerKind.Vlc, "VLC", PlayerState.NoInterface);
-        Assert.Equal("mpv：已设为 -236 ms\nVLC：未开启网页接口（见「设置」）\n其他播放器：把音频延迟设为 -236 ms；网页视频：用浏览器插件自动对齐。",
+        Assert.Equal("mpv：已设为 -236 ms\nVLC：未开启网页接口（见「音画同步」）\n其他播放器：把音频延迟设为 -236 ms；网页视频：用浏览器插件自动对齐。",
             PlayerText.MovieHint(true, true, [new(PlayerKind.Mpv, "mpv", PlayerState.Applied, -236), vlcOff, vlcOff], 236));
     }
 

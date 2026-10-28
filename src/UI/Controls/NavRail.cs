@@ -19,6 +19,8 @@ internal sealed class NavRail : LayoutPanel, ISurface
         TabStop = false;
         AccessibleRole = AccessibleRole.PageTabList;
         _viewport.Controls.Add(_main);
+        // The items scroll in a system scroll bar when the window is short: in the theme's style, as a page's.
+        _viewport.HandleCreated += (_, _) => Theme.StyleScrollBars(_viewport);
         Controls.AddRange([_viewport, _themeButton]);
         _themeButton.Click += (_, _) => ThemeRequested?.Invoke();
         ShowTheme();
@@ -42,6 +44,7 @@ internal sealed class NavRail : LayoutPanel, ISurface
     {
         ShowTheme();
         _viewport.BackColor = SurfaceColor;
+        Theme.StyleScrollBars(_viewport);
         base.OnThemeChanged();
     }
 
@@ -203,8 +206,19 @@ internal sealed class NavItem : FluentControl
         if (!e.Handled && e.KeyCode is Keys.Enter or Keys.Space && e.Modifiers == Keys.None)
         {
             e.Handled = true;
-            OnClick(EventArgs.Empty);
+            // Once per press. Held down, Windows repeats the key about 30 times a second: the theme button switched the whole
+            // window between light and dark on each one (2026-10-27 review).
+            if (!_repeat) OnClick(EventArgs.Empty);
         }
+    }
+
+    private bool _repeat;
+
+    /// <summary>The key message being handled is an auto-repeat (WM_KEYDOWN, lParam bit 30: the key was already down).</summary>
+    protected override bool ProcessKeyEventArgs(ref Message m)
+    {
+        _repeat = m.Msg == 0x0100 && ((long)m.LParam & 0x40000000) != 0;
+        return base.ProcessKeyEventArgs(ref m);
     }
 
     public override Size GetPreferredSize(Size proposedSize)
@@ -217,7 +231,10 @@ internal sealed class NavItem : FluentControl
     {
         var g = e.Graphics;
         var r = new Rectangle(0, 0, Width, Height);
-        var fill = _selected ? (IsHover ? P.NavHover : P.NavSelected) : IsPressed ? P.NavSelected : IsHover ? P.NavHover : Color.Empty;
+        // From the rail or list underneath (Theme.NavSelectedOn): the light rail is darker than the window.
+        var s = Surface;
+        var fill = _selected ? (IsHover ? Theme.NavHoverOn(s) : Theme.NavSelectedOn(s))
+            : IsPressed ? Theme.NavSelectedOn(s) : IsHover ? Theme.NavHoverOn(s) : Color.Empty;
         if (!fill.IsEmpty) Shapes.FillRound(g, fill, r, Dp(4));
         if (_selected)
         {

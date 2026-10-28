@@ -43,6 +43,9 @@ internal sealed partial class Walker
 
     private static string LogPath => Path.Combine(ConfigDir, "homepodcast.log");
 
+    /// <summary>FirewallAdvisor's log line for a Public network: the app then asks 「当前是公用网络」.</summary>
+    private const string PublicNetworkLine = "firewall rule only applies on Private networks, so the speaker can't connect back";
+
     private static readonly string[] Pages = ["首页", "混音器", "麦克风", "均衡", "音箱信息", "多音箱（实验性）", "音画同步", "诊断", "使用配置", "设置", "关于"];
 
     private readonly Scenario _s;
@@ -86,6 +89,7 @@ internal sealed partial class Walker
                 case "runtime": RunRuntime(); break; // Walker.Runtime.cs
                 case "update-notes": RunUpdateNotes(); break;
                 case "group-outputs": RunGroupOutputs(); break; // Walker.GroupOutputs.cs
+                case "mixer-destinations": RunMixerDestinations(); break;
                 default: throw new ArgumentException($"unknown scenario kind {_s.Kind}");
             }
         }
@@ -103,7 +107,7 @@ internal sealed partial class Walker
         finally
         {
             StopApp();
-            SaveLog();
+            if (_s.Kind != "mixer-destinations") SaveLog();
             _fake?.Dispose();
             Uia.Noted = null;
         }
@@ -182,6 +186,7 @@ internal sealed partial class Walker
             if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
+            if (page == "混音器") { CheckMixerHelp(); tree = Uia.Snapshot(MainWindow()); }
             if (page == "诊断") CheckDiagnostics(tree);
             Layout(tree, page); ShootPage(page, "");
             if (page == "首页") Flyout(false, compatibility: true);
@@ -280,6 +285,7 @@ internal sealed partial class Walker
             if (page == "首页") CheckHome(tree, connected);
             if (page == "设置") CheckSettings();
             if (page == "音画同步") CheckAvSync(tree);
+            if (page == "混音器") { CheckMixerHelp(); tree = Uia.Snapshot(MainWindow()); }
             if (page == "诊断") CheckDiagnostics(tree, connected);
             if (page == "音箱信息") tree = CheckSpeakers(connected);
             if (page == "关于") tree = CheckAbout();
@@ -315,7 +321,7 @@ internal sealed partial class Walker
             Uia.Invoke(toggle);
             WaitUntil(() => Find(Uia.Snapshot(MainWindow()), n => n.Type == "Button" &&
                 (n.Name == T("切换到浅色") || n.Name == T("切换到深色")) && n.Name != before) != null, "theme switch", 5000);
-            Shoot(MainWindow(), "theme-fade-" + i, "client theme transition");
+            Shoot(MainWindow(), "theme-fade-" + i, "window under the theme fade (the fading cover is a window of its own, not in this capture)");
             Thread.Sleep(300);
             Layout(Uia.Snapshot(MainWindow()), "theme switch");
             Shoot(MainWindow(), "theme-toggle-" + i, "client fade completed");
@@ -338,6 +344,7 @@ internal sealed partial class Walker
                 var tree = Uia.Snapshot(MainWindow());
                 CheckNavigation(tree, compact: true);
                 if (page is "麦克风" or "均衡") CheckMicrophoneAndEqualizer(tree, page);
+                if (page == "混音器") { CheckMixerHelp(); tree = Uia.Snapshot(MainWindow()); }
                 Layout(tree, page + " (narrow)");
                 ShootPage(page, "narrow");
             }
@@ -444,7 +451,8 @@ internal sealed partial class Walker
         {
             foreach (string text in new[] { "麦克风监听", "输入设备", "输出到", "本机输出设备", "麦克风监听已关闭。",
                          "每次启动 HomePodCast 时麦克风默认关闭。", "衰减（Room Size）", "高频阻尼（Damping）",
-                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡" })
+                         "干湿比（Wet/Dry）", "预延迟（Pre-delay）", "麦克风均衡", "低切", "压缩器", "齿音消除", "限制器",
+                         "输入电平", "输出电平", "频率响应" })
                 Expect(Has(page, T(text)), name, $"missing microphone control or explanation: {T(text)}");
             Expect(!Has(page, T("HomePod 输出均衡")), name, "output EQ is still on the microphone page");
             var route = Find(page, n => n.Name == T("输出到") && n.Type == "List");
@@ -454,7 +462,8 @@ internal sealed partial class Walker
         }
         else
         {
-            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。" })
+            foreach (string text in new[] { "HomePod 输出均衡", "预设", "作用于推送到 HomePod 的所有声音，包括电脑声音和麦克风。",
+                         "频率响应", "频率", "增益", "Q 值", "类型", "输出增益" })
                 Expect(Has(page, T(text)), name, $"missing output EQ control or scope: {T(text)}");
             Expect(!Has(page, T("麦克风均衡")), name, "microphone EQ is on the output page");
         }
@@ -527,29 +536,56 @@ internal sealed partial class Walker
         var tile = Find(page, n => n.Name == T("实际延迟") && n.Type == "Text" && n.Hwnd == IntPtr.Zero);
         if (tile == null || !page.Rect.Contains(tile.Rect)) return; // a later full-width visit can expose it
         _checkedPaintedToolTip = true;
+        var main = MainWindow();
+        var center = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        string explanation = T("这次连接实际使用的延迟");
+        string Describe(IntPtr h) => h == main ? "the main window" : h == IntPtr.Zero ? "none" : $"{Native.ClassName(h)} 「{Native.WindowText(h)}」";
         bool shown = false;
-        bool activated = Native.SetForegroundWindow(MainWindow());
         var observed = new HashSet<string>();
-        Cursor.Position = new Point(tile.Rect.Left + tile.Rect.Width / 2, tile.Rect.Top + tile.Rect.Height / 2);
+        var blocked = new List<string>();
+        string state = "";
+        const int attempts = 3;
         try
         {
-            var deadline = DateTime.UtcNow.AddSeconds(4);
-            while (!shown && DateTime.UtcNow < deadline)
+            // A message box disables the main window until it is answered: no mouse message reaches the page, and the
+            // tooltip shows only in the active window. 2026-10-26 (run 40251785256) the startup 「当前是公用网络」 came up
+            // late on a cold runner, during this hover. A box that comes up meanwhile is answered and the tile hovered
+            // again; a hover with nothing in the way decides.
+            for (int attempt = 0; attempt < attempts && !shown; attempt++)
             {
-                foreach (var window in Native.TopLevelWindows(App.Id).Where(h => Native.IsToolTipClass(Native.ClassName(h))))
+                HandlePrompts();
+                bool activated = Native.SetForegroundWindow(main);
+                Cursor.Position = Point.Empty; // from outside: each attempt is a new move onto the tile
+                Thread.Sleep(100);
+                Cursor.Position = center;
+                string? inTheWay = null;
+                var deadline = DateTime.UtcNow.AddSeconds(4);
+                while (!shown && inTheWay == null && DateTime.UtcNow < deadline)
                 {
-                    var tooltip = Uia.Snapshot(window);
-                    observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
-                    // A native tooltip exposes its text as the root's Name and may have no children.
-                    if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(T("这次连接实际使用的延迟"), StringComparison.Ordinal)
-                        || Has(tooltip, T("这次连接实际使用的延迟")))) { shown = true; break; }
+                    foreach (var window in Native.TopLevelWindows(App.Id))
+                    {
+                        if (IsPrompt(window)) inTheWay ??= $"message box 「{Native.WindowText(window)}」";
+                        if (!Native.IsToolTipClass(Native.ClassName(window))) continue;
+                        var tooltip = Uia.Snapshot(window);
+                        observed.Add($"{Native.ClassName(window)} {tooltip.Type}: {tooltip.Name} {tooltip.Rect}");
+                        // A native tooltip exposes its text as the root's Name and may have no children.
+                        if (tooltip.Shown && tooltip.HasSize && (tooltip.Name.Contains(explanation, StringComparison.Ordinal)
+                            || Has(tooltip, explanation))) { shown = true; break; }
+                    }
+                    if (shown) break;
+                    if (inTheWay == null && (Native.Style(main) & Native.WS_DISABLED) != 0) inTheWay = "the main window was disabled";
+                    if (inTheWay == null) Thread.Sleep(100);
                 }
-                if (!shown) Thread.Sleep(100);
+                state = $"activated={activated}, foreground={Describe(Native.GetForegroundWindow())}, pointer={Cursor.Position}, tile={tile.Rect}";
+                if (shown || inTheWay == null) break;
+                blocked.Add(inTheWay);
             }
+            string answered = blocked.Count == 0 ? "" : $" (hovered again after: {string.Join("; ", blocked)})";
             if (!shown) _report.Note(Where("painted tooltip"),
-                $"activated={activated}, pointer={Cursor.Position}, tile={tile.Rect}; observed: {string.Join("; ", observed)}");
-            else _report.Pass(Where("painted tooltip"), "the windowless latency tile shows its hover explanation: " + string.Join("; ", observed));
-            Expect(shown, "首页", "the windowless latency tile lost its hover explanation");
+                $"{state}; in the way: {(blocked.Count == 0 ? "nothing" : string.Join("; ", blocked))}; observed: {string.Join("; ", observed)}");
+            else _report.Pass(Where("painted tooltip"), $"the windowless latency tile shows its hover explanation{answered}: " + string.Join("; ", observed));
+            Expect(shown, "首页", "the windowless latency tile lost its hover explanation"
+                + (blocked.Count == attempts ? $" (each of {attempts} hovers was blocked: {string.Join("; ", blocked)})" : ""));
         }
         finally { Cursor.Position = Point.Empty; Thread.Sleep(100); }
     }
@@ -1080,9 +1116,16 @@ internal sealed partial class Walker
         var main = WaitWindow(MainWindow, "the main window", 30_000);
         _report.Note(Where(), $"main window after {watch.ElapsedMilliseconds} ms ({FileVersionInfo.GetVersionInfo(_exe).ProductVersion})");
 
-        // The firewall check at startup may ask about a rule (none on the runner): answer it before anything else.
+        // The firewall check at startup may ask about a rule (none on the runner) or the network (Public there): answer it
+        // before anything else. The box is posted to the UI thread after the log line; a Public network's line announces
+        // it, so wait for that box rather than a fixed time. 2026-10-26 (run 40251785256, a cold first start: main window
+        // after 2.9 s) it came more than 1.5 s after the line, up during 首页's tooltip check, and the disabled window never
+        // got the hover.
         WaitUntil(() => ReadLog().Any(l => l.Contains(" network: ", StringComparison.Ordinal)), "the startup firewall check in the log", 20_000, fail: false);
-        Thread.Sleep(1500);
+        if (ReadLog().Any(l => l.Contains(PublicNetworkLine, StringComparison.Ordinal)))
+            WaitUntil(() => _promptsShot.Contains(T("当前是公用网络")), $"the message box 「{T("当前是公用网络")}」 that the log announced",
+                15_000, fail: false);
+        else Thread.Sleep(1500); // a missing rule has no line of its own
         HandlePrompts();
 
         uint dpi = Native.GetDpiForWindow(main), want = (uint)(96 * _s.Scale / 100);
@@ -1164,14 +1207,16 @@ internal sealed partial class Walker
 
     private bool _inPrompts;
 
+    // A closed native picker can remain as a hidden window briefly while its owner disposes it.
+    // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
+    private static bool IsPrompt(IntPtr h) => Native.ClassName(h) == "#32770" && Native.IsWindowVisible(h)
+        && Native.WindowRect(h) is { Width: > 0, Height: > 0 };
+
     private void AnswerPrompts()
     {
         foreach (var h in Native.TopLevelWindows(App.Id))
         {
-            // A closed native picker can remain as a hidden window briefly while its owner disposes it.
-            // Only a visible, sized dialog can block the user; closing windows are not new error prompts.
-            if (Native.ClassName(h) != "#32770" || !Native.IsWindowVisible(h)
-                || Native.WindowRect(h) is not { Width: > 0, Height: > 0 }) continue;
+            if (!IsPrompt(h)) continue;
             string title = Native.WindowText(h);
             Node tree;
             try { tree = Uia.Snapshot(h); }

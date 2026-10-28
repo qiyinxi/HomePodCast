@@ -54,10 +54,13 @@ internal sealed class FluentComboBox : FluentControl
     public string? SelectedText => _selected >= 0 && _selected < Items.Count ? Items[_selected] : null;
 
     public bool DroppedDown => _menu is { Visible: true };
+    public Func<int, bool>? IsItemEnabled { get; set; }
+    public Func<int, string?>? ItemDisabledReason { get; set; }
 
     private void Select(int index, bool user)
     {
         if (index < -1 || index >= Items.Count) index = -1;
+        if (user && index >= 0 && IsItemEnabled?.Invoke(index) == false) return;
         if (index == _selected) return;
         _selected = index;
         Invalidate();
@@ -108,15 +111,21 @@ internal sealed class FluentComboBox : FluentControl
         if (Items.Count == 0) return false;
         switch (keyData)
         {
-            case Keys.Up: Select(Math.Max(0, _selected - 1), user: true); return true;
-            case Keys.Down: Select(Math.Min(Items.Count - 1, _selected + 1), user: true); return true;
-            case Keys.Home: Select(0, user: true); return true;
-            case Keys.End: Select(Items.Count - 1, user: true); return true;
+            case Keys.Up: Step(_selected - 1, -1); return true;
+            case Keys.Down: Step(_selected + 1, 1); return true;
+            case Keys.Home: Step(0, 1); return true;
+            case Keys.End: Step(Items.Count - 1, -1); return true;
             case Keys.Space or Keys.Enter or Keys.F4 or (Keys.Alt | Keys.Down):
                 Open();
                 return true;
             default: return false;
         }
+    }
+
+    private void Step(int start, int direction)
+    {
+        for (int i = Math.Clamp(start, 0, Items.Count - 1); i >= 0 && i < Items.Count; i += direction)
+            if (IsItemEnabled?.Invoke(i) != false) { Select(i, user: true); return; }
     }
 
     private void Open()
@@ -149,12 +158,14 @@ internal sealed class FluentComboBox : FluentControl
         for (int i = 0; i < Items.Count; i++)
         {
             int index = i;
-            var item = new ToolStripMenuItem(Items[i])
+            var item = new ListItem(Items[i])
             {
                 Checked = i == _selected,
                 Font = Theme.FontFor(TextStyle.Body, menuDpi, Items[i]),
                 Padding = new Padding(Dp(8), Dp(6), Dp(8), Dp(6)),
                 AutoSize = true,
+                Enabled = IsItemEnabled?.Invoke(i) != false,
+                ToolTipText = ItemDisabledReason?.Invoke(i) ?? "",
             };
             item.Click += (_, _) => Select(index, user: true);
             menu.Items.Add(item);
@@ -166,6 +177,20 @@ internal sealed class FluentComboBox : FluentControl
         };
         menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
         return menu;
+    }
+
+    /// <summary>
+    /// An entry as wide as the list. The menu makes every entry as wide as its longest text, not as the list (MinimumSize):
+    /// 2026-10-27, the EQ presets in a 240 px list were 125 px wide, and the highlight ended in the middle of the list.
+    /// The width is read from the list when it lays out, so it follows the list when WinForms rescales it to its monitor.
+    /// </summary>
+    private sealed class ListItem(string text) : ToolStripMenuItem(text)
+    {
+        public override Size GetPreferredSize(Size constrainingSize)
+        {
+            var size = base.GetPreferredSize(constrainingSize);
+            return new Size(Math.Max(size.Width, Owner?.MinimumSize.Width ?? 0), size.Height);
+        }
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -194,7 +219,7 @@ internal sealed class FluentComboBox : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new ComboAccessible(this);
 
-    private sealed class ComboAccessible(FluentComboBox owner) : ControlAccessibleObject(owner)
+    private sealed class ComboAccessible(FluentComboBox owner) : FluentAccessible(owner)
     {
         /// <summary>Setting the value picks the item with that text (as the user would).</summary>
         public override string? Value
@@ -266,7 +291,9 @@ internal sealed class FluentMenuRenderer : ToolStripRenderer
     {
         var item = e.Item;
         var r = new Rectangle(Dp(e.ToolStrip, 4), 1, item.Width - Dp(e.ToolStrip, 8), item.Height - 2);
-        if (item.Selected && item.Enabled) Shapes.FillRound(e.Graphics, P.Subtle, r, Dp(e.ToolStrip, 4));
+        // Also on a disabled entry: the arrow keys stop there (WinForms selects disabled menu items), and without the
+        // highlight the list showed no position at all. Its grey text already says it can't be picked.
+        if (item.Selected) Shapes.FillRound(e.Graphics, P.Subtle, r, Dp(e.ToolStrip, 4));
         if (item is ToolStripMenuItem { Checked: true } && e.ToolStrip is ContextMenuStrip { ShowCheckMargin: false, ShowImageMargin: false })
         {
             // Selected entry of a drop-down list: accent pill on the left, like Windows 11.

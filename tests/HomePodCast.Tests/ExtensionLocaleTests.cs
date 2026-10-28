@@ -36,13 +36,34 @@ public class ExtensionLocaleTests
             if (!File.Exists(Path.Combine(Ext, "_locales", locale, "messages.json"))) { bad.Add($"{locale}: no messages.json"); continue; }
             // htmlLang is the BCP 47 tag of the translation; its language must be the folder's (no ≈ nb).
             var tag = Messages(locale).TryGetValue("htmlLang", out var m) ? Text(m) : "";
-            string Base(string s) => s.Split('-', '_')[0].ToLowerInvariant() is "nb" or "nn" ? "no" : s.Split('-', '_')[0].ToLowerInvariant();
-            if (Base(tag) != Base(locale)) bad.Add($"{locale}: htmlLang \"{tag}\" is not this folder's language");
+            if (Language(tag) != Language(locale)) bad.Add($"{locale}: htmlLang \"{tag}\" is not this folder's language");
         }
         Assert.True(bad.Count == 0, string.Join("\n", bad));
     }
 
     private static string Text(JsonElement m) => m.GetProperty("message").GetString()!;
+
+    private static string Language(string locale) =>
+        locale.Split('-', '_')[0].ToLowerInvariant() is "nb" or "nn" ? "no" : locale.Split('-', '_')[0].ToLowerInvariant();
+
+    [Fact]
+    public void Every_app_language_reaches_the_extension_in_each_chrome_variant_of_it()
+    {
+        // chrome.i18n tries the browser's locale, then its language, then default_locale (en). A pt-BR Chrome never
+        // picks pt_PT, so it got the English popup while the app (pt.json) speaks Portuguese to the same user.
+        var languages = Directory.GetFiles(Path.Combine(Repo.Root, "src", "i18n"), "*.json")
+            .Select(f => Language(Path.GetFileNameWithoutExtension(f))).Append("zh").Distinct();
+        var bad = new List<string>();
+        foreach (var language in languages)
+        {
+            foreach (var chrome in ChromeLocales.Where(c => Language(c) == language))
+            {
+                string picked = Locales.Contains(chrome) ? chrome : Locales.Contains(language) ? language : "en";
+                if (Language(picked) != language) bad.Add($"a {chrome} browser gets _locales/{picked}");
+            }
+        }
+        Assert.True(bad.Count == 0, string.Join("\n", bad));
+    }
 
     /// <summary>$NAME$ references in a message, and the $n substitutions its placeholders map them to.</summary>
     private static (string[] Names, string[] Contents) Placeholders(JsonElement m)

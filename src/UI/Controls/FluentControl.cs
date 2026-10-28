@@ -17,6 +17,38 @@ internal interface ISurface
 internal abstract class FluentControl : Control
 {
     private bool _hover, _pressed, _collapsed;
+    internal bool RequestedVisible { get; private set; } = true;
+    internal bool RequestedEnabled { get; private set; } = true;
+    private bool? _logicalShown, _logicalEnabled;
+
+    public new bool Enabled
+    {
+        get => base.Enabled;
+        set
+        {
+            RequestedEnabled = value;
+            if (!LogicalLayout.SetEnabled(this, value)) base.Enabled = value;
+        }
+    }
+
+    protected override void SetVisibleCore(bool value)
+    {
+        RequestedVisible = value;
+        if (!LogicalLayout.SetVisible(this, value)) base.SetVisibleCore(value);
+    }
+
+    internal void ApplyLogicalState(bool shown, bool enabled)
+    {
+        if (_logicalShown != shown) { base.SetVisibleCore(shown); _logicalShown = shown; }
+        if (_logicalEnabled != enabled) { base.Enabled = enabled; _logicalEnabled = enabled; }
+    }
+
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        // AssignParent raises VisibleChanged when an input leaves a painted row. WinForms creates the input and all
+        // its native ancestors there, even on a detached page. The normal preparation/show path creates them later.
+        if (!LogicalLayout.BuildingDetached(this)) base.OnVisibleChanged(e);
+    }
 
     protected FluentControl()
     {
@@ -52,11 +84,11 @@ internal abstract class FluentControl : Control
     }
 
     /// <summary>The colour behind this control (the nearest card or page).</summary>
-    protected Color Surface => SurfaceOf(Parent);
+    protected Color Surface => SurfaceOf(LogicalLayout.Parent(this));
 
     public static Color SurfaceOf(Control? c)
     {
-        for (; c != null; c = c.Parent)
+        for (; c != null; c = LogicalLayout.Parent(c))
             if (c is ISurface s) return s.SurfaceColor;
         return Theme.P.Window;
     }
@@ -72,7 +104,7 @@ internal abstract class FluentControl : Control
     protected virtual void OnThemeChanged() => Invalidate();
 
     /// <summary>Ask the page to measure again (text or size of this control changed).</summary>
-    protected void RequestLayout() => LayoutPanel.Relayout(Parent);
+    protected void RequestLayout() => LayoutPanel.Relayout(LogicalLayout.Parent(this));
 
     protected override void OnPaintBackground(PaintEventArgs e) => Shapes.Fill(e.Graphics, Surface, ClientRectangle);
 
@@ -133,6 +165,22 @@ internal abstract class FluentControl : Control
         base.OnEnabledChanged(e);
     }
 
+    protected override AccessibleObject CreateAccessibilityInstance() => new FluentAccessible(this);
+
+    protected class FluentAccessible(FluentControl owner) : ControlAccessibleObject(owner)
+    {
+        public override AccessibleObject? Parent => LogicalLayout.IsInput(owner) ? LogicalLayout.Parent(owner)?.AccessibilityObject : base.Parent;
+        public override AccessibleObject? Navigate(AccessibleNavigation direction)
+        {
+            if (!LogicalLayout.IsInput(owner) || direction is not (AccessibleNavigation.Next or AccessibleNavigation.Previous))
+                return base.Navigate(direction);
+            var siblings = LogicalLayout.Children(LogicalLayout.Parent(owner)!).Where(LayoutPanel.IsShown).ToArray();
+            int index = Array.IndexOf(siblings, owner);
+            int next = direction == AccessibleNavigation.Next ? index + 1 : direction == AccessibleNavigation.Previous ? index - 1 : -1;
+            return index >= 0 && next >= 0 && next < siblings.Length ? siblings[next].AccessibilityObject : null;
+        }
+    }
+
     /// <summary>
     /// Only a repaint: the window lays itself out once at the new DPI (MainWindow.OnDpiChanged and the dialogs; WinForms'
     /// font scaling for the others). Windows sends this to every child window, top-down, after the window's WM_DPICHANGED;
@@ -147,7 +195,11 @@ internal abstract class FluentControl : Control
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) Theme.Changed -= ThemeChanged;
+        if (disposing)
+        {
+            LogicalLayout.Disposing(this);
+            Theme.Changed -= ThemeChanged;
+        }
         base.Dispose(disposing);
     }
 
@@ -305,7 +357,11 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) Theme.Changed -= ThemeChanged;
+        if (disposing)
+        {
+            LogicalLayout.Disposing(this);
+            Theme.Changed -= ThemeChanged;
+        }
         base.Dispose(disposing);
     }
 
@@ -314,11 +370,12 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        foreach (Control child in Controls) ParentPainting.Draw(child, e.Graphics);
+        foreach (Control child in LogicalLayout.Children(this)) ParentPainting.Draw(child, e.Graphics);
     }
 
     protected override void OnControlRemoved(ControlEventArgs e)
     {
+        if (e.Control != null) LogicalLayout.Removed(this, e.Control);
         base.OnControlRemoved(e);
         if (e.Control != null && ParentPainting.IsPainted(e.Control))
         {
@@ -331,6 +388,7 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
 
     protected override void OnControlAdded(ControlEventArgs e)
     {
+        if (e.Control != null) LogicalLayout.Added(this, e.Control);
         UpdateParentPainting();
         base.OnControlAdded(e);
         if (e.Control != null && ParentPainting.IsPainted(e.Control))
@@ -358,13 +416,24 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
 
     private sealed class LayoutAccessible(LayoutPanel owner) : ControlAccessibleObject(owner)
     {
+        public override Rectangle Bounds => owner.ParentPainted ? ParentPainting.ScreenBounds(owner) : base.Bounds;
+        public override AccessibleRole Role => owner.ParentPainted && owner.AccessibleRole == AccessibleRole.Default ? AccessibleRole.Pane : base.Role;
+        public override string? Name { get => owner.ParentPainted ? owner.AccessibleName ?? owner.Text : base.Name; set => base.Name = value; }
+        public override AccessibleStates State => owner.ParentPainted
+            ? (owner.Enabled ? AccessibleStates.None : AccessibleStates.Unavailable)
+                | (IsShown(owner) && !owner.Collapsed ? AccessibleStates.None : AccessibleStates.Invisible)
+                | (ParentPainting.ScreenBounds(owner, clipped: true).IsEmpty ? AccessibleStates.Offscreen : AccessibleStates.None)
+            : base.State;
+        public override AccessibleObject? Navigate(AccessibleNavigation direction) => owner.ParentPainted
+            ? NavigatePainted(owner, direction) : base.Navigate(direction);
+        public override AccessibleObject? GetFocused() => owner.ParentPainted ? FocusedPainted(owner) : base.GetFocused();
         // 2026-10-18: the base Parent wraps OLEACC's native proxy on every external query. Releasing thousands
         // of those GIT entries re-entered COM's STA message pump until the published app overflowed its stack.
         // Our parent is already a managed accessible object; return that stable identity directly.
-        public override AccessibleObject? Parent => owner.Parent?.AccessibilityObject;
-        private bool HasPaintedText => owner.Controls.Cast<Control>().Any(ParentPainting.IsPainted);
+        public override AccessibleObject? Parent => LogicalLayout.Parent(owner)?.AccessibilityObject;
+        private bool HasPaintedText => LogicalLayout.Children(owner).Any(ParentPainting.IsPainted);
         // Native children keep their providers and keyboard behavior. Painted text occupies its original layout position.
-        internal Control[] Children => owner.Controls.Cast<Control>()
+        internal Control[] Children => LogicalLayout.Children(owner)
             .Where(c => ParentPainting.IsPainted(c) ? IsShown(c) && !IsCollapsed(c) : c.IsHandleCreated).ToArray();
         public override int GetChildCount() => HasPaintedText ? Children.Length : base.GetChildCount();
         public override AccessibleObject? GetChild(int index)
@@ -375,7 +444,7 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
         }
         public override AccessibleObject? HitTest(int x, int y)
         {
-            foreach (Control child in owner.Controls)
+            foreach (Control child in LogicalLayout.Children(owner))
                 if (ParentPainting.IsPainted(child) && IsShown(child) && child.AccessibilityObject.HitTest(x, y) is { } hit) return hit;
             return base.HitTest(x, y);
         }
@@ -446,13 +515,12 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
     /// </summary>
     internal static bool CreateWindows(Control root, Func<bool> yield)
     {
-        if (ParentPainting.IsPainted(root)) return true;
-        if (!root.IsHandleCreated)
+        if (!ParentPainting.IsPainted(root) && !root.IsHandleCreated)
         {
             _ = root.Handle;
             if (yield()) return false;
         }
-        foreach (var child in root.Controls.Cast<Control>().ToArray())
+        foreach (var child in LogicalLayout.Children(root).ToArray())
             if (!IsCollapsed(child) && !CreateWindows(child, yield)) return false;
         return true;
     }
@@ -460,20 +528,29 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
     /// <summary>Set bounds and arrange a container once, including when only its children's sizes changed.</summary>
     public static void Place(Control c, int x, int y, int w, int h)
     {
-        bool container = c is LayoutPanel or ScrollPage;
-        if (container) c.SuspendLayout();
+        if (LogicalLayout.PlaceInput(c, new Rectangle(x, y, Math.Max(0, w), Math.Max(0, h)))) return;
+        _placementDepth++;
         try
         {
-            if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+            bool container = c is LayoutPanel or ScrollPage;
+            if (container) c.SuspendLayout();
+            try
+            {
+                if (c.Left != x || c.Top != y || c.Width != w || c.Height != h) c.SetBounds(x, y, Math.Max(0, w), Math.Max(0, h));
+            }
+            finally
+            {
+                // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
+                // doing both multiplies the work at each level of the page's nested cards and rows.
+                if (container) c.ResumeLayout(false);
+            }
+            if (container) c.PerformLayout();
         }
-        finally
-        {
-            // SetBounds already requests layout on a resized control. Let the explicit pass below handle it too:
-            // doing both multiplies the work at each level of the page's nested cards and rows.
-            if (container) c.ResumeLayout(false);
-        }
-        if (container) c.PerformLayout();
+        finally { _placementDepth--; }
     }
+
+    [ThreadStatic] private static int _placementDepth;
+    internal static bool Placing => _placementDepth != 0;
 
     /// <summary>Apply related text/visibility changes together, then measure and position the subtree once.</summary>
     public static IDisposable BatchLayout(Control root) => new LayoutBatch(root);
@@ -516,7 +593,7 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
                 c.SuspendLayout();
                 _containers.Add(c);
             }
-            foreach (Control child in c.Controls) Suspend(child);
+            foreach (Control child in LogicalLayout.Children(c)) Suspend(child);
         }
 
         public void Dispose()
@@ -541,7 +618,7 @@ internal abstract partial class LayoutPanel : Panel, IParentPainted
     private static Control? RootOf(Control? from)
     {
         Control? root = null;
-        for (var c = from; c != null; c = c.Parent)
+        for (var c = from; c != null; c = LogicalLayout.Parent(c))
         {
             if (c is ScrollPage or ILayoutRoot) return c;
             if (c is LayoutPanel) root = c;
@@ -573,9 +650,9 @@ internal class StackPanel : LayoutPanel
     protected override int Arrange(int width, bool apply)
     {
         int x = Dp(Inset.Left), y = Dp(Inset.Top), w = Math.Max(0, width - Dp(Inset.Horizontal));
-        var last = apply && FillLast ? Controls.Cast<Control>().LastOrDefault(c => !IsCollapsed(c)) : null;
+        var last = apply && FillLast ? LogicalLayout.Children(this).LastOrDefault(c => !IsCollapsed(c)) : null;
         bool first = true;
-        foreach (Control c in Controls)
+        foreach (Control c in LogicalLayout.Children(this))
         {
             int h = HeightFor(c, w);
             if (h <= 0)
@@ -615,7 +692,7 @@ internal class RowPanel : LayoutPanel
     public override Size GetPreferredSize(Size proposedSize)
     {
         if (proposedSize.Width > 0) return base.GetPreferredSize(proposedSize);
-        var items = Controls.Cast<Control>().Where(c => !IsCollapsed(c)).ToList();
+        var items = LogicalLayout.Children(this).Where(c => !IsCollapsed(c)).ToList();
         if (items.Count == 0) return Size.Empty;
         int width = items.Sum(WidthOf) + Dp(Gap) * (items.Count - 1);
         return new Size(width, Arrange(width, apply: false));
@@ -623,7 +700,7 @@ internal class RowPanel : LayoutPanel
 
     protected override int Arrange(int width, bool apply)
     {
-        var items = Controls.Cast<Control>().Where(c => !IsCollapsed(c)).ToList();
+        var items = LogicalLayout.Children(this).Where(c => !IsCollapsed(c)).ToList();
         if (items.Count == 0) return 0;
         int gaps = Dp(Gap) * (items.Count - 1);
         int fixedSum = items.Where(c => c != Fill).Sum(WidthOf);
@@ -709,7 +786,7 @@ internal class Card : LayoutPanel, ISurface
         var inner = Inner(width);
         int y = inner.Y;
         bool first = true;
-        foreach (Control c in Controls)
+        foreach (Control c in LogicalLayout.Children(this))
         {
             int h = HeightFor(c, inner.Width);
             if (h <= 0)
@@ -760,6 +837,26 @@ internal class ScrollPage : Panel, ISurface
     }
 
     public TextBlock? TitleText { get; }
+
+    private static long _scrolledAt = long.MinValue / 2;
+
+    /// <summary>
+    /// A page scrolled within the last 400 ms: the wheel is scrolling, and a control it brings under the pointer leaves the
+    /// wheel to the page instead of changing its value (FluentSlider, EqGraph).
+    /// </summary>
+    public static bool ScrolledRecently => Environment.TickCount64 - _scrolledAt < 400;
+
+    protected override void OnScroll(ScrollEventArgs se)
+    {
+        _scrolledAt = Environment.TickCount64;
+        base.OnScroll(se);
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        _scrolledAt = Environment.TickCount64;
+        base.OnMouseWheel(e);
+    }
 
     /// <summary>The page became the visible one (window shown and this page selected): start timers, refresh.</summary>
     public virtual void PageShown() { }

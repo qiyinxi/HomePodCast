@@ -164,6 +164,10 @@ public sealed class Reverb : IAudioEffect
                 x[i * 2] = outL * w + inL * d;
                 x[i * 2 + 1] = outR * w + inR * d;
             }
+            // A NaN or Inf that got in would ring in the combs for good (NaN × 0 is NaN, even fully dry). Every comb
+            // takes the same input and comb 0 is the shortest, so its store goes bad first and the whole tail is
+            // dropped at the end of that block. Inputs are sanitized (SampleGuard); this is the backstop.
+            if (!float.IsFinite(_combL[0].Store + _combR[0].Store)) Clear();
         }
     }
 

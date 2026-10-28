@@ -57,7 +57,7 @@ public sealed partial class StreamController
         try
         {
             if (plan.LocalOutputs.Count > 0)
-                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, CurrentGroupCap, ct, OpenLocalOutput);
+                locals = await LocalOutputSet.PrepareAsync(plan.LocalOutputs, LocalCapturedId, CurrentGroupCap, ct, OpenLocalOutput, duplicate: MixerLocalDuplicate);
             if (raop.Length > 0)
             {
                 var outputs = raop.Select(m => RaopGroupOptions(plan, m.Member, m.Index, run)).ToArray();

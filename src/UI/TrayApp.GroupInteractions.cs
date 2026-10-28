@@ -6,11 +6,12 @@ internal sealed partial class TrayApp
 {
     private bool _groupInteractionOpen;
 
-    private void InitializeGroupInteractions()
+    private void InitializeGroupInteractions(StreamController? source = null)
     {
-        Controller.GroupReceiverActionRequired += request => _ui.Post(_ =>
+        var controller = source ?? Controller;
+        controller.GroupReceiverActionRequired += request => _ui.Post(_ =>
         {
-            bool Current() => !_quitting && _wantConnected && Controller.MatchesGroupReceiverInteraction(request);
+            bool Current() => !_quitting && _wantConnected && controller.MatchesGroupReceiverInteraction(request);
             if (!Current() || _groupInteractionOpen || _pairingOpen || _raopDialog
                 || !PairingPolicy.OffersPinPairing(request.Trigger)) return;
             _groupInteractionOpen = true;
@@ -24,7 +25,7 @@ internal sealed partial class TrayApp
                         using (var dialog = new RaopPasswordDialog(request.Device.Name))
                         {
                             if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || !Current()) break;
-                            Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+                            Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
                             Config.Save(); resume = true;
                         }
                         break;
@@ -41,7 +42,12 @@ internal sealed partial class TrayApp
                 }
                 if (!resume || !Current()) return;
                 // Optional sessions resume alone. Required failures can have ended the whole attempt already.
-                if (!Controller.ResumeGroupReceiverOutput(request, trigger)) Connect(trigger);
+                if (!controller.ResumeGroupReceiverOutput(request, trigger))
+                {
+                    var key = Mixer?.KeyForController(controller);
+                    if (key != null) PostConnection(() => Mixer!.ReconnectAsync(key, trigger).GetAwaiter().GetResult());
+                    else Connect(trigger);
+                }
             }
             finally { _groupInteractionOpen = false; }
         }, null);

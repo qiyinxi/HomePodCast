@@ -243,7 +243,10 @@ internal sealed class SpeakerRoom : LayoutPanel
             var g = e.Graphics;
             var bounds = new Rectangle(0, 0, Width, Height);
             bool selected = Position == _room.SelectedPosition;
-            Shapes.FillRound(g, selected ? P.NavSelected : IsHover ? P.ControlHover : P.Card, bounds, Dp(6));
+            // An accent tint for the selection, stronger than hover: 2026-10-27, in dark the selected fill (NavSelected, +4
+            // over the card) was fainter than a hovered position's (ControlHover, +18).
+            var fill = selected ? Theme.Blend(P.Card, P.Accent, 0.2) : IsHover ? Theme.SubtleOn(P.Card) : P.Card;
+            Shapes.FillRound(g, fill, bounds, Dp(6));
             using var pen = new Pen(_measuring ? P.Caution : selected ? P.Accent : P.ControlBorder, Dp(_measuring ? 2 : 1))
                 { DashStyle = _assigned ? DashStyle.Solid : DashStyle.Dash };
             Shapes.DrawRound(g, pen, RectangleF.Inflate(bounds, -Dp(1), -Dp(1)), Dp(6));

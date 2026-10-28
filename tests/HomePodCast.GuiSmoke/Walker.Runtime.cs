@@ -70,7 +70,7 @@ internal sealed partial class Walker
             Navigate("关于");
             Uia.Invoke(Button("检查更新"));
             string status = T(".NET 已更新，请重启 HomePodCast 后再试");
-            WaitUntil(() => Has(Uia.Snapshot(MainWindow()), status), $"「{status}」 in 设置 → 软件更新", 20_000, fail: false);
+            WaitUntil(() => Has(Uia.Snapshot(MainWindow()), status), $"「{status}」 in 关于 → 软件更新", 20_000, fail: false);
             Expect(Has(Uia.Snapshot(MainWindow()), status), "设置", $"the update row doesn't say 「{status}」 after the failed check");
             WaitUntil(() => ReadLog().Any(l => l.Contains("runtime: the .NET runtime this copy started on", StringComparison.Ordinal)),
                 "the watch to find the runtime gone", 20_000);

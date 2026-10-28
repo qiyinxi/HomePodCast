@@ -14,12 +14,14 @@ public sealed class AppRouting
     private volatile RouteRules _rules;
     private volatile string? _captureDeviceId;
     private int _syncTestRoutes;
+    private readonly bool _forceProcessCapture;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SendVolumeStatus> _sendStates = new();
 
-    public AppRouting(AppConfig config, Action? save = null)
+    public AppRouting(AppConfig config, Action? save = null, bool forceProcessCapture = false)
     {
         _config = config;
         _save = save ?? config.Save;
+        _forceProcessCapture = forceProcessCapture;
         _rules = Build();
         _captureDeviceId = Normalize(config.CaptureDeviceId);
     }
@@ -60,6 +62,8 @@ public sealed class AppRouting
         {
             if (_config.RouteDefault == value) return;
             _config.RouteDefault = value;
+            if (MixerRoutes.Read(_config).Settings is { } routing)
+                MixerRoutes.Write(_config, routing with { Default = MixerRoutes.FromLegacy(value) });
             Commit();
         }
     }
@@ -76,7 +80,13 @@ public sealed class AppRouting
             if (_config.AppRoutes.TryGetValue(key, out var old) && old == r) return;
             _config.AppRoutes[key] = r;
         }
-        else if (!_config.AppRoutes.Remove(key)) return;
+        else if (!_config.AppRoutes.Remove(key) && MixerRoutes.Read(_config).Settings?.Apps.ContainsKey(key) != true) return;
+        if (MixerRoutes.Read(_config).Settings is { } routing)
+        {
+            if (route is { } selected) routing.Apps[key] = MixerRoutes.FromLegacy(selected);
+            else routing.Apps.Remove(key);
+            MixerRoutes.Write(_config, routing);
+        }
         Commit();
     }
 
@@ -88,16 +98,19 @@ public sealed class AppRouting
         _config.AppSendVolumesOff.TryGetValue(RouteRules.KeyFor(key), out var v) ? Math.Clamp(v, 0, 100) : null;
 
     internal SendVolumeStatus SendStatus(string key) => _sendStates.GetValueOrDefault(RouteRules.KeyFor(key));
-    internal void ReportSendStatus(string key, SendVolumeStatus status) => _sendStates[key] = status;
+    internal AppRouting? SendStatusTarget { get; set; }
+    internal void ReportSendStatus(string key, SendVolumeStatus status)
+    { _sendStates[key] = status; SendStatusTarget?.ReportSendStatus(key, status); }
 
     /// <summary>Forget the status of apps that are no longer sent with their own level (sessions ended, or turned off).</summary>
     internal void KeepSendStatus(IReadOnlyList<RouteTarget> targets)
     {
         foreach (var key in _sendStates.Keys)
             if (!targets.Any(t => t.SendVolumePercent != null && t.Key == key)) _sendStates.TryRemove(key, out _);
+        SendStatusTarget?.KeepSendStatus(targets);
     }
 
-    internal void ClearSendStatus() => _sendStates.Clear();
+    internal void ClearSendStatus() { _sendStates.Clear(); SendStatusTarget?.ClearSendStatus(); }
 
     /// <summary>
     /// Turn the app's independent HomePod volume on at <paramref name="percent"/> or off (null: follow Windows again,
@@ -212,13 +225,23 @@ public sealed class AppRouting
         var sends = new Dictionary<string, int>();
         foreach (var (key, level) in _config.AppSendVolumes)
             if (RouteRules.KeyFor(key ?? "") is { Length: > 0 } k) sends[k] = Math.Clamp(level, 0, 100);
+        bool destinations = false;
+        AudioRoute defaultRoute = _config.RouteDefault;
+        if (MixerRoutes.Read(_config).Settings is { } routing)
+        {
+            static AudioRoute Legacy(MixerRoute r) => r.Output.Kind == MixerOutputKind.Local ? AudioRoute.Local : r.AlsoLocal ? AudioRoute.Both : AudioRoute.HomePod;
+            defaultRoute = Legacy(routing.Default);
+            foreach (var (key, route) in routing.Apps) apps[key] = Legacy(route);
+            destinations = MixerOutputCoordinator.NeedsHub(_config, routing);
+        }
+        // The temporary calibration route overlays either persisted format and is never saved.
         if (_syncTestRoutes > 0)
         {
             string own = RouteRules.KeyFor(System.Diagnostics.Process.GetCurrentProcess().ProcessName);
             apps[own] = AudioRoute.HomePod;
             sends.Remove(own);
         }
-        return new RouteRules(_config.RouteDefault, apps) { SendVolumes = sends, ForceRouting = _syncTestRoutes > 0 };
+        return new RouteRules(defaultRoute, apps) { SendVolumes = sends, ForceRouting = _syncTestRoutes > 0 || _forceProcessCapture || destinations };
     }
 
     /// <summary>Whether the default output is muted or at 0 % (nothing is heard on this PC).</summary>
@@ -264,6 +287,14 @@ public sealed class MixSources
     private readonly object _lock = new();
 
     public IReadOnlyList<IMixSource> Snapshot => _items;
+
+    /// <summary>Whether any of <paramref name="sources"/> has audio to add now (<see cref="IMixSource.HasAudio"/>).</summary>
+    public static bool HasAudio(IReadOnlyList<IMixSource> sources)
+    {
+        for (int i = 0; i < sources.Count; i++)
+            if (sources[i].HasAudio) return true;
+        return false;
+    }
 
     public void Add(IMixSource source)
     {

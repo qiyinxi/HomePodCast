@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Namespace creation, package installation and the software renderer are deliberately CI-only.
+# Namespace creation, the packages it needs and the software renderer are deliberately CI-only.
 [[ "${GITHUB_ACTIONS:-}" == "true" ]] || { echo 'Run this test only in GitHub Actions' >&2; exit 1; }
 [[ "$(uname -s)" == Linux ]] || { echo 'This test requires a Linux CI runner' >&2; exit 1; }
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -44,10 +44,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config \
-  libglib2.0-dev libupnp-dev libgstreamer1.0-dev gstreamer1.0-plugins-base \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools iproute2 ffmpeg
+# The build packages, GStreamer and FFmpeg come from the workflow's apt cache step (.github/workflows/build.yml).
 # Build the unmodified upstream renderer, pinned to v0.3.1. Nothing is installed from its build.
 git clone --branch v0.3.1 --depth 1 https://github.com/hzeller/gmrender-resurrect.git "$scratch/gmrender-resurrect"
 cd "$scratch/gmrender-resurrect"

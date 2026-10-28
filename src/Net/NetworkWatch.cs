@@ -174,8 +174,11 @@ internal sealed class NetworkWatch : IDisposable
     private sealed class Probe(string name, IPAddress address, PingTarget target, Action<PingTarget, long> spike, int intervalMs, Func<IEcho> newEcho)
     {
         private readonly object _lock = new();
-        private readonly List<long> _rtts = new();
-        private int _sent, _lost, _failed;
+        // Answered pings by round trip in whole ms (RoundTrip counts none above TimeoutMs), not a list of every round trip.
+        // 2026-10-27 (review): only StreamController.LogStats takes summaries, so on RAOP and third-party sessions, which
+        // never log them, that list grew by 20 entries a second for as long as they streamed.
+        private readonly int[] _histogram = new int[TimeoutMs + 1];
+        private int _sent, _lost, _failed, _answered;
         private volatile bool _watching;
 
         public PingTarget Target => target;
@@ -236,7 +239,11 @@ internal sealed class NetworkWatch : IDisposable
                         {
                             _sent++;
                             if (rtt < 0) _lost++;
-                            else _rtts.Add(rtt);
+                            else
+                            {
+                                _histogram[rtt]++;
+                                _answered++;
+                            }
                         }
 
                         if (rtt < 0 || rtt > SpikeMs)
@@ -281,21 +288,34 @@ internal sealed class NetworkWatch : IDisposable
 
         public string TakeSummary()
         {
-            long[] rtts;
-            int sent, lost, failed;
+            int sent, lost, failed, answered;
+            long median = 0, p99 = 0, max = 0;
             lock (_lock)
             {
-                rtts = _rtts.ToArray();
-                (sent, lost, failed) = (_sent, _lost, _failed);
-                _rtts.Clear();
-                _sent = _lost = _failed = 0;
+                (sent, lost, failed, answered) = (_sent, _lost, _failed, _answered);
+                if (answered > 0)
+                {
+                    long Pct(double p) => Nth(_histogram, Math.Min(answered - 1, (int)(p * answered)));
+                    (median, p99, max) = (Pct(0.5), Pct(0.99), Nth(_histogram, answered - 1));
+                }
+                Array.Clear(_histogram);
+                _sent = _lost = _failed = _answered = 0;
             }
             string notSent = failed > 0 ? $" unsent={failed}" : "";
             if (sent == 0) return "-" + notSent;
-            if (rtts.Length == 0) return $"- lost={lost}/{sent}" + notSent;
-            Array.Sort(rtts);
-            long Pct(double p) => rtts[Math.Min(rtts.Length - 1, (int)(p * rtts.Length))];
-            return $"{Pct(0.5)}/{Pct(0.99)}/{rtts[^1]}ms lost={lost}/{sent}" + notSent;
+            if (answered == 0) return $"- lost={lost}/{sent}" + notSent;
+            return $"{median}/{p99}/{max}ms lost={lost}/{sent}" + notSent;
+        }
+
+        /// <summary>The round trip at <paramref name="index"/> (from 0) of all answered pings in ascending order.</summary>
+        private static long Nth(int[] histogram, int index)
+        {
+            for (int ms = 0, below = 0; ms < histogram.Length; ms++)
+            {
+                below += histogram[ms];
+                if (below > index) return ms;
+            }
+            return histogram.Length - 1;
         }
     }
 }

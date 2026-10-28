@@ -58,7 +58,7 @@ internal sealed class TileGrid : LayoutPanel
 
     protected override int Arrange(int width, bool apply)
     {
-        var tiles = Controls.Cast<Control>().Where(c => !IsCollapsed(c)).ToList();
+        var tiles = LogicalLayout.Children(this).Where(c => !IsCollapsed(c)).ToList();
         if (tiles.Count == 0) return 0;
         int gap = Dp(Gap);
         int minW = Math.Max(Dp(MinTileWidth), tiles.Max(WidthFor));

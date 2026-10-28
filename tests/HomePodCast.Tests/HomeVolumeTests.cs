@@ -96,12 +96,12 @@ public class HomeVolumeTests
             using var host = new Host();
             var only = TestApp.Field<ToggleSwitch>(host.Page, "_onlyHomePod");
             var night = TestApp.Field<ToggleSwitch>(host.Page, "_night");
-            var row = Assert.IsType<RowPanel>(only.Parent);
+            var row = Assert.IsType<RowPanel>(LogicalLayout.Parent(only));
             row.Width = Theme.Dp(298, row.DeviceDpi);
             row.PerformLayout();
             foreach (var toggle in new[] { only, night })
             {
-                Assert.True(row.ClientRectangle.Contains(toggle.Bounds), $"{language}: {toggle.Text} outside row");
+                Assert.True(row.ClientRectangle.Contains(LogicalLayout.Bounds(toggle)), $"{language}: {toggle.Text} outside row");
                 Assert.True(toggle.Width >= toggle.GetPreferredSize(Size.Empty).Width, $"{language}: {toggle.Text} clipped");
             }
             Assert.False(only.Bounds.IntersectsWith(night.Bounds));

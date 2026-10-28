@@ -11,6 +11,9 @@ internal sealed partial class TrayApp
 
     private static bool HasConfiguredOutputs(AppConfig config)
     {
+        if (config.MixerRouting != null && MixerRoutes.Read(config).Settings is { } routing &&
+            new[] { routing.Default }.Concat(routing.Apps.Values).Any(r => r.Output.Kind is MixerOutputKind.Speaker or MixerOutputKind.Group &&
+                MixerDestinationResolver.Resolve(config, r).Available)) return true;
         var plan = GroupPlan.FromConfig(config);
         return plan == null ? config.DeviceId != null : plan.Kind == GroupKind.StereoPair
             || plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count > 0;
@@ -20,6 +23,12 @@ internal sealed partial class TrayApp
     {
         var group = Config.SavedOutputGroups.FirstOrDefault(g => g.Id == id);
         if (group == null) return;
+        if (Mixer != null)
+        {
+            var projection = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(Config))!;
+            OutputGroups.Apply(projection, group.Settings); projection.SelectedOutputGroupId = group.Id;
+            if (Mixer.ValidateConfiguration(projection).Result != MixerEditResult.Applied) return;
+        }
         _form.Flush(); SavePendingVolume();
         OutputGroups.Apply(Config, group.Settings);
         Config.SelectedOutputGroupId = group.Id;

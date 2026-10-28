@@ -32,7 +32,7 @@ internal static class ParentPainting
     internal static Rectangle ScreenBounds(Control c, bool clipped = false)
     {
         var bounds = c.ClientRectangle;
-        for (Control? current = c; current != null; current = current.Parent)
+        for (Control? current = c; current != null; current = LogicalLayout.Parent(current))
         {
             if (clipped)
             {
@@ -44,10 +44,10 @@ internal static class ParentPainting
                 if (!current.IsHandleCreated) return Rectangle.Empty;
                 bounds = current.RectangleToScreen(bounds);
                 if (clipped)
-                    for (var parent = current.Parent; parent != null; parent = parent.Parent)
+                    for (var parent = LogicalLayout.Parent(current); parent != null; parent = LogicalLayout.Parent(parent))
                     {
-                        if (!IsShown(parent) || !parent.IsHandleCreated) return Rectangle.Empty;
-                        bounds.Intersect(parent.RectangleToScreen(parent.ClientRectangle));
+                        if (!IsShown(parent) || LayoutPanel.IsCollapsed(parent)) return Rectangle.Empty;
+                        bounds.Intersect(ScreenBounds(parent));
                     }
                 return bounds;
             }
@@ -87,7 +87,7 @@ internal static class ParentPainting
 
     internal static void Notify(Control owner, AccessibleEvents change)
     {
-        for (var c = owner.Parent; c is LayoutPanel panel; c = c.Parent)
+        for (var c = LogicalLayout.Parent(owner); c is LayoutPanel panel; c = LogicalLayout.Parent(c))
         {
             if (IsPainted(panel)) continue;
             panel.PaintedElementChanged(owner, change);

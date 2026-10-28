@@ -243,7 +243,7 @@ public class AppRestartTests
                 catch (IOException) { continue; } // cmd is still writing it
                 if (text.Contains('\n')) break;
             }
-            Assert.Equal("HOMEPODCAST_PROFILE=unit-tests", text.Trim());
+            Assert.Equal("HOMEPODCAST_PROFILE=" + Environment.GetEnvironmentVariable("HOMEPODCAST_PROFILE"), text.Trim());
         }
         finally
         {

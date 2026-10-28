@@ -8,8 +8,9 @@ internal delegate void TimestampedMicSamples(ReadOnlySpan<float> stereo, long fi
 /// <summary>
 /// Microphone input for the voice chain: event-driven shared-mode WASAPI capture from a chosen input
 /// (null = the default one, followed when it changes) at the smallest period the driver offers
-/// (IAudioClient3), first channel only → input gain → optional noise gate → 44.1 kHz stereo → the effect
-/// chain → every attached <see cref="AudioTap"/> (the HomePod mixer, the local monitor).
+/// (IAudioClient3), one input channel (<see cref="Channel"/>) or their average → input gain → optional noise
+/// gate → 44.1 kHz stereo → the effect chain → every attached <see cref="AudioTap"/> (the HomePod mixer, the
+/// local monitor).
 /// Normally only levels are measured. Explicit cinema calibration may inspect transient timestamped samples;
 /// this capture never writes or retains recordings.
 /// </summary>
@@ -77,6 +78,14 @@ public sealed class MicCapture : ITapSource, IDisposable
     public bool GateOpen => _pipeline?.Gate.IsOpen ?? true;
 
     public float GainDb { get; set; }
+
+    /// <summary>
+    /// Input channel the voice is taken from, 0-based; -1 = the average of all of them. Two-input USB interfaces
+    /// (Scarlett 2i2, UMC202HD, iD4) are one stereo endpoint in Windows, so a mic on input 2 is channel 1.
+    /// Clamped to the device's <see cref="DeviceChannels"/>; takes effect with the next packet.
+    /// </summary>
+    public int Channel { get; set; }
+
     public bool GateEnabled { get; set; }
     public float GateThresholdDb { get; set; } = -50;
 
@@ -208,7 +217,7 @@ public sealed class MicCapture : ITapSource, IDisposable
                     CoreAudio.Check(hr, "get buffer");
                     long now = Stopwatch.GetTimestamp();
                     var bytes = new ReadOnlySpan<byte>((void*)data, (int)frames * fmt.BlockAlign);
-                    pipeline.Load(bytes, (int)frames, (flags & CoreAudio.BufferFlagsSilent) != 0, GainDb, GateEnabled, GateThresholdDb);
+                    pipeline.Load(bytes, (int)frames, (flags & CoreAudio.BufferFlagsSilent) != 0, GainDb, GateEnabled, GateThresholdDb, Channel);
                     capture.ReleaseBuffer(frames);
                     long firstTicks = (flags & 0x4) == 0 && qpc != 0 ? (long)(qpc * (Stopwatch.Frequency / 1e7)) : 0;
                     pipeline.Deliver(_effects, _taps, CalibrationSamples, firstTicks);
@@ -260,7 +269,7 @@ public sealed class MicCapture : ITapSource, IDisposable
 
 /// <summary>
 /// The mic path after WASAPI, separate from the device so it can be tested with synthetic buffers:
-/// first channel → gain (glides) → noise gate → stereo → 44.1 kHz → effects → taps.
+/// the chosen channel → gain (glides) → noise gate → stereo → 44.1 kHz → effects → taps.
 /// Allocation-free once warmed up (buffers grow only for packets larger than any seen before).
 /// </summary>
 internal sealed class MicPipeline
@@ -279,7 +288,7 @@ internal sealed class MicPipeline
     public NoiseGate Gate { get; }
     public float Peak { get; private set; }
     public float Rms { get; private set; }
-    public double ResamplerDelayMs => _resampler == null ? 0 : 32 * 1000.0 / _fmt.SampleRate;
+    public double ResamplerDelayMs => _resampler == null ? 0 : _resampler.DelayFrames * 1000.0 / _fmt.SampleRate;
 
     public MicPipeline(WaveFormat fmt, int outRate)
     {
@@ -293,14 +302,14 @@ internal sealed class MicPipeline
 
     /// <summary>Load + Deliver in one go (tests).</summary>
     public void Process(ReadOnlySpan<byte> data, int frames, bool silent, float gainDb, bool gate, float gateDb,
-        IAudioEffect[] effects, AudioTap[] taps)
+        IAudioEffect[] effects, AudioTap[] taps, int channel = 0)
     {
-        Load(data, frames, silent, gainDb, gate, gateDb);
+        Load(data, frames, silent, gainDb, gate, gateDb, channel);
         Deliver(effects, taps);
     }
 
-    /// <summary>Copy the packet out of the device buffer: first channel, gain, gate, levels.</summary>
-    public void Load(ReadOnlySpan<byte> data, int frames, bool silent, float gainDb, bool gate, float gateDb)
+    /// <summary>Copy the packet out of the device buffer: the chosen channel (see MicCapture.Channel), gain, gate, levels.</summary>
+    public void Load(ReadOnlySpan<byte> data, int frames, bool silent, float gainDb, bool gate, float gateDb, int channel = 0)
     {
         if (_mono.Length < frames)
         {
@@ -311,7 +320,7 @@ internal sealed class MicPipeline
         _inputFrames += frames;
         var mono = _mono.AsSpan(0, frames);
         if (silent) mono.Clear();
-        else FirstChannel(data, frames, _fmt, mono);
+        else ReadChannel(data, frames, _fmt, channel, mono);
 
         float target = MathF.Pow(10, Math.Clamp(gainDb, -60f, 40f) / 20);
         float g = _gain, peak = 0, sum = 0;
@@ -353,32 +362,49 @@ internal sealed class MicPipeline
         if (calibration != null)
         {
             long first = packetTicks == 0 ? 0 : packetTicks + (long)((_outputFrames / (double)_outRate
-                - (_inputFrames - _frames) / (double)_fmt.SampleRate + (_resampler == null ? 0 : 31.0 / _fmt.SampleRate)) * Stopwatch.Frequency);
+                - (_inputFrames - _frames) / (double)_fmt.SampleRate
+                + (_resampler == null ? 0 : (_resampler.DelayFrames - 1.0) / _fmt.SampleRate)) * Stopwatch.Frequency);
             calibration(output, first);
         }
         _outputFrames += frames;
         foreach (var tap in taps) tap.Write(output);
     }
 
-    /// <summary>Converts the first channel of each frame to float (mono mics, or the left/first capsule).</summary>
-    internal static void FirstChannel(ReadOnlySpan<byte> data, int frames, WaveFormat fmt, Span<float> mono)
+    /// <summary>
+    /// Converts one channel of each frame to float: <paramref name="channel"/> (0-based, clamped to the format's
+    /// channels; 0 = a mono mic, or the left/first capsule or input), or with a negative channel the average of all
+    /// channels (e.g. two mics on a two-input interface).
+    /// </summary>
+    internal static void ReadChannel(ReadOnlySpan<byte> data, int frames, WaveFormat fmt, int channel, Span<float> mono)
     {
-        int bytes = fmt.BitsPerSample / 8, block = fmt.BlockAlign;
-        for (int i = 0; i < frames; i++)
+        int bytes = fmt.BitsPerSample / 8, block = fmt.BlockAlign, channels = Math.Max(1, fmt.Channels);
+        bool isFloat = fmt.IsFloat;
+        if (channel < 0 && channels > 1)
         {
-            var s = data.Slice(i * block, bytes);
-            mono[i] = fmt.IsFloat
-                ? (bytes == 8 ? (float)MemoryMarshal.Read<double>(s) : MemoryMarshal.Read<float>(s))
-                : bytes switch
-                {
-                    1 => (s[0] - 128) / 128f,
-                    2 => MemoryMarshal.Read<short>(s) / 32768f,
-                    3 => (s[0] << 8 | s[1] << 16 | s[2] << 24) / 2147483648f,
-                    4 => MemoryMarshal.Read<int>(s) / 2147483648f,
-                    _ => 0f,
-                };
+            float scale = 1f / channels;
+            for (int i = 0; i < frames; i++)
+            {
+                float sum = 0;
+                for (int c = 0; c < channels; c++) sum += Sample(data.Slice(i * block + c * bytes, bytes), isFloat);
+                mono[i] = sum * scale;
+            }
+            return;
         }
+        int offset = Math.Clamp(channel, 0, channels - 1) * bytes;
+        for (int i = 0; i < frames; i++) mono[i] = Sample(data.Slice(i * block + offset, bytes), isFloat);
     }
+
+    // Only a float format can carry a NaN, an Inf or an absurd level (a virtual mic, an APO): SampleGuard.
+    private static float Sample(ReadOnlySpan<byte> s, bool isFloat) => isFloat
+        ? SampleGuard.Clean(s.Length == 8 ? (float)MemoryMarshal.Read<double>(s) : MemoryMarshal.Read<float>(s))
+        : s.Length switch
+        {
+            1 => (s[0] - 128) / 128f,
+            2 => MemoryMarshal.Read<short>(s) / 32768f,
+            3 => (s[0] << 8 | s[1] << 16 | s[2] << 24) / 2147483648f,
+            4 => MemoryMarshal.Read<int>(s) / 2147483648f,
+            _ => 0f,
+        };
 }
 
 /// <summary>
@@ -420,7 +446,8 @@ public sealed class NoiseGate
         {
             float a = MathF.Abs(mono[i]);
             _env += (a - _env) * (a > _env ? _envAttack : _envRelease);
-            if (_env < 1e-12f) _env = 0;
+            // A NaN envelope never compares above or below a threshold: the gate would stay open or closed for good.
+            if (!float.IsFinite(_env) || _env < 1e-12f) _env = 0;
 
             if (!enabled || _env >= open)
             {

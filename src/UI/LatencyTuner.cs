@@ -48,9 +48,9 @@ internal sealed class LatencyTuner
 {
     public const int MaxMs = 500, SmallStep = 1, LargeStep = 10;
 
-    private readonly AppConfig _config;
+    private AppConfig _config;
     private readonly Action<int> _apply;
-    private readonly Action _save;
+    private Action _save;
     private readonly IDebounce _slider, _scene;
     private int _pendingSceneMs;
     private int _floor;
@@ -101,6 +101,13 @@ internal sealed class LatencyTuner
     }
 
     public int Clamp(int ms) => Math.Clamp(ms, _floor, MaxMs);
+
+    internal void Rebind(AppConfig config, Action save)
+    {
+        if (ReferenceEquals(config, _config)) return;
+        _slider.Stop(); _scene.Stop();
+        _config = config; _save = save; Value = Clamp(config.LatencyMs);
+    }
 
     /// <summary>The user moved the slider (drag, keys, − / +).</summary>
     public void UserSet(int ms)

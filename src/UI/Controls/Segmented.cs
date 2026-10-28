@@ -185,7 +185,7 @@ internal sealed class Segmented : FluentControl
             }
             else
             {
-                if (enabled && i == _hot) Shapes.FillRound(g, IsPressed ? P.SubtlePressed : P.Subtle, r, Dp(4));
+                if (enabled && i == _hot) Shapes.FillRound(g, Theme.SubtleOn(P.Control, IsPressed), r, Dp(4)); // over the track
                 fore = enabled ? P.Text : P.TextDisabled;
             }
             TextRenderer.DrawText(g, _items[i], font, r, fore, TextFlags.Line | TextFormatFlags.HorizontalCenter);
@@ -195,7 +195,7 @@ internal sealed class Segmented : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new SegmentedAccessible(this);
 
-    private sealed class SegmentedAccessible(Segmented owner) : ControlAccessibleObject(owner)
+    private sealed class SegmentedAccessible(Segmented owner) : FluentAccessible(owner)
     {
         public override string? Value => owner.SelectedText;
         public override int GetChildCount() => owner._items.Length;

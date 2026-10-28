@@ -128,13 +128,23 @@ internal sealed class SpeakersPage : ScrollPage
 
     private sealed class Browser : LayoutPanel
     {
-        private readonly Panel _scroll = new() { AutoScroll = true };
+        private readonly Panel _scroll = new() { AutoScroll = true, BackColor = Theme.P.Window };
         private readonly StackPanel _list, _detail;
         public Browser(StackPanel list, StackPanel detail)
         {
             (_list, _detail) = (list, detail);
             _scroll.Controls.Add(list);
+            // A plain panel, so the theme is applied here as ScrollPage does: 2026-10-27, an overflowing list had a light
+            // scroll bar in dark mode, and the strip beside the list kept the old colour after a Windows light/dark switch
+            // (which runs no layout; the colour was set only in Arrange).
+            _scroll.HandleCreated += (_, _) => Theme.StyleScrollBars(_scroll);
             Controls.AddRange([_scroll, detail]);
+        }
+        protected override void OnThemeChanged()
+        {
+            _scroll.BackColor = Theme.P.Window;
+            Theme.StyleScrollBars(_scroll);
+            base.OnThemeChanged();
         }
         protected override int Arrange(int width, bool apply)
         {
@@ -146,7 +156,6 @@ internal sealed class SpeakersPage : ScrollPage
             int height = columns ? Math.Max(listHeight, detailHeight) : listHeight + Dp(12) + detailHeight;
             if (apply)
             {
-                _scroll.BackColor = Theme.P.Window;
                 _scroll.SetBounds(0, 0, listWidth, listHeight);
                 Place(_list, 0, _scroll.AutoScrollPosition.Y, Math.Max(0, listWidth - Dp(20)), HeightFor(_list, listWidth - Dp(20)));
                 Place(_detail, columns ? listWidth + Dp(16) : 0, columns ? 0 : listHeight + Dp(12), detailWidth, detailHeight);

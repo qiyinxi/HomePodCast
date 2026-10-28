@@ -47,8 +47,47 @@ public class MicPathTests(ITestOutputHelper output)
         // Channel 0 carries a ramp, the others carry a different constant that must not leak in.
         var data = Interleave(fmt, 100, (i, c) => c == 0 ? (i - 50) / 64.0 : -0.9);
         var mono = new float[100];
-        MicPipeline.FirstChannel(data, 100, fmt, mono);
+        MicPipeline.ReadChannel(data, 100, fmt, 0, mono);
         for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+    }
+
+    [Theory]
+    [MemberData(nameof(Formats))]
+    public void Any_input_channel_or_the_average_of_all_can_be_taken(int bits, int channels, bool isFloat)
+    {
+        // Two-input interfaces (Scarlett 2i2, UMC202HD) are one stereo endpoint: a mic on input 2 is channel 1.
+        var fmt = new WaveFormat(48000, channels, bits, channels * bits / 8, isFloat);
+        var data = Interleave(fmt, 100, (i, c) => c == channels - 1 ? (i - 50) / 64.0 : 0.25 * c - 0.5);
+        var mono = new float[100];
+        MicPipeline.ReadChannel(data, 100, fmt, channels - 1, mono);
+        for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+
+        // A channel the device does not have (another device with fewer inputs) is the last one it has.
+        MicPipeline.ReadChannel(data, 100, fmt, 7, mono);
+        for (int i = 0; i < 100; i++) Assert.InRange(mono[i], (i - 50) / 64.0 - 1e-4, (i - 50) / 64.0 + 1e-4);
+
+        MicPipeline.ReadChannel(data, 100, fmt, -1, mono);
+        for (int i = 0; i < 100; i++)
+        {
+            double others = Enumerable.Range(0, channels - 1).Sum(c => 0.25 * c - 0.5);
+            double want = ((i - 50) / 64.0 + others) / channels;
+            Assert.InRange(mono[i], want - 1e-4, want + 1e-4);
+        }
+    }
+
+    [Fact]
+    public void Pipeline_follows_a_channel_change_from_the_next_packet()
+    {
+        var fmt = Float32(44100, 2);
+        var pipeline = new MicPipeline(fmt, 44100);
+        var data = Interleave(fmt, 441, (_, c) => c == 0 ? 0 : 0.5);   // only input 2 has a signal
+        pipeline.Load(data, 441, false, 0, false, -50);
+        Assert.Equal(0, pipeline.Peak);
+        pipeline.Load(data, 441, false, 0, false, -50, channel: 1);
+        Assert.Equal(0.5f, pipeline.Peak, 3);
+        pipeline.Load(data, 441, false, 0, false, -50, channel: -1);
+        Assert.Equal(0.25f, pipeline.Peak, 3);
+        Assert.Equal(0, new MicCapture().Channel);   // input 1, as before there was a choice
     }
 
     [Fact]
@@ -159,6 +198,203 @@ public class MicPathTests(ITestOutputHelper output)
         Assert.Equal(352, tap.Read(dest));
         Assert.Equal(tap.TargetFrames - 352, tap.Depth);             // the overshoot was dropped, not queued
         Assert.Equal(0, tap.Underruns);
+    }
+
+    [Fact]
+    public void Tap_read_in_buffered_1024_frame_packets_does_not_underrun()
+    {
+        // 2026-10-27 review: a buffered AirPlay 2 session's MixIn reads 1024 frames per packet (every 23.2 ms) from
+        // the 20 ms (882-frame) HomePod tap, which underran on every packet. Producer: 441 frames every 10 ms.
+        var tap = new AudioTap(44100, 44100, targetMs: 20, capMs: 80);
+        long now = 1;
+        tap.Clock = () => now;
+        var mix = new MixIn(tap);
+        long tick = Stopwatch.Frequency / 10_000;   // 0.1 ms
+        var chunk = Signals.Sine(44100, 440, 441, 0.2);
+        var packet = new float[1024 * 2];
+        double owed = 0;
+        void Run(int seconds, int frames)
+        {
+            for (int t = 0; t < seconds * 10_000; t++)
+            {
+                now += tick;
+                if (t % 100 == 0) tap.Write(chunk);
+                owed += 4.41;
+                if (owed < frames) continue;
+                owed -= frames;
+                mix.Process(packet.AsSpan(0, frames * 2), frames);
+            }
+        }
+        Run(2, 1024);
+        long underrunsAfterStart = tap.Underruns;
+        Run(60, 1024);
+        output.WriteLine($"target {tap.TargetFrames}, depth {tap.AverageDepth:F0}, drift {tap.DriftPpm:F0} ppm, start-up underruns {underrunsAfterStart}");
+        Assert.Equal(underrunsAfterStart, tap.Underruns);
+        Assert.Equal(0, tap.Overflows);
+        Assert.Equal(1024 + 221 + 88, tap.TargetFrames);   // one read, half a write, 2 ms
+
+        // Smaller reads that still need more than 20 ms (the mixer hub's, 10-15 ms of frames per cycle): within two
+        // seconds the target follows them down. Back on a realtime HomePod (352-frame packets) the configured 20 ms
+        // return; the surplus drains through the drift control without dropping audio.
+        Run(3, 600);
+        Assert.Equal(600 + 221 + 88, tap.TargetFrames);
+        Run(3, 352);
+        Assert.Equal(882, tap.TargetFrames);
+        Assert.Equal(3528, tap.CapFrames);
+        Assert.Equal(0, tap.Overflows);
+        Assert.Equal(underrunsAfterStart, tap.Underruns);
+
+        // Attaching again (a new mic) starts from the configured values too; a target set by hand is left alone.
+        mix.Process(packet, 1024);
+        Assert.True(tap.TargetFrames > 882);
+        tap.Clear();
+        Assert.Equal(882, tap.TargetFrames);
+        var monitor = new AudioTap(44100, 48000, 0, 0) { TargetFrames = 500, CapFrames = 2000 };
+        monitor.Clear();
+        Assert.Equal((500, 2000), (monitor.TargetFrames, monitor.CapFrames));
+    }
+
+    /// <summary>
+    /// The mixer hub reading the mic's HomePod tap as CombinedSources does: a cycle every 10 ms reads, through
+    /// EnsureReadFrames and Read, the frames that elapsed since the previous one (a bus carrying the mic alone), at
+    /// most MixerCaptureHub.MaxPacketFrames. The mic writes a packet of <c>writeFrames</c> per period.
+    /// </summary>
+    private sealed class HubReadingTap
+    {
+        public AudioTap Tap { get; } = new(44100, 44100, targetMs: 20, capMs: 80);
+        public double MinDepth { get; private set; } = double.MaxValue;   // smoothed, from the last Run
+        private readonly float[] _packet;
+        private readonly float[] _dest = new float[MixerCaptureHub.MaxPacketFrames * 2];
+        private readonly int _writeTicks;
+        private long _now = 1, _ticks;
+        private double _owed;
+
+        public HubReadingTap(int writeFrames)
+        {
+            _packet = Signals.Sine(44100, 440, writeFrames, 0.2);
+            _writeTicks = writeFrames * 10_000 / 44100;   // in 0.1 ms
+            Tap.Clock = () => _now;
+        }
+
+        /// <summary>
+        /// Runs for <paramref name="ms"/>. The hub's thread is stalled for the first <paramref name="stallMs"/>;
+        /// its first cycle reads <paramref name="firstRead"/> frames instead, when given (an app's backlog).
+        /// </summary>
+        public void Run(int ms, int stallMs = 0, int firstRead = 0)
+        {
+            MinDepth = double.MaxValue;
+            for (int i = 0; i < ms * 10; i++)
+            {
+                _now += Stopwatch.Frequency / 10_000;
+                if (++_ticks % _writeTicks == 0) Tap.Write(_packet);
+                _owed += 4.41;
+                if (_ticks % 100 != 0 || i < stallMs * 10) continue;
+                int frames = (int)_owed;
+                if (frames >= MixerCaptureHub.MaxPacketFrames) (frames, _owed) = (MixerCaptureHub.MaxPacketFrames, 0);
+                else _owed -= frames;
+                if (firstRead > 0) (frames, firstRead) = (firstRead, 0);
+                Tap.EnsureReadFrames(frames);
+                Tap.Read(_dest.AsSpan(0, frames * 2));
+                MinDepth = Math.Min(MinDepth, Tap.AverageDepth);
+            }
+        }
+    }
+
+    /// <summary>What the hub's 10 ms reads need with 20 ms mic packets: one cycle, half a packet, 2 ms (+2 at most: some
+    /// cycles read 442 frames, and the drift control makes some packets 883).</summary>
+    private const int HubNeed = 441 + 441 + 88;
+
+    [Fact]
+    public void Tap_catch_up_read_after_a_hub_stall_keeps_the_target()
+    {
+        // 2026-10-27 review: a stall of the mixer hub's thread (activating an app's process loopback, a GC) made it
+        // read the whole stall at once, and that read raised the target to the stall's length. The tap had overflowed
+        // during the stall, so it re-primed at that depth and the voice stayed ~75 ms late for over a minute.
+        var hub = new HubReadingTap(882);
+        hub.Run(3000);
+        Assert.InRange(hub.Tap.TargetFrames, HubNeed, HubNeed + 2);
+        long underruns = hub.Tap.Underruns, overflows = hub.Tap.Overflows;
+
+        hub.Run(90, stallMs: 80);   // 80 ms stalled, then one cycle reads 3969 frames
+        output.WriteLine($"after the stall: target {hub.Tap.TargetFrames}, cap {hub.Tap.CapFrames}, overflows +{hub.Tap.Overflows - overflows}");
+        Assert.Equal(overflows + 1, hub.Tap.Overflows);
+        Assert.InRange(hub.Tap.TargetFrames, HubNeed, HubNeed + 2);
+        Assert.Equal(3528, hub.Tap.CapFrames);
+
+        // One re-prime at the usual depth (a few ms of silence), then the voice is as early as before the stall.
+        hub.Run(2000);
+        output.WriteLine($"2 s later: depth {hub.Tap.AverageDepth:F0}, underruns +{hub.Tap.Underruns - underruns}");
+        Assert.Equal(underruns + 1, hub.Tap.Underruns);
+        Assert.InRange(hub.Tap.AverageDepth, HubNeed - 441, HubNeed + 441);
+    }
+
+    [Fact]
+    public void Tap_cap_comes_down_with_a_lowered_target()
+    {
+        // A big read on time still raises the target: an app's process loopback can hand the hub its backlog in one
+        // cycle. The tap underruns and re-primes at ~110 ms. Once the reads are back to normal the target comes down
+        // within two seconds. 2026-10-27 review: the cap stayed raised, so the drift control drained the surplus at
+        // 1000 ppm for over a minute; now the cap comes down too and the next write cuts the surplus once.
+        var hub = new HubReadingTap(882);
+        hub.Run(3000);
+        long underruns = hub.Tap.Underruns, overflows = hub.Tap.Overflows;
+        hub.Run(10, firstRead: MixerCaptureHub.MaxPacketFrames);
+        Assert.InRange(hub.Tap.TargetFrames, 4410 + 441 + 88, 4410 + 442 + 88);
+        Assert.Equal(underruns + 1, hub.Tap.Underruns);
+
+        hub.Run(3000);
+        output.WriteLine($"target {hub.Tap.TargetFrames}, cap {hub.Tap.CapFrames}, depth {hub.Tap.AverageDepth:F0}, overflows +{hub.Tap.Overflows - overflows}");
+        Assert.InRange(hub.Tap.TargetFrames, HubNeed, HubNeed + 2);
+        Assert.Equal(3528, hub.Tap.CapFrames);
+        Assert.Equal(overflows + 1, hub.Tap.Overflows);
+        Assert.InRange(hub.Tap.AverageDepth, HubNeed - 441, HubNeed + 441);
+        Assert.Equal(underruns + 1, hub.Tap.Underruns);
+    }
+
+    [Fact]
+    public void Tap_drains_a_surplus_under_the_cap_without_undershooting()
+    {
+        // A 2500-frame read on time re-primes the tap at ~69 ms; the reads after it need ~22 ms, and the surplus is
+        // under the cap, so the drift control drains it at its 1000 ppm limit for ~40 s. 2026-10-27 review: its
+        // integral grew all that time, reached its clamp, and the depth then undershot the target by ~7 ms and underran.
+        var hub = new HubReadingTap(882);
+        hub.Run(3000);
+        hub.Run(10, firstRead: 2500);
+        long underruns = hub.Tap.Underruns;
+        hub.Run(2000);
+        Assert.InRange(hub.Tap.AverageDepth, 2500, 3100);   // not cut: under the cap
+
+        hub.Run(118_000);
+        output.WriteLine($"lowest depth {hub.MinDepth:F0} for a target of {hub.Tap.TargetFrames}, drift {hub.Tap.DriftPpm:F0} ppm");
+        Assert.Equal(underruns, hub.Tap.Underruns);
+        Assert.InRange(hub.MinDepth, hub.Tap.TargetFrames - 88, hub.Tap.TargetFrames + 88);   // within 2 ms
+    }
+
+    [Fact]
+    public void Tap_follows_a_consumer_that_comes_back_at_another_pace()
+    {
+        // A realtime session (352 frames every 8 ms) ends and the HomePod comes back buffered (1024 frames every
+        // 23 ms). A read more than two typical intervals late only counts in part, so after a pause the typical
+        // interval starts over instead of staying at the old pace: the second packet already raises the target.
+        var tap = new AudioTap(44100, 44100, targetMs: 20, capMs: 80);
+        long now = 1;
+        tap.Clock = () => now;
+        var mix = new MixIn(tap);
+        var packet = new float[1024 * 2];
+        long ms = Stopwatch.Frequency / 1000;
+        for (int i = 0; i < 250; i++)
+        {
+            now += 8 * ms;
+            mix.Process(packet.AsSpan(0, 352 * 2), 352);
+        }
+        Assert.Equal(882, tap.TargetFrames);
+        now += 3000 * ms;
+        for (int i = 0; i < 2; i++)
+        {
+            now += 23 * ms;
+            mix.Process(packet, 1024);
+        }
+        Assert.Equal(1024 + 221 + 88, tap.TargetFrames);   // one read, half a (default 10 ms) write, 2 ms
     }
 
     [Fact]

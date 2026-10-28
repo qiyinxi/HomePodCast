@@ -10,6 +10,8 @@ public sealed partial class StreamController
     public Func<string, ReceiverPreferences?>? ReceiverSettings { get; set; }
     internal ThirdPartyConnections.Connector? BufferedReceiverConnector { get; set; }
     internal Func<ReceiverProtocol, ThirdPartyConnections.Connector?>? ReceiverConnectorOverride { get; set; }
+    /// <summary>Test seam: the mDNS browse a retry finds the receiver again with.</summary>
+    internal Func<CancellationToken, Task<List<AirPlayDevice>>>? BrowseReceivers { get; set; }
     public event Action<string, ReceiverProtocol, int?>? ReceiverProtocolConnected;
     public ReceiverProtocol? ActiveProtocol => _receiverSession?.Protocol
         ?? (_raopClient != null ? ReceiverProtocol.Raop : ActiveSender != null ? ReceiverProtocol.AirPlay2Realtime : null);
@@ -26,7 +28,7 @@ public sealed partial class StreamController
     {
         TakeStartVolume(volume, volumeAsOf);
         string key = OwnSession.KeyOf(device.DeviceId);
-        bool streamed = false;
+        bool streamed = false, rediscover = false;
         int attempt = 0;
         while (!ct.IsCancellationRequested)
         {
@@ -36,6 +38,8 @@ public sealed partial class StreamController
             try
             {
                 Set(StreamState.Connecting, L.T("正在连接第三方 AirPlay 设备（实验性，未在实机上测试）…")); // experimental since 1.1
+                if (rediscover) device = await RediscoverReceiverAsync(device, ct);
+                rediscover = true;
                 HostResolved?.Invoke(device.Address.ToString());
                 await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key,
                     [new BusyTarget(device.DeviceId, device.Name, device.Address, device.Port)], ct);
@@ -61,15 +65,18 @@ public sealed partial class StreamController
                 reason = await lost.Task.WaitAsync(ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            catch (PairingRequiredException ex)
+            // Only a loop still current acts on a refusal. The realtime trial's RTSP setup ignores ct, so a receiver can
+            // answer after Stop gave up waiting (3 s) and a new loop owns the capture: a cancelled loop just ends below,
+            // never disposing that capture, setting Idle or asking the user about a connection that no longer exists.
+            catch (PairingRequiredException ex) when (!ct.IsCancellationRequested)
             {
                 StopForPairing(device.DeviceId, device.Address, ex, trigger, device.Port, thirdParty: true); return;
             }
-            catch (RaopPasswordRequiredException ex)
+            catch (RaopPasswordRequiredException ex) when (!ct.IsCancellationRequested)
             {
                 DisposeCapture(); Set(StreamState.Idle, ex.Message); RaopPasswordRequired?.Invoke(new(device, trigger)); return;
             }
-            catch (RaopBusyException ex)
+            catch (RaopBusyException ex) when (!ct.IsCancellationRequested)
             {
                 if (trigger is ConnectTrigger.Manual or ConnectTrigger.TakeOver)
                 {
@@ -97,5 +104,17 @@ public sealed partial class StreamController
             Set(StreamState.Retrying, L.F("{0}，{1:F0} 秒后重试", reason, seconds));
             try { await Task.Delay(TimeSpan.FromSeconds(seconds), ct); } catch (OperationCanceledException) { break; }
         }
+    }
+
+    /// <summary>
+    /// A retry finds the receiver again by its stable id, as the RAOP and group loops do: DHCP may have moved it, and its
+    /// old address may belong to another receiver by now. Never by name or address. An explicit address stays the user's.
+    /// </summary>
+    private async Task<AirPlayDevice> RediscoverReceiverAsync(AirPlayDevice device, CancellationToken ct)
+    {
+        if (ManualGroupReceiverDevice?.Invoke(device.DeviceId) is { } manual) return manual;
+        var found = BrowseReceivers != null ? await BrowseReceivers(ct) : await Mdns.BrowseAsync(TimeSpan.FromSeconds(3), ct);
+        return found.FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == RaopPassword.Key(device.DeviceId))
+            ?? throw new AirPlayException(L.T("找不到音箱：请确认它已通电、和电脑在同一网络"));
     }
 }

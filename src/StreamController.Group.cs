@@ -107,7 +107,14 @@ public sealed partial class StreamController
             Volatile.Write(ref _activeGroupRun, run);
             // The connected line says when the group was taken over from a home theater's Apple TV.
             var runner = new GroupRunner(plan.Name, ct => ConnectGroupAsync(plan, latencyMs, run, ct),
-                (state, text) => Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text),
+                (state, text) =>
+                {
+                    // The runner reports Idle only when it gives up (a speaker taken over, or one that needs the user).
+                    // The capture goes first, as in the single-speaker loops, so whoever sees Idle finds it released.
+                    // 2026-10-26: disposed after Idle, a test polling State still found the capture once in a full run.
+                    if (state == StreamState.Idle) DisposeCapture();
+                    Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text);
+                },
                 takeoverGrace: TakeoverGrace);
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
             runner.Connected += _ =>
@@ -128,10 +135,7 @@ public sealed partial class StreamController
                 _run = cts;
                 _groupRunner = runner;
                 TakeStartVolume(volume, volumeAsOf);
-                _loop = Task.Run(async () =>
-                {
-                    if (await runner.RunAsync(cts.Token)) DisposeCapture(); // a speaker was taken over by another sender
-                });
+                _loop = Task.Run(() => runner.RunAsync(cts.Token)); // giving up releases the capture (the status above)
             }
         }
     }
@@ -147,6 +151,7 @@ public sealed partial class StreamController
             return m with { Device = device, Port = GroupUsesRaop(device) ? device!.RaopPort ?? device.Port : m.Port };
         }).ToList();
         ct.ThrowIfCancellationRequested();
+        CheckMixerGroupLease?.Invoke(plan, members.Select(m => m.DeviceId).ToArray());
         if (Volatile.Read(ref _groupSelection)?.Generation == run.Generation)
             Volatile.Write(ref _groupSelection, new(run.Generation, members.Select(m => GroupPlan.Key(m.DeviceId)).ToFrozenSet()));
         if (run.Source != null && members.Any(m => GroupUsesReceiver(m.Device)))

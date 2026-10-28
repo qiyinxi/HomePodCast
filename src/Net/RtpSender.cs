@@ -71,6 +71,7 @@ public sealed class RtpSender : IDisposable
     public long RetransmitRequests => Sum(static s => s.RetransmitRequests);
     public long Retransmitted => Sum(static s => s.Retransmitted);
     public long RetransmitMisses => Sum(static s => s.RetransmitMisses);
+    public long SkippedResendRequests => Sum(static s => s.SkippedResendRequests);
 
     /// <summary>
     /// When set, report the QPC time at which a sound onset (after ≥300 ms of near-silence) leaves the
@@ -158,6 +159,7 @@ public sealed class RtpSender : IDisposable
             {
                 // Too far behind to be useful: jump the timeline forward instead of bursting.
                 long skip = (long)(late * (double)SampleRate / FramesPerPacket / MediaClock.Frequency);
+                foreach (var s in _streams) s.MarkSkipped((ushort)(s.FirstSeq + n), skip);
                 n += skip;
                 SkippedPackets += skip;
                 _fifo.DiscardToTarget();
@@ -329,6 +331,16 @@ public sealed class RtpStream : IDisposable
     public long Retransmitted;
     public long RetransmitMisses;
 
+    /// <summary>
+    /// Packets asked for that were never sent: the sender jumped its timeline over them after a stall on this PC (see
+    /// <see cref="MarkSkipped"/>). Not in <see cref="RetransmitMisses"/>, which 首页's network hint reads as packets the
+    /// network lost for good, and would then blame the Wi-Fi for the PC's own stall.
+    /// </summary>
+    public long SkippedResendRequests;
+
+    private ushort _skippedFrom; // the sequence numbers the last stall jumped over (under _backlogLock)
+    private int _skippedCount;
+
     internal RtpStream(RtpTarget target)
     {
         _control = target.Control;
@@ -377,6 +389,15 @@ public sealed class RtpStream : IDisposable
         PacketsSent++;
     }
 
+    /// <summary>
+    /// The sender skipped <paramref name="count"/> packets from <paramref name="first"/> on (a stall): their sequence numbers
+    /// are never sent, and the speaker may ask for them. Only the count changes; what goes on the wire stays as it was.
+    /// </summary>
+    internal void MarkSkipped(ushort first, long count)
+    {
+        lock (_backlogLock) (_skippedFrom, _skippedCount) = (first, (int)Math.Min(count, ushort.MaxValue));
+    }
+
     internal void SendSync(uint rtpNow, ulong ntp, bool first, int latencyFrames)
     {
         RtpSender.WriteSyncPacket(_sync, rtpNow, ntp, first, latencyFrames);
@@ -392,6 +413,9 @@ public sealed class RtpStream : IDisposable
             {
                 IPEndPoint? from = null;
                 var msg = _control.Receive(ref from);
+                // Only the speaker's own requests: an 8-byte datagram from anyone else on the LAN would otherwise send
+                // up to 64 packets (about 92 KB) wherever it claims to come from, and count as the speaker's.
+                if (from == null || !from.Address.Equals(_controlRemote.Address)) continue;
                 if (msg.Length < 8 || (msg[1] & 0x7F) != 0x55) continue;
                 ushort lost = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(4));
                 ushort count = BinaryPrimitives.ReadUInt16BigEndian(msg.AsSpan(6));
@@ -402,7 +426,12 @@ public sealed class RtpStream : IDisposable
                     int slot = seq % BacklogSize;
                     lock (_backlogLock)
                     {
-                        if (_backlogSeq[slot] != seq) { RetransmitMisses++; continue; }
+                        if (_backlogSeq[slot] != seq)
+                        {
+                            if ((ushort)(seq - _skippedFrom) < _skippedCount) SkippedResendRequests++;
+                            else RetransmitMisses++;
+                            continue;
+                        }
                         resend[0] = 0x80;
                         resend[1] = 0xD6;
                         _backlog[slot].AsSpan(2, 2).CopyTo(resend.AsSpan(2));

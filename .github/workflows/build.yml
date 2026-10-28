@@ -103,6 +103,12 @@ jobs:
         shell: pwsh
         run: ./tools/release.ps1 -SelfTest
 
+      # The process helpers of tools/ci/update-e2e.ps1 (path comparison, waiting for a starting process's image path)
+      # against fake process snapshots, offline: it installs and starts nothing here.
+      - name: Check update e2e helpers
+        shell: pwsh
+        run: ./tools/ci/update-e2e.ps1 -SelfTest
+
       - name: Publish (framework-dependent, single file)
         run: >
           dotnet publish src/HomePodCast.csproj -c Release -r win-x64 --self-contained false
@@ -191,7 +197,7 @@ jobs:
           path: publish/*.msix
           if-no-files-found: error
 
-  # The MSI install's in-app update (设置 → 软件更新 「更新」), end to end, on every build: an older MSI built from this
+  # The MSI install's in-app update (关于 → 软件更新 「更新」), end to end, on every build: an older MSI built from this
   # source (0.0.1-e2e.1, never uploaded) is installed, then its `update-selftest` command runs the button's code against a
   # fake release list on 127.0.0.1 that offers this build's MSI: download, SHA-256 (a corrupted copy must be refused),
   # helper, msiexec through Verb runas, the new version started again with --updated-from=, in the default and in a
@@ -213,7 +219,7 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -250,12 +256,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: msix
           path: msix
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -292,7 +298,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -334,12 +340,21 @@ jobs:
           cache: npm
           cache-dependency-path: extension/test/e2e/package-lock.json
 
-      # ffmpeg makes the test video; Ubuntu 24.04 keeps Chromium's sandbox from user namespaces unless this is off.
+      # ffmpeg makes the test video, unless the image has one; Ubuntu 24.04 keeps Chromium's sandbox from user namespaces
+      # unless this is off.
       - name: Prepare the runner
+        id: prepare
         run: |
-          command -v ffmpeg || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg; }
+          command -v ffmpeg || echo 'packages=ffmpeg' >> "$GITHUB_OUTPUT"
           userns=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
           if [ -e "$userns" ]; then echo 0 | sudo tee "$userns"; fi
+
+      # From the apt cache (.github/actions/apt-install): the mirror once took the whole job's 20 min for ffmpeg alone.
+      - name: Install ffmpeg
+        if: steps.prepare.outputs.packages
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ${{ steps.prepare.outputs.packages }}
 
       - name: Install Puppeteer (and its Chrome for Testing)
         run: npm ci --no-audit --no-fund
@@ -375,7 +390,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -430,7 +445,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -451,7 +466,7 @@ jobs:
       - name: GUI group-output test
         shell: pwsh
         run: |
-          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --video-window smoke-video-window --out gui-output-groups-${{ matrix.shard }} --only group-outputs --shard ${{ matrix.shard }}/5
+          ./tests/HomePodCast.GuiSmoke/bin/Release/net10.0-windows/HomePodCast.GuiSmoke.exe --app smoke-app/HomePodCast.exe --video-window smoke-video-window --out gui-output-groups-${{ matrix.shard }} --only group-outputs,mixer-destinations --shard ${{ matrix.shard }}/5
           if ($LASTEXITCODE) { throw 'GUI group-output test failed: see the job summary and the gui-output-groups-${{ matrix.shard }} artifact (index.html)' }
 
       - name: Upload screenshots
@@ -494,6 +509,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      # shairport-sync's build and mDNS for airplay-compat-e2e.sh, from the apt cache (.github/actions/apt-install). The
+      # receiver image's apt-get (airplay2-receiver.Dockerfile) uses archive.ubuntu.com, not the runners' Azure mirror.
+      - name: Install build packages
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            build-essential autoconf automake libtool pkg-config
+            libpopt-dev libconfig-dev libavahi-client-dev avahi-daemon libssl-dev libsoxr-dev
       - name: AirPlay compatibility receiver test
         run: bash tools/ci/airplay-compat-e2e.sh
       - uses: actions/download-artifact@v8
@@ -531,10 +554,19 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: dlna-codec-fixture
           path: test-results/dlna-codec-fixture
+      # gmrender-resurrect's build, GStreamer and FFmpeg for dlna-compat-e2e.sh, from the apt cache
+      # (.github/actions/apt-install): 97 MB that the mirror once couldn't deliver within the job's 15 min.
+      - name: Install build packages and GStreamer
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            build-essential autoconf automake libtool pkg-config
+            libglib2.0-dev libupnp-dev libgstreamer1.0-dev gstreamer1.0-plugins-base
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-tools iproute2 ffmpeg
       - name: DLNA compatibility renderer test
         run: |
           mkdir -p test-results/dlna-compat
@@ -563,7 +595,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: packages
           path: packages
@@ -596,7 +628,7 @@ jobs:
   #   if: github.ref_type == 'tag' && !contains(needs.build.outputs.version, '-') && !startsWith(needs.build.outputs.version, '0.')
   #   runs-on: windows-latest
   #   steps:
-  #     - uses: actions/download-artifact@v7
+  #     - uses: actions/download-artifact@v8
   #       with:
   #         name: msix
   #         path: msix

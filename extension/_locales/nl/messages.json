@@ -6,6 +6,8 @@
   "statusNotRunning": { "message": "Niet actief" },
   "statusIdle": { "message": "Niet aan het streamen" },
   "statusStreaming": { "message": "Streamt" },
+  "statusDestinationUnknown": { "message": "De audiobestemming van de browser is onbekend; synchronisatie is tijdelijk niet beschikbaar." },
+  "statusLocalOutput": { "message": "De browser speelt lokaal af; het beeld wordt niet vertraagd." },
   "siteLabel": { "message": "Deze site" },
   "localFile": { "message": "(lokaal bestand)" },
   "minusLabel": { "message": "1 ms minder" },

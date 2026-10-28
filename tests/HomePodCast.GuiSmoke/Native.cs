@@ -48,6 +48,7 @@ internal static partial class Native
     [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdc, uint flags);
     [DllImport("user32.dll")] public static extern bool RedrawWindow(IntPtr hwnd, IntPtr rect, IntPtr region, uint flags);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(Point pt, uint flags);
     [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint dpiX, out uint dpiY);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
@@ -204,19 +205,22 @@ internal static partial class Native
             new Rectangle(Point.Empty, full.Size));
         if (crop.Width <= 0 || crop.Height <= 0) crop = new Rectangle(Point.Empty, full.Size);
         var shot = full.Clone(crop, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        if (printed && !Uniform(shot)) return shot;
+        if (printed && !UniformClient(shot)) return shot;
         shot.Dispose();
         var screen = new Bitmap(visible.Width, visible.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
         using (var g = Graphics.FromImage(screen)) g.CopyFromScreen(visible.Location, Point.Empty, visible.Size);
         return screen;
     }
 
-    /// <summary>All one colour (sampled): PrintWindow gave a black or empty picture.</summary>
-    private static bool Uniform(Bitmap bitmap)
+    /// <summary>Sample the client interior: a painted title bar does not prove the window content was captured.</summary>
+    internal static bool UniformClient(Bitmap bitmap)
     {
-        var first = bitmap.GetPixel(0, 0);
-        for (int y = 0; y < bitmap.Height; y += Math.Max(1, bitmap.Height / 40))
-        for (int x = 0; x < bitmap.Width; x += Math.Max(1, bitmap.Width / 40))
+        // 2026-10-26: PrintWindow sometimes returned a normal confirmation title bar above a black client.
+        int left = bitmap.Width / 10, top = bitmap.Height / 5;
+        int right = Math.Max(left + 1, bitmap.Width * 9 / 10), bottom = Math.Max(top + 1, bitmap.Height * 4 / 5);
+        var first = bitmap.GetPixel(left, top);
+        for (int y = top; y < bottom; y += Math.Max(1, bitmap.Height / 40))
+        for (int x = left; x < right; x += Math.Max(1, bitmap.Width / 40))
             if (bitmap.GetPixel(x, y) != first) return false;
         return true;
     }

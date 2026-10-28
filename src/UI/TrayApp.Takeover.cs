@@ -38,13 +38,42 @@ internal sealed partial class TrayApp
         }, null);
     }
 
-    private void SaveOwnSession()
+    private void SaveOwnSession() => SaveOwnSession(Controller);
+
+    private void SaveOwnSession(StreamController controller)
     {
-        _ownSessionLive = Controller.OwnSession.Live;
-        var record = Controller.OwnSession.Record(DateTime.UtcNow);
+        // What InitTakeover's handler compares Controller's session with, so only Controller's own: set from another
+        // (a mixer destination's) controller, Controller's next status change would save its own record over that one.
+        if (ReferenceEquals(controller, Controller)) _ownSessionLive = controller.OwnSession.Live;
+        var record = controller.OwnSession.Record(DateTime.UtcNow);
         if (record == Config.LastOwnSession) return;
         Config.LastOwnSession = record;
-        Config.Save();
+        Config.TrySave();
+    }
+
+    /// <summary>
+    /// A controller the mixer made for a destination (the startup one is watched in InitTakeover): its session to the
+    /// selected speaker is saved as soon as it begins or ends, read from this controller, since Controller may be the idle
+    /// startup one again by the time the post runs. 2026-10-27: such sessions were saved only by the minute's timer, and
+    /// their end never, so a crash in their first minute left the next start taking our own session for another sender's.
+    /// </summary>
+    private void WatchOwnSession(StreamController controller)
+    {
+        bool live = false;
+        string? liveKey = null; // the speaker this controller's session went live for
+        controller.Changed += () => _ui.Post(_ =>
+        {
+            if (_quitting || controller.OwnSession.Live == live) return;
+            live = !live;
+            // Forgotten (another sender took the speaker over), the session keeps no key: the one it went live for says
+            // whose it was. 2026-10-27: the saved record's key stood in for it, the selected speaker's whatever this
+            // controller played to, so an iPhone taking an app route's speaker erased the selected one's, still streaming.
+            string? key = controller.OwnSession.Record(DateTime.UtcNow)?.Key ?? liveKey;
+            if (live) liveKey = key;
+            // Only the selected speaker's: what the next start's controller restores. A forgotten one's record goes.
+            string? selection = OwnSession.KeyOf(Config);
+            if (selection != null && key == selection) SaveOwnSession(controller);
+        }, null);
     }
 
     /// <summary>The PC goes to sleep (any thread): our session ends now as far as the speaker's flag is concerned.</summary>
@@ -81,6 +110,7 @@ internal sealed partial class TrayApp
     /// </summary>
     private async void ConnectManual(IWin32Window? owner)
     {
+        if (Mixer != null) { await ConnectMixerManually(Mixer.SelectedKey, owner); return; }
         if (!HasOutputSelection)
         {
             ShowMain();
@@ -129,5 +159,39 @@ internal sealed partial class TrayApp
         {
             _checkingClick = false;
         }
+    }
+
+    internal async Task ConnectMixerManually(string? key, IWin32Window? owner)
+    {
+        if (Mixer == null || _checkingClick) return;
+        var destination = key == null ? MixerDestinationResolver.Resolve(Config,
+            MixerRoutes.Read(Config).Settings?.Default ?? MixerRoute.Current, LastScan) : Mixer.DestinationForKey(key);
+        if (destination?.Config is not { } config) { ShowMain(); return; }
+        key = destination.Key;
+        var controller = Mixer.ControllerForKey(key) ?? _legacyController!;
+        _checkingClick = true;
+        try
+        {
+            var targets = SpeakerSelection.Of(config, LastScan)
+                .Select(s => new BusyTarget(s.DeviceId, s.Name, s.Address, s.Port)).ToList();
+            var reader = controller.BusyReader ?? new InfoBusyReader(SpeakerInfo, () => LastScan);
+            var reading = await reader.ReadAsync(targets, CancellationToken.None);
+            if (_quitting) return;
+            var trigger = ConnectTrigger.Manual;
+            bool ours = controller.OwnSession.IsRecent(OwnSession.KeyOf(config), DateTime.UtcNow);
+            if (TakeoverPolicy.Decide(trigger, reading.State, ours, reading.Holder, Config.HomeTheaterTakeover) == TakeoverAction.Ask)
+            {
+                if (!TakeoverDialog.Confirm(owner, string.Join(" / ", reading.BusyNames), reading.HomeTheater?.Name) || _quitting) return;
+                trigger = ConnectTrigger.TakeOver;
+            }
+            if (Mixer.DestinationForKey(key) != null) await Mixer.ReconnectAsync(key, trigger);
+            else if (MixerDestinationResolver.Resolve(Config, MixerRoutes.Read(Config).Settings?.Default ?? MixerRoute.Current, LastScan).Key == key)
+            {
+                _wantConnected = true; _nightDisconnected = false;
+                await Mixer.ConnectAsync(Config, trigger, key);
+            }
+        }
+        catch (Exception ex) { Log.Warn($"mixer manual connect {key}: {ex.Message}"); }
+        finally { _checkingClick = false; }
     }
 }

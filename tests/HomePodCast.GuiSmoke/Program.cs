@@ -38,12 +38,18 @@ internal static class Program
         new("compatibility", "en", 100),
         new("compatibility", "de", 150),
         .. L.Languages.Select(language => new Scenario("group-outputs", language, 150, RequiredScale: true)),
+        .. L.Languages.Select(language => new Scenario("mixer-destinations", language, 150, RequiredScale: true)),
     ];
 
     private static readonly TimeSpan ScenarioTimeout = TimeSpan.FromMinutes(6);
 
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--mixer-fixture")
+        {
+            Native.SetProcessDpiAwarenessContext(Native.DpiAwarenessPerMonitorV2);
+            return MixerUiFixture.Run(args[1], args[2]);
+        }
         if (args.FirstOrDefault() == "--uia-probe") return UiaProbe.Run(args[1..]);
         string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
         if (args.Contains("--selftest")) return SelfTest();
@@ -136,6 +142,8 @@ internal static class Program
                 }
                 if (scenario.Kind == "group-outputs" && !report.Shots.Any(shot => shot.Scenario == scenario.Id))
                     report.Fail(scenario.Id, "the required group-output scenario produced no screenshot");
+                if (scenario.Kind == "mixer-destinations" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 6)
+                    report.Fail(scenario.Id, "the required mixer scenario did not capture its controls, conflict and confirmations");
                 if (scenario.Kind == "update-notes" && report.Shots.Count(shot => shot.Scenario == scenario.Id) < 2)
                     report.Fail(scenario.Id, "the required update-notes scenario did not capture both the top and bottom");
                 int failed = report.Failures.Count - failuresBefore;
@@ -172,7 +180,7 @@ internal static class Program
     private static List<Scenario> SelectScenarios(string[]? only, (int Index, int Count)? shard = null)
     {
         var filtered = Matrix.Where(s => only == null || only.Any(o => o == "baseline"
-            ? s.Kind != "group-outputs" : s.Id.StartsWith(o, StringComparison.Ordinal)));
+            ? s.Kind is not ("group-outputs" or "mixer-destinations") : s.Id.StartsWith(o, StringComparison.Ordinal)));
         return filtered.Where((_, index) => shard == null || index % shard.Value.Count == shard.Value.Index).ToList();
     }
 
@@ -212,10 +220,33 @@ internal static class Program
             Console.WriteLine($"{(ok ? "ok  " : "FAIL")} {what}");
             if (!ok) failures++;
         }
+        var viewport = new Rectangle(285, 63, 1350, 915);
+        Check(Walker.MixerScrollAction(viewport, new(327, 954, 1252, 48)) == Native.SB_LINEDOWN &&
+            Walker.MixerScrollAction(viewport, new(327, 39, 1252, 48)) == 0 &&
+            Walker.MixerScrollAction(viewport, new(327, 1200, 1252, 48)) == Native.SB_PAGEDOWN &&
+            Walker.MixerScrollAction(viewport, new(327, 100, 1252, 48)) == null,
+            "mixer scrolling reaches controls straddling either page boundary");
+        Check(Walker.MixerScrollOffset(viewport, new(351, 973, 422, 111)) == 106 &&
+            Walker.MixerScrollOffset(viewport, new(351, 58, 422, 111)) == -5,
+            "help positioning includes the full link/action pair and its remaining pixel distance");
+        using (var capture = new Bitmap(100, 100))
+        {
+            using (var graphics = Graphics.FromImage(capture))
+            { graphics.Clear(Color.Black); graphics.FillRectangle(Brushes.White, 0, 0, 100, 20); }
+            Check(Native.UniformClient(capture), "a painted frame above a blank client is rejected");
+            capture.SetPixel(50, 50, Color.Red);
+            Check(!Native.UniformClient(capture), "painted client content is recognized");
+        }
         var groupScenarios = Matrix.Where(s => s.Kind == "group-outputs").ToArray();
         var baseline = SelectScenarios(["baseline"]);
-        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind != "group-outputs").Select(s => s.Id)),
-            "baseline automatically includes every non-group scenario");
+        Check(baseline.Select(s => s.Id).SequenceEqual(Matrix.Where(s => s.Kind is not ("group-outputs" or "mixer-destinations")).Select(s => s.Id)),
+            "baseline includes every scenario outside the language shards");
+        var mixerScenarios = Matrix.Where(s => s.Kind == "mixer-destinations").ToArray();
+        Check(mixerScenarios.Select(s => s.Language).Order().SequenceEqual(L.Languages.Order()) &&
+            mixerScenarios.All(s => s.Scale == 150 && s.RequiredScale), "every language requires a 150 percent mixer scenario");
+        var languageShards = Enumerable.Range(0, 5).SelectMany(index => SelectScenarios(["group-outputs", "mixer-destinations"], (index, 5))).ToArray();
+        Check(languageShards.Select(s => s.Id).Order().SequenceEqual(groupScenarios.Concat(mixerScenarios).Select(s => s.Id).Order()),
+            "language shards cover every group and mixer scenario exactly once");
         Check(baseline.Where(s => s.Kind == "update-notes").Select(s => (s.Language, s.Scale, s.RequiredScale))
             .SequenceEqual(new[] { ("zh-CN", 100, true), ("en", 150, true) }),
             "baseline requires Chinese and English release-notes screenshots at their specified scales");

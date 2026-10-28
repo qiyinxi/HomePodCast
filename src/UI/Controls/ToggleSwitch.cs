@@ -115,7 +115,7 @@ internal sealed class ToggleSwitch : FluentControl
 
     protected override AccessibleObject CreateAccessibilityInstance() => new ToggleAccessible(this);
 
-    private sealed class ToggleAccessible(ToggleSwitch owner) : ControlAccessibleObject(owner)
+    private sealed class ToggleAccessible(ToggleSwitch owner) : FluentAccessible(owner)
     {
         public override AccessibleStates State =>
             base.State | (owner.Checked ? AccessibleStates.Checked : AccessibleStates.None);

@@ -31,6 +31,60 @@ public class UsageProfileTests
     }
 
     [Fact]
+    public void Every_mic_and_EQ_setting_is_restored_by_a_profile()
+    {
+        var c = new AppConfig();
+        var s = c.Effects;
+        // A non-default value for every property, so a setting missing from the copy shows up.
+        foreach (var p in typeof(EffectsSettings).GetProperties().Where(p => p.CanWrite))
+        {
+            object? value = p.PropertyType switch
+            {
+                var t when t == typeof(bool) => !(bool)p.GetValue(s)!,
+                var t when t == typeof(double) => (double)p.GetValue(s)! + 1.5,
+                var t when t == typeof(int) => (int)p.GetValue(s)! + 12,
+                var t when t == typeof(string) => "device-" + p.Name,
+                var t when t == typeof(MicDestination) => MicDestination.Both,
+                var t when t == typeof(EqSettings) => new EqSettings
+                {
+                    Preset = "custom", OutputGainDb = -4, Enabled = false,
+                    Bands = [new() { Type = EqFilterType.Notch, Frequency = 456, Q = 7 }],
+                },
+                _ => throw new InvalidOperationException($"no test value for {p.Name} ({p.PropertyType})"),
+            };
+            p.SetValue(s, value);
+        }
+        string expected = JsonSerializer.Serialize(s);
+        var saved = UsageProfiles.Capture(c);
+        c.Effects = new EffectsSettings();
+        var engineSettings = c.Effects;
+        UsageProfiles.Apply(c, saved);
+        Assert.Same(engineSettings, c.Effects);
+        Assert.Equal(expected, JsonSerializer.Serialize(c.Effects));
+        c.Effects.MicEq.Bands![0].Frequency = 1000;
+        Assert.Equal(456, saved.Effects.MicEq.Bands![0].Frequency); // the profile keeps its own bands
+    }
+
+    [Fact]
+    public void A_profile_from_before_the_voice_chain_keeps_the_current_one()
+    {
+        var c = new AppConfig();
+        c.Effects.MicChannel = 1; c.Effects.CompressorEnabled = true; c.Effects.CompressorRatio = 6; c.Effects.LimiterEnabled = true;
+        c.Effects.ReverbMix = 0.9;
+        // Saved by 1.2: no EffectsVersion, none of the new settings.
+        var old = JsonSerializer.Deserialize<UsageSettings>("{\"Scene\":0,\"Effects\":{\"ReverbMix\":0.1,\"MicGainDb\":6}}")!;
+        Assert.Equal(0, old.EffectsVersion);
+        UsageProfiles.Apply(c, old);
+        Assert.Equal((0.1, 6.0), (c.Effects.ReverbMix, c.Effects.MicGainDb)); // what it saved is restored
+        Assert.Equal((1, true, 6.0, true), (c.Effects.MicChannel, c.Effects.CompressorEnabled, c.Effects.CompressorRatio, c.Effects.LimiterEnabled));
+
+        var now = UsageProfiles.Capture(new AppConfig()); // saved now: everything, the voice chain off
+        Assert.Equal(UsageProfiles.EffectsVersion, now.EffectsVersion);
+        UsageProfiles.Apply(c, now);
+        Assert.Equal((0, false, false), (c.Effects.MicChannel, c.Effects.CompressorEnabled, c.Effects.LimiterEnabled));
+    }
+
+    [Fact]
     public void Profiles_do_not_copy_credentials_startup_updates_or_global_calibration()
     {
         var source = new AppConfig { Language = "ja", Theme = "dark", AutoConnect = true, VlcPasswordProtected = "secret",
@@ -199,6 +253,7 @@ public class UsageProfileTests
         [nameof(AppConfig.SyncCalibrations)] = "calibration, kept per speaker and capture path",
         [nameof(AppConfig.UsageProfiles)] = "the profiles themselves",
         [nameof(AppConfig.SavedOutputGroups)] = "named output presets are shared by every usage profile",
+        [nameof(AppConfig.MixerDeviceIdentities)] = "physical-device identity confirmations are shared by every profile and live lease",
         [nameof(AppConfig.SelectedOutputGroupId)] = "which named output group was selected last",
         [nameof(AppConfig.Cinema)] = "physical surround layout and room-specific acoustic alignment; file playback is session-only",
         [nameof(AppConfig.LastUsageProfileId)] = "which profile was applied last",
@@ -230,12 +285,16 @@ public class UsageProfileTests
         [nameof(AppConfig.PcMutedEndpointId)] = "a record of this PC's own mute, given back at the next start after a crash",
     };
 
+    /// <summary>The profile's settings: every property but EffectsVersion, which says what its Effects hold (no setting).</summary>
+    private static System.Reflection.PropertyInfo[] Captured => typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+        .Where(p => p.Name != nameof(UsageSettings.EffectsVersion)).ToArray();
+
     [Fact]
     public void Every_setting_is_restored_by_profiles_or_deliberately_left_out()
     {
         var settable = typeof(AppConfig).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.SetMethod is { IsPublic: true }).ToDictionary(p => p.Name, p => p.PropertyType);
-        var captured = typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var captured = Captured;
         var undecided = settable.Keys.Where(n => !NotInProfiles.ContainsKey(n) && captured.All(p => p.Name != n)).ToList();
         Assert.True(undecided.Count == 0, "AppConfig settings neither in UsageSettings nor in NotInProfiles (decide whether a " +
                                           "profile restores them): " + string.Join(", ", undecided));
@@ -252,7 +311,7 @@ public class UsageProfileTests
     public void Capture_copies_every_choice_of_a_profile()
     {
         var cfg = new AppConfig();
-        var captured = typeof(UsageSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var captured = Captured;
         foreach (var p in captured)
         {
             var setting = typeof(AppConfig).GetProperty(p.Name)!;

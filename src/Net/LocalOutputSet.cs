@@ -27,11 +27,11 @@ internal sealed class LocalOutputSet : IDisposable
     private double _volume;
 
     private LocalOutputSet(IReadOnlyList<LocalOutputOptions> options, Func<string?> captured, Func<double> cap,
-        CancellationToken ct, Func<string, ILocalRenderDevice>? open, Func<TimeSpan, CancellationToken, Task>? retry)
+        CancellationToken ct, Func<string, ILocalRenderDevice>? open, Func<TimeSpan, CancellationToken, Task>? retry, Func<string, bool>? duplicate)
     {
         _slots = options.Select(o => new Slot(o)).ToArray();
         _stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _prepare = (o, c) => LocalOutputSink.PrepareAsync(o, captured, cap, c, open);
+        _prepare = (o, c) => LocalOutputSink.PrepareAsync(o, captured, cap, c, open, duplicate);
         _retry = retry;
         _watch = open == null;
         if (_watch) AudioDeviceWatcher.Changed += DevicesChanged;
@@ -50,7 +50,7 @@ internal sealed class LocalOutputSet : IDisposable
 
     public static async Task<LocalOutputSet> PrepareAsync(IReadOnlyList<LocalOutputOptions> options, Func<string?> captured,
         Func<double> cap, CancellationToken ct, Func<string, ILocalRenderDevice>? open = null,
-        Func<TimeSpan, CancellationToken, Task>? retry = null)
+        Func<TimeSpan, CancellationToken, Task>? retry = null, Func<string, bool>? duplicate = null)
     {
         if (options.Count == 0) throw new ArgumentException("No local outputs", nameof(options));
         var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -59,8 +59,9 @@ internal sealed class LocalOutputSet : IDisposable
             option.Validate();
             if (!ids.Add(option.DeviceId)) throw new ArgumentException("Duplicate local endpoint", nameof(options));
             LocalOutputSink.CheckCapture(option.DeviceId, captured());
+            LocalOutputSink.CheckDuplicate(option.DeviceId, duplicate);
         }
-        var set = new LocalOutputSet(options, captured, cap, ct, open, retry);
+        var set = new LocalOutputSet(options, captured, cap, ct, open, retry, duplicate);
         try
         {
             await Task.WhenAll(set._slots.Select(set.PrepareOne));

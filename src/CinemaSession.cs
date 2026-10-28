@@ -26,15 +26,18 @@ internal sealed class CinemaSession
 {
     private readonly StreamController _controller;
     private readonly LatestRequestQueue _connection;
+    private readonly Func<GroupPlan, IDisposable>? _acquireLease;
+    private IDisposable? _deviceLease;
     private readonly object _lock = new();
     private IGroupPacketSource? _source;   // the window's playback, until it stops or is superseded
     private IGroupPacketSource? _handed;   // its queued start ran: the controller has it (or is about to)
     private bool _active;                  // the controller has left Idle with it (connecting, streaming, retrying)
 
-    public CinemaSession(StreamController controller, LatestRequestQueue connection)
+    public CinemaSession(StreamController controller, LatestRequestQueue connection, Func<GroupPlan, IDisposable>? acquireLease = null)
     {
         _controller = controller;
         _connection = connection;
+        _acquireLease = acquireLease;
         // The controller is Idle for a moment between StartGroup publishing the source and its loop saying 正在连接…:
         // that Idle is not the end of the cinema; one after it is (another sender took a speaker, the loop gave up).
         controller.Changed += () =>
@@ -74,6 +77,11 @@ internal sealed class CinemaSession
                 _handed = source;
             }
             // Automatic: a speaker another device plays to is waited for, never taken over.
+            if (_acquireLease != null)
+            {
+                ReleaseSuperseded();
+                _deviceLease = _acquireLease(plan);
+            }
             _controller.StartGroup(plan, latencyMs, volume, asOf, ConnectTrigger.Automatic, source: source);
         });
     }
@@ -103,7 +111,11 @@ internal sealed class CinemaSession
         }
         _connection.Post(() =>
         {
-            if (ReferenceEquals(_controller.GroupSource, source)) _controller.Stop(); // disposes the source
+            if (ReferenceEquals(_controller.GroupSource, source))
+            {
+                _controller.StopFullyAsync().GetAwaiter().GetResult();
+                _deviceLease?.Dispose(); _deviceLease = null;
+            }
             else source.Dispose();
         });
         return true;
@@ -124,6 +136,13 @@ internal sealed class CinemaSession
             _active = false;
             return true;
         }
+    }
+
+    internal void ReleaseSuperseded()
+    {
+        if (_deviceLease == null) return;
+        _controller.StopFullyAsync().GetAwaiter().GetResult();
+        _deviceLease.Dispose(); _deviceLease = null;
     }
 
     /// <summary>The window's view of <paramref name="source"/>.</summary>

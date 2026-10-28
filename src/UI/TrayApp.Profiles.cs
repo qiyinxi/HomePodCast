@@ -43,6 +43,13 @@ internal sealed partial class TrayApp
         var profile = Config.UsageProfiles.FirstOrDefault(p => p.Id == id);
         if (profile == null) return false;
         var s = profile.Settings;
+        if (Mixer != null)
+        {
+            var projection = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(System.Text.Json.JsonSerializer.Serialize(Config))!;
+            try { UsageProfiles.Apply(projection, s, LastScan); }
+            catch (InvalidOperationException) { return false; }
+            if (Mixer.ValidateConfiguration(projection).Result != MixerEditResult.Applied) return false;
+        }
         var next = new RouteRules(s.RouteDefault, s.AppRoutes) { SendVolumes = s.AppSendVolumes };
         if (!Config.RoutingNoticeAccepted && !Routing.Active && AppRouting.Supported && next.NeedsRouting)
         {

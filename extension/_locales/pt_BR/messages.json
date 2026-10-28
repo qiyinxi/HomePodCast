@@ -1,0 +1,178 @@
+{
+  "extName": {
+    "message": "HomePodCast – Sincronização de vídeo",
+    "description": "Extension name, also the popup heading."
+  },
+  "extDescription": {
+    "message": "Atrasa o vídeo da web alguns milissegundos para acompanhar o som, que chega mais tarde a um HomePod via AirPlay.",
+    "description": "Store/extension description, at most 132 characters."
+  },
+  "htmlLang": {
+    "message": "pt-BR",
+    "description": "BCP 47 tag of this translation, used as the popup's lang attribute."
+  },
+  "statusConnecting": {
+    "message": "Conectando…",
+    "description": "Status while the popup asks the HomePodCast app for its state."
+  },
+  "statusNotRunning": {
+    "message": "Não está em execução",
+    "description": "Status: the HomePodCast app is not running."
+  },
+  "statusIdle": {
+    "message": "Sem transmissão",
+    "description": "Status: the app runs but sends no audio to the speaker."
+  },
+  "statusStreaming": {
+    "message": "Transmitindo",
+    "description": "Status: audio is being sent to the speaker; followed by the speaker name and the delay."
+  },
+  "statusDestinationUnknown": {
+    "message": "O destino de áudio do navegador é desconhecido; a sincronização está temporariamente indisponível.",
+    "description": "Status: HomePodCast's per-app outputs can't tell where the browser's sound goes, or that output isn't streaming; no picture delay."
+  },
+  "statusLocalOutput": {
+    "message": "O navegador reproduz o som localmente; a imagem não é atrasada.",
+    "description": "Status: HomePodCast's per-app outputs play the browser's sound on this PC, not on a speaker; no picture delay."
+  },
+  "siteLabel": {
+    "message": "Este site",
+    "description": "Label in front of the current site's host name."
+  },
+  "localFile": {
+    "message": "(arquivo local)",
+    "description": "Shown instead of a host name for file:// pages."
+  },
+  "minusLabel": {
+    "message": "Menos 1 ms",
+    "description": "Accessible name of the − button."
+  },
+  "minusTitle": {
+    "message": "Menos 1 ms (mantenha pressionado para continuar ajustando)",
+    "description": "Tooltip of the − button."
+  },
+  "plusLabel": {
+    "message": "Mais 1 ms",
+    "description": "Accessible name of the + button."
+  },
+  "plusTitle": {
+    "message": "Mais 1 ms (mantenha pressionado para continuar ajustando)",
+    "description": "Tooltip of the + button."
+  },
+  "delayCaption": {
+    "message": "Atraso da imagem",
+    "description": "Caption under the big delay number."
+  },
+  "siteOffset": {
+    "message": "Ajuste do site",
+    "description": "Label of the per-site correction added to the delay, followed by e.g. +5 ms."
+  },
+  "reset": {
+    "message": "Redefinir",
+    "description": "Button that sets the site offset back to 0."
+  },
+  "siteToggle": {
+    "message": "Ativar neste site",
+    "description": "Switch for the current site."
+  },
+  "globalToggle": {
+    "message": "Ativar em todos os sites",
+    "description": "Master switch."
+  },
+  "hintUnavailable": {
+    "message": "Indisponível nesta página, ou a página foi aberta antes da instalação da extensão. Recarregue a página e tente novamente.",
+    "description": "The page has no content script."
+  },
+  "hintGlobalOff": {
+    "message": "Desativado em todos os sites; a imagem não é atrasada."
+  },
+  "hintSiteOff": {
+    "message": "Desativado neste site; a imagem não é atrasada."
+  },
+  "hintNotStreaming": {
+    "message": "O HomePodCast não está transmitindo; a imagem não é atrasada."
+  },
+  "hintNotRunning": {
+    "message": "O HomePodCast não está em execução; a imagem não é atrasada."
+  },
+  "hintLongDelay": {
+    "message": "Atraso longo: para vídeo, use o cenário “Filmes” ou “Recomendado”."
+  },
+  "videosNone": {
+    "message": "Nenhum vídeo encontrado nesta página (≥ 200×112).",
+    "description": "Only videos at least 200×112 pixels are handled."
+  },
+  "videosCount": {
+    "message": "Vídeos nesta página: $COUNT$",
+    "description": "First part of the video summary line; parts are joined with ' · '.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "2" }
+    }
+  },
+  "videosDelaying": {
+    "message": "atrasados: $COUNT$",
+    "description": "How many of the videos are being delayed.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "videosMeasured": {
+    "message": "medido: $MS$ ms",
+    "description": "Average delay actually shown, in milliseconds.",
+    "placeholders": {
+      "ms": { "content": "$1", "example": "141" }
+    }
+  },
+  "videosDrm": {
+    "message": "protegido contra cópia (DRM), não pode ser atrasado"
+  },
+  "videosFullscreen": {
+    "message": "não pode ser atrasado enquanto o próprio elemento de vídeo estiver em tela cheia"
+  },
+  "videosPlayerUnsupported": {
+    "message": "o player desta página não permite atrasar a imagem"
+  },
+  "videosNotDelayed": {
+    "message": "sem atraso"
+  },
+  "syncFullscreen": {
+    "message": "Tela cheia sincronizada"
+  },
+  "syncExitFullscreen": {
+    "message": "Sair da tela cheia"
+  },
+  "syncFullscreenTitle": {
+    "message": "Manter o vídeo e o áudio do HomePod sincronizados em tela cheia."
+  },
+  "syncShortcuts": {
+    "message": "Alt+←/→: ±5 ms · Alt+Shift+←/→: ±20 ms"
+  },
+  "syncDelayFeedback": {
+    "message": "Atraso da imagem $DELAY$ ms · Ajuste do site $OFFSET$ ms",
+    "placeholders": {
+      "delay": {
+        "content": "$1"
+      },
+      "offset": {
+        "content": "$2"
+      }
+    }
+  },
+  "syncFullscreenFailed": {
+    "message": "A tela cheia não está disponível. Saia da tela cheia atual ou permita a tela cheia neste player e tente novamente."
+  },
+  "syncPopupHint": {
+    "message": "Passe o ponteiro sobre um vídeo (ou pressione Alt) para mostrar “Tela cheia sincronizada”. Em tela cheia, Alt+←/→ ajusta 5 ms; adicione Shift para 20 ms. As alterações são salvas para este site."
+  },
+  "syncAdjustmentLabel": {
+    "message": "Alterar o ajuste do site em $DELTA$ ms",
+    "placeholders": {
+      "delta": {
+        "content": "$1"
+      }
+    }
+  },
+  "hintDelayLimit": {
+    "message": "O atraso do som excede o limite de 2000 ms do atraso da imagem. A imagem não pode ser atrasada o suficiente para acompanhá-lo."
+  }
+}

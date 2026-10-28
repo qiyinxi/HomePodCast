@@ -32,25 +32,54 @@ public sealed class EventChannel : IDisposable
         _thread = new Thread(Run) { IsBackground = true, Name = "AirPlay events" };
     }
 
-    public static async Task<EventChannel> ConnectAsync(IPAddress host, int port, byte[] sharedSecret, CancellationToken ct)
+    /// <summary>Connect attempts in all; a refused one is tried again after 500 ms.</summary>
+    private const int Attempts = 5;
+
+    /// <summary>
+    /// Attempts that got no answer at all (a filtered port), of <see cref="Attempts"/>: the RTSP session holds the speaker
+    /// while they wait, and a port that dropped one connect usually drops the next.
+    /// </summary>
+    private const int UnansweredAttempts = 2;
+
+    /// <summary>One connect attempt's limit, as RtspConnection's: without one, a filtered port waited the OS's own (about 21 s).</summary>
+    private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(5);
+
+    public static Task<EventChannel> ConnectAsync(IPAddress host, int port, byte[] sharedSecret, CancellationToken ct) =>
+        ConnectAsync(sharedSecret, (tcp, token) => tcp.ConnectAsync(host, port, token), AttemptTimeout, ct);
+
+    /// <param name="connect">Connects one attempt's client to the event port (tests: one that is refused or never answers).</param>
+    internal static async Task<EventChannel> ConnectAsync(byte[] sharedSecret,
+        Func<TcpClient, CancellationToken, ValueTask> connect, TimeSpan attemptTimeout, CancellationToken ct)
     {
         // Note the swap: the receiver writes with the "Write" key, so we read with it.
         var outKey = HapKeys.Derive(sharedSecret, "Events-Salt", "Events-Read-Encryption-Key");
         var inKey = HapKeys.Derive(sharedSecret, "Events-Salt", "Events-Write-Encryption-Key");
 
-        for (int attempt = 1; ; attempt++)
+        for (int attempt = 1, unanswered = 0; ; attempt++)
         {
             var tcp = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
             try
             {
-                await tcp.ConnectAsync(host, port, ct);
+                using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    timeout.CancelAfter(attemptTimeout);
+                    await connect(tcp, timeout.Token);
+                }
                 var ch = new EventChannel(tcp, new HapSession(outKey, inKey));
                 ch._thread.Start();
                 return ch;
             }
-            catch (SocketException) when (attempt < 5)
+            catch (Exception ex)
             {
+                // Every way out but success closes this attempt's socket: a stop while connecting, the last attempt, a
+                // failure past the connect. Left to the finalizer, each kept a socket handle open until a collection.
                 tcp.Dispose();
+                bool timedOut = ex is OperationCanceledException && !ct.IsCancellationRequested;
+                if (ex is not SocketException && !timedOut) throw;
+                // What the OS's own connect timeout threw, rather than this attempt's cancellation.
+                if (timedOut && (++unanswered >= UnansweredAttempts || attempt >= Attempts))
+                    throw new SocketException((int)SocketError.TimedOut);
+                if (attempt >= Attempts) throw;
                 await Task.Delay(500, ct); // the listener sometimes isn't up yet right after SETUP
             }
         }

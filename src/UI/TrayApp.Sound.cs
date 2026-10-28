@@ -92,6 +92,7 @@ internal sealed partial class TrayApp
         Config.NightMode = on;
         Config.Save();
         Controller.NightMode.Enabled = on;
+        ApplyMixerEffects();
         ApplyNightEq();
         Log.Info($"night mode {(on ? "on" : "off")}");
         _form.ShowSoundOptions();
@@ -105,14 +106,17 @@ internal sealed partial class TrayApp
         if (Config.Volume > cap) Config.Volume = cap;
         Config.Save();
         Controller.SetVolumeCap(cap);
+        ApplyMixerEffects();
         _followLink?.CapChanged(); // 跟随 Windows: the mapping changed; align again, lowering only
         RaiseStateChanged();
     }
 
     public void SetSpeakerMuted(bool muted)
     {
+        _mixerMuted = muted;
         SavePendingVolume(); // saved first, so a late save can't unmute
         Controller.SetMuted(muted);
+        if (Mixer != null) foreach (var controller in Mixer.Controllers) if (!ReferenceEquals(controller, Controller)) controller.SetMuted(muted);
         _form.ShowSoundOptions();
         RaiseStateChanged();
     }
@@ -134,6 +138,7 @@ internal sealed partial class TrayApp
     /// <param name="unmute">False only for lowering at alignment: a muted HomePod stays muted.</param>
     private void SetVolumeLive(double percent, bool fromWindows = false, bool unmute = true)
     {
+        if (unmute && _mixerMuted) SetSpeakerMuted(false);
         percent = VolumeLimit.Clamp(percent, Config.VolumeCapPercent);
         Controller.SetVolume(percent, unmute);
         if (!fromWindows) _followLink?.HomePodChanged();
@@ -151,14 +156,13 @@ internal sealed partial class TrayApp
         _volumeSave?.Stop();
         if (_pendingVolume is not { } percent) return;
         _pendingVolume = null;
-        Config.Volume = VolumeLimit.Clamp(Controller.Volume ?? percent, Config.VolumeCapPercent);
-        Config.Save();
+        SaveSelectedVolume(VolumeLimit.Clamp(Controller.Volume ?? percent, Config.VolumeCapPercent));
     }
 
     /// <summary>The HomePod side of <see cref="FollowWindowsLink"/>: volumes from Windows go out without being written back.</summary>
     private sealed class HomePodSide(TrayApp app) : IFollowHomePod
     {
-        public double? Volume => app.Controller.Volume ?? app.Config.Volume;
+        public double? Volume => app.Controller.Volume ?? app.PlaybackConfig.Volume;
         public bool Muted => app.Controller.Muted;
         public double Cap => app.Config.VolumeCapPercent;
         public void SetVolume(double percent, bool unmute) => app.SetVolumeLive(percent, fromWindows: true, unmute);

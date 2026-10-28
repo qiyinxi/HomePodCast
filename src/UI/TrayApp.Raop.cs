@@ -8,7 +8,7 @@ internal sealed partial class TrayApp
     private bool _raopDialog;
     private void InitRaop()
     {
-        // Explicit addresses are user choices; discovered receivers still resolve fresh on every group reconnect.
+        // Explicit addresses are user choices; discovered receivers still resolve fresh on every reconnect, alone or in a group.
         Controller.ManualGroupReceiverDevice = id => Config.ManualDevices.Select(d => d.ToDevice())
             .FirstOrDefault(d => d != null && RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id));
         Controller.ReceiverLookup = id => LastScan.FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == RaopPassword.Key(id))
@@ -22,7 +22,7 @@ internal sealed partial class TrayApp
             if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
             {
                 if (Controller.ReceiverLookup?.Invoke(id) is not { } device) return;
-                Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+                Config.SetReceiverPreferences(key, settings = ReceiverPreferences.Of(device));
             }
             settings.LastSuccessfulProtocol = protocol;
             if (processing != null) settings.ArrivalToRenderMs = processing;
@@ -32,13 +32,15 @@ internal sealed partial class TrayApp
         Controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
         Controller.RaopPasswordRequired += request => _ui.Post(_ =>
         {
+            if (Mixer?.KeyForController(_legacyController!) is { } key)
+            { ShowMixerPassword(key, _legacyController!, request); return; }
             if (!CanShowRaopDialog(request) || !PairingPolicy.OffersPinPairing(request.Trigger)) return;
             _raopDialog = true;
             try
             {
                 using var dialog = new RaopPasswordDialog(request.Device.Name);
                 if (dialog.ShowDialog(_form.Visible ? _form : null) != DialogResult.OK || _quitting) return;
-                Config.RaopPasswordsProtected[RaopPassword.Key(request.Device.DeviceId)] = RaopPassword.Protect(request.Device.DeviceId, dialog.Password);
+                Config.SetRaopPassword(RaopPassword.Key(request.Device.DeviceId), RaopPassword.Protect(request.Device.DeviceId, dialog.Password));
                 Config.Save();
                 Connect(request.Trigger);
             }
@@ -46,6 +48,12 @@ internal sealed partial class TrayApp
         }, null);
         Controller.RaopTakeoverRequired += request => _ui.Post(_ =>
         {
+            if (Mixer?.KeyForController(_legacyController!) is { } key)
+            {
+                if (!_quitting && !_raopDialog && TakeoverDialog.Confirm(_form.Visible ? _form : null, request.Device.Name))
+                    PostConnection(() => Mixer.ReconnectAsync(key, ConnectTrigger.TakeOver).GetAwaiter().GetResult());
+                return;
+            }
             if (!CanShowRaopDialog(request)) return;
             _raopDialog = true;
             try
@@ -61,8 +69,7 @@ internal sealed partial class TrayApp
     {
         if (Controller.ReceiverLookup?.Invoke(id) is not { } device || device.Kind is ReceiverKind.HomePod or ReceiverKind.AppleTv) return;
         string key = RaopPassword.Key(id);
-        if (!Config.ReceiverSettings.TryGetValue(key, out var settings))
-            Config.ReceiverSettings[key] = settings = ReceiverPreferences.Of(device);
+        var settings = Config.ReceiverPreferencesFor(key, () => ReceiverPreferences.Of(device));
         if (settings.ProtocolOverride == protocol) return;
         settings.ProtocolOverride = protocol;
         Config.Save();

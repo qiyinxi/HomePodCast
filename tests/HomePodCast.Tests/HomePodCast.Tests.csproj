@@ -9,9 +9,9 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="10.1.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../Shared/MixerScenario.cs" Link="Shared/MixerScenario.cs" />
     <!-- The protocol harness collector is pure byte storage; test it without running a sender or receiver. -->
     <Compile Include="../HomePodCast.ProtocolHarness/PcmCaptureBuffer.cs" Link="ProtocolHarness/PcmCaptureBuffer.cs" />
     <!-- Test the companion's pure timeline/status logic without a WinRT dependency or opening a window. -->

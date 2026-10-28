@@ -8,6 +8,12 @@ namespace HomePodCast.Audio;
 public interface IMixSource
 {
     void Read(Span<float> dest);
+
+    /// <summary>
+    /// False while the source has nothing to add (e.g. the mic is off): a capture that has captured nothing then
+    /// writes no frames for the extra sources alone.
+    /// </summary>
+    bool HasAudio => true;
 }
 
 /// <summary>
@@ -56,6 +62,14 @@ public sealed class StreamMixer(int maxLagFrames)
     /// <summary>Frames waiting in one input (for tests and diagnostics).</summary>
     public int Pending(int id) => _inputs.TryGetValue(id, out var i) ? i.Frames : 0;
 
+    internal int Limit(int id, int frames)
+    {
+        if (!_inputs.TryGetValue(id, out var input)) return 0;
+        int drop = Math.Max(0, input.Frames - frames);
+        Consume(input, drop);
+        return drop;
+    }
+
     /// <summary>Queue interleaved stereo frames for an input, scaled by <paramref name="gain"/>.</summary>
     public void Push(int id, ReadOnlySpan<float> stereo, float gain = 1f) => Push(id, stereo, new PacketGain(gain, 1f));
 
@@ -101,7 +115,9 @@ public sealed class StreamMixer(int maxLagFrames)
     /// Call once per capture cycle, after every input was drained: appends the mixed frames to
     /// <paramref name="output"/> (clamped to ±1) and returns how many frames were mixed.
     /// </summary>
-    public int Mix(List<float> output)
+    public int Mix(List<float> output) => Mix(output, null);
+
+    internal int Mix(List<float> output, Action<int, float[], int, int>? observe)
     {
         if (_inputs.Count == 0) return 0;
         int min = int.MaxValue, max = 0;
@@ -123,9 +139,10 @@ public sealed class StreamMixer(int maxLagFrames)
             int start = output.Count;
             for (int i = 0; i < n * 2; i++) output.Add(0f);
             var mix = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(output)[start..];
-            foreach (var input in _inputs.Values)
+            foreach (var (id, input) in _inputs)
             {
                 int take = Math.Min(n, input.Frames);
+                observe?.Invoke(id, input.Buffer, take, n);
                 var src = input.Buffer.AsSpan(0, take * 2);
                 for (int i = 0; i < src.Length; i++) mix[i] += src[i];
                 Consume(input, take);
@@ -154,8 +171,9 @@ public sealed class StreamMixer(int maxLagFrames)
         if (sources.Count == 0) return;
         if (scratch.Length < mix.Length) scratch = new float[mix.Length];
         var tmp = scratch.AsSpan(0, mix.Length);
-        foreach (var source in sources)
+        for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
         {
+            var source = sources[sourceIndex];
             tmp.Clear();
             try
             {
