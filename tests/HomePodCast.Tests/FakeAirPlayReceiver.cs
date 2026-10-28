@@ -70,6 +70,91 @@ internal sealed class FakeAirPlayReceiver : IDisposable
         }
     }
     public int? BufferedDataPort { get; init; }
+
+    // ---------------------------------------------------------------- fake HomePod grandmaster (5.1 surround)
+
+    private readonly object _gmLock = new();
+    private ulong _gmId;
+    private long _gmOffsetNs;
+    private bool _gmSending, _gmStarted;
+    private IPEndPoint? _ourPtpEvents, _ourPtpGeneral;
+
+    /// <summary>Sync + Follow_Up pairs sent by <see cref="StartGrandmaster"/>.</summary>
+    public int GrandmasterSyncs { get; private set; }
+
+    /// <summary>
+    /// Acts as a HomePod's own PTP clock on the <see cref="TimingPorts"/> sockets: it learns our event port from our
+    /// Delay_Req and our general port from our Announce, then every 125 ms sends a two-step Sync and a Follow_Up whose
+    /// preciseOrigin is <see cref="PtpClockObserver.LocalNs"/>(now) + <paramref name="offsetNs"/>, and every second an
+    /// Announce (priority1 248, as a HomePod 2 on OS 27 announced on 2026-10-28).
+    /// </summary>
+    public void StartGrandmaster(ulong gmId, long offsetNs)
+    {
+        _ = TimingPorts;
+        lock (_gmLock)
+        {
+            _gmId = gmId; _gmOffsetNs = offsetNs; _gmSending = true;
+            if (_gmStarted) return;
+            _gmStarted = true;
+        }
+        new Thread(() => ReadPtp(_ptpEvents!, events: true)) { IsBackground = true, Name = "fake grandmaster event" }.Start();
+        new Thread(() => ReadPtp(_ptpGeneral!, events: false)) { IsBackground = true, Name = "fake grandmaster general" }.Start();
+        new Thread(SendPtp) { IsBackground = true, Name = "fake grandmaster" }.Start();
+    }
+
+    /// <summary>Another clock leads from now on (the HomePod joined a home theater, or its clock stepped).</summary>
+    public void ChangeGrandmaster(ulong gmId) { lock (_gmLock) _gmId = gmId; }
+
+    /// <summary>Sync, Follow_Up and Announce stop; the sockets stay open.</summary>
+    public void StopGrandmaster() { lock (_gmLock) _gmSending = false; }
+
+    private void ReadPtp(UdpClient socket, bool events)
+    {
+        while (!_closed)
+        {
+            try
+            {
+                IPEndPoint? from = null;
+                var packet = socket.Receive(ref from);
+                if (packet.Length < PtpPackets.HeaderSize) continue;
+                int type = packet[0] & 15;
+                lock (_gmLock)
+                {
+                    if (events && type == PtpPackets.DelayRequest) _ourPtpEvents = from;
+                    if (!events && type == PtpPackets.Announce) _ourPtpGeneral = from;
+                }
+            }
+            catch (SocketException) when (!_closed) { } // ICMP port unreachable after our follower closed
+            catch (Exception) { return; }
+        }
+    }
+
+    private void SendPtp()
+    {
+        ushort sequence = 0;
+        while (!_closed)
+        {
+            try
+            {
+                ulong id; long offset; bool sending; IPEndPoint? events, general;
+                lock (_gmLock) { id = _gmId; offset = _gmOffsetNs; sending = _gmSending; events = _ourPtpEvents; general = _ourPtpGeneral; }
+                if (sending && events != null && general != null)
+                {
+                    if (sequence % 8 == 0)
+                        _ptpGeneral!.Send(PtpPackets.AnnounceMessage(id, (ushort)(sequence / 8), 0, priority: 248), general);
+                    _ptpEvents!.Send(PtpPackets.SyncMessage(id, sequence), events);
+                    ulong origin = (ulong)(PtpClockObserver.LocalNs(System.Diagnostics.Stopwatch.GetTimestamp()) + offset);
+                    _ptpGeneral!.Send(PtpPackets.FollowUpMessage(id, sequence, origin), general);
+                    GrandmasterSyncs++;
+                    sequence++;
+                }
+            }
+            catch (SocketException) when (!_closed) { }
+            catch (Exception) { return; }
+            Thread.Sleep(125);
+        }
+    }
+
     public Dictionary<string, object?>? SessionSetup { get; private set; }
     public Dictionary<string, object?>? StreamSetup { get; private set; }
     public Dictionary<string, object?>? RateAnchor { get; private set; }

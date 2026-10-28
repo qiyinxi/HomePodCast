@@ -833,5 +833,8 @@
   "声道 {0}": "Kanal {0}",
   "全部声道混合": "Alle kanaler mikset",
   "Windows 的 AAC 编码器不支持 5.1": "AAC-koderen i Windows støtter ikke 5.1",
-  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "utdataenheten i Windows er ikke satt til 5.1 eller 7.1: den har {0} kanaler"
+  "Windows 输出设备不是 5.1 或 7.1：现在是 {0} 声道": "utdataenheten i Windows er ikke satt til 5.1 eller 7.1: den har {0} kanaler",
+  "UDP 端口 319 和 320 被其他程序占用": "UDP-portene 319 og 320 brukes av et annet program",
+  "HomePod 的 PTP 对时中断了": "PTP-tidssynkroniseringen fra HomePod stoppet",
+  "HomePod 的 PTP 时钟变了": "PTP-klokken til HomePod endret seg"
 }
