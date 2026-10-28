@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 
 namespace HomePodCast.Audio;
 
@@ -9,6 +10,7 @@ namespace HomePodCast.Audio;
 /// a later caller, and one that hangs for good costs only the first caller its wait. A timeout cached as a failure would
 /// keep 5.1 off until the app restarts, on a PC whose encoder works.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal sealed class BackgroundCheck(string name, Func<(bool Ok, string Detail)> probe, TimeSpan budget)
 {
     private readonly object _gate = new();

@@ -47,6 +47,10 @@ public sealed partial class AirPlayClient
     internal SurroundSender? SurroundSender => _surround;
     internal PtpFollower? SurroundClock => _follower;
 
+    partial void DisposeSurroundSender() => _surround?.Dispose();
+
+    partial void DisposeSurroundClock() => _follower?.Dispose();
+
     /// <summary>
     /// One 5.1 session. <see cref="SurroundUnavailableException"/> (translated) when 5.1 can't be used here: the caller then
     /// streams stereo. A broken RTSP connection, a cancellation or a pairing that is needed propagate as they are, so the

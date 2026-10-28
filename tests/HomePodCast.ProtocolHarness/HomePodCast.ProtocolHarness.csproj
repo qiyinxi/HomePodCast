@@ -59,6 +59,7 @@
     <Compile Include="../../src/Audio/TimelineBuffer.cs" Link="Audio/TimelineBuffer.cs" />
     <Compile Include="../../src/Audio/ReceiverTimelineSource.cs" Link="Audio/ReceiverTimelineSource.cs" />
     <Compile Include="../../src/Audio/AacEncoder.cs" Link="Audio/AacEncoder.cs" />
+    <Compile Include="../../src/Audio/BackgroundCheck.cs" Link="Audio/BackgroundCheck.cs" />
     <Compile Include="../../src/Audio/DlnaAudioEncoder.cs" Link="Audio/DlnaAudioEncoder.cs" />
     <Compile Include="../../src/Audio/DlnaMediaFoundationEncoder.cs" Link="Audio/DlnaMediaFoundationEncoder.cs" />
     <Compile Include="../../src/Audio/Effects.cs" Link="Audio/Effects.cs" />
