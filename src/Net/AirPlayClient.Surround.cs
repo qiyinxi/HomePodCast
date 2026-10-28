@@ -32,6 +32,9 @@ internal sealed record SurroundSetup(AudioFifo Fifo)
 /// <summary>5.1 surround can't be used with this speaker or on this PC right now; the message (translated) says why.</summary>
 public sealed class SurroundUnavailableException(string message) : AirPlayException(message);
 
+/// <summary><see cref="SurroundSetup.RequireIdle"/>: another sender has a session, or the speaker doesn't say (CLI only).</summary>
+internal sealed class SpeakerInUseException(string message) : AirPlayException(message);
+
 // experimental since 1.4
 // 5.1 surround to one HomePod: AAC-LC 48 kHz 5.1 over the buffered (type 103) path, anchored in the HomePod's own PTP
 // timeline. The sequence is the one verified on a HomePod 2 (OS 27.0) on 2026-10-28, including the SETPEERS and
@@ -84,7 +87,7 @@ public sealed partial class AirPlayClient
             throw new SurroundUnavailableException(L.T("这台音箱不支持 5.1"))
                 { LogMessage = $"no 5.1 here: {model}, {SupportedFormats.Describe(Info)}" };
         if (setup.RequireIdle && (flags is not { } idle || StatusFlags.SessionActive(idle)))
-            throw new AirPlayException($"speaker in use (statusFlags {(flags is { } busy ? StatusFlags.Describe(busy) : "none")}): not taking it over");
+            throw new SpeakerInUseException($"speaker in use (statusFlags {(flags is { } busy ? StatusFlags.Describe(busy) : "none")}): not taking it over");
 
         var shared = Pair(options);
         _rtsp.EnableEncryption(

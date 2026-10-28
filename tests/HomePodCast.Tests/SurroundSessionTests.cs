@@ -280,9 +280,8 @@ public sealed class SurroundSessionTests
     public async Task The_CLI_never_takes_a_speaker_another_sender_is_using()
     {
         using var rig = Start(flags: 0x1A0404); // bit 17: another sender's session
-        var error = await Assert.ThrowsAsync<AirPlayException>(() => rig.Connect(rig.Setup(s => s with { RequireIdle = true })));
-        Assert.IsNotType<SurroundUnavailableException>(error);
-        Assert.Contains("speaker in use", error.Message);
+        var error = await Assert.ThrowsAsync<SpeakerInUseException>(() => rig.Connect(rig.Setup(s => s with { RequireIdle = true })));
+        Assert.Contains("speaker in use (statusFlags 0x1A0404", error.Message);
         Assert.DoesNotContain(rig.Fake.Requests, r => r.StartsWith("POST /pair-", StringComparison.Ordinal));
     }
 

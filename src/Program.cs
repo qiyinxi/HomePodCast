@@ -134,6 +134,8 @@ public static class Program
               firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
         // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
+        // experimental since 1.4: the 5.1 line below.
+        Console.WriteLine("  " + SurroundCliOptions.Usage + "   5.1 buffered protocol check, digital silence only (experimental)");
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
         Console.WriteLine(DlnaCli.Usage);
         Console.WriteLine(Update.UpdateSelfTest.Usage);
@@ -301,6 +303,7 @@ public static class Program
 
     private static async Task<int> Stream(string[] args)
     {
+        if (args.Contains("--surround")) return await StreamSurround(args);
         if (Opt(args, "--protocol") is "raop")
             return await StreamRaop(args);
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
@@ -391,6 +394,138 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    /// experimental since 1.4: `stream --surround --host IP --silent`, the app's 5.1 session (AirPlayClient.Surround.cs)
+    /// sending AAC-encoded digital silence: a FIFO nobody writes to, no capture, no tone. Refuses a speaker another sender
+    /// is using (no override: AGENTS.md). Exit code 0: anchored and nothing lost; 2: refused or in use; 1: lost or failed.
+    /// </summary>
+    private static async Task<int> StreamSurround(string[] args)
+    {
+        if (SurroundCliOptions.Parse(args, out var error) is not { } o)
+        {
+            Console.WriteLine(error);
+            Console.WriteLine("usage: HomePodCast " + SurroundCliOptions.Usage);
+            return 2;
+        }
+        Log.Info($"stream --surround: host {o.Host}, {o.Seconds} s of digital silence, latency {o.LatencyMs} ms, volume {o.VolumePercent}% (cap {o.CapPercent}%)");
+        var fifo = new AudioFifo(SurroundSender.Rate, targetMs: 40, capMs: 250, channels: SurroundSender.Channels); // never written
+        var options = new StreamOptions(o.LatencyMs, o.VolumePercent)
+        {
+            VolumeCapPercent = o.CapPercent,
+            Pairings = PairingStore.Default,
+            RequestLog = Log.Info,
+        };
+        using var stop = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; Log.Info("Ctrl+C: stopping; TEARDOWN follows"); stop.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
+        {
+            AirPlayClient client;
+            try
+            {
+                client = await AirPlayClient.ConnectSurroundAsync(o.Host, 7000, options, new SurroundSetup(fifo) { RequireIdle = true }, stop.Token);
+            }
+            catch (Exception ex) when (ex is SurroundUnavailableException or SpeakerInUseException)
+            {
+                Log.Info($"SURROUND REFUSED: {AirPlayException.ForLog(ex)}");
+                return 2;
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"SURROUND FAILED: {ex.GetType().Name}: {AirPlayException.ForLog(ex)}");
+                return 1;
+            }
+            using (client)
+            {
+                var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                client.Lost += reason => lost.TrySetResult(reason);
+                if (client.LostReason is { } early) lost.TrySetResult(early);
+                var sender = client.SurroundSender!;
+                var ptp = client.SurroundClock!;
+                var watch = Stopwatch.StartNew();
+                for (int t = 1; t <= o.Seconds && !lost.Task.IsCompleted && !stop.IsCancellationRequested; t++)
+                {
+                    var wait = TimeSpan.FromSeconds(t) - watch.Elapsed;
+                    if (wait > TimeSpan.Zero)
+                        await Task.WhenAny(Task.Delay(wait, stop.Token).ContinueWith(_ => { }, TaskScheduler.Default), lost.Task);
+                    if (lost.Task.IsCompleted || stop.IsCancellationRequested) break;
+                    if (t == 2) Log.Info(await SurroundStatusFlags(o.Host, stop.Token));
+                    if (t % 2 == 0)
+                        Log.Info($"t={t}s sent={sender.PacketsSent} bytes={sender.BytesSent} maxLate={sender.MaxLateMs:F1}ms " +
+                                 $"ptp syncAge={ptp.SyncAgeMs?.ToString() ?? "?"}ms drift={ptp.DriftPpm?.ToString("F1") ?? "?"}ppm");
+                }
+                Log.Info(ptp.Describe);
+                if (lost.Task.IsCompleted)
+                {
+                    Log.Info($"SURROUND LOST: {lost.Task.Result}");
+                    return 1;
+                }
+                Log.Info(stop.IsCancellationRequested ? "SURROUND OK (stopped early with Ctrl+C)" : "SURROUND OK");
+                return 0;
+            }
+        }
+        finally { Console.CancelKeyPress -= cancel; }
+    }
+
+    /// <summary>One read-only GET /info on its own connection: bit 17 (a session) and bit 20 (an anchored timeline running).</summary>
+    private static async Task<string> SurroundStatusFlags(IPAddress host, CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(3));
+            var info = await SpeakerInfoReader.ReadAsync(host, 7000, timeout.Token);
+            return StatusFlags.FromInfo(info) is { } flags
+                ? $"statusFlags {StatusFlags.Hex(flags)} bit17 session={StatusFlags.SessionActive(flags)}, " +
+                  $"bit20 timeline={((flags & StatusFlags.AnchoredTimelineRunning) != 0 ? "yes" : "no")}"
+                : "statusFlags unreadable: /info has none";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return $"statusFlags unreadable: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+}
+
+/// <summary>
+/// experimental since 1.4: the options of `stream --surround`. Silence only, and a low ceiling: it talks to a real
+/// HomePod (the maintainer's checklist), so --silent is required, --tone/--beeps are refused, --cap stays at or below 10 %.
+/// </summary>
+internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds)
+{
+    public const string Usage = "stream --surround --host IP --silent [--latency MS] [--seconds N] [--cap PCT]";
+
+    /// <summary>Silence still goes out at a volume: never more than this.</summary>
+    public const double MaxCapPercent = 10;
+
+    /// <summary>The app's 5.1 latency (1800 ms: the picture delay stays under the browser extension's 2000 ms clamp).</summary>
+    public const int DefaultLatencyMs = 1800;
+
+    /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
+    public static SurroundCliOptions? Parse(string[] args, out string? error)
+    {
+        error = null;
+        string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        bool Number(string name, double fallback, out double value)
+        {
+            value = fallback;
+            if (Opt(name) is not { } text) return !args.Contains(name);
+            return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value)
+                   && double.IsFinite(value);
+        }
+
+        if (!args.Contains("--silent")) error = "--surround sends digital silence only: add --silent";
+        else if (args.Contains("--tone") || args.Contains("--beeps")) error = "--surround sends digital silence only: --tone and --beeps are refused";
+        else if (Opt("--host") is not { } hostText || !IPAddress.TryParse(hostText, out _)) error = "--host IP required";
+        else if (!Number("--cap", MaxCapPercent, out double cap) || cap < 0) error = "--cap: a percentage";
+        else if (cap > MaxCapPercent) error = $"--cap {cap} refused: at most {MaxCapPercent} %";
+        else if (!Number("--volume", cap, out double volume) || volume < 0) error = "--volume: a percentage";
+        else if (volume > cap) error = $"--volume {volume} refused: above --cap {cap}";
+        else if (!Number("--latency", DefaultLatencyMs, out double latency)) error = "--latency: milliseconds";
+        else if (!Number("--seconds", 30, out double seconds) || seconds < 1) error = "--seconds: at least 1";
+        else return new(IPAddress.Parse(hostText), cap, volume, (int)Math.Clamp(latency, 1000, 4000), (int)Math.Min(seconds, 3600));
+        return null;
+    }
 }
 
 /// <summary>Test source: N short 880 Hz beeps at the start of every second, generated in real time.</summary>
