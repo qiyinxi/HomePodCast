@@ -63,6 +63,14 @@ test('a slow answer keeps the app\'s last status for 2.5 s; a refused connection
   assert.deepEqual(await b.status(), { running: false });
 });
 
+test('the app is recognised under its coming name too, nothing else', async () => {
+  const b = background();
+  b.answer({ body: { ...app, app: 'Akoustra' } }); b.at(0);
+  assert.equal((await b.status()).running, true);
+  b.answer({ body: { ...app, app: 'Other' } }); b.at(600);
+  assert.deepEqual(await b.status(), { running: false });
+});
+
 test('answers are cached for 500 ms', async () => {
   const b = background();
   b.answer({ body: app }); b.at(0);

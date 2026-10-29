@@ -32,7 +32,8 @@ async function fetchStatus() {
   try {
     const res = await fetch(STATUS_URL, { signal: ctrl.signal, cache: 'no-store', credentials: 'omit' });
     const json = res.ok ? await res.json() : null;
-    if (!json || typeof json !== 'object' || json.app !== 'HomePodCast') {
+    // 'Akoustra': the app's coming name (2026-10-30), so this extension keeps working if the app ever reports it.
+    if (!json || typeof json !== 'object' || (json.app !== 'HomePodCast' && json.app !== 'Akoustra')) {
       lastGood = null;
       return { running: false };
     }
