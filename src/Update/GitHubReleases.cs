@@ -49,8 +49,16 @@ internal static class GitHubReleases
     public const string ApiUrl = "https://api.github.com/repos/qiyinxi/HomePodCast/releases?per_page=20";
     public const string ReleasesPage = "https://github.com/qiyinxi/HomePodCast/releases";
 
+    /// <summary>
+    /// The repository under its name today and under the one it is to get (2026-10-30: the app is to be renamed Akoustra).
+    /// After a rename GitHub still answers <see cref="ApiUrl"/> (a redirect) but lists the files under the new name, and
+    /// every version that accepts only the old one then finds no update at all: this one takes either.
+    /// </summary>
+    internal static readonly string[] RepositoryPaths = ["/qiyinxi/HomePodCast", "/qiyinxi/Akoustra"];
+
     /// <summary>Only files and pages of this repository are downloaded or opened, whatever the response says.</summary>
-    internal const string DownloadPrefix = ReleasesPage + "/download/";
+    internal static readonly string[] DownloadPrefixes = [.. RepositoryPaths.Select(p => "https://github.com" + p + "/releases/download/")];
+    private static readonly string[] PagePrefixes = [.. RepositoryPaths.Select(p => "https://github.com" + p + "/releases/")];
     private const string PagePrefix = ReleasesPage + "/";
 
     public static readonly TimeSpan Timeout = TimeSpan.FromSeconds(15);
@@ -104,10 +112,10 @@ internal static class GitHubReleases
             if (r.ValueKind != JsonValueKind.Object || Bool(r, "draft")) continue;
             var tag = Str(r, "tag_name");
             if (ReleaseVersion.Parse(tag) is not { } version) continue;
-            var page = Str(r, "html_url") is { } url && url.StartsWith(PagePrefix, StringComparison.Ordinal) && ReleaseNotes.CanOpen(url)
+            var page = Str(r, "html_url") is { } url && PagePrefixes.Any(p => url.StartsWith(p, StringComparison.Ordinal)) && ReleaseNotes.CanOpen(url)
                 ? url
                 : PagePrefix + "tag/" + Uri.EscapeDataString(tag!);
-            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed.DownloadPrefix),
+            list.Add(new Release(version, tag!, page, Bool(r, "prerelease") || version.IsPrerelease, Msi(r, feed),
                 Str(r, "body") ?? "", DateTimeOffset.TryParse(Str(r, "published_at"), System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.AssumeUniversal, out var published) ? published : null));
         }
@@ -115,7 +123,7 @@ internal static class GitHubReleases
     }
 
     /// <summary>The release's x64 MSI, once it is fully uploaded; one from another place is ignored.</summary>
-    private static ReleaseAsset? Msi(JsonElement release, string downloadPrefix)
+    private static ReleaseAsset? Msi(JsonElement release, ReleaseFeed feed)
     {
         if (!release.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
         foreach (var a in assets.EnumerateArray())
@@ -124,7 +132,7 @@ internal static class GitHubReleases
             var url = Str(a, "browser_download_url");
             if (name == null || url == null || !name.EndsWith("-x64.msi", StringComparison.OrdinalIgnoreCase)) continue;
             if (Str(a, "state") is { } state && state != "uploaded") continue;
-            if (!url.StartsWith(downloadPrefix, StringComparison.Ordinal)) continue;
+            if (!feed.Downloads(url)) continue;
             long size = a.TryGetProperty("size", out var s) && s.TryGetInt64(out var n) ? n : 0;
             return new ReleaseAsset(name, url, size, UpdatePackage.Sha256FromDigest(Str(a, "digest")));
         }
