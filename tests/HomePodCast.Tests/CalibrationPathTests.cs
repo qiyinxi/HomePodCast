@@ -80,6 +80,9 @@ public class CalibrationPathTests
         Assert.Null(TrayApp.CalibrationContextFor(Config(), new FakeCapture(null, noOutput: true), null));         // no output at all
         Assert.Null(TrayApp.CalibrationContextFor(new AppConfig(), new FakeCapture(Speakers), null));             // no speaker
         Assert.NotNull(TrayApp.CalibrationContextFor(cfg, new FakeCapture(Headphones.ToUpperInvariant()), cfg.CaptureDeviceId));
+        // 5.1 (experimental since 1.4): the same endpoint, but a 1.8 s path without a sync test, so no calibration.
+        Assert.Null(TrayApp.CalibrationContextFor(cfg, new FakeSurroundCapture { EndpointId = Headphones }, cfg.CaptureDeviceId));
+        Assert.Null(TrayApp.CalibrationContextFor(Config(), new FakeSurroundCapture { EndpointId = Speakers }, null));
 
         // Not streaming: nothing to measure on.
         var context = Context(Config(), new FakeCapture(Speakers));

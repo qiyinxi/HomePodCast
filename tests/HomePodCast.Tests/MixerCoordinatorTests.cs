@@ -190,6 +190,89 @@ public sealed class MixerCoordinatorTests
     }
 
     [Fact]
+    public async Task The_surround_switch_restarts_a_single_speaker_but_never_a_group()
+    {
+        const string speakerKey = "speaker:airplay:AABBCCDDEEFF", groupKey = "group:room";
+        var harness = new Harness(); await using var coordinator = harness.Coordinator;
+        var config = Config();
+        // A real multi-room group (Routes' "music" preset holds one speaker, which plays as a single speaker would).
+        OutputGroups.Save(config, "room", new() { DeviceId = "112233445566", DeviceName = "music", MultiRoomDeviceId = "665544332211",
+            MultiRoomDeviceName = "study", GroupDelayMs = 2000 }, "room");
+        MixerRoutes.Write(config, new MixerRoutingSettings { Apps = new() { ["music"] = new(new MixerOutput(MixerOutputKind.Group, "room")) },
+            DestinationSettings = new() { [groupKey] = new(Scene.Music, 2000) } });
+        await coordinator.ConnectAsync(config, ConnectTrigger.Manual);
+        await coordinator.RefreshRootsAsync([new(2, "music", false)]);
+        var speaker = harness.Sessions[speakerKey];
+        var group = harness.Sessions[groupKey];
+        Assert.NotNull(GroupPlan.FromConfig(group.Config));
+
+        // Off and unchanged: the signature is the same, so a reconnect restarts nothing.
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Same(speaker, harness.Sessions[speakerKey]); Assert.Equal(0, speaker.Stops);
+
+        // 5.1 (experimental since 1.4) on: the single speaker restarts with it; the group streams stereo either way.
+        config.Surround51 = true;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(1, speaker.Stops);
+        var surround = harness.Sessions[speakerKey];
+        Assert.NotSame(speaker, surround);
+        Assert.True(surround.Config.Surround51);
+        Assert.Equal(1, surround.Starts);
+        Assert.Same(group, harness.Sessions[groupKey]);
+        Assert.Equal(0, group.Stops); Assert.Equal(1, group.Starts);
+
+        // On and unchanged: nothing restarts; off again: the speaker restarts once more, the group still not.
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Same(surround, harness.Sessions[speakerKey]); Assert.Equal(0, surround.Stops);
+        config.Surround51 = false;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(1, surround.Stops);
+        Assert.False(harness.Sessions[speakerKey].Config.Surround51);
+        Assert.Equal(0, group.Stops);
+    }
+
+    /// <summary>
+    /// Third-party AirPlay 2 and AirPlay 1 receivers never take the 5.1 path, so flipping the switch must not drop their
+    /// music for a reconnect that comes back in the same stereo; a HomePod restarts to try 5.1.
+    /// </summary>
+    [Theory]
+    [InlineData("third-party AirPlay 2", ReceiverKind.ThirdPartyAirPlay2, false)]
+    [InlineData("AirPlay 1", ReceiverKind.ThirdPartyAirPlay1, false)]
+    [InlineData("AirPlay 1 offline", ReceiverKind.ThirdPartyAirPlay1, false)] // known from its saved receiver settings only
+    [InlineData("HomePod", ReceiverKind.HomePod, true)]
+    public async Task The_surround_switch_restarts_only_a_speaker_that_can_stream_5_1(string what, ReceiverKind kind, bool restarts)
+    {
+        const string speakerKey = "speaker:airplay:AABBCCDDEEFF";
+        var config = Config();
+        string id = config.DeviceId!;
+        var address = IPAddress.Parse("192.0.2.20");
+        var device = kind switch
+        {
+            ReceiverKind.ThirdPartyAirPlay2 => new AirPlayDevice("Sonos", id, address, 7000, "Speaker1,1",
+                new Dictionary<string, string> { ["srcvers"] = "377.40.00" }),
+            ReceiverKind.HomePod => new AirPlayDevice("卧室", id, address, 7000, "AudioAccessory6,1", new Dictionary<string, string>()),
+            _ => new AirPlayDevice("投影仪", id, address, 7001, "ShairportSync", new Dictionary<string, string>()) { HasAirPlay = false, RaopPort = 7001 },
+        };
+        Assert.Equal(kind, device.Kind);
+        bool offline = what.EndsWith("offline");
+        if (offline) config.ReceiverSettings[RaopPassword.Key(id)] = ReceiverPreferences.Of(device);
+        var harness = new Harness(scan: offline ? [] : [device]); await using var coordinator = harness.Coordinator;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Manual);
+        var before = harness.Sessions[speakerKey];
+
+        config.Surround51 = true;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(restarts ? 1 : 0, before.Stops);
+        var on = harness.Sessions[speakerKey];
+        Assert.Equal(restarts, !ReferenceEquals(before, on));
+
+        config.Surround51 = false;
+        await coordinator.ConnectAsync(config, ConnectTrigger.Reconnect);
+        Assert.Equal(restarts ? 1 : 0, on.Stops);
+        Assert.Equal(restarts ? 1 : 0, before.Stops);
+    }
+
+    [Fact]
     public async Task Unknown_formats_are_preserved_and_ambiguous_app_delay_has_no_fallback()
     {
         var harness = new Harness(); await using var coordinator = harness.Coordinator;
@@ -223,10 +306,11 @@ public sealed class MixerCoordinatorTests
         public readonly Dictionary<string, FakeSession> Sessions = [];
         public readonly MixerOutputCoordinator Coordinator;
         public int Hosts, LegacyCaptures;
-        public Harness(MixerDeviceLeaseTable? leases = null)
+        public Harness(MixerDeviceLeaseTable? leases = null, IReadOnlyList<AirPlayDevice>? scan = null)
         {
             Coordinator = new(leases ?? new(), (d, capture) => Sessions[d.Key] = new(d.Config!, capture),
-                (_, _) => { LegacyCaptures++; return new FakeCapture(); }, () => { Hosts++; return new FakeHost(); });
+                (_, _) => { LegacyCaptures++; return new FakeCapture(); }, () => { Hosts++; return new FakeHost(); },
+                scan == null ? null : () => scan);
         }
     }
     internal sealed class FakeSession(AppConfig config, Func<AudioFifo, ICaptureSource> capture) : IMixerDestinationSession

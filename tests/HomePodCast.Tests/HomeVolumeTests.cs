@@ -109,6 +109,86 @@ public class HomeVolumeTests
         finally { L.Use(before); }
     });
 
+    /// <summary>5.1 环绕声 (experimental since 1.4) has a row of its own: beside the other two it wrapped outside theirs.</summary>
+    [Theory]
+    [InlineData("zh-CN")]
+    [InlineData("de")]
+    [InlineData("en")]
+    public void The_surround_switch_fits_its_own_row_in_a_narrow_volume_card(string language) => Sta.Run(() =>
+    {
+        string before = L.Language;
+        try
+        {
+            L.Use(language);
+            using var host = new Host();
+            var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
+            var only = TestApp.Field<ToggleSwitch>(host.Page, "_onlyHomePod");
+            var row = Assert.IsType<RowPanel>(LogicalLayout.Parent(surround));
+            Assert.NotSame(row, LogicalLayout.Parent(only));
+            row.Width = Theme.Dp(298, row.DeviceDpi);
+            row.PerformLayout();
+            Assert.True(row.ClientRectangle.Contains(LogicalLayout.Bounds(surround)), $"{language}: {surround.Text} outside row");
+            Assert.True(surround.Width >= surround.GetPreferredSize(Size.Empty).Width, $"{language}: {surround.Text} clipped");
+        }
+        finally { L.Use(before); }
+    });
+
+    /// <summary>
+    /// A WinForms tooltip may be as wide as the screen: in one piece the 5.1 description (experimental since 1.4) ran across
+    /// a whole monitor. Every line stays under about 800 px at 100 % in every language, in the tooltip's own font.
+    /// </summary>
+    [Fact]
+    public void The_surround_description_keeps_every_line_narrow_in_every_language()
+    {
+        string before = L.Language;
+        try
+        {
+            using var screen = Graphics.FromHwnd(IntPtr.Zero);
+            // Windows' tooltip font, Segoe UI 9 pt (CJK falls back as in the tooltip), measured on this DC and scaled to 100 %.
+            using var font = new Font("Segoe UI", 9f);
+            float scale = 96f / screen.DpiX;
+            foreach (var language in L.Languages)
+            {
+                L.Use(language);
+                var lines = HomePage.SurroundDescription().Split('\n');
+                Assert.True(lines.Length >= 8, $"{language}: {lines.Length} lines");
+                foreach (var line in lines)
+                {
+                    int width = (int)(TextRenderer.MeasureText(screen, line, font).Width * scale);
+                    Assert.True(width <= 820, $"{language}: {width} px at 100 %: {line}");
+                }
+            }
+        }
+        finally { L.Use(before); }
+    }
+
+    [Fact]
+    public void The_surround_switch_is_saved_and_described_as_experimental() => Sta.Run(() =>
+    {
+        using var host = new Host();
+        var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
+        var tips = TestApp.Field<ToolTip>(host.Page, "_tips");
+        Assert.Equal("5.1 环绕声", surround.Text);
+        Assert.False(surround.Checked); // off on a fresh config
+        Assert.Contains($"约 {SurroundPolicy.LatencyMs / 1000.0:F1} 秒", surround.AccessibleDescription);
+        Assert.EndsWith("实验性功能。", surround.AccessibleDescription);
+        Assert.Equal(surround.AccessibleDescription, tips.GetToolTip(surround));
+
+        // The unit-tests profile's file, which other test classes save to meanwhile: only that a save happened is certain.
+        string file = Path.Combine(AppConfig.Directory, "config.json");
+        var longAgo = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        try { if (File.Exists(file)) File.SetLastWriteTimeUtc(file, longAgo); }
+        catch (IOException) { } // being replaced by another test's save right now
+        surround.Flip();
+        Assert.True(host.App.Config.Surround51);
+        Assert.True(File.Exists(file) && File.GetLastWriteTimeUtc(file) > longAgo, "the switch was not saved");
+        Assert.Equal(StreamState.Idle, host.App.Controller.State); // not connected: nothing to reconnect
+
+        host.App.SetSurround51(false); // as from elsewhere: the switch follows
+        Assert.False(surround.Checked);
+        Assert.False(host.App.Config.Surround51);
+    });
+
     private sealed class Host : IDisposable
     {
         private readonly MainWindow _window;

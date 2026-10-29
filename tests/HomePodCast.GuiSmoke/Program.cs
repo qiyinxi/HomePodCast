@@ -17,7 +17,8 @@ internal static class Program
     /// Every page and dialog in Chinese, English and German (the long one) at 100 % and also at the window's minimum
     /// width; at 150 % in Chinese and German; one dark run; the retry wait (「找不到音箱…」) and a connection to the fake
     /// HomePod, which also walk everything while connected; a .NET update under the connected app, and 立即重启; once, the scale goes
-    /// 150 % → 100 % → 150 % while the app runs. The group-output editor has a focused 150 % run in every language.
+    /// 150 % → 100 % → 150 % while the app runs; 5.1 环绕声 on with that fake HomePod, which falls back to stereo and says why
+    /// (experimental since 1.4). The group-output editor has a focused 150 % run in every language.
     /// </summary>
     private static readonly Scenario[] Matrix =
     [
@@ -28,6 +29,7 @@ internal static class Program
         new("retrying", "zh-CN", 100),
         new("retrying", "en", 100),
         new("streaming", "zh-CN", 100),
+        new("surround-fallback", "zh-CN", 100),
         new("runtime", "zh-CN", 100),
         new("update-notes", "zh-CN", 100, RequiredScale: true),
         new("update-notes", "en", 150, RequiredScale: true),
@@ -272,6 +274,11 @@ internal static class Program
             Check(!t.Pattern("{0}，{1:F0} 秒后重试").IsMatch(t.T("正在连接…")), $"{lang}: 「{t.T("正在连接…")}」 is no retry status");
             Check(t.Pattern("正在重连（第 {0} 次）…").IsMatch(t.F("正在重连（第 {0} 次）…", 3)), $"{lang}: 「{t.F("正在重连（第 {0} 次）…", 3)}」");
             Check(t.Pattern("已连接 · {0}").IsMatch(t.F("已连接 · {0}", "Smoke Test HomePod")), $"{lang}: 「{t.F("已连接 · {0}", "Smoke Test HomePod")}」");
+            // 5.1's stereo fallback (experimental since 1.4): its own pattern, and still a 「已连接」 status for the other runs.
+            string fallback = t.F("已连接 · {0} · 立体声。未用 5.1 环绕声：{1}", "Smoke Test HomePod", t.T("Windows 输出设备不可用"));
+            Check(t.Pattern("已连接 · {0} · 立体声。未用 5.1 环绕声：{1}").IsMatch(fallback) && t.Pattern("已连接 · {0}").IsMatch(fallback) &&
+                  !t.Pattern("已连接 · {0} · 立体声。未用 5.1 环绕声：{1}").IsMatch(t.F("已连接 · {0}", "Smoke Test HomePod")),
+                $"{lang}: 5.1 fallback status 「{fallback}」");
             foreach (var key in new[] { "首页", "混音器", "麦克风", "均衡", "设置", "连接", "断开", "全局快捷键", "标记刚才的卡顿", "未设置", "使用配置",
                          "多音箱（实验性）", "导出诊断", "音箱信息", "HomePod 音响", "打开主界面", "退出", "需要防火墙放行", "当前是公用网络", "自动检查更新",
                          "更新渠道", "测试版", "正式版", "快捷键…", "管理配置", "打开", "关闭", "取消", "实际延迟", "缓冲", "音箱处理", "重传", "播放统计", "缓冲欠载", "网络波动",
@@ -280,7 +287,8 @@ internal static class Program
                          "同步观影窗口（实验性）", "选择窗口…", "停止采集", "全屏 / F11", "已跟随本机音频状态", "自动扣除显示延迟",
                          "画面延迟 {0} ms · {1} · 缓存 {2} 帧 / {3} MiB", "选择要观看的窗口；这里只延迟画面，音频仍由 HomePodCast 发送。",
                          "关于", "许可证", "切换到浅色", "切换到深色", "诊断", "音画同步测试", "日志", "诊断报告", "打开日志文件夹", "当前版本 {0}", "检查更新", "更新", "查看说明", "跳过此版本", "立即重启",
-                         "HomePod 静音", "取消静音", "仅 HomePod 输出", "夜间模式" })
+                         "HomePod 静音", "取消静音", "仅 HomePod 输出", "夜间模式",
+                         "5.1 环绕声", "已连接 · {0} · 立体声。未用 5.1 环绕声：{1}" })
                 Check(t.Cjk || !Texts.HasCjk(t.T(key)), $"{lang}: {key} → {t.T(key)}");
         }
         var scale = Display.Scale();

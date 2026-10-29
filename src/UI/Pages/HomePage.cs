@@ -5,7 +5,7 @@ namespace HomePodCast.UI.Pages;
 
 /// <summary>
 /// 首页: which speaker, what latency now, is anything wrong. Speaker card (picker, state, connect), scene
-/// card (scene, latency, how far the sound lags the picture), volume card (volume, mute, night mode), and
+/// card (scene, latency, how far the sound lags the picture), volume card (volume, mute, night mode, 5.1 surround), and
 /// tiles with the stream statistics the app actually measures, and the network's line (or a hint when Wi-Fi jitter
 /// threatens the latency's margin).
 /// </summary>
@@ -59,6 +59,7 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentButton _mute = new("", ButtonKind.Subtle, Glyph.Volume);
     private readonly ToggleSwitch _onlyHomePod = new(L.T("仅 HomePod 输出"));
     private readonly ToggleSwitch _night = new(L.T("夜间模式"));
+    private readonly ToggleSwitch _surround = new(L.T("5.1 环绕声")); // experimental since 1.4
     private readonly TextBlock _capNote = Ui.Note();
     private readonly TimerDebounce _volumeWait = new(150);
 
@@ -245,12 +246,15 @@ internal sealed class HomePage : ScrollPage
         var slider = Ui.Row(10, _volume, _mute, _volume);
         var toggles = Ui.Row(28, null, _onlyHomePod, _night);
         toggles.Wrap = true; // Keep both labels whole at narrow widths and in translated UIs.
-        var card = Ui.Card(header, slider, toggles, _capNote);
+        // Its own row: a third switch beside those two wrapped outside the row at 298 dp (HomeVolumeTests).
+        var card = Ui.Card(header, slider, toggles, Ui.Row(28, null, _surround), _capNote);
         card.Gap = 8;
 
         _onlyHomePod.AccessibleDescription = L.T("推流时只让 HomePod 出声，电脑输出静音；关闭、断开或退出后恢复，电脑音量数值不变。实验性功能。"); // experimental since 1.2
         _tips.SetToolTip(_onlyHomePod, _onlyHomePod.AccessibleDescription);
         _tips.SetToolTip(_night, L.T("压缩动态范围：爆炸、枪声变小，对白、脚步声变大，适合夜里小音量"));
+        _surround.AccessibleDescription = SurroundDescription();
+        _tips.SetToolTip(_surround, _surround.AccessibleDescription);
 
         _volume.Scroll += (_, _) =>
         {
@@ -271,8 +275,26 @@ internal sealed class HomePage : ScrollPage
         };
         _onlyHomePod.Toggled += (_, _) => _app.SetMutePcWhileStreaming(_onlyHomePod.Checked);
         _night.Toggled += (_, _) => _app.SetNightMode(_night.Checked);
+        _surround.Toggled += (_, _) => _app.SetSurround51(_surround.Checked);
         return card;
     }
+
+    /// <summary>
+    /// The 5.1 switch's description and tooltip (experimental since 1.4), a sentence or two per line: a WinForms tooltip may
+    /// be as wide as the screen, and in one piece this ran across a whole monitor (English about 3300 px at 100 %).
+    /// HomeVolumeTests keeps every line narrow in every language. Only a single speaker's status names a reason for
+    /// stereo; groups just stay stereo.
+    /// </summary>
+    internal static string SurroundDescription() => L.F("把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n" +
+        "7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n" +
+        "需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n" +
+        "延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n" +
+        "这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n" +
+        "按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n" +
+        "这时状态里会写明原因。\n" +
+        "立体声对和多房间照常推送立体声，无线影院不受影响。\n" +
+        "实验性功能。",
+        SurroundPolicy.LatencyMs / 1000.0); // experimental since 1.4
 
     /// <summary>The caution under the tiles when Wi-Fi jitter eats the latency's margin; collapsed until then.</summary>
     private Card BuildNetworkHint()
@@ -462,11 +484,14 @@ internal sealed class HomePage : ScrollPage
         _loading = loading;
     }
 
-    /// <summary>The 影视 hint: what the local players were set to, and the value for the others.</summary>
+    /// <summary>
+    /// The 影视 hint: what the local players were set to, and the value for the others. Shown whenever the players follow
+    /// the HomePod, so also in 5.1 whatever the scene (UpdateState calls this through ShowLatency when 5.1 starts or ends).
+    /// </summary>
     public void ShowPlayers()
     {
         var cfg = _app.PlaybackConfig;
-        _movieHint.Collapsed = cfg.Scene != Scene.Movie;
+        _movieHint.Collapsed = !TrayApp.PlayersFollow(cfg.Scene, _app.Controller.SurroundActive);
         if (_movieHint.Collapsed) return;
         _movieHint.Text = Players.PlayerText.MovieHint(cfg.MoviePlayerSync, _app.Controller.State == StreamState.Streaming,
             _app.PlayerStatuses, _lagMs);
@@ -485,6 +510,7 @@ internal sealed class HomePage : ScrollPage
         ShowMute();
         _onlyHomePod.Checked = cfg.MutePcWhileStreaming;
         _night.Checked = cfg.NightMode;
+        _surround.Checked = cfg.Surround51;
         int cap = cfg.VolumeCapPercent;
         _volume.Ceiling = cap;
         _volume.Mark = cap < 100 ? cap : null;
@@ -591,6 +617,7 @@ internal sealed class HomePage : ScrollPage
         if (c.State == StreamState.Streaming && c.Volume is { } v) ShowVolume(v);
         ShowMute();
         _onlyHomePod.Checked = _app.Config.MutePcWhileStreaming;
+        _surround.Checked = _app.Config.Surround51;
         UpdateFloor();
         ShowLatency();
         UpdateStats();
@@ -644,10 +671,14 @@ internal sealed class HomePage : ScrollPage
             _streamStats.Text = source;
         }
 
-        _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}" : null);
+        // The FIFO in use: 48 kHz in 5.1 (experimental since 1.4), 44.1 kHz otherwise.
+        _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / c.Fifo.SampleRate:F0}" : null);
         // Like the other tiles, only while streaming: the value saved from the last connection still sets the latency
-        // floor and the estimates, but shown while disconnected it looked like a live reading.
-        _speakerDelay.SetValue(streaming ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString() : null);
+        // floor and the estimates, but shown while disconnected it looked like a live reading. Blank in 5.1: the buffered
+        // session's speaker reports no processing time, and the realtime one saved would be no reading of this one.
+        _speakerDelay.SetValue(streaming && !c.SurroundActive
+            ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString()
+            : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);

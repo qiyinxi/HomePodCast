@@ -2,7 +2,7 @@ using HomePodCast.Players;
 
 namespace HomePodCast.UI;
 
-// 「影视场景自动调整播放器」: local players' audio delay follows the HomePod while the 影视 scene streams.
+// 「影视场景自动调整播放器」: local players' audio delay follows the HomePod while the 影视 scene (or 5.1) streams.
 internal sealed partial class TrayApp
 {
     private PlayerSync? _players;
@@ -45,10 +45,11 @@ internal sealed partial class TrayApp
                 config.VideoDelayExtraMs = Config.VideoDelayExtraMs;
                 var context = MixerCalibrationContext(config, controller, destination.Key);
                 return PlayerInputFor(config, controller.State, VideoDelayFor(config, controller.State,
-                    controller.EffectiveLatencyMs, controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context));
+                    controller.EffectiveLatencyMs, controller.Capture?.ExtraLatencyMs ?? 0, controller.Fifo.TargetMs, context),
+                    controller.SurroundActive);
             },
         }
-        : PlayerInputFor(Config, Controller.State, VideoDelayMs);
+        : PlayerInputFor(Config, Controller.State, VideoDelayMs, Controller.SurroundActive);
 
     private object ApiStatusForApp(string? app, uint? pid)
     {
@@ -85,9 +86,16 @@ internal sealed partial class TrayApp
             : new { app = "HomePodCast", streaming = false, destination, local, destinationRequired = !local, reason, message };
     }
 
-    /// <summary>What the players follow: on only in the 影视 scene with the setting on.</summary>
-    internal static PlayerSyncInput PlayerInputFor(AppConfig cfg, StreamState state, int videoDelayMs) =>
-        new(cfg.MoviePlayerSync && cfg.Scene == Scene.Movie, state, videoDelayMs);
+    /// <summary>What the players follow: on with the setting on and <see cref="PlayersFollow"/>.</summary>
+    internal static PlayerSyncInput PlayerInputFor(AppConfig cfg, StreamState state, int videoDelayMs, bool surround = false) =>
+        new(cfg.MoviePlayerSync && PlayersFollow(cfg.Scene, surround), state, videoDelayMs);
+
+    /// <summary>
+    /// When the players follow the HomePod (with the setting on), and 首页 shows what they were set to: in the 影视 scene, or
+    /// while 5.1 streams (experimental since 1.4), whatever the scene: its fixed 1.8 s can't be watched without the picture
+    /// held back.
+    /// </summary>
+    internal static bool PlayersFollow(Scene scene, bool surround) => scene == Scene.Movie || surround;
 
     /// <summary>GET /v1/status of the local API, which the browser extension reads (the same lag the players get).</summary>
     internal static object ApiStatus(bool streaming, string? device, int latencyMs, int videoDelayMs, bool calibrated) => new

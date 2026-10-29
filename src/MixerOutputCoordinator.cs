@@ -327,8 +327,28 @@ public sealed class MixerOutputCoordinator : IAsyncDisposable
         }
     }
 
-    private static string Signature(ResolvedMixerDestination d, bool hub) =>
-        JsonSerializer.Serialize(OutputGroups.Capture(d.Config!)) + $"|{d.Config!.Scene}|{d.Config.LatencyMs}|{d.Config.FifoTargetMs}|{hub}";
+    /// <summary>
+    /// What a running destination is restarted for. The 5.1 switch (experimental since 1.4) counts only where a toggle can
+    /// change the stream: a single speaker whose connection asks for 5.1. Groups, third-party AirPlay 2 and AirPlay 1
+    /// receivers stream stereo either way, so a toggle never interrupts them. In the hub a HomePod still restarts, to show
+    /// why it stays stereo. Switched off, the speaker is never looked up and the term is the same for everyone.
+    /// </summary>
+    private string Signature(ResolvedMixerDestination d, bool hub) =>
+        JsonSerializer.Serialize(OutputGroups.Capture(d.Config!)) + $"|{d.Config!.Scene}|{d.Config.LatencyMs}|{d.Config.FifoTargetMs}|{hub}" +
+        $"|{SurroundPolicy.Applies(d.Config) && SurroundPolicy.Reaches(Receiver(d.Config))}";
+
+    /// <summary>
+    /// A destination's speaker as its controller looks it up (TrayApp's ReceiverLookup): the scan, else the receiver settings
+    /// saved for it, else a manually added speaker. A HomePod never gets receiver settings, so offline it is null, as there.
+    /// </summary>
+    private AirPlayDevice? Receiver(AppConfig c)
+    {
+        string id = c.DeviceId!;
+        string key = RaopPassword.Key(id);
+        return _scan().FirstOrDefault(d => RaopPassword.Key(d.DeviceId) == key)
+            ?? c.ReceiverSettings.GetValueOrDefault(key)?.Device(id)
+            ?? c.ManualDevices.Select(m => m.ToDevice()).FirstOrDefault(d => d != null && RaopPassword.Key(d.DeviceId) == key);
+    }
 
     private void OnRootsChanged()
     {

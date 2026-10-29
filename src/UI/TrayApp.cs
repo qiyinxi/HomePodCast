@@ -355,6 +355,11 @@ internal sealed partial class TrayApp : ApplicationContext
             MessageBox.Show(owner, L.T("请先连接音箱，再做同步测试。"), L.T("音画同步测试"));
             return;
         }
+        if (Controller.SurroundActive) // experimental since 1.4: said before 「无法播放测试音…」, which would blame the source
+        {
+            MessageBox.Show(owner, L.T("5.1 环绕声模式下还不能做音画同步测试。"), L.T("音画同步测试"));
+            return;
+        }
         if (!TryGetCalibrationSnapshot(out var snapshot))
         {
             MessageBox.Show(owner, L.T("无法播放测试音，请检查所选音源后重新测试。"), L.T("音画同步测试"));

@@ -466,6 +466,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         _sender?.Dispose();
         _buffered?.Dispose();
         PtpRealtime?.Dispose();
+        DisposeSurroundSender();
         // A session lost to three failed heartbeats in a row (as a rule, no answer within the receive timeout) would not
         // get a TEARDOWN answered either: it would only hold up the reconnect for another receive timeout. One failed
         // heartbeat and then 断开 still ends the session cleanly.
@@ -482,8 +483,13 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         _control.Dispose();
         _timing.Dispose();
         _ptp?.Dispose();
+        DisposeSurroundClock();
         _rtsp.Dispose();
     }
+
+    // The 5.1 path (AirPlayClient.Surround.cs) fills these in; the protocol harness compiles this file without it.
+    partial void DisposeSurroundSender();
+    partial void DisposeSurroundClock();
 }
 
 /// <param name="network">

@@ -321,7 +321,33 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 4. - [ ] 「全部切到」的覆盖数包含未运行程序；取消不改变设置，确认后还能逐个改。独立程序音量和 Windows 默认输出不变；确认期间的设置变化会要求重新确认数量
 5. - [ ] 所有程序切回同一台 HomePod、关闭独立推送音量后，回到「全部推送」的原体验。录真实画面／声音比较属于维护者的实机项目，不把软件帧／时间戳回归当作实测
 
+#### 单台 HomePod 5.1 环绕声（首次发布于 1.4，实验性，尚未用本程序实机验证）
+
+2026-10-28 用实验工具在一台 HomePod（第二代，软件 27.0）上验证过协议，五个主声道的测试音都从对的方向出来；程序里的 5.1 路径（采集、编码、PTP 对时、发送、退回立体声）只用进程内的假 HomePod 测过（见「已自动化」）。HomePod 音量不超过 25%；先确认没有 iPhone 或 Apple TV 正在用这台 HomePod。准备：被采集的 Windows 输出设备配置为 5.1（控制面板 → 声音 →「播放」→ 选中设备 →「配置」），可以是实体声卡，也可以把 VB-CABLE 配置为 5.1、再在「混音器 → 采集设备」选它（按声卡分流）；这个设备的空间音效关闭；没有按程序分流，只连一台 HomePod。本节各项：改了 `src/Net/AirPlayClient.Surround.cs`、`src/Net/SurroundSender.cs`、`src/Net/PtpFollower.cs`、`src/Audio/SurroundCapture.cs`、`src/Audio/SurroundLayout.cs` 才需要重测。
+
+1. - [ ] 先在 HomePodCast 里断开（音箱正被使用时这个命令会拒绝，程序自己连着也算），再运行 `HomePodCast.exe stream --surround --host <IP> --silent --cap 10 --seconds 30`：最后一行是 `SURROUND OK`，输出里 SETRATEANCHORTIME 的回应是 200，第 2 秒那行是 `bit20 timeline=yes`；全程听不到任何声音。如果 1800 ms 下失败，再加 `--latency 2000` 跑一次，两次的输出都发给我
+2. - [ ] 首页打开「5.1 环绕声」再连接：首页状态是「已连接 · <音箱> · 实验性 5.1 环绕声」，「实际延迟」约 1843 ms，日志有 `surround capture: … → 5.1` 和 `5.1 streaming: …`。在 Windows 声音设置里对这个设备点「配置」→「测试」：前左、前右、中置、左环绕、右环绕依次从合理的方向出来
+3. - [ ] 「测试」到低音声道（LFE）时听不听得到，写下来；整体的空间感、环绕的包围感怎么样
+4. - [ ] Windows 里把这个设备配置成 7.1 再重新连接：仍是「实验性 5.1 环绕声」，日志 `surround capture:` 那行写着 `8 ch mask 0x63F → 5.1 (7.1 folded: back+side→surround)`；「测试」时侧环绕和后环绕都听得到，都从环绕的方向出来
+5. - [ ] Windows 里配置回立体声再重新连接：照常推送立体声，首页是「已连接 · <音箱> · 立体声。未用 5.1 环绕声：Windows 输出设备不是 5.1 或 7.1：现在是 2 声道」
+6. - [ ] 关掉「5.1 环绕声」：重连一次，回到低延迟立体声，延迟是场景的延迟
+7. - [ ] 用 5.1 放完一部电影：没有断音；日志里每分钟一行的 `stats: surround` 里 `underruns=` 不往上涨，`ptpDrift=` 基本不变
+8. - [ ] 音量键、静音、音量上限：照常作用于 HomePod，5.1 下音量也不超过上限
+9. - [ ] 口型：浏览器插件放一个有人说话的 5.1 视频，开了「影视场景自动调整播放器」的 VLC 或 mpv 放一部 5.1 电影：口型和声音对得上吗？插件弹窗显示的画面延迟是多少
+10. - [ ] iPhone 隔空播放到这台 HomePod：首页变成「已断开（音箱可能被其他设备占用）」，电脑端不抢回
+11. - [ ] 推流中拔掉电脑的网线 10 秒再插回：自动重新连上，仍是 5.1
+12. - [ ] 推流中让电脑睡眠再唤醒：自动重新连上，仍是 5.1
+
 ## 已自动化（不用手测）
+
+- **SurroundSessionTests / SurroundControllerTests**（5.1 环绕声，实验性）：报告 5.1、带假 PTP 主时钟的假 HomePod 上按实测的顺序建立会话：GET /info → 瞬时配对 → SETUP（PTP，没有 timingPort）→ SETPEERS → SETUP 数据流（type 103、AAC 5.1、48 kHz）→ RECORD → 音量（不超过上限）→ FLUSHBUFFERED → SETRATEANCHORTIME（带 networkTimeFlags，锚在 HomePod 时间线上约 1.8 秒后）；数据包加密，时间戳每包加 1024；音箱不报告 5.1 或是 Apple TV 时在配对之前拒绝；没有 PTP、锚点或其他步骤被拒时退回立体声并 TEARDOWN；音箱关掉数据连接、主时钟变了或停了、采集不再是 5.1 时结束会话，被其他设备接管时按接管处理；命令行不碰正被使用的音箱。控制器：开关关着时请求和参数与没有 5.1 代码时完全一样；开着时用 5.1，延迟 1843 ms，音量和停止照常；采集不是 5.1、音箱不支持 5.1、多个去处时在同一次连接里退回立体声并写明原因，之后的重连直接走立体声。连接期间积压在 FIFO 里的声音不发：第一个包从 FIFO 的目标深度开始，新的 5.1 采集从空 FIFO 开始；按程序实际的算法，5.1 时给插件和播放器的画面延迟在插件 2000 ms 上限以内
+- **PtpFollowerTests**：Sync + Follow_Up 和一步式 Sync 算出偏移和时间线；其他主机和坏包只计数不用；序号回绕时按先后淘汰；停了 30 秒（测试里缩短）或主时钟变了就报问题；UDP 319／320 被占用时重试约 3 秒后拒绝，释放后能重新绑定
+- **SurroundLayoutTests / AudioFifoChannelTests / SurroundCaptureTests / SurroundPacingTests / SupportedFormatsTests / SurroundPolicyTests**：5.1、侧环绕 5.1、7.1、0xFF 等掩码到 5.1 的声道映射（7.1 的侧环绕和后环绕相加合并，5.1 片源放在 7.1 设备上环绕音量不变；0xFF 的前中左右分到前置和中置；LFE 独立；不到 5.1 的拒绝）和 16／24／32 位、浮点输入；6 声道 FIFO 按帧计数；三对声道重采样后不错位；发送按 HomePod 的时钟定时，一小时 ±100 ppm 漂移下误差不到 1 µs；bufferStream 第 39 位的各种写法；默认关，分组从不尝试 5.1，多个去处和按程序分流先拒绝；只有 HomePod、Apple TV 和还没找到的音箱会尝试 5.1，和连接时的分派一致
+- **MixerCoordinatorTests**（5.1 部分）：切换「5.1 环绕声」只让会尝试 5.1 的单台音箱重连；分组、第三方 AirPlay 2 和 AirPlay 1 接收端（扫描到的或只在接收端设置里的）不重连，开关关着时什么都不变
+- **AacMultichannelTests / BackgroundCheckTests**：立体声编码器不变；Windows 的 AAC 编码器能编 5.1 时 AudioSpecificConfig 是 `11 B0`，不能时报告不支持（程序随后退回立体声）；7.1 拒绝。编码器检查 5 秒没答复只拒绝那一次连接，之后的连接用迟到的答复；卡住不答的检查只让第一次连接等
+- **HomeVolumeTests / PlayerSyncTests**（5.1 部分）：开关单独一行、各语言都不出界，切换会保存；开关说明的每一行在全部语言里都不超过约 800 px（工具提示不会横跨整个屏幕）；5.1 时播放器在任何场景都跟随，首页的播放器提示也显示
+- **SurroundCliTests**：`stream --surround` 必须带 `--silent`，拒绝测试音和高于 10% 的音量；默认 1800 ms、30 秒、10%
+- **gui-smoke 的 surround-fallback 场景**：每轮都检查首页有「5.1 环绕声」开关、默认关；这个场景把开关打开后连假 HomePod（运行器上没有 5.1 输出，假音箱也不报告 5.1，哪一种拒绝都算）：首页是「已连接 · … · 立体声。未用 5.1 环绕声：…」，照常推送立体声（有 RECORD 和 RTP，没有 SETRATEANCHORTIME），布局检查和截图通过，日志里没有 ERROR
 
 - **ParametricEqTests / EqualizerTests / DynamicsTests / MicrophonePagesTests**：每种频段类型的实测频率响应和曲线一致；拖频率、改 Q、换类型、开关频段时没有不连续（二阶差分）；旧五段预设和旧配置得到同样的滤波器；关掉均衡后逐位不变；NaN 样本不会让之后全部静音；处理时不分配内存。压缩器静态曲线、齿音消除只压高频、限制器不超过上限；麦克风页的开关和滑块改到设置和引擎，不打开麦克风；配置档案恢复全部音效设置。gui-smoke 检查均衡页和麦克风页的新控件并截图。
 
