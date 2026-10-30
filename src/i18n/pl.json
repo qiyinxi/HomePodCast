@@ -850,5 +850,7 @@
   "按程序分流开启时不能用": "niedostępne przy kierowaniu według aplikacji",
   "5.1 环绕声": "Dźwięk surround 5.1",
   "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n这时状态里会写明原因。\n立体声对和多房间照常推送立体声，无线影院不受影响。\n实验性功能。": "Wysyła wyjście 5.1 systemu Windows bez zmian do HomePoda, który gra sam; dźwięk surround renderuje sam HomePod.\n7.1 jest łączone do 5.1. Kanał LFE może milczeć, a to nie jest Dolby Atmos.\nNajpierw ustaw w ustawieniach dźwięku Windows urządzenie wyjściowe na 5.1 lub 7.1 i wyłącz w Windows funkcję „Dźwięk przestrzenny”.\nOpóźnienie jest stałe, około {0:F1} s: do filmów, nie do gier.\nSceny, ustawienie opóźnienia, korektor, tryb nocny i miksowanie mikrofonu nie działają wtedy.\nPrzy kierowaniu według aplikacji, odtwarzaniu w kilku miejscach naraz albo gdy brakuje któregoś warunku, jak zwykle przesyłany jest dźwięk stereo.\nStan podaje wtedy powód.\nPary stereo i wiele pomieszczeń jak zwykle grają w stereo; kino bezprzewodowe pozostaje bez zmian.\nFunkcja eksperymentalna.",
-  "5.1 环绕声模式下还不能做音画同步测试。": "Test synchronizacji A/V nie jest jeszcze dostępny w trybie dźwięku surround 5.1."
+  "5.1 环绕声模式下还不能做音画同步测试。": "Test synchronizacji A/V nie jest jeszcze dostępny w trybie dźwięku surround 5.1.",
+  "点个星星": "Dodaj gwiazdkę",
+  "点个星星是对开发者最大的鼓励~": "Gwiazdka to największa zachęta dla dewelopera~"
 }

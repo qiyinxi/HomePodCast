@@ -850,5 +850,7 @@
   "按程序分流开启时不能用": "ei käytettävissä sovelluskohtaisen reitityksen kanssa",
   "5.1 环绕声": "5.1-surround",
   "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n这时状态里会写明原因。\n立体声对和多房间照常推送立体声，无线影院不受影响。\n实验性功能。": "Lähettää Windowsin 5.1-äänen muuttamattomana yksinään toistavaan HomePodiin; HomePod toistaa surround-äänen itse.\n7.1 yhdistetään 5.1:ksi. LFE-kanava voi jäädä hiljaiseksi, eikä tämä ole Dolby Atmos.\nMääritä ensin Windowsin ääniasetuksissa toistolaitteeksi 5.1 tai 7.1 ja poista Windowsin Tilaääni käytöstä.\nViive on kiinteä, noin {0:F1} s: videoille, ei peleille.\nProfiilit, viiveasetus, taajuuskorjain, yötila ja mikrofonin miksaus eivät silloin vaikuta.\nKun käytössä on sovelluskohtainen reititys tai useita kohteita tai jokin edellytys puuttuu, ääni lähetetään tavalliseen tapaan stereona.\nTila kertoo silloin syyn.\nStereoparit ja monihuone toistavat stereota tavalliseen tapaan; langaton elokuvateatteri ei muutu.\nKokeellinen toiminto.",
-  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkronointitestiä ei voi vielä tehdä, kun 5.1-surround on käytössä."
+  "5.1 环绕声模式下还不能做音画同步测试。": "A/V-synkronointitestiä ei voi vielä tehdä, kun 5.1-surround on käytössä.",
+  "点个星星": "Anna projektille tähti",
+  "点个星星是对开发者最大的鼓励~": "Tähti on suurin kannustus kehittäjälle~"
 }

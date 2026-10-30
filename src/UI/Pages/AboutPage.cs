@@ -33,11 +33,17 @@ internal sealed class AboutPage : ScrollPage
         // The release's version (1.3.0-beta.2), as 当前版本 below says: the assembly version drops the prerelease part.
         var link = new FluentButton("GitHub", ButtonKind.Link, Glyph.OpenInNew) { AccessibleName = RepositoryUrl };
         var aboutRow = new SettingRow(Glyph.Info, $"HomePodCast {ReleaseVersion.CurrentText}", RepositoryUrl, link);
+        var star = new FluentButton(L.T("点个星星"), ButtonKind.Link, Glyph.FavoriteStar)
+        {
+            AccessibleName = L.T("点个星星"),
+        };
+        var starRow = new SettingRow(Glyph.FavoriteStar, L.T("点个星星"), L.T("点个星星是对开发者最大的鼓励~"), star);
 
         var license = new FluentButton("GPL-3.0", ButtonKind.Link, Glyph.OpenInNew);
         var licenseRow = new SettingRow(Glyph.Info, L.T("许可证"), "GNU General Public License v3.0", license);
-        Content.Controls.AddRange([aboutRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]);
+        Content.Controls.AddRange([aboutRow, starRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]);
         link.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl);
+        star.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl);
         license.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl + "/blob/dev/LICENSE");
         _channel.AccessibleName = L.T("更新渠道");
         _channel.SelectionChangeCommitted += (_, _) =>

@@ -850,5 +850,7 @@
   "按程序分流开启时不能用": "indisponible avec le routage par application",
   "5.1 环绕声": "Son surround 5.1",
   "把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n这时状态里会写明原因。\n立体声对和多房间照常推送立体声，无线影院不受影响。\n实验性功能。": "Envoie la sortie 5.1 de Windows telle quelle à un HomePod qui joue seul ; le HomePod restitue lui-même le son surround.\nLe 7.1 est réduit en 5.1. Le canal LFE peut rester muet, et ce n'est pas du Dolby Atmos.\nConfigurez d'abord le périphérique de sortie en 5.1 ou 7.1 dans les paramètres de son de Windows et désactivez le son spatial.\nLa latence est fixe, environ {0:F1} s : pour la vidéo, pas pour les jeux.\nLes scènes, le réglage de latence, l'égaliseur, le mode nuit et le mixage du micro sont alors sans effet.\nAvec le routage par application, plusieurs destinations à la fois ou si une condition manque, le son est diffusé en stéréo.\nL'état indique alors pourquoi.\nLes paires stéréo et le multiroom diffusent en stéréo comme d'habitude ; le cinéma sans fil n'est pas concerné.\nFonction expérimentale.",
-  "5.1 环绕声模式下还不能做音画同步测试。": "Le test de synchro A/V n'est pas encore disponible en mode son surround 5.1."
+  "5.1 环绕声模式下还不能做音画同步测试。": "Le test de synchro A/V n'est pas encore disponible en mode son surround 5.1.",
+  "点个星星": "Ajouter une étoile",
+  "点个星星是对开发者最大的鼓励~": "Une étoile est le plus grand encouragement pour le développeur~"
 }
