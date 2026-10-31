@@ -151,6 +151,15 @@ public class LayoutTests
     });
 
     [Fact]
+    public void Navigation_keeps_labels_at_125_percent_when_the_page_can_stack()
+    {
+        // 862 px is the attached desktop screenshot's client width. At 125% the old 560-DP two-column
+        // requirement left 612 px for the page and incorrectly collapsed the rail to icons.
+        Assert.True(NavRail.FullWidthFits(862, 250, 120));
+        Assert.False(NavRail.FullWidthFits(750, 250, 120)); // the 600-DP minimum window stays compact
+    }
+
+    [Fact]
     public void Resizing_a_page_stacks_columns_reduces_insets_and_centers_wide_content() => Sta.Run(() =>
     {
         using var page = new ScrollPage { Size = new Size(960, 600) };

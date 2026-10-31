@@ -6,6 +6,10 @@ namespace HomePodCast.UI.Controls;
 /// </summary>
 internal sealed class NavRail : LayoutPanel, ISurface
 {
+    // The page stacks its columns once this much room is left; keeping the old two-column threshold made a normal
+    // 125% window collapse the navigation to icons even though the single-column page still fit (the screenshot on
+    // 2026-10-31 was 862 px wide and hit that path).
+    private const int MinPageWidthDp = 440;
     private readonly List<NavItem> _items = [];
     private readonly List<NavItem> _footer = [];
     private readonly ToolTip _tips = new();
@@ -105,12 +109,15 @@ internal sealed class NavRail : LayoutPanel, ISurface
     /// <summary>Width that fits the longest label.</summary>
     public int PreferredWidth() => Math.Max(Dp(200), _items.Count == 0 ? 0 : _items.Max(i => i.GetPreferredSize(Size.Empty).Width) + Dp(16));
 
-    /// <summary>Keep room for page controls at narrow widths; labels return as soon as both columns fit.</summary>
+    /// <summary>Keep enough room for a readable single-column page before switching to compact navigation.</summary>
     public int WidthForWindow(int clientWidth)
     {
         int full = PreferredWidth();
-        return full <= clientWidth / 3 && clientWidth - full >= Dp(560) ? full : Dp(64);
+        return FullWidthFits(clientWidth, full, DeviceDpi) ? full : Dp(64);
     }
+
+    internal static bool FullWidthFits(int clientWidth, int fullWidth, int dpi) =>
+        fullWidth <= clientWidth / 3 && clientWidth - fullWidth >= Theme.Dp(MinPageWidthDp, dpi);
 
     private void EnsureVisible(NavItem item)
     {
