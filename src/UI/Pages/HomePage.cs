@@ -455,7 +455,8 @@ internal sealed class HomePage : ScrollPage
         _loading = true;
         var cfg = _app.PlaybackConfig;
         var selection = _app.ReceiverSelection;
-        bool scopedGroup = _app.Mixer?.IsConnected == true && GroupPlan.FromConfig(cfg) != null;
+        // A stereo pair is one speaker: the scene card as for a single HomePod, not 各去处状态 (IsOneSpeaker).
+        bool scopedGroup = _app.Mixer?.IsConnected == true && GroupPlan.FromConfig(cfg) is { } scoped && !IsOneSpeaker(scoped);
         _homePodLatency.Collapsed = selection != null || scopedGroup || _app.NativeMixerView;
         _destinationLatency.Collapsed = !scopedGroup && !_app.NativeMixerView;
         _destinationLatency.Text = _app.NativeMixerView ? L.T("本机播放由 Windows 决定；不创建播放副本，也不提供网络延迟设置。") : scopedGroup
@@ -546,7 +547,8 @@ internal sealed class HomePage : ScrollPage
         {
             string label = DeviceLabel(d, scan);
             string kind = ReceiverKinds.Label(d.Kind);
-            _device.Items.Add(d.Kind is ReceiverKind.HomePod ? label : $"{label} · {kind}");
+            // A pair's entry has no model of its own (Unknown), but is two HomePods: no 「· 未知 AirPlay 设备」 after it.
+            _device.Items.Add(d.Kind is ReceiverKind.HomePod || StereoPairs.IsPairId(d.DeviceId) ? label : $"{label} · {kind}");
         }
         _device.SelectedIndex = SelectedIndex(devices, _app.Config.DeviceId);
         ShowSpeaker();
@@ -569,7 +571,9 @@ internal sealed class HomePage : ScrollPage
         var device = _device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count ? _devices[_device.SelectedIndex] : null;
         _model.Text = device == null ? (cfg.DeviceId == null ? L.T("在下面选择一台 AirPlay 音箱") : "")
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
-        if (plan != null)
+        if (plan != null && IsOneSpeaker(plan))
+            _model.Text = PairModelText(plan, _app.LastScan);
+        else if (plan != null)
             _model.Text = L.F("{0} 个输出 · {1}", plan.Kind == GroupKind.StereoPair ? (plan.PairLeaderOnly ? 1 : 2) + plan.LocalOutputs.Count + plan.DlnaOutputs.Count
                 : plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count,
                 plan.DlnaOutputs.Count > 0 ? L.T("大致同步") : plan.LocalOutputs.Count > 0
@@ -583,6 +587,24 @@ internal sealed class HomePage : ScrollPage
     }
 
     internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
+
+    /// <summary>
+    /// A stereo pair on its own (no local or DLNA outputs beside it) is one speaker on this page: 「立体声对 · HomePod 第二代」
+    /// under its name, no line per member and the scene card as for a single HomePod. 2026-11-03: 「2 个输出 · AirPlay
+    /// 时间线同步」, a line per member and 各去处状态 made it read as two speakers, and the member lines, coming and going
+    /// with each connection attempt, moved the volume card below them up and down. Both members are required, so one that
+    /// fails ends the session and the status line says so.
+    /// </summary>
+    internal static bool IsOneSpeaker(GroupPlan plan) =>
+        plan.Kind == GroupKind.StereoPair && plan.LocalOutputs.Count == 0 && plan.DlnaOutputs.Count == 0;
+
+    /// <summary>「立体声对 · HomePod 第二代」 (the members' model from the scan), or 「立体声对」 before they were found.</summary>
+    internal static string PairModelText(GroupPlan plan, IReadOnlyList<AirPlayDevice> scan)
+    {
+        string? model = plan.PairTsid is { } tsid
+            ? StereoPairs.Members(scan, tsid).Select(m => m.Model).FirstOrDefault(m => !string.IsNullOrEmpty(m)) : null;
+        return model == null ? L.T("立体声对") : L.T("立体声对") + " · " + FriendlyModel(model);
+    }
 
     /// <summary>
     /// A speaker in the picker: "卧室（HomePod 第二代）"; an Apple TV with home-theater speakers "客厅（Apple TV，家庭影院：卧室）"
@@ -689,8 +711,8 @@ internal sealed class HomePage : ScrollPage
     {
         var cfg = _app.PlaybackConfig;
         var plan = GroupPlan.FromConfig(cfg);
-        _groupStatus.Collapsed = plan == null;
-        if (plan == null) { _groupStatus.Text = ""; return; }
+        _groupStatus.Collapsed = plan == null || IsOneSpeaker(plan);
+        if (plan == null || _groupStatus.Collapsed) { _groupStatus.Text = ""; return; }
         var actual = _app.Controller.GroupOutputStatuses;
         var names = plan.Members.Select(m => (m.DeviceId, m.Name))
             .Concat(plan.LocalOutputs.Select(o => (o.DeviceId, o.Name)))
