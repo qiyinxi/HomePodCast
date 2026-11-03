@@ -244,7 +244,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 1. - [ ] `HomePodCast.exe scan --txt`：整段输出发我。同时写下 Home App 里哪只是左、哪只是右（用来核对：flags 第 13 位标的主音箱是哪只，gid 里的 `+0+` / `+1+` 是不是对应左 / 右）
 2. - [ ] `HomePodCast.exe info --host 左边IP` 和 `info --host 右边IP`：两段输出都发我（找有没有声道或主从字段）
-3. - [ ] 默认模式：`HomePodCast.exe group --pair --tone --seconds 20 --volume 20 --verbose`，然后在界面里选这对音箱连接，放一段左右声道测试视频：左边只出左、右边只出右吗？两只之间有没有回声 / 一前一后的感觉？2026-11-03：界面里能连上（接管后第一次卧室 (2) 超时，2 秒后自动重连成功）；2% 音量下听着比 iPhone 单薄，正常音量还没对比
+3. - [ ] 默认模式：`HomePodCast.exe group --pair --tone --seconds 20 --volume 20 --verbose`，然后在界面里选这对音箱连接，放一段左右声道测试视频：左边只出左、右边只出右吗？两只之间有没有回声 / 一前一后的感觉？2026-11-03：界面里能连上（接管后第一次卧室 (2) 超时，2 秒后自动重连成功）；2% 音量下听着比 iPhone 单薄，调到正常音量后听着没问题（单薄是音量太小）。左右声道和回声还没专门听
 4. - [x] 只连主音箱：`group --pair --leader-only --tone --seconds 20 --volume 20`。另一只响不响？主音箱放的是完整立体声还是只有它那一侧？2026-11-03（界面里的「只连接主音箱」，主音箱卧室 (2) 是 OS 22K557、另一只是 24K122）：另一只不响，主音箱不转发，默认模式两路都要连。主音箱放的是哪一侧还没听
 5. - [ ] 只连非主音箱：`stream --host 非主音箱IP --tone --seconds 20 --volume 20`。只有它响，还是两只都响？
 6. - [ ] 第 3 步连不上，或者一只很快断开：用 `group --pair --no-group-uuid --tone --seconds 20 --volume 20` 再试一次，看是不是 groupUUID 引起的
