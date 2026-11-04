@@ -2,7 +2,7 @@ using HomePodCast.UI.Controls;
 
 namespace HomePodCast.UI.Pages;
 
-/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume and hotkeys.</summary>
+/// <summary>Preferences: appearance, startup, takeover, night disconnect, volume and hotkeys, 5.1 surround.</summary>
 internal sealed class SettingsPage : ScrollPage
 {
     private static readonly string[] ThemeModes = [Theme.Auto, Theme.Light, Theme.Dark];
@@ -30,6 +30,7 @@ internal sealed class SettingsPage : ScrollPage
     private readonly SettingRow _volumeKeysRow;
     private readonly FluentButton _hotkeys = new(L.T("快捷键…"));
     private readonly SettingRow _hotkeysRow;
+    private readonly ToggleSwitch _surround = new(); // experimental since 1.4
     public void ShowTheme() => _theme.SelectedIndex = Array.IndexOf(ThemeModes, Theme.Normalize(_app.Config.Theme));
 
     /// <summary>外观 chosen ("auto", "light" or "dark"); without a handler the page saves and applies it itself.</summary>
@@ -80,11 +81,16 @@ internal sealed class SettingsPage : ScrollPage
         _volumeKeysRow = new SettingRow(Glyph.Keyboard, L.T("键盘音量键"), "", _volumeKeys);
         _hotkeysRow = new SettingRow(Glyph.Keyboard, L.T("全局快捷键"), "", _hotkeys);
 
+        // 2026-11-04: moved here from 首页's volume card. A mode set once (it needs Windows set to 5.1 and costs about 1.8 s
+        // of latency), not something switched while listening; 首页's status still says whether 5.1 is in use and why not.
+        var audio = Ui.Section(L.T("音频"));
+        var surround = new SettingRow(Glyph.Speaker, L.T("5.1 环绕声（实验性）"), SurroundDescription(), _surround); // experimental since 1.4
+
         Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            sound, cap, _volumeKeysRow, _hotkeysRow]);
-        foreach (var header in new Control[] { general, sound }) Content.GapBefore[header] = 20;
+            sound, cap, _volumeKeysRow, _hotkeysRow, audio, surround]);
+        foreach (var header in new Control[] { general, sound, audio }) Content.GapBefore[header] = 20;
         foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
-            cap, _volumeKeysRow, _hotkeysRow }) Content.GapBefore[row] = 4;
+            cap, _volumeKeysRow, _hotkeysRow, surround }) Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
         _language.SelectionChangeCommitted += (_, _) =>
@@ -149,6 +155,7 @@ internal sealed class SettingsPage : ScrollPage
             ShowVolumeKeys();
         };
         _hotkeys.Click += (_, _) => _app.ShowHotkeys(FindForm()!);
+        _surround.Toggled += (_, _) => _app.SetSurround51(_surround.Checked);
         Load();
         if (logicalLayout) LogicalLayout.Enable(Content); // tests compare the native and logical hierarchies
     }
@@ -280,8 +287,25 @@ internal sealed class SettingsPage : ScrollPage
         ShowHotkeyStatus(_app.UnavailableHotkeys.Count);
     }
 
+    /// <summary>
+    /// What 5.1 环绕声 does and what it costs (experimental since 1.4), a sentence or two per line: it was a tooltip on
+    /// 首页 until 2026-11-04, where in one piece it ran across a whole monitor.
+    /// Only a single speaker's status names a reason for stereo; groups just stay stereo.
+    /// </summary>
+    internal static string SurroundDescription() => L.F("把 Windows 输出的 5.1 声道原样送到单独播放的 HomePod，由 HomePod 自己渲染环绕声。\n" +
+        "7.1 会合并成 5.1；低频效果声道 LFE 可能没有声音；这不是杜比全景声。\n" +
+        "需要先在 Windows 声音设置里把输出设备配置为 5.1 或 7.1，并关闭空间音效。\n" +
+        "延迟固定约 {0:F1} 秒，适合看视频，不适合玩游戏。\n" +
+        "这时场景和延迟设置、均衡器、夜间模式和麦克风混音都不起作用。\n" +
+        "按程序分流、多个去处同时播放或条件不满足时，照常推送立体声。\n" +
+        "这时状态里会写明原因。\n" +
+        "立体声对和多房间照常推送立体声，无线影院不受影响。\n" +
+        "实验性功能。",
+        SurroundPolicy.LatencyMs / 1000.0); // experimental since 1.4
+
     public void ShowSoundOptions()
     {
+        _surround.Checked = _app.Config.Surround51;
         if (_cap.IsDragging || _capWait.Enabled) return;
         _cap.Value = _app.Config.VolumeCapPercent;
         _capValue.Text = $"{_cap.Value}%";

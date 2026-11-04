@@ -109,70 +109,32 @@ public class HomeVolumeTests
         finally { L.Use(before); }
     });
 
-    /// <summary>5.1 环绕声 (experimental since 1.4) has a row of its own: beside the other two it wrapped outside theirs.</summary>
-    [Theory]
-    [InlineData("zh-CN")]
-    [InlineData("de")]
-    [InlineData("en")]
-    public void The_surround_switch_fits_its_own_row_in_a_narrow_volume_card(string language) => Sta.Run(() =>
-    {
-        string before = L.Language;
-        try
-        {
-            L.Use(language);
-            using var host = new Host();
-            var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
-            var only = TestApp.Field<ToggleSwitch>(host.Page, "_onlyHomePod");
-            var row = Assert.IsType<RowPanel>(LogicalLayout.Parent(surround));
-            Assert.NotSame(row, LogicalLayout.Parent(only));
-            row.Width = Theme.Dp(298, row.DeviceDpi);
-            row.PerformLayout();
-            Assert.True(row.ClientRectangle.Contains(LogicalLayout.Bounds(surround)), $"{language}: {surround.Text} outside row");
-            Assert.True(surround.Width >= surround.GetPreferredSize(Size.Empty).Width, $"{language}: {surround.Text} clipped");
-        }
-        finally { L.Use(before); }
-    });
-
     /// <summary>
-    /// A WinForms tooltip may be as wide as the screen: in one piece the 5.1 description (experimental since 1.4) ran across
-    /// a whole monitor. Every line stays under about 800 px at 100 % in every language, in the tooltip's own font.
+    /// 5.1 环绕声 (experimental since 1.4) moved to 设置 → 音频 on 2026-11-04: the volume card has only its two switches,
+    /// and the row on 设置 shows the whole description, not a tooltip.
     /// </summary>
     [Fact]
-    public void The_surround_description_keeps_every_line_narrow_in_every_language()
-    {
-        string before = L.Language;
-        try
-        {
-            using var screen = Graphics.FromHwnd(IntPtr.Zero);
-            // Windows' tooltip font, Segoe UI 9 pt (CJK falls back as in the tooltip), measured on this DC and scaled to 100 %.
-            using var font = new Font("Segoe UI", 9f);
-            float scale = 96f / screen.DpiX;
-            foreach (var language in L.Languages)
-            {
-                L.Use(language);
-                var lines = HomePage.SurroundDescription().Split('\n');
-                Assert.True(lines.Length >= 8, $"{language}: {lines.Length} lines");
-                foreach (var line in lines)
-                {
-                    int width = (int)(TextRenderer.MeasureText(screen, line, font).Width * scale);
-                    Assert.True(width <= 820, $"{language}: {width} px at 100 %: {line}");
-                }
-            }
-        }
-        finally { L.Use(before); }
-    }
-
-    [Fact]
-    public void The_surround_switch_is_saved_and_described_as_experimental() => Sta.Run(() =>
+    public void The_surround_switch_is_on_settings_not_on_home() => Sta.Run(() =>
     {
         using var host = new Host();
-        var surround = TestApp.Field<ToggleSwitch>(host.Page, "_surround");
-        var tips = TestApp.Field<ToolTip>(host.Page, "_tips");
-        Assert.Equal("5.1 环绕声", surround.Text);
+        Assert.Null(typeof(HomePage).GetField("_surround", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.DoesNotContain(Descendants(host.Page).OfType<ToggleSwitch>(), t => t.Text.Contains("5.1"));
+
+        var surround = TestApp.Field<ToggleSwitch>(host.Settings, "_surround");
+        var row = Assert.IsType<SettingRow>(LogicalLayout.Parent(surround));
+        Assert.Equal("5.1 环绕声（实验性）", row.TitleText.Text);
+        Assert.Equal(SettingsPage.SurroundDescription(), row.DescriptionText.Text);
+        Assert.Contains($"约 {SurroundPolicy.LatencyMs / 1000.0:F1} 秒", row.DescriptionText.Text);
+        int index = host.Settings.Content.Controls.GetChildIndex(row);
+        Assert.Equal("音频", Assert.IsAssignableFrom<TextBlock>(host.Settings.Content.Controls[index - 1]).Text);
+    });
+
+    [Fact]
+    public void The_surround_switch_is_saved_and_follows_the_setting() => Sta.Run(() =>
+    {
+        using var host = new Host();
+        var surround = TestApp.Field<ToggleSwitch>(host.Settings, "_surround");
         Assert.False(surround.Checked); // off on a fresh config
-        Assert.Contains($"约 {SurroundPolicy.LatencyMs / 1000.0:F1} 秒", surround.AccessibleDescription);
-        Assert.EndsWith("实验性功能。", surround.AccessibleDescription);
-        Assert.Equal(surround.AccessibleDescription, tips.GetToolTip(surround));
 
         // The unit-tests profile's file, which other test classes save to meanwhile: only that a save happened is certain.
         string file = Path.Combine(AppConfig.Directory, "config.json");
@@ -188,6 +150,9 @@ public class HomeVolumeTests
         Assert.False(surround.Checked);
         Assert.False(host.App.Config.Surround51);
     });
+
+    private static IEnumerable<Control> Descendants(Control parent) =>
+        parent.Controls.Cast<Control>().SelectMany(c => Descendants(c).Prepend(c));
 
     private sealed class Host : IDisposable
     {
@@ -207,6 +172,7 @@ public class HomeVolumeTests
                 StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) };
             typeof(TrayApp).GetField("_form", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(App, _window);
             Page = TestApp.Field<HomePage>(_window, "_home");
+            Settings = TestApp.Field<SettingsPage>(_window, "_settings");
             _window.Show(); // An invisible fake app; never starts discovery, capture or a sender.
             _window.ShowSoundOptions();
         }
@@ -214,6 +180,7 @@ public class HomeVolumeTests
         public TrayApp App { get; }
         public FakePcOutput Pc { get; }
         public HomePage Page { get; }
+        public SettingsPage Settings { get; }
 
         public void Dispose()
         {

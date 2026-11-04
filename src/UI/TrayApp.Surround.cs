@@ -1,7 +1,7 @@
 namespace HomePodCast.UI;
 
 // experimental since 1.4
-// 首页 →「5.1 环绕声」: one app-wide switch. StreamController.Surround.cs decides per connect attempt whether a single
+// 设置 → 音频 →「5.1 环绕声（实验性）」: one app-wide switch. StreamController.Surround.cs decides per connect attempt whether a single
 // HomePod gets 5.1 (SurroundFor, wired in TrayApp.Mixer.cs); everything else stays stereo.
 internal sealed partial class TrayApp
 {
