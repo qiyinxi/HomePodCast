@@ -83,7 +83,7 @@ older versions cannot represent named destinations. See the [hardware checklist]
 
 ## 5.1 surround to one HomePod — experimental since 1.4
 
-Turn on Home → **5.1 surround** (on the volume card, below **HomePod only** and **Night mode**; off by default). Windows'
+Turn on Settings → Audio → **5.1 surround (experimental)** (off by default). Windows'
 5.1 output then goes unchanged to a HomePod played on its own, and the HomePod renders the surround sound itself. While
 the switch is off nothing changes: realtime stereo, its latency and the scenes work exactly as before.
 
