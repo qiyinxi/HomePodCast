@@ -26,6 +26,8 @@ internal sealed class FakeMember(string name, FakeReceiver rx, ConcurrentQueue<s
     {
         log.Enqueue($"record {Name}");
         if (FailOn == "record") throw new AirPlayException("RECORD failed: RTSP/1.0 500 Internal Server Error");
+        // What RtspConnection throws when a HomePod drops the connection instead of answering.
+        if (FailOn == "record-closed") throw new IOException("connection closed by speaker");
     }
 
     public void Flush(ushort firstSeq, uint rtpBase)
@@ -173,11 +175,36 @@ public class SpeakerGroupTests : IDisposable
             SpeakerGroup.ConnectAsync([a.Setup(), b.Setup()], Fifo(), 30, default));
 
         Assert.Equal("B", ex.Member);
+        Assert.Equal("RECORD", ex.Step);
         Assert.True(a.Disposed && b.Disposed);
         Assert.DoesNotContain(_log, s => s.StartsWith("flush"));
         Thread.Sleep(300);
         Assert.Empty(a.Receiver.Audio);
         Assert.Empty(a.Receiver.Sync);
+    }
+
+    [Fact]
+    public async Task A_speaker_that_closes_the_connection_is_logged_with_the_request_it_refused()
+    {
+        // 2026-11-07: a stereo pair's HomePods closed the connection right after the stream SETUP, ten attempts in a
+        // row; "connection closed by speaker" alone did not say whether RECORD or FLUSH was refused.
+        var a = Member("A");
+        var b = Member("B", failOn: "record-closed");
+        var ex = await Assert.ThrowsAsync<GroupMemberException>(() =>
+            SpeakerGroup.ConnectAsync([a.Setup(), b.Setup()], Fifo(), 30, default));
+
+        Assert.Equal("RECORD", ex.Step);
+        var line = GroupRunner.DescribeForLog(ex);
+        Assert.Equal($"{Log.Name("B")} during RECORD: IOException: connection closed by speaker", line);
+        // The text the user sees keeps the speaker's name and reason as before.
+        var shown = GroupRunner.Describe(ex);
+        Assert.Contains("B", shown);
+        Assert.Contains("IOException: connection closed by speaker", shown);
+        Assert.DoesNotContain("RECORD", shown);
+        // A member failing before any step (connect, pair, SETUP) says so too.
+        var setupFail = await Assert.ThrowsAsync<GroupMemberException>(() =>
+            SpeakerGroup.ConnectAsync([Member("C", failOn: "prepare").Setup()], Fifo(), null, default));
+        Assert.Equal("prepare", setupFail.Step);
     }
 
     [Fact]

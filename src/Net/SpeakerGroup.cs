@@ -149,7 +149,7 @@ internal sealed class SpeakerGroup : IOutputSink
             var members = group._members.Select(m => m!).ToArray();
 
             // RECORD on every speaker first: nothing plays until all of them have accepted the stream.
-            await group.EachAsync((m, _) => m.Record(), attemptToken);
+            await group.EachAsync("RECORD", (m, _) => m.Record(), attemptToken);
 
             // One timeline: same RTP base and T0 for all; per-session keys, SSRCs and sequence numbers.
             long? coordinatedT0 = null;
@@ -191,7 +191,7 @@ internal sealed class SpeakerGroup : IOutputSink
                 };
                 group._sender = sender;
                 sender.Start(t0 + (coordinated ? MediaClock.FromMs(TimelinePump.HeadroomMs) : 0));
-                await group.EachAsync((m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), attemptToken);
+                await group.EachAsync("FLUSH", (m, i) => m.Flush(sender.Streams[i].FirstSeq, sender.RtpBase), attemptToken);
             }
 
             double CurrentMaster()
@@ -201,7 +201,7 @@ internal sealed class SpeakerGroup : IOutputSink
                     ?? (members.Length > 0 ? AirPlayClient.DbToPercent(members[0].InitialVolumeDb ?? -20.0) : 20), group.VolumeCapPercent);
             }
             group.MasterVolume = CurrentMaster();
-            await group.EachAsync((m, i) =>
+            await group.EachAsync("volume", (m, i) =>
             {
                 if (m is AirPlayClient client) client.VolumeCapPercent = group.VolumeCapPercent;
                 m.SetVolumePercent(MemberVolume(CurrentMaster(), setups[i].VolumeOffset, group.VolumeCapPercent));
@@ -262,12 +262,12 @@ internal sealed class SpeakerGroup : IOutputSink
         }
         await Task.WhenAll(tasks);
         ct.ThrowIfCancellationRequested();
-        if (_firstError is { } first) throw new GroupMemberException(_setups[_firstErrorIndex].Label, first);
+        if (_firstError is { } first) throw new GroupMemberException(_setups[_firstErrorIndex].Label, first) { Step = "prepare" };
         ThrowIfLost();
     }
 
-    /// <summary>Run one step on every member at once; a failure fails the group, naming the member.</summary>
-    private async Task EachAsync(Action<IGroupMember, int> step, CancellationToken ct)
+    /// <summary>Run one step on every member at once; a failure fails the group, naming the member and the step.</summary>
+    private async Task EachAsync(string stepName, Action<IGroupMember, int> step, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var tasks = new Task[_members.Length];
@@ -277,7 +277,7 @@ internal sealed class SpeakerGroup : IOutputSink
             tasks[i] = Task.Run(() =>
             {
                 try { step(_members[index]!, index); }
-                catch (Exception ex) { throw new GroupMemberException(_setups[index].Label, ex); }
+                catch (Exception ex) { throw new GroupMemberException(_setups[index].Label, ex) { Step = stepName }; }
             });
         }
         await Task.WhenAll(tasks);
