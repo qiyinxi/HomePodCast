@@ -400,11 +400,10 @@ public class LayoutWorkTests
         var panels = All(page).OfType<LayoutPanel>().Where(panel => panel != page.Content).ToArray();
         var inputs = All(page).Where(control => LogicalLayout.IsInput(control) && control.IsHandleCreated).ToArray();
         output.WriteLine($"Home: {Handles(before.Page)} -> {Handles(page)} HWNDs, {panels.Length} logical layout nodes, {inputs.Length} native inputs");
-        // The 5.1 switch on its own row (experimental since 1.4): one more input and layout node, natively two more windows.
-        Assert.Equal(31, Handles(before.Page));
-        Assert.Equal(17, Handles(page));
-        Assert.Equal(35, panels.Length);
-        Assert.Equal(15, inputs.Length);
+        Assert.Equal(29, Handles(before.Page));
+        Assert.Equal(16, Handles(page));
+        Assert.Equal(34, panels.Length);
+        Assert.Equal(14, inputs.Length);
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
         Assert.All(inputs, input => Assert.Same(page.Content, input.Parent));
         Assert.Equal(2 + inputs.Length, Handles(page));
@@ -448,10 +447,11 @@ public class LayoutWorkTests
         var panels = All(after.Page).OfType<LayoutPanel>().Where(panel => panel != after.Page.Content).ToArray();
         var inputs = All(after.Page).Where(control => LogicalLayout.IsInput(control) && control.IsHandleCreated).ToArray();
         output.WriteLine($"Settings: {Handles(before.Page)} -> {Handles(after.Page)} HWNDs, {panels.Length} logical panels, {inputs.Length} created native inputs");
-        Assert.Equal(21, Handles(before.Page));
-        Assert.Equal(11, Handles(after.Page));
-        Assert.Equal(13, panels.Length);
-        Assert.Equal(9, inputs.Length);
+        // 音频 → 5.1 环绕声 (experimental since 1.4, moved here from 首页): one more row and input, natively two more windows.
+        Assert.Equal(23, Handles(before.Page));
+        Assert.Equal(12, Handles(after.Page));
+        Assert.Equal(14, panels.Length);
+        Assert.Equal(10, inputs.Length);
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
         Assert.All(inputs, input => Assert.Same(after.Page.Content, input.Parent));
         Assert.Equal(2 + inputs.Length, Handles(after.Page));

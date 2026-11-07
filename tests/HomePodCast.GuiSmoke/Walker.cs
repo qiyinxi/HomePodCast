@@ -259,7 +259,7 @@ internal sealed partial class Walker
     /// 5.1 环绕声 on (experimental since 1.4) with the fake HomePod: the runner can't give 5.1 (no output device or a stereo
     /// one, maybe no 6-channel AAC encoder) and the fake offers none either (no supportedFormats in /info), so whichever
     /// refusal comes first, the same attempt streams stereo realtime and the status says why, with no ERROR in the log.
-    /// The switch is only looked at here, never flipped.
+    /// The switch (设置 → 音频) is only looked at here, never flipped.
     /// </summary>
     private void RunSurroundFallback()
     {
@@ -276,6 +276,8 @@ internal sealed partial class Walker
         CheckHome(tree, connected: true);
         Layout(tree, "首页");
         ShootPage("首页", "surround-fallback");
+        Navigate("设置");
+        CheckSettings(); // the switch reads on there
         Quit();
         CheckLog(idle: false);
 
@@ -551,13 +553,9 @@ internal sealed partial class Walker
             $"「{onlyHomePodTitle}」 is not off on a fresh config (state {onlyHomePodState?.ToString("X") ?? "not found"})");
         Expect(Find(page, n => n.Name == T("夜间模式") && n.Type == "CheckBox") != null, "首页",
             "the night-mode switch beside HomePod only is missing");
-        // 5.1 环绕声 (experimental since 1.4): off on a fresh config, on where the scenario turned it on. Never flipped here.
-        string surroundTitle = T("5.1 环绕声");
-        bool surroundOn = _s.Kind == "surround-fallback";
-        var surround = Find(page, n => n.Name == surroundTitle && n.Type == "CheckBox" && n.Hwnd != IntPtr.Zero);
-        var surroundState = surround == null ? null : Native.MsaaState(surround.Hwnd);
-        Expect(surroundState is { } ss && ((ss & Native.STATE_SYSTEM_CHECKED) != 0) == surroundOn, "首页",
-            $"「{surroundTitle}」 is not {(surroundOn ? "on" : "off")} (state {surroundState?.ToString("X") ?? "not found"})");
+        // 5.1 环绕声 moved to 设置 → 音频 (2026-11-04): CheckSettings looks at it there.
+        Expect(Find(page, n => n.Type == "CheckBox" && n.Name.Contains("5.1", StringComparison.Ordinal)) == null, "首页",
+            "a 5.1 surround switch is on 首页 again");
         if (!connected)
         {
             Expect(Has(page, T("未连接")), "首页", $"the status doesn't say 「{T("未连接")}」");
@@ -692,6 +690,13 @@ internal sealed partial class Walker
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+        // 5.1 环绕声 (experimental since 1.4): off on a fresh config, on where the scenario turned it on. Never flipped here.
+        string surroundTitle = T("5.1 环绕声（实验性）");
+        bool surroundOn = _s.Kind == "surround-fallback";
+        var surround = Find(page, n => n.Name == surroundTitle && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var surroundState = surround == null ? null : Native.MsaaState(surround.Hwnd);
+        Expect(surroundState is { } ss && ((ss & Native.STATE_SYSTEM_CHECKED) != 0) == surroundOn, "设置",
+            $"「{surroundTitle}」 is not {(surroundOn ? "on" : "off")} (state {surroundState?.ToString("X") ?? "not found"})");
     }
 
     private void CheckAvSync(Node tree)

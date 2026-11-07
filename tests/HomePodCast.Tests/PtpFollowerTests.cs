@@ -124,6 +124,11 @@ public sealed class PtpFollowerTests
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         Assert.True(await follower.SettleAsync(TimeSpan.FromSeconds(5), timeout.Token));
         Assert.Equal(0xABCDUL, follower.TimelineId);
+        // The estimate keeps the least-delayed Sync, so it only gets better. 2026-11-04, PR #112's CI: settled on a first
+        // Sync that a busy runner received 56 ms late; the next ones brought it back. Wait for that, not for the first one.
+        var converged = Stopwatch.StartNew();
+        while (follower.OffsetNs is not (>= offset - 20_000_000 and <= offset + 1_000_000) && converged.Elapsed < TimeSpan.FromSeconds(5))
+            await Task.Delay(50);
         Assert.InRange(follower.OffsetNs!.Value, offset - 20_000_000, offset + 1_000_000); // loopback: well under 20 ms
         long now = Stopwatch.GetTimestamp();
         Assert.InRange((long)follower.TimeAt(now)!.Value - PtpClockObserver.LocalNs(now), offset - 20_000_000, offset + 1_000_000);
