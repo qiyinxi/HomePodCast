@@ -133,7 +133,7 @@ internal sealed class GroupRunner(
     /// <summary><see cref="Describe"/> for the log: speaker names marked (Log.Name), so a diagnostic report leaves them out.</summary>
     internal static string DescribeForLog(Exception ex) => ex switch
     {
-        GroupMemberException g => $"{Log.Name(g.Member)}: {DescribeForLog(g.InnerException!)}",
+        GroupMemberException g => $"{Log.Name(g.Member)}{(g.Step is { } step ? $" during {step}" : "")}: {DescribeForLog(g.InnerException!)}",
         AirPlayException => AirPlayException.ForLog(ex),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
