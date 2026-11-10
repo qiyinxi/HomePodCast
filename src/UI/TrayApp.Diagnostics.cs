@@ -53,7 +53,7 @@ internal sealed partial class TrayApp
         var info = c.Client?.Info;
         var network = c.PcNetwork;
         var verdict = c.HealthWatched ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs,
-            c.SafeLatency(0) - StreamController.SafetyMarginMs, c.RouterWatched, c.PcWired) : null;
+            c.SpeakerProcessingMs, c.RouterWatched, c.PcWired) : null;
         var snapshot = new DiagnosticSnapshot(DateTimeOffset.Now, Update.ReleaseVersion.CurrentText,
             RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription, c.State,
             info?.GetValueOrDefault("model")?.ToString(), info?.GetValueOrDefault("sourceVersion")?.ToString(),

@@ -59,9 +59,8 @@ internal sealed class DiagnosticsPage : ScrollPage
         int? network = null;
         if (session != null && controller.HealthWatched && app.ReceiverSelection == null)
         {
-            int arrivalToRender = controller.SafeLatency(0) - StreamController.SafetyMarginMs;
             network = controller.Health.Assess(StreamController.HealthClockMs(), controller.EffectiveLatencyMs,
-                arrivalToRender, controller.RouterWatched, controller.PcWired).ConnectionThreats;
+                controller.SpeakerProcessingMs, controller.RouterWatched, controller.PcWired).ConnectionThreats;
         }
         return new(session, controller.Fifo.Underruns, network);
     }

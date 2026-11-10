@@ -29,6 +29,9 @@ public sealed partial class StreamController : IDisposable
     /// </summary>
     internal TimeSpan TakeoverRestartAfter { get; set; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>The wait before a retry (2, 4, 8, 16, 30 s; tests shorten it). Null: Task.Delay.</summary>
+    internal Func<TimeSpan, CancellationToken, Task>? RetryDelay { get; set; }
+
     /// <summary>The AirPlay port a single speaker is connected on (tests: an in-process receiver's).</summary>
     internal int AirPlayPort { get; set; } = 7000;
 
@@ -182,7 +185,7 @@ public sealed partial class StreamController : IDisposable
     private async Task RunAsync(string deviceId, string? host, int latencyMs, double? volume, int? volumeAsOf, ConnectTrigger trigger,
         string? takenFrom, CancellationToken ct)
     {
-        int attempt = 0;
+        int attempt = 0, closedWhileTakingOver = 0;
         bool streamed = false, endedBySpeaker = false;
         string key = OwnSession.KeyOf(deviceId);
         string? surroundRefusal = null; // 5.1 refused in this Start: reconnects go straight to stereo (experimental since 1.4)
@@ -192,7 +195,7 @@ public sealed partial class StreamController : IDisposable
             var started = Stopwatch.StartNew();
             string? lostReason = null;
             AirPlayClient? mine = null;
-            bool live = false, restart = false;
+            bool live = false, restart = false, tookOver = false;
             IPAddress? resolved = null;
             PairingRequiredException? needsPairing = null;
             try
@@ -202,7 +205,7 @@ public sealed partial class StreamController : IDisposable
                 resolved = address;
                 host = address.ToString();
                 HostResolved?.Invoke(host);
-                bool tookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key,
+                tookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed, endedBySpeaker), key,
                     [new BusyTarget(deviceId, host, address)], ct, endedBySpeaker, takenFrom);
                 started.Restart(); // the takeover grace counts from here, not from before a wait for the speaker
 
@@ -251,7 +254,7 @@ public sealed partial class StreamController : IDisposable
                     ArrivalToRenderChanged?.Invoke(a2r);
                 }
                 Volume ??= client.InitialVolumeDb is { } db ? VolumeLimit.Clamp(AirPlayClient.DbToPercent(db), VolumeCapPercent) : null;
-                attempt = 0;
+                attempt = closedWhileTakingOver = 0;
                 OwnSession.Began(key, UtcNow()); // before the change is announced: the UI saves it
                 live = streamed = true;
                 Set(StreamState.Streaming, StreamingText(client.Info.GetValueOrDefault("name"), client, surroundRefusal));
@@ -289,6 +292,16 @@ public sealed partial class StreamController : IDisposable
                 lostReason = ex is FirewallBlockedException or AirPlayException ? ex.Message : $"{ex.GetType().Name}: {ex.Message}";
                 Log.Warn($"stream: {lostReason}");
                 if (ex is FirewallBlockedException && !ct.IsCancellationRequested) FirewallBlocked?.Invoke();
+                // The speaker closed the connection of an attempt that took it over, before anything streamed: after a few
+                // in a row its other sender takes it back each time, and nothing takes it again (TakeoverPolicy).
+                if (live || !tookOver || !TakeoverPolicy.ClosedBySpeaker(ex)) closedWhileTakingOver = 0;
+                else if (++closedWhileTakingOver >= TakeoverPolicy.ClosedTakeoversBeforeWaiting)
+                {
+                    Log.Info($"takeover: the speaker closed our connection {closedWhileTakingOver} times in a row while we took it over: " +
+                             "its other sender keeps taking it back; not taking it again");
+                    OwnSession.Forget();
+                    endedBySpeaker = true;
+                }
             }
             finally
             {
@@ -323,7 +336,7 @@ public sealed partial class StreamController : IDisposable
             var delay = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(attempt, 5))));
             var shown = lostReason == EventChannel.ClosedBySpeaker ? L.T(EventChannel.ClosedBySpeaker) : lostReason;
             Set(StreamState.Retrying, L.F("{0}，{1:F0} 秒后重试", shown, delay.TotalSeconds));
-            try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
+            try { await (RetryDelay ?? Task.Delay)(delay, ct); } catch (OperationCanceledException) { break; }
         }
     }
 

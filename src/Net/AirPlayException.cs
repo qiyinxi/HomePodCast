@@ -10,6 +10,9 @@ public class AirPlayException(string message) : Exception(message)
     public int? ResponseStatusCode { get; init; }
     public string? RequestName { get; init; }
 
+    /// <summary>The speaker ended the session itself (<see cref="EventChannel.ClosedBySpeaker"/>): another sender took it.</summary>
+    public bool EndedBySpeaker { get; init; }
+
     /// <summary>What the log says about <paramref name="ex"/>.</summary>
     public static string ForLog(Exception ex) => ex is AirPlayException { LogMessage: { } m } ? m : ex.Message;
 }

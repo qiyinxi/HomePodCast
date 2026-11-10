@@ -635,8 +635,8 @@ internal sealed class HomePage : ScrollPage
         ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
-        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
-        int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
+        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker or a stereo pair: the network is watched
+        int arrivalToRender = c.SpeakerProcessingMs; // the speaker's own time, as the floor assumes it (a group: its slowest member's)
         var verdict = live
             ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
             : DemoVerdict(arrivalToRender);
@@ -787,10 +787,14 @@ internal sealed class HomePage : ScrollPage
     /// <summary>
     /// The latency a HomePod taken over from its home-theater Apple TV needs. 2026-10-12 (HomePod 2, Apple TV 4K): with
     /// the home theater on, the two answered pings 60–90 ms late every 2.1 s in step (up to ~145 ms now and then), also
-    /// with nothing streaming and whatever our session SETUP said; 105–135 ms stuttered, 500 ms played clean. 200 ms
-    /// leaves 110 ms for it (not yet heard on the device).
+    /// with nothing streaming and whatever our session SETUP said; 105–135 ms stuttered, 500 ms played clean. 200 ms,
+    /// which leaves 110 ms for it, was the first guess. 2026-11-10 (a stereo pair of HomePod 2 on OS 27, the Apple TV on
+    /// tvOS 27): the pair stuttered at 200 ms, with not one resend request in 45 minutes. Pinged every 50 ms for 5
+    /// minutes from the wired PC, both members answered late about twice a second, in step: over 60 ms nearly every
+    /// time, over 108 ms (all that 200 ms leaves) 27 and 32 times, over 150 ms 5 and 10 times, 172 ms at most; the
+    /// Apple TV and the router within 1 ms throughout. 300 ms leaves 208 ms.
     /// </summary>
-    internal const int HomeTheaterLatencyMs = NetworkHealth.MaxSuggestedMs;
+    internal const int HomeTheaterLatencyMs = 300;
 
     /// <summary>Shown as soon as such a HomePod streams below <see cref="HomeTheaterLatencyMs"/>, before any dropout.</summary>
     internal static string HomeTheaterNotice(string speaker, string appleTv) =>

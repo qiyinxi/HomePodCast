@@ -100,6 +100,24 @@ public class TakeoverPolicyTests
         Assert.Equal(TakeOver, TakeoverPolicy.RetryTrigger(TakeOver, streamed: false));
         foreach (var first in Enum.GetValues<ConnectTrigger>())
             Assert.Equal(Reconnect, TakeoverPolicy.RetryTrigger(first, streamed: true));
+        // The speaker ended the connection itself before anything streamed: 仍然连接 was answered once, not for every retry.
+        foreach (var first in Enum.GetValues<ConnectTrigger>())
+            Assert.Equal(Reconnect, TakeoverPolicy.RetryTrigger(first, streamed: false, endedBySpeaker: true));
+    }
+
+    [Fact]
+    public void An_attempt_counts_as_closed_by_the_speaker_only_when_the_speaker_ended_it()
+    {
+        // What a group's failed attempt carries: the member's failure around RtspConnection's.
+        Assert.True(TakeoverPolicy.ClosedBySpeaker(new GroupMemberException("卧室", new SpeakerClosedException()) { Step = "RECORD" }));
+        Assert.True(TakeoverPolicy.ClosedBySpeaker(new SpeakerClosedException(new IOException("reset"))));
+        // Its event channel closed while the session was set up (SpeakerGroup.ThrowIfLost).
+        Assert.True(TakeoverPolicy.ClosedBySpeaker(new AirPlayException("卧室：音箱结束了会话") { EndedBySpeaker = true }));
+        // A timeout, a refused request, a speaker that is not there: not the speaker ending anything.
+        Assert.False(TakeoverPolicy.ClosedBySpeaker(new GroupMemberException("卧室", new IOException("timed out"))));
+        Assert.False(TakeoverPolicy.ClosedBySpeaker(new AirPlayException("RECORD failed: RTSP/1.0 500 Internal Server Error")));
+        Assert.False(TakeoverPolicy.ClosedBySpeaker(null));
+        Assert.Equal(2, TakeoverPolicy.ClosedTakeoversBeforeWaiting);
     }
 
     [Fact]
@@ -559,6 +577,133 @@ public class TakeoverControllerTests : IDisposable
         await Until(() => c.StatusText == HeldText, "waiting instead of fighting the Apple TV");
         Assert.True(c.WaitingForSpeaker);
         Assert.Equal(2, Members().Count);
+    }
+
+    /// <summary>Member "A" (卧室) closes the control connection during the setup of the first <paramref name="closes"/> attempts.</summary>
+    private Func<int> CloseAttempts(StreamController c, int closes)
+    {
+        int attempts = 0;
+        var prepare = c.PrepareGroupMember!;
+        c.PrepareGroupMember = (m, options, channels, ct) =>
+            m.DeviceId == "A" && Interlocked.Increment(ref attempts) <= closes
+                ? Task.FromException<IGroupMember>(new SpeakerClosedException())
+                : prepare(m, options, channels, ct);
+        return () => Volatile.Read(ref attempts);
+    }
+
+    [Theory]
+    [InlineData(ConnectTrigger.Automatic)] // 临时接管: every connect takes the HomePod from its Apple TV
+    [InlineData(ConnectTrigger.Manual)]
+    [InlineData(ConnectTrigger.TakeOver)]  // 先询问 → 仍然连接
+    public async Task A_takeover_the_speaker_closes_before_it_streams_is_tried_twice_and_then_left_to_the_Apple_TV(ConnectTrigger trigger)
+    {
+        // 2026-11-07: a stereo pair's Apple TV was playing and closed every attempt within a second. Nothing had streamed,
+        // so nothing counted as taken back, and the retries took the pair again every 30 s (160 times in 80 minutes).
+        var (c, reader) = Controller();
+        c.RetryDelay = (_, ct) => Task.Delay(10, ct);
+        if (trigger == ConnectTrigger.TakeOver) c.HomeTheaterMode = HomeTheaterMode.Ask;
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        var attempts = CloseAttempts(c, closes: int.MaxValue);
+        c.StartGroup(Plan, 150, 40, trigger: trigger, takenFrom: trigger == ConnectTrigger.TakeOver ? "电视" : null);
+        await Until(() => c.StatusText == HeldText, "waiting instead of taking it again");
+        Assert.True(c.WaitingForSpeaker);
+        Assert.Equal(StreamState.Idle, c.State);                 // 连接 stays available: a click takes it over again
+        Assert.Equal(TakeoverPolicy.ClosedTakeoversBeforeWaiting, attempts());
+
+        int reads = reader.Reads;
+        await Until(() => reader.Reads >= reads + 3, "reading again");
+        Assert.Equal(TakeoverPolicy.ClosedTakeoversBeforeWaiting, attempts()); // read, and not taken
+        Assert.Null(c.Capture);                                  // nothing captured while waiting
+    }
+
+    [Fact]
+    public async Task One_closed_takeover_is_tried_again_and_plays()
+    {
+        // 2026-11-03: the first attempt after a takeover failed once and the retry 2 s later played.
+        var (c, reader) = Controller();
+        c.RetryDelay = (_, ct) => Task.Delay(10, ct);
+        reader.HeldBy = Tv;
+        reader.Set("卧室");
+        var attempts = CloseAttempts(c, closes: 1);
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming on the second attempt");
+        Assert.Equal(2, attempts());
+        Assert.Equal("电视", c.TakenFromAppleTv);
+    }
+
+    [Fact]
+    public async Task A_single_HomePod_that_closes_every_takeover_is_left_to_its_Apple_TV_too()
+    {
+        int records = 0;
+        FakeAirPlayReceiver? homePod = null;
+        homePod = new FakeAirPlayReceiver(appleTv: false)
+        {
+            Name = "卧室",
+            RefuseRequest = request =>
+            {
+                if (!request.StartLine.StartsWith("RECORD ")) return null;
+                Interlocked.Increment(ref records);
+                homePod!.EndSessions();                          // the speaker drops the connection instead of answering
+                return null;
+            },
+        };
+        using (homePod)
+        {
+            var (c, reader) = Controller();
+            c.RetryDelay = (_, ct) => Task.Delay(10, ct);
+            c.AirPlayPort = homePod.Port;
+            reader.HeldBy = Tv;
+            reader.Set("127.0.0.1");                             // a single speaker is read by its address
+            c.Start(homePod.DeviceId, "127.0.0.1", 150, 20, trigger: ConnectTrigger.Automatic);
+            await Until(() => c.StatusText == "127.0.0.1是 Apple TV「电视」的家庭影院音箱，Apple TV 正连着它", "waiting instead of taking it again");
+            Assert.True(c.WaitingForSpeaker);
+            Assert.Equal(TakeoverPolicy.ClosedTakeoversBeforeWaiting, Volatile.Read(ref records));
+            await Task.Delay(200);                               // ten poll intervals
+            Assert.Equal(TakeoverPolicy.ClosedTakeoversBeforeWaiting, Volatile.Read(ref records));
+            c.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task A_stereo_pair_taken_over_from_its_Apple_TV_is_watched_like_one_speaker_and_gets_the_home_theater_notice()
+    {
+        // 2026-11-10: the maintainer's pair, home-theater speakers of an Apple TV, stuttered when taken over, and 首页 said
+        // nothing: only a single HomePod's network was watched, so only it got the notice and its 应用.
+        var (c, reader) = Controller();
+        var pair = new GroupPlan(GroupKind.StereoPair, "卧室", "6A1B2C3D-0000-4000-8000-0123456789AB", [], false, false, new Dictionary<string, int>());
+        c.ResolveGroupMembers = (_, _) => Task.FromResult(new List<StreamController.ResolvedMember>
+        {
+            new("A", "卧室", IPAddress.Loopback, 7000), new("B", "卧室 (2)", IPAddress.Loopback, 7000),
+        });
+        reader.HeldBy = Tv;
+        reader.Set("卧室", "卧室 (2)");
+        Assert.False(c.HealthWatched);
+        int session = c.Health.Session;
+        c.StartGroup(pair, 120, 20, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming && c.HealthWatched, "streaming and watched");
+        Assert.Equal(session + 1, c.Health.Session);             // this connection's events, from nothing
+        Assert.Equal(90, c.SpeakerProcessingMs);                 // the members' own (FakeMember), not the single speaker's 85
+        Assert.Equal(120, c.EffectiveLatencyMs);
+
+        var verdict = c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, c.SpeakerProcessingMs, c.RouterWatched, c.PcWired);
+        var notice = UI.Pages.HomePage.NoticeFor(verdict, c.TakenFromAppleTv, applied: false, c.EffectiveLatencyMs, "卧室");
+        Assert.True(notice.HomeTheater);
+        Assert.Equal(300, notice.SuggestedMs);                   // 应用 sets the latency the home theater's link leaves alone
+        Assert.StartsWith("卧室是 Apple TV「电视」的家庭影院音箱", notice.Text);
+
+        c.Stop();
+        Assert.False(c.HealthWatched);
+    }
+
+    [Fact]
+    public async Task A_group_of_several_rooms_keeps_its_outputs_own_latency_and_is_not_watched()
+    {
+        var (c, _) = Controller();
+        c.StartGroup(Plan, 150, 40, trigger: ConnectTrigger.Automatic);
+        await Until(() => c.State == StreamState.Streaming, "streaming");
+        await Task.Delay(100);
+        Assert.False(c.HealthWatched);                           // 首页's hint would change a latency this group does not use
     }
 
     [Fact]

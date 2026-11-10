@@ -155,6 +155,9 @@ internal static class CoreAudio
     public const uint StreamFlagsSrcDefaultQuality = 0x08000000;
     public const uint StreamFlagsAutoConvertPcm = 0x80000000;
     public const uint BufferFlagsSilent = 0x2;
+
+    /// <summary>AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY: audio before this packet is missing (the capture buffer ran full, or a glitch).</summary>
+    public const uint BufferFlagsDataDiscontinuity = 0x1;
     public const int ClsCtxAll = 0x17;
     public const int DeviceInvalidated = unchecked((int)0x88890004);
 

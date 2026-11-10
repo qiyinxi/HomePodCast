@@ -68,6 +68,12 @@ public sealed class HttpMessage
 }
 
 /// <summary>
+/// The speaker closed the control connection instead of answering a request. What a HomePod does to a session another
+/// sender takes from it (2026-11-07: a stereo pair's home-theater Apple TV, within a second of every connect).
+/// </summary>
+public sealed class SpeakerClosedException(Exception? inner = null) : IOException("connection closed by speaker", inner);
+
+/// <summary>
 /// The AirPlay control connection (TCP 7000). Request/response, plaintext until pairing completes,
 /// then HAP-encrypted. Thread-safe: requests are serialized.
 /// </summary>
@@ -174,10 +180,17 @@ public sealed class RtspConnection : IDisposable
 
         var raw = HttpMessage.Format($"{method} {uri} {protocol}", all, body);
         var wire = _session?.Encrypt(raw) ?? raw;
-        _stream.Write(wire);
-        var response = ReadResponse(cseq);
-        RequestTrace?.Invoke(method, uri, response.StartLine);
-        return response;
+        try
+        {
+            _stream.Write(wire);
+            var response = ReadResponse(cseq);
+            RequestTrace?.Invoke(method, uri, response.StartLine);
+            return response;
+        }
+        catch (IOException ex) when (ex.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+        {
+            throw new SpeakerClosedException(ex); // closed with a reset instead of a FIN: the speaker's doing all the same
+        }
     }
 
     /// <summary>
@@ -202,7 +215,7 @@ public sealed class RtspConnection : IDisposable
                 return msg;
             }
             int n = _stream.Read(_readBuf, 0, _readBuf.Length);
-            if (n == 0) throw new IOException("connection closed by speaker");
+            if (n == 0) throw new SpeakerClosedException();
             var chunk = _readBuf.AsSpan(0, n);
             _rx.AddRange(_session != null ? _session.Decrypt(chunk) : chunk.ToArray());
         }

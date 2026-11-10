@@ -309,7 +309,7 @@ internal sealed class SpeakerGroup : IOutputSink
         if (_dlnaFailure != null) throw new GroupMemberException(_auxiliaryFailureName ?? Name, _dlnaFailure);
         if (LostRequiresUserAction || LostReason == RaopClient.ClosedByReceiver)
             throw new RaopRefusedException(_lost.Task.Result) { LogMessage = _lostForLog };
-        throw new AirPlayException(_lost.Task.Result) { LogMessage = _lostForLog };
+        throw new AirPlayException(_lost.Task.Result) { LogMessage = _lostForLog, EndedBySpeaker = LostReason == EventChannel.ClosedBySpeaker };
     }
 
     private async Task WatchLocalOutputs(LocalOutputSet outputs, CancellationToken ct)
