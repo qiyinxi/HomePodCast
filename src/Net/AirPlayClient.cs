@@ -42,6 +42,9 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>Third-party pairing over RTSP. HomePods and Apple TVs retain HTTP by default.</summary>
     internal bool PairingOverRtsp { get; init; }
+
+    /// <summary>An Apple TV is sent its volume once more this long after the stream starts (<see cref="AirPlayClient"/>; tests shorten it).</summary>
+    internal TimeSpan AppleTvVolumeResendAfter { get; init; } = TimeSpan.FromSeconds(2);
 }
 
 /// <summary>
@@ -162,7 +165,26 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
 
         double volumeDb = options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20.0;
         SetVolumeDb(volumeDb);
+
+        // An Apple TV gets the volume once more when audio flows. 2026-11-07: the maintainer's Apple TV 4K (AppleTV14,1,
+        // tvOS 27, its HomePods as home-theater speakers) took the whole session, answered 200 to everything and asked
+        // for no packet again, and played nothing. pyatv #2642 has the same model and system silent after a volume set
+        // before the stream, and audible once it was set while the stream ran. Not yet heard on the maintainer's device.
+        if (ReceiverKinds.Classify(Info.GetValueOrDefault("model") as string ?? "", null, info: Info) == ReceiverKind.AppleTv)
+            _volumeResend = new System.Threading.Timer(_ =>
+            {
+                try
+                {
+                    if (_lastVolumeDb is not { } db) return;
+                    Log.Info($"Apple TV: sending the volume again now that audio flows ({db:F1} dB)");
+                    SetVolumeDb(db);
+                }
+                catch (Exception ex) { Log.Debug($"volume resend failed: {ex.Message}"); }
+            }, null, options.AppleTvVolumeResendAfter, Timeout.InfiniteTimeSpan);
     }
+
+    private System.Threading.Timer? _volumeResend;
+    private double? _lastVolumeDb; // the last volume sent, after the cap
 
     /// <summary>/info, pairing (<see cref="Pair"/>), encrypted session SETUP, event channel and stream SETUP.</summary>
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
@@ -308,7 +330,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     /// <summary>
     /// The speaker only answers the stream SETUP once it has synced to our NTP clock, so a timeout here
     /// with zero timing requests means its packets never reached us (almost always the firewall; on a Public
-    /// network, always: our rule only applies on Private ones).
+    /// network, always: our rule only applies on Private ones). Not when the speaker closed the connection itself: that
+    /// is another sender taking it, and no firewall's doing.
     /// </summary>
     private HttpMessage SetupStream(Dictionary<string, object?> body)
     {
@@ -316,7 +339,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         {
             return _rtsp.RtspPlist("SETUP", body);
         }
-        catch (IOException) when (_timing.RequestsAnswered == 0)
+        catch (IOException ex) when (ex is not SpeakerClosedException && _timing.RequestsAnswered == 0)
         {
             throw new FirewallBlockedException(NetworkProfile.ForLocalAddress(_rtsp.LocalIp));
         }
@@ -453,6 +476,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     public void SetVolumeDb(double db)
     {
         db = VolumeLimit.ClampDb(db, VolumeCapPercent);
+        _lastVolumeDb = db;
         var body = System.Text.Encoding.UTF8.GetBytes($"volume: {db.ToString("F6", CultureInfo.InvariantCulture)}");
         _rtsp.Rtsp("SET_PARAMETER", contentType: "text/parameters", body: body);
     }
@@ -463,6 +487,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     {
         _lostSignalled = 1; // no Lost events during deliberate teardown
         _feedbackTimer?.Dispose();
+        _volumeResend?.Dispose();
         _sender?.Dispose();
         _buffered?.Dispose();
         PtpRealtime?.Dispose();

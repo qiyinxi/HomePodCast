@@ -127,6 +127,7 @@ public static class Program
               info --host IP [--port N]                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
+                     [--legacy-sync] [--cap PCT]                 experiments: sync packets carrying the latency; volume ceiling
               stream --protocol raop --host IP [--port N] [--latency 1000|1500|2000] [--silent | --tone] [--cap 10]
                      [--encryption 0|1|4]           experimental; password via HOMEPODCAST_RAOP_PASSWORD
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
@@ -332,7 +333,9 @@ public static class Program
             }
             return overrides.Count > 0 ? overrides : null;
         }
-        var options = new StreamOptions(latency, volume)
+        // --legacy-sync: sync packets that also carry the latency (pyatv's and OwnTone's form), for a receiver that may
+        // not add the SETUP latency itself as a HomePod does (the Apple TV experiment, docs/device-test-checklist.zh-CN.md).
+        var options = new StreamOptions(latency, volume, LatencyInSync: args.Contains("--legacy-sync"))
         {
             VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
             StreamSetupOverrides = Overrides("--setup"),

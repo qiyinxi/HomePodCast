@@ -218,7 +218,11 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
 - [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
-- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低
+- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低。2026-11-07（Apple TV 4K 第三代，tvOS 27，家庭影院是一对 HomePod）：配对、会话、对时都正常，没有重发请求，但没有声音，HomePod 的灯也不亮。原因还没确定，按下面几条找：
+  - [ ] 界面里连 Apple TV：连上约 2 秒后日志有 `Apple TV: sending the volume again now that audio flows`，这之后有声音吗（2026-11-10 新增：pyatv #2642 在同型号同系统上，推流开始前设的音量不生效，推流中再设一次才出声；单元测试：PairingFlowTests，只补发一次、HomePod 不补发；仍需实机：有没有声音）。改了 `src/Net/AirPlayClient.cs` 的 `StartRealtimeSender` 才需要重测
+  - [ ] 上一条仍然没声音：程序先断开，在安装目录运行 `HomePodCast.exe stream --host 电视IP --tone --cap 25 --volume 15 --latency 2000`（15 秒的提示音，提前量 2 秒，别的发送端都用 1.75–2 秒）：有声音吗
+  - [ ] 再加 `--legacy-sync` 跑一次（同步包里带上延迟，pyatv 和 OwnTone 的写法）：有声音吗
+  - [ ] 在 Apple TV 上把音频输出改回电视，再跑不带 `--legacy-sync` 的那条：电视出声吗？出声说明问题在 Apple TV 转给 HomePod 的那一段（Roon 在 tvOS 27 上也是这一段单独没声音）
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
@@ -237,6 +241,8 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 9. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗（单元测试：TakeoverPolicyTests、HomeTheaterTests；仍需实机：`scan --txt` 的结果）
 10. - [ ] Apple TV 正在播放（比如在 Apple TV 上看视频）和空闲时各跑一次 `scan --txt`，两段都发我：看 Apple TV 和卧室的 flags、gid、pgid、igl 有没有区别（用来判断以后能不能做到「Apple TV 空闲时才接管」）
 11. - [ ] 接管后重连（2026-10-16 新增）：卧室被占着（日志 `statusFlags 0xA0C04`）时点「连接」→「仍然连接」：约 5 秒后日志有 `takeover: starting our session once more`，状态闪一下「正在连接…」后回到已连接，**之后一直有声音**（2026-10-16 那次没有这一步：响一声后就没声音了，会话却一直在）。stats 行里的 `ntp=` 每分钟都在涨吗（单元测试：TakeoverRestartTests，只重连一次、断开时不再重连；仍需实机：重连后有声音）。改了 `src/StreamController.cs` 里的 `RunAsync` 才需要重测
+12. - [ ] 立体声对被接管时卡顿（2026-11-10 新增）：卧室这对是 Apple TV 的家庭影院音箱，首页连上、延迟低于 200 ms：首页出现「卧室是 Apple TV「…」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi……」和「应用」（以前只有单只 HomePod 有）；点「应用」后延迟变成 200 ms，还卡吗？____。日志每分钟有一行 `group network: ping=…`，卡顿前后的几行和 `group stats` 一起发我（单元测试：TakeoverControllerTests，立体声对有网络监测和提示、多房间分组没有；仍需实机：提示出现、200 ms 够不够）。改了 `src/StreamController.Network.cs` 的 `WatchGroupNetwork` 才需要重测
+13. - [ ] Apple TV 正在播放时去连这对（2026-11-10 新增）：Apple TV 的声音最多被打断两次，之后状态停在「卧室是 Apple TV「…」的家庭影院音箱，Apple TV 正连着它」，日志有 `takeover: the speaker closed our connection 2 times in a row`，不再每 30 秒抢一次（2026-11-07 抢了 160 次）；再点「连接」会重新试两次（单元测试：TakeoverPolicyTests、TakeoverControllerTests；仍需实机：Apple TV 的声音只断两次）
 
 #### 立体声对（等有两只 HomePod 配成立体声对时再测）
 

@@ -68,6 +68,19 @@ public sealed partial class StreamController
         public System.Collections.Concurrent.ConcurrentDictionary<string, ConnectTrigger> ReceiverUserTriggers { get; } = new();
         public volatile bool Streamed;
         public volatile bool EndedBySpeaker;
+
+        /// <summary>
+        /// The attempt under way connects a stereo pair alone, playing what this PC plays (no other output, not the
+        /// cinema's file): 首页 shows it as one speaker with the scene's latency, so its network is watched like one. Other
+        /// groups keep their own latency per output (混音器), which the network hint's 应用 would not change.
+        /// </summary>
+        public volatile bool PairAlone;
+
+        /// <summary>The attempt under way takes its speakers from another sender's session (仍然连接, or 临时接管 of a home theater).</summary>
+        public volatile bool TookOver;
+
+        /// <summary>Attempts in a row that took the speakers over and had a speaker close the connection before anything streamed.</summary>
+        public int ClosedWhileTakingOver;
     }
 
     /// <param name="volumeAsOf">As for <see cref="Start"/>: a volume set after the request was made is kept.</param>
@@ -115,18 +128,34 @@ public sealed partial class StreamController
                     if (state == StreamState.Idle) DisposeCapture();
                     Set(state, state == StreamState.Streaming && _takenFrom != null ? ConnectedText(plan.Name) : text);
                 },
-                takeoverGrace: TakeoverGrace);
+                RetryDelay, TakeoverGrace);
             runner.FirewallBlocked += () => FirewallBlocked?.Invoke();
-            runner.Connected += _ =>
+            runner.Connected += group =>
             {
                 run.Streamed = true;
+                run.ClosedWhileTakingOver = 0;
                 OwnSession.Began(run.Key, UtcNow());
+                if (run.PairAlone) WatchGroupNetwork(group); // 首页's network status (StreamController.Network.cs)
             };
             runner.StreamEnded += (lostReason, stopped) =>
             {
+                EndGroupNetworkWatch();
                 if (lostReason is EventChannel.ClosedBySpeaker or Net.RaopClient.ClosedByReceiver) OwnSession.Forget(); // another sender took a member over
                 else OwnSession.Ended(UtcNow(), clean: stopped);
                 run.EndedBySpeaker = lostReason is EventChannel.ClosedBySpeaker or Net.RaopClient.ClosedByReceiver;
+            };
+            runner.ConnectFailed += ex =>
+            {
+                // The speaker closed the connection of an attempt that took it over: after a few in a row, its other
+                // sender (a home theater's Apple TV that is playing) took it back each time, and nothing takes it again.
+                if (!run.TookOver || !TakeoverPolicy.ClosedBySpeaker(ex)) run.ClosedWhileTakingOver = 0;
+                else if (++run.ClosedWhileTakingOver >= TakeoverPolicy.ClosedTakeoversBeforeWaiting)
+                {
+                    Log.Info($"takeover: the speaker closed our connection {run.ClosedWhileTakingOver} times in a row while we took it over: " +
+                             "its other sender keeps taking it back; not taking it again");
+                    OwnSession.Forget();
+                    run.EndedBySpeaker = true;
+                }
             };
             runner.StoppedForUserAction += OwnSession.Forget;
             runner.Connected += OnGroupConnected;
@@ -142,6 +171,7 @@ public sealed partial class StreamController
 
     private async Task<SpeakerGroup> ConnectGroupAsync(GroupPlan plan, int latencyMs, GroupRun run, CancellationToken ct)
     {
+        run.PairAlone = run.TookOver = false;
         _groupOutputFailures.Clear();
         // A capture collision is refused before resolution, including when that output is optional.
         foreach (var output in plan.LocalOutputs) LocalOutputSink.CheckCapture(output.DeviceId, LocalCapturedId());
@@ -171,8 +201,9 @@ public sealed partial class StreamController
             }
             return await ConnectLocalGroupAsync(plan, members, latencyMs, run, ct);
         }
-        await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
+        run.TookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed, run.EndedBySpeaker), run.Key,
             members.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address, m.Port)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
+        run.PairAlone = plan.Kind == GroupKind.StereoPair && run.Source == null;
         if (run.Source == null) EnsureCapture(ct); // the cinema plays its file: no system capture, no effects chain
 
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
@@ -279,6 +310,7 @@ public sealed partial class StreamController
         Volatile.Write(ref _groupStatusPlan, null);
         Volatile.Write(ref _activeGroupRun, null);
         Volatile.Write(ref _preparingReceiverOutputs, null);
+        EndGroupNetworkWatch();
         Interlocked.Exchange(ref _groupRunner, null)?.TearDown();
         Interlocked.Exchange(ref _groupSource, null)?.Dispose();
     }

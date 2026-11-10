@@ -635,8 +635,8 @@ internal sealed class HomePage : ScrollPage
         ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
-        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
-        int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
+        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker or a stereo pair: the network is watched
+        int arrivalToRender = c.SpeakerProcessingMs; // the speaker's own time, as the floor assumes it (a group: its slowest member's)
         var verdict = live
             ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
             : DemoVerdict(arrivalToRender);
