@@ -23,7 +23,7 @@ public sealed class RoutedCapture : ICaptureSource
 
     /// <summary>
     /// The whole-output loopback's buffer: 200 ms. It is only room: every packet is still taken as soon as Windows
-    /// signals it, so nothing is later. 2026-11-10, the maintainer's log (11 days): 544 of 630 dropouts wrote exactly
+    /// signals it, so nothing is later. 2026-11-10, the maintainer's log (10-28 to 11-10): 544 of 630 dropouts wrote exactly
     /// 22.0 ms, all a 20 ms buffer holds (Windows rounds it up to 1056 frames at 48 kHz). This thread had not come back
     /// for 31–50 ms, the buffer ran full, and the audio beyond it was gone: a skip, then the dropout.
     /// </summary>
