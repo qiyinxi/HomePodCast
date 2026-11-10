@@ -689,7 +689,7 @@ public class TakeoverControllerTests : IDisposable
         var verdict = c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, c.SpeakerProcessingMs, c.RouterWatched, c.PcWired);
         var notice = UI.Pages.HomePage.NoticeFor(verdict, c.TakenFromAppleTv, applied: false, c.EffectiveLatencyMs, "卧室");
         Assert.True(notice.HomeTheater);
-        Assert.Equal(200, notice.SuggestedMs);                   // 应用 sets the latency the home theater's link leaves alone
+        Assert.Equal(300, notice.SuggestedMs);                   // 应用 sets the latency the home theater's link leaves alone
         Assert.StartsWith("卧室是 Apple TV「电视」的家庭影院音箱", notice.Text);
 
         c.Stop();
