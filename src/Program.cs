@@ -29,6 +29,7 @@ public static class Program
                 "proctest" => ProcTest.Run(args),
                 "tone" => ProcTest.Tone(args),
                 "routetest" => RouteTest.Run(args),
+                "capturetest" => CaptureTest(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
                 "firewall" => FirewallCommand.Run(), // CI: tools/ci/msi-e2e.ps1
@@ -197,6 +198,86 @@ public static class Program
         r.ClickScheduled += when => Log.Info($"click scheduled {Net.MediaClock.ToMs(when - Net.MediaClock.Now):F1} ms from now");
         r.Start();
         Thread.Sleep(3500);
+        return 0;
+    }
+
+    /// <summary>
+    /// `capturetest [--seconds N] [--silence]`: the app's capture (the whole default output, no routing rules) into the app's FIFO,
+    /// read at the sender's pace by a thread of the sender's priority, with nothing connected and nothing played: only
+    /// what this PC already plays is captured. Shows whether the capture side alone drops out on this PC, and where the
+    /// time went (the "capture: … ms without a packet" lines). 2026-11-10: the maintainer's dropouts.
+    /// </summary>
+    private static int CaptureTest(string[] args)
+    {
+        int seconds = int.Parse(Opt(args, "--seconds") ?? "600");
+        var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: AppConfig.DefaultFifoTargetMs, capMs: AppConfig.DefaultFifoTargetMs * 3 + 10)
+        {
+            MaxTargetFrames = 30 * RtpSender.SampleRate / 1000,
+            RelaxAfterReads = 600L * RtpSender.SampleRate / RtpSender.FramesPerPacket,
+        };
+        using var capture = new RoutedCapture(fifo, RtpSender.SampleRate, new AppRouting(new AppConfig(), save: () => { }));
+        capture.Start();
+        bool stop = false;
+        // --silence: digital silence into the default output for the whole test, so that Windows keeps delivering
+        // packets when nothing else plays. Nothing can be heard, here or on a speaker another copy streams to.
+        Thread? silence = null;
+        if (args.Contains("--silence") && AudioEndpoints.DefaultOutputId() is { } output)
+        {
+            silence = new Thread(() =>
+            {
+                while (!Volatile.Read(ref stop))
+                {
+                    try
+                    {
+                        // The default output as it is now: it may change during the test (the capture follows it too).
+                        using var device = new WasapiOutputDevice(AudioEndpoints.DefaultOutputId() ?? output);
+                        var zeros = new float[device.BufferFrames * 2];
+                        device.Start();
+                        while (!Volatile.Read(ref stop))
+                        {
+                            device.WaitReady();
+                            int room = device.BufferFrames - device.PaddingFrames;
+                            if (room > 0) device.Write(zeros.AsSpan(0, room * 2));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"capturetest: the silent stream ended ({ex.Message}); opening it again");
+                        Thread.Sleep(500);
+                    }
+                }
+            }) { IsBackground = true, Name = "capturetest silence" };
+            silence.SetApartmentState(ApartmentState.MTA);
+            silence.Start();
+        }
+        long late = 0;
+        double maxLateMs = 0;
+        var reader = new Thread(() =>
+        {
+            using var mmcss = Native.EnterMmcss("Pro Audio");
+            using var timer = new Native.PreciseTimer();
+            var pcm = new float[RtpSender.FramesPerPacket * 2];
+            long t0 = MediaClock.Now;
+            for (long n = 0; !Volatile.Read(ref stop); n++)
+            {
+                long deadline = t0 + (long)(n * (double)RtpSender.FramesPerPacket * MediaClock.Frequency / RtpSender.SampleRate);
+                long now = MediaClock.Now;
+                if (now < deadline) timer.Sleep(deadline - now);
+                double lateMs = MediaClock.ToMs(MediaClock.Now - deadline);
+                if (lateMs > 2) { late++; maxLateMs = Math.Max(maxLateMs, lateMs); }
+                fifo.Read(pcm);
+            }
+        }) { IsBackground = true, Name = "capturetest reader", Priority = ThreadPriority.Highest };
+        reader.Start();
+        for (int t = 10; t <= seconds; t += 10)
+        {
+            Thread.Sleep(10_000);
+            Log.Info($"t={t,4}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,3:F0}ms target={fifo.TargetMs:F0}ms underruns={fifo.Underruns} idle={fifo.IdleGaps} " +
+                     $"overflows={fifo.Overflows} maxGap={capture.TakeMaxGapMs():F0}ms peak={capture.Peak:F2} readerLate={late} maxLate={maxLateMs:F1}ms");
+        }
+        Volatile.Write(ref stop, true);
+        reader.Join(1000);
+        silence?.Join(1000);
         return 0;
     }
 

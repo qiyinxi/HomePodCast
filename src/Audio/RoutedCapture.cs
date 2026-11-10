@@ -20,6 +20,20 @@ public sealed class RoutedCapture : ICaptureSource
     public const int RoutedExtraLatencyMs = 35;
 
     private const long BufferDuration = 200_000; // 20 ms
+
+    /// <summary>
+    /// The whole-output loopback's buffer: 200 ms. It is only room: every packet is still taken as soon as Windows
+    /// signals it, so nothing is later. 2026-11-10, the maintainer's log (11 days): 544 of 630 dropouts wrote exactly
+    /// 22.0 ms, all a 20 ms buffer holds (Windows rounds it up to 1056 frames at 48 kHz). This thread had not come back
+    /// for 31–50 ms, the buffer ran full, and the audio beyond it was gone: a skip, then the dropout.
+    /// </summary>
+    private const long EndpointBufferDuration = 2_000_000;
+
+    /// <summary>A wait for the next packet this long, while audio plays (packets come every 10 ms), is worth a log line.</summary>
+    private static readonly long StallTicks = Stopwatch.Frequency * 15 / 1000;
+
+    /// <summary>How long one cycle waits for Windows' signal: while audio plays, and while the endpoint is silent.</summary>
+    private static readonly long FlowingWaitTicks = Stopwatch.Frequency * 12 / 1000, SilentWaitTicks = Stopwatch.Frequency / 50;
     private static readonly long DeviceCheckInterval = Stopwatch.Frequency;
     private static readonly long OpenRetry = Stopwatch.Frequency * 5;
     private static readonly long GuardHold = Stopwatch.Frequency * 3 / 10;
@@ -166,6 +180,7 @@ public sealed class RoutedCapture : ICaptureSource
         var clients = new Dictionary<uint, Client>();
         var failed = new Dictionary<uint, long>();
         IntPtr ready = _ready.SafeWaitHandle.DangerousGetHandle();
+        using var timer = new Native.PreciseTimer();
         try
         {
             _devicesChanged = false;
@@ -203,7 +218,7 @@ public sealed class RoutedCapture : ICaptureSource
             if (routed) rate = MixRate(device);
             else
             {
-                endpoint = LoopbackStream.OpenEndpoint(device, ready, BufferDuration);
+                endpoint = LoopbackStream.OpenEndpoint(device, ready, EndpointBufferDuration);
                 rate = endpoint.Format.SampleRate;
             }
             var mixer = new StreamMixer(maxLagFrames: rate * 30 / 1000);
@@ -225,10 +240,17 @@ public sealed class RoutedCapture : ICaptureSource
             endpoint?.Start();
             long nextDeviceCheck = Stopwatch.GetTimestamp() + DeviceCheckInterval;
             long lastData = Stopwatch.GetTimestamp(), lastOutput = lastData;
+            long checkTicks = 0; // how long the cycle before spent asking Windows about the devices
+            int breaks = 0, stallsLogged = 0;
 
             while (!_stop)
             {
-                _ready.WaitOne(20); // loopback signals nothing while the endpoint is silent
+                // Windows signals every packet (10 ms apart), and nothing while the endpoint is silent. Now and then no
+                // signal comes for a packet: while audio plays, look again 12 ms after the last look, on a timer that
+                // keeps its time. 2026-11-10: with WaitOne(20), such a wait ended on the system timer's next tick, 31 to
+                // 47 ms after the last packet: more than the buffer held and more than the FIFO's 30 ms.
+                long waitFrom = Stopwatch.GetTimestamp();
+                bool signalled = timer.WaitFor(ready, waitFrom - lastData < Stopwatch.Frequency / 5 ? FlowingWaitTicks : SilentWaitTicks);
                 long now = Stopwatch.GetTimestamp();
 
                 var current = _router.Plan;
@@ -279,8 +301,22 @@ public sealed class RoutedCapture : ICaptureSource
                 mixed.Clear();
                 if (mixer.Mix(mixed) > 0)
                 {
+                    int lost = (endpoint?.Discontinuities ?? 0) - breaks;
+                    breaks += lost;
                     if (now - lastData > Stopwatch.Frequency / 5) resampler.Reset(); // resume after silence
-                    else if (now - lastData > Volatile.Read(ref _maxGapTicks)) Volatile.Write(ref _maxGapTicks, now - lastData);
+                    else
+                    {
+                        if (now - lastData > Volatile.Read(ref _maxGapTicks)) Volatile.Write(ref _maxGapTicks, now - lastData);
+                        // Where the time went (first 30 per capture): this thread's own work before the wait (and how much
+                        // of it the once-a-second device check), or the wait itself (Windows signalled late, or this
+                        // thread got no processor). 2026-11-10: the log could only say that a dropout happened.
+                        if ((now - lastData > StallTicks || lost > 0) && stallsLogged++ < 30)
+                            Log.Info($"capture: {Ms(now - lastData):F0} ms without a packet while audio played (waited {Ms(now - waitFrom):F0} ms " +
+                                     $"for Windows' signal, which {(signalled ? "came" : "did not come")}; before that this thread worked " +
+                                     $"{Ms(waitFrom - lastData):F0} ms, {Ms(checkTicks):F0} ms of it " +
+                                     $"asking Windows about the output device), then {mixed.Count / 2 * 1000.0 / rate:F0} ms arrived at once" +
+                                     (lost > 0 ? $"; Windows marked a break in the audio before it (its buffer holds {endpoint?.BufferMs:F0} ms)" : ""));
+                    }
                     lastData = now;
                     resampled.Clear();
                     resampler.Process(CollectionsMarshal.AsSpan(mixed), resampled);
@@ -308,13 +344,17 @@ public sealed class RoutedCapture : ICaptureSource
 
                 string? choice = _routing.CaptureDeviceId;
                 bool choiceChanged = !CaptureEndpoint.SameChoice(choice, chosen);
+                checkTicks = 0;
                 if (choiceChanged || _devicesChanged || now >= nextDeviceCheck)
                 {
                     _devicesChanged = false;
                     nextDeviceCheck = now + DeviceCheckInterval;
+                    long checkFrom = Stopwatch.GetTimestamp();
                     // The default output only matters while following it (a chosen device ignores default changes).
                     string? defaultId = CaptureEndpoint.FollowsDefault(choice) ? AudioEndpoints.DefaultId(enumerator, EDataFlow.Render) : null;
-                    if (CaptureEndpoint.ShouldReopen(choice, deviceId, defaultId, AudioEndpoints.IsActive(device)))
+                    bool reopen = CaptureEndpoint.ShouldReopen(choice, deviceId, defaultId, AudioEndpoints.IsActive(device));
+                    checkTicks = Stopwatch.GetTimestamp() - checkFrom;
+                    if (reopen)
                     {
                         Log.Info(choiceChanged ? "capture device setting changed, switching"
                             : CaptureEndpoint.FollowsDefault(choice) ? "default output device changed, switching"
@@ -340,6 +380,8 @@ public sealed class RoutedCapture : ICaptureSource
     }
 
     private static int Id(uint root) => unchecked((int)root);
+
+    private static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
 
     /// <summary>Open clients for new targets (one per cycle: activation can take a few ms), close stale ones.</summary>
     private void Reconcile(RoutePlan plan, Dictionary<uint, Client> clients, Dictionary<uint, long> failed,

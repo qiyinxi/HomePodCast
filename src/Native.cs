@@ -148,10 +148,31 @@ internal static partial class Native
                 WaitForSingleObject(_handle, 0xFFFFFFFF);
         }
 
+        /// <summary>
+        /// Waits for <paramref name="signal"/> (an event's handle), at most roughly <paramref name="qpcTicks"/>: true when
+        /// it was signalled. WaitHandle.WaitOne(20) ends on the system timer's tick, 15.6 ms apart unless something asked
+        /// for more: its 20 ms are 31 to 47 ms then (2026-11-10, the capture's dropouts).
+        /// </summary>
+        public unsafe bool WaitFor(IntPtr signal, long qpcTicks)
+        {
+            if (qpcTicks <= 0) return WaitForSingleObject(signal, 0) == 0;
+            if (_fallback) // the 1 ms period asked for above makes the plain timeout precise enough
+                return WaitForSingleObject(signal, (uint)Math.Max(1, qpcTicks * 1000 / System.Diagnostics.Stopwatch.Frequency)) == 0;
+            long due = -(long)((double)qpcTicks * 10_000_000 / System.Diagnostics.Stopwatch.Frequency);
+            if (due == 0) due = -1;
+            if (!SetWaitableTimer(_handle, ref due, 0, IntPtr.Zero, IntPtr.Zero, false))
+                return WaitForSingleObject(signal, (uint)Math.Max(1, qpcTicks * 1000 / System.Diagnostics.Stopwatch.Frequency)) == 0;
+            IntPtr* handles = stackalloc IntPtr[2] { signal, _handle };
+            return WaitForMultipleObjects(2, handles, false, 0xFFFFFFFF) == 0;
+        }
+
         public void Dispose()
         {
             if (_fallback) timeEndPeriod(1);
             else CloseHandle(_handle);
         }
     }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static unsafe partial uint WaitForMultipleObjects(uint count, IntPtr* handles, [MarshalAs(UnmanagedType.Bool)] bool waitAll, uint milliseconds);
 }

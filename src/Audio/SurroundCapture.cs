@@ -35,7 +35,7 @@ internal interface ISurroundCapture : ICaptureSource
 /// </remarks>
 internal sealed class SurroundCapture : ISurroundCapture
 {
-    private const long BufferDuration = 200_000; // 20 ms
+    private const long BufferDuration = 2_000_000; // 200 ms of room, as RoutedCapture's whole-output loopback: nothing is later for it
     private static readonly long DeviceCheckInterval = Stopwatch.Frequency;
     private static readonly long ResumeGap = Stopwatch.Frequency / 5; // 200 ms without data: the resamplers start afresh
 
@@ -158,6 +158,7 @@ internal sealed class SurroundCapture : ISurroundCapture
         IMMDevice? device = null;
         LoopbackStream? endpoint = null;
         IntPtr ready = _ready.SafeWaitHandle.DangerousGetHandle();
+        using var timer = new Native.PreciseTimer();
         try
         {
             _devicesChanged = false;
@@ -218,7 +219,10 @@ internal sealed class SurroundCapture : ISurroundCapture
 
             while (!_stop)
             {
-                _ready.WaitOne(20); // loopback signals nothing while the endpoint is silent
+                // Loopback signals nothing while the endpoint is silent. A timer that keeps its time, as in RoutedCapture:
+                // 12 ms while audio plays (a signal can fail to come), 20 ms otherwise.
+                long waitFrom = Stopwatch.GetTimestamp();
+                timer.WaitFor(ready, Stopwatch.Frequency * (waitFrom - lastData < ResumeGap ? 12 : 20) / 1000);
                 long now = Stopwatch.GetTimestamp();
 
                 drained.Clear();
