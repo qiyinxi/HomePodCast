@@ -491,8 +491,11 @@ public static class Program
             Console.WriteLine("usage: HomePodCast " + SurroundCliOptions.Usage);
             return 2;
         }
-        Log.Info($"stream --surround: host {o.Host}, {o.Seconds} s of digital silence, latency {o.LatencyMs} ms, volume {o.VolumePercent}% (cap {o.CapPercent}%)");
-        var fifo = new AudioFifo(SurroundSender.Rate, targetMs: 40, capMs: 250, channels: SurroundSender.Channels); // never written
+        Log.Info($"stream --surround: host {o.Host}, {o.Seconds} s of {(o.Beeps > 0 ? $"a tone ({o.Beeps} beeps a second, front left and right)" : "digital silence")}, " +
+                 $"latency {o.LatencyMs} ms, volume {o.VolumePercent}% (cap {o.CapPercent}%){(o.AppleTv ? ", Apple TV experiment" : "")}");
+        var fifo = new AudioFifo(SurroundSender.Rate, targetMs: 40, capMs: 250, channels: SurroundSender.Channels); // never written without a tone
+        using var tone = o.Beeps > 0 ? new ToneGenerator(fifo, o.Beeps) : null;
+        tone?.Start();
         var options = new StreamOptions(o.LatencyMs, o.VolumePercent)
         {
             VolumeCapPercent = o.CapPercent,
@@ -507,7 +510,8 @@ public static class Program
             AirPlayClient client;
             try
             {
-                client = await AirPlayClient.ConnectSurroundAsync(o.Host, 7000, options, new SurroundSetup(fifo) { RequireIdle = true }, stop.Token);
+                client = await AirPlayClient.ConnectSurroundAsync(o.Host, 7000, options,
+                    new SurroundSetup(fifo) { RequireIdle = true, AllowAppleTv = o.AppleTv }, stop.Token);
             }
             catch (Exception ex) when (ex is SurroundUnavailableException or SpeakerInUseException)
             {
@@ -575,12 +579,22 @@ public static class Program
 /// experimental since 1.4: the options of `stream --surround`. Silence only, and a low ceiling: it talks to a real
 /// HomePod (the maintainer's checklist), so --silent is required, --tone/--beeps are refused, --cap stays at or below 10 %.
 /// </summary>
-internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds)
+/// <param name="AppleTv">
+/// `--apple-tv`: the experiment of 2026-11-11, an Apple TV as the receiver (<see cref="SurroundSetup.AllowAppleTv"/>). Only
+/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 25 % at most.
+/// </param>
+/// <param name="Beeps">Beeps a second of the tone; 0: digital silence.</param>
+internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds,
+    bool AppleTv = false, int Beeps = 0)
 {
-    public const string Usage = "stream --surround --host IP --silent [--latency MS] [--seconds N] [--cap PCT]";
+    public const string Usage = "stream --surround --host IP --silent [--latency MS] [--seconds N] [--cap PCT]\n" +
+                                "         stream --surround --apple-tv --host IP (--silent | --tone [--beeps N]) [--cap PCT]   experiment: an Apple TV";
 
     /// <summary>Silence still goes out at a volume: never more than this.</summary>
     public const double MaxCapPercent = 10;
+
+    /// <summary>The Apple TV experiment's tone: the ceiling of every audible test (AGENTS.md).</summary>
+    public const double MaxToneCapPercent = 25;
 
     /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
     public static SurroundCliOptions? Parse(string[] args, out string? error)
@@ -595,16 +609,24 @@ internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, dou
                    && double.IsFinite(value);
         }
 
-        if (!args.Contains("--silent")) error = "--surround sends digital silence only: add --silent";
-        else if (args.Contains("--tone") || args.Contains("--beeps")) error = "--surround sends digital silence only: --tone and --beeps are refused";
+        bool appleTv = args.Contains("--apple-tv");
+        bool tone = appleTv && (args.Contains("--tone") || args.Contains("--beeps"));
+        double maxCap = tone ? MaxToneCapPercent : MaxCapPercent;
+        if (tone && args.Contains("--silent")) error = "--silent or --tone, not both";
+        else if (!tone && !args.Contains("--silent")) error = appleTv
+            ? "--surround --apple-tv: add --silent, or --tone with the maintainer listening"
+            : "--surround sends digital silence only: add --silent";
+        else if (!appleTv && (args.Contains("--tone") || args.Contains("--beeps"))) error = "--surround sends digital silence only: --tone and --beeps are refused";
         else if (Opt("--host") is not { } hostText || !IPAddress.TryParse(hostText, out _)) error = "--host IP required";
-        else if (!Number("--cap", MaxCapPercent, out double cap) || cap < 0) error = "--cap: a percentage";
-        else if (cap > MaxCapPercent) error = $"--cap {cap} refused: at most {MaxCapPercent} %";
+        else if (!Number("--cap", maxCap, out double cap) || cap < 0) error = "--cap: a percentage";
+        else if (cap > maxCap) error = $"--cap {cap} refused: at most {maxCap} %";
         else if (!Number("--volume", cap, out double volume) || volume < 0) error = "--volume: a percentage";
         else if (volume > cap) error = $"--volume {volume} refused: above --cap {cap}";
         else if (!Number("--latency", SurroundPolicy.LatencyMs, out double latency)) error = "--latency: milliseconds"; // the app's 5.1 latency
         else if (!Number("--seconds", 30, out double seconds) || seconds < 1) error = "--seconds: at least 1";
-        else return new(IPAddress.Parse(hostText), cap, volume, (int)Math.Clamp(latency, 1000, 4000), (int)Math.Min(seconds, 3600));
+        else if (!Number("--beeps", 1, out double beeps) || beeps < 1 || beeps > 6) error = "--beeps: 1 to 6";
+        else return new(IPAddress.Parse(hostText), cap, volume, (int)Math.Clamp(latency, 1000, 4000), (int)Math.Min(seconds, 3600),
+            appleTv, tone ? (int)beeps : 0);
         return null;
     }
 }
@@ -619,8 +641,9 @@ internal sealed class ToneGenerator(AudioFifo fifo, int beeps = 1) : IDisposable
     {
         _thread = new Thread(() =>
         {
-            const int rate = RtpSender.SampleRate, chunk = rate / 100;
-            var buf = new float[chunk * 2];
+            // The FIFO's own format: 44.1 kHz stereo, or 48 kHz 5.1 with the tone in front left and right only.
+            int rate = fifo.SampleRate, channels = fifo.Channels, chunk = rate / 100;
+            var buf = new float[chunk * channels];
             long frame = 0;
             var sw = Stopwatch.StartNew();
             while (!_stop)
@@ -631,7 +654,7 @@ internal sealed class ToneGenerator(AudioFifo fifo, int beeps = 1) : IDisposable
                     int slot = (int)(t / 0.16);                  // 80 ms beep + 80 ms gap
                     bool on = slot < beeps && t - slot * 0.16 < 0.08;
                     float s = on ? (float)(0.5 * Math.Sin(2 * Math.PI * 880 * frame / rate)) : 0f;
-                    buf[i * 2] = buf[i * 2 + 1] = s;
+                    buf[i * channels] = buf[i * channels + 1] = s;
                 }
                 fifo.Write(buf);
                 double ahead = frame * 1000.0 / rate - sw.Elapsed.TotalMilliseconds;

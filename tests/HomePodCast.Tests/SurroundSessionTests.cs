@@ -203,6 +203,47 @@ public sealed class SurroundSessionTests
     }
 
     [Fact]
+    public async Task The_Apple_TV_experiment_runs_the_same_sequence_with_the_stored_pairing_and_never_a_new_one()
+    {
+        // 2026-11-11: the maintainer's Apple TV played our realtime NTP stream on the TV's speakers and nothing with its
+        // home-theater HomePods as the output; `stream --surround --apple-tv` tries the buffered PTP sequence on it.
+        using var rig = Start(appleTv: true, flags: FakeAirPlayReceiver.AppleTvFlags);
+        string dir = Path.Combine(Path.GetTempPath(), "hpc-surround-tv-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new PairingStore(Path.Combine(dir, PairingStore.FileName));
+            var experiment = rig.Setup(s => s with { AllowAppleTv = true });
+            Task<AirPlayClient> Connect() => AirPlayClient.ConnectSurroundAsync(IPAddress.Loopback, rig.Fake.Port,
+                new StreamOptions(LatencyMs, 50) { VolumeCapPercent = 10, Pairings = store, DeviceId = rig.Fake.DeviceId }, experiment, rig.Timeout.Token);
+
+            // No stored pairing: it stops before anything shows on the TV, as every other connect does.
+            await Assert.ThrowsAsync<PairingRequiredException>(Connect);
+            Assert.Equal(0, rig.Fake.PinStarts);
+            Assert.DoesNotContain(rig.Fake.Requests, r => r.StartsWith("SETUP", StringComparison.Ordinal));
+
+            using (var pin = await PinPairingSession.StartAsync(IPAddress.Loopback, rig.Fake.Port, rig.Timeout.Token))
+                store.Save(rig.Fake.DeviceId, rig.Fake.Name, pin.Finish(rig.Fake.Pin));
+            int before = rig.Fake.Requests.Count;
+            var accept = rig.Data.AcceptTcpClientAsync(rig.Timeout.Token).AsTask();
+            using var client = await Connect();
+            using var data = await accept;
+            Assert.Equal(new[]
+            {
+                "GET /info", "POST /pair-verify M1", "POST /pair-verify M3",
+                "SETUP session [encrypted]", "SETPEERS [encrypted]", "SETUP stream [encrypted]", "RECORD [encrypted]",
+                "SET_PARAMETER [encrypted]", "FLUSHBUFFERED [encrypted]", "SETRATEANCHORTIME [encrypted]",
+            }, rig.Fake.Requests.Skip(before).Where(r => r != "POST /feedback [encrypted]").Take(10));
+            Assert.Equal(1L << 39, rig.Fake.StreamSetup!["audioFormat"]);
+            Assert.Equal(Gm, client.SurroundClock!.TimelineId);
+            Assert.Empty(rig.Fake.Errors);
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task No_PTP_from_the_HomePod_refuses_5_1_and_tears_down()
     {
         using var rig = Start(grandmaster: false);

@@ -39,6 +39,36 @@ public sealed class SurroundCliTests
     }
 
     [Fact]
+    public void The_Apple_TV_experiment_takes_a_tone_at_25_percent_at_most_or_silence()
+    {
+        // 2026-11-11: the maintainer listens while a buffered PTP stream goes to the Apple TV whose output is its HomePods.
+        var tone = Parse("stream --surround --apple-tv --host 192.0.2.110 --tone --beeps 3 --volume 20", out var error)!;
+        Assert.Null(error);
+        Assert.True(tone.AppleTv);
+        Assert.Equal((3, 25.0, 20.0), (tone.Beeps, tone.CapPercent, tone.VolumePercent));
+        Assert.Equal(1, Parse("stream --surround --apple-tv --host 192.0.2.110 --tone", out _)!.Beeps);
+
+        var silent = Parse("stream --surround --apple-tv --host 192.0.2.110 --silent", out _)!;
+        Assert.True(silent.AppleTv);
+        Assert.Equal((0, 10.0), (silent.Beeps, silent.CapPercent)); // silence keeps the 10 % ceiling
+
+        foreach (string refused in new[]
+                 {
+                     "stream --surround --apple-tv --host 192.0.2.110",                  // neither silence nor a tone
+                     "stream --surround --apple-tv --host 192.0.2.110 --tone --silent",
+                     "stream --surround --apple-tv --host 192.0.2.110 --tone --cap 26",
+                     "stream --surround --apple-tv --host 192.0.2.110 --tone --volume 50",
+                     "stream --surround --apple-tv --host 192.0.2.110 --tone --beeps 0",
+                     "stream --surround --apple-tv --host 192.0.2.110 --silent --cap 25", // silence: 10 % as before
+                 })
+        {
+            Assert.Null(Parse(refused, out var why));
+            Assert.NotNull(why);
+        }
+        Assert.False(Parse("stream --surround --host 192.0.2.26 --silent", out _)!.AppleTv); // a HomePod: as before
+    }
+
+    [Fact]
     public void A_host_is_required()
     {
         Assert.Null(Parse("stream --surround --silent", out var error));

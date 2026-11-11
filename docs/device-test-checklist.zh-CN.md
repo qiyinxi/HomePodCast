@@ -219,11 +219,11 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
 - [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
-- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低。2026-11-07（Apple TV 4K 第三代，tvOS 27，家庭影院是一对 HomePod）：配对、会话、对时都正常，没有重发请求，但没有声音，HomePod 的灯也不亮。原因还没确定，按下面几条找：
-  - [ ] 界面里连 Apple TV：连上约 2 秒后日志有 `Apple TV: sending the volume again now that audio flows`，这之后有声音吗（2026-11-10 新增：pyatv #2642 在同型号同系统上，推流开始前设的音量不生效，推流中再设一次才出声；单元测试：PairingFlowTests，只补发一次、HomePod 不补发；仍需实机：有没有声音）。改了 `src/Net/AirPlayClient.cs` 的 `StartRealtimeSender` 才需要重测
-  - [ ] 上一条仍然没声音：程序先断开，在安装目录运行 `HomePodCast.exe stream --host 电视IP --tone --cap 25 --volume 15 --latency 2000`（15 秒的提示音，提前量 2 秒，别的发送端都用 1.75–2 秒）：有声音吗
-  - [ ] 再加 `--legacy-sync` 跑一次（同步包里带上延迟，pyatv 和 OwnTone 的写法）：有声音吗
-  - [ ] 在 Apple TV 上把音频输出改回电视，再跑不带 `--legacy-sync` 的那条：电视出声吗？出声说明问题在 Apple TV 转给 HomePod 的那一段（Roon 在 tvOS 27 上也是这一段单独没声音）
+- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低。2026-11-07（Apple TV 4K 第三代，tvOS 27，家庭影院是一对 HomePod）：配对、会话、对时都正常，没有重发请求，但没有声音，HomePod 的灯也不亮。已经排除和还要试的：
+  - [x] 界面里连 Apple TV，连上约 2 秒后补发一次音量（日志 `Apple TV: sending the volume again now that audio flows`）。2026-11-11（1.4.0 测试版 3）：补发了，仍然没有声音（单元测试：PairingFlowTests，只补发一次、HomePod 不补发）
+  - [x] 命令行推提示音，维护者在听，2026-11-11：提前量 2 秒、同步包带延迟（`--legacy-sync`）、完全照 pyatv 的参数（自报 iPhone、latencyMin 11025、同步包提前 1.5 秒）、音量 50%、换会话参数（`isMultiSelectAirPlay=false`、`groupUUID`、`senderSupportsRelay=true`），全部没有声音。每次 Apple TV 都回 200、一直向电脑对时、没有重发请求，状态里多出第 17 位（会话进行中），两只 HomePod 的 TXT 不变
+  - [x] 把 Apple TV 的音频输出改成电视再推（250 ms，原始参数），2026-11-11：**电视出声**，`arrivalToRenderLatency=108ms`（输出是 HomePod 时报 4 ms）。所以推流本身 tvOS 27 能播，问题在 Apple TV 转给家庭影院 HomePod 的那一段。改输出后的第一次连接，流的 SETUP 回了 400，再连一次正常
+  - [ ] 实验（2026-11-11 新增）：用给 HomePod 做 5.1 的那套缓冲推流（type 103，跟随对方的 PTP 时钟，`SETRATEANCHORTIME`）推 Apple TV。程序先断开，Apple TV 的输出是 HomePod，在安装目录运行 `HomePodCast.exe stream --surround --apple-tv --host 电视IP --tone --volume 20 --seconds 20`（前左、前右每秒一声，上限 25%）：HomePod 出声吗？输出里有没有 `5.1 streaming:` 和 `SURROUND OK`。2026-11-11（维护者在听，20% 和 25% 各 20 秒）：每一步都回 200，跟上了 Apple TV 的 PTP 时钟，`SETRATEANCHORTIME` 被接受，`SURROUND OK`，但 HomePod 仍然没有声音。想先不出声地看握手：把 `--tone --volume 20` 换成 `--silent`（单元测试：SurroundCliTests、SurroundSessionTests，只有 `--apple-tv` 才放行 Apple TV，用已存的配对、从不发起新配对；仍需实机：有没有声音）。改了 `src/Net/AirPlayClient.Surround.cs` 才需要重测
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
