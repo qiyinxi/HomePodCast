@@ -712,8 +712,8 @@ internal sealed class HomePage : ScrollPage
 
     /// <summary>
     /// The 网络 line (jitter episodes in the last 10 minutes) or, when they threaten the margin, the hint naming the
-    /// Wi-Fi hop with a suggested latency; for a HomePod taken over from its home-theater Apple TV below
-    /// <see cref="HomeTheaterLatencyMs"/>, the home-theater notice right away. Never changes anything by itself; hidden
+    /// Wi-Fi hop with a suggested latency; for a HomePod that is an Apple TV's home-theater speaker (taken over from it
+    /// or not) below <see cref="HomeTheaterLatencyMs"/>, the home-theater notice right away. Never changes anything by itself; hidden
     /// while not streaming.
     /// </summary>
     /// <param name="v">The current connection's verdict (or the demo's); null while not streaming.</param>
@@ -721,7 +721,9 @@ internal sealed class HomePage : ScrollPage
     private void ShowNetwork(NetworkVerdict? v, bool live)
     {
         var c = _app.Controller;
-        string? theaterTv = live ? c.TakenFromAppleTv : null;
+        // The Apple TV this connection took the speaker from, or the one whose home theater it belongs to anyway: a
+        // reconnect of our own session takes nothing over, and the home theater's link is there all the same.
+        string? theaterTv = live ? c.TakenFromAppleTv ?? HomeTheater.OwnerOfSelection(_app.PlaybackConfig.DeviceId, _app.LastScan)?.Name : null;
         bool applied = c.Health.Session == _appliedSession;
         var notice = NoticeFor(v, theaterTv, applied, c.EffectiveLatencyMs, _app.Config.DeviceName ?? "HomePod");
         bool threatened = notice.Threatened, show = notice.Show;
@@ -744,7 +746,7 @@ internal sealed class HomePage : ScrollPage
             Log.Info(threatened
                 ? $"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v!.Threats} of {v.Episodes} episodes in " +
                   $"10 min beyond its {v.MarginMs} ms margin, hop: {v.Hop}, PC on {pc}); suggesting {_suggestedMs?.ToString() ?? "-"} ms"
-                : $"network: taken over from its home-theater Apple TV at {c.EffectiveLatencyMs} ms: their link takes up the Wi-Fi " +
+                : $"network: a home-theater speaker of an Apple TV at {c.EffectiveLatencyMs} ms: their link takes up the Wi-Fi " +
                   $"at regular intervals; suggesting {HomeTheaterLatencyMs} ms or the Apple TV's audio back on the TV");
         }
     }
