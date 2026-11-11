@@ -66,6 +66,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     private int _feedbackFailures;
     private int _feedbackBusy;
     private volatile bool _lostByFeedback;
+    private string? _feedbackAnswer;
     private int _lostSignalled;
 
     public IReadOnlyDictionary<string, object?> Info { get; private set; } = new Dictionary<string, object?>();
@@ -212,6 +213,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         var s1 = BPlist.ReadDict(setup1.Body);
         int eventPort = Convert.ToInt32(s1.GetValueOrDefault("eventPort") ?? 0L);
         Log.Debug($"SETUP session -> eventPort={eventPort} timingPort={s1.GetValueOrDefault("timingPort")}");
+        if (Log.Verbose) Log.Debug($"SETUP session reply: {BPlist.Describe(s1)}");
 
         if (eventPort > 0 || !options.AllowMissingEventChannel)
         {
@@ -249,6 +251,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         }), "SETUP stream");
         var stream = (BPlist.ReadDict(setup2.Body)["streams"] as List<object?>)?[0] as Dictionary<string, object?>
                      ?? throw new InvalidDataException("SETUP stream: no streams in reply");
+        if (Log.Verbose) Log.Debug($"SETUP stream reply: {BPlist.Describe(setup2.Body)}");
         int dataPort = Convert.ToInt32(stream["dataPort"]);
         int controlPort = Convert.ToInt32(stream["controlPort"]);
         if (stream.GetValueOrDefault("arrivalToRenderLatencyMs") is long a2r) ArrivalToRenderMs = (int)a2r;
@@ -438,6 +441,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
             {
                 var r = _rtsp.Rtsp("POST", "/feedback");
                 _feedbackFailures = r.IsSuccess ? 0 : _feedbackFailures + 1;
+                if (Log.Verbose && r.Body.Length > 0 && BPlist.Describe(r.Body) is var answer && answer != _feedbackAnswer)
+                    Log.Debug($"feedback answer: {_feedbackAnswer = answer}"); // only when it changes: one line, not one every 2 s
             }
             catch (Exception ex)
             {

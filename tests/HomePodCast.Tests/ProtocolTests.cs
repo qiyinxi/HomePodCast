@@ -97,6 +97,31 @@ public class BPlistTests
         Assert.Equal(shk, (byte[])s["shk"]!);
         Assert.Equal(4630L, s["latencyMin"]);
     }
+
+    [Fact]
+    public void Describes_a_reply_on_one_line_without_showing_a_key_whole()
+    {
+        // What --verbose logs of a receiver's answer; 2026-11-11: an Apple TV's session reply, with its home-theater group.
+        var shk = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+        var reply = BPlist.Write(new Dictionary<string, object?>
+        {
+            ["skipRecord"] = true,
+            ["eventPort"] = 54933,
+            ["timingPeerInfo"] = new Dictionary<string, object?>
+            {
+                ["HTGroupUUID"] = "AAD51CBC-C288-52E1-885C-4C2DD8E57F9C",
+                ["Addresses"] = new List<object?> { "192.168.50.110" },
+                ["ClockPorts"] = new Dictionary<string, object?> { ["8CE3A0E0"] = 32789 },
+            },
+            ["shk"] = shk,
+        });
+        Assert.Equal("{skipRecord=True, eventPort=54933, timingPeerInfo={HTGroupUUID=\"AAD51CBC-C288-52E1-885C-4C2DD8E57F9C\", " +
+                     "Addresses=[\"192.168.50.110\"], ClockPorts={8CE3A0E0=32789}}, shk=<32 bytes 0001020304050607…>}",
+            BPlist.Describe(reply));
+        Assert.Equal("(empty)", BPlist.Describe(ReadOnlySpan<byte>.Empty));
+        Assert.Equal("(5 bytes, no binary plist)", BPlist.Describe("hello"u8));
+        Assert.Equal("\"" + new string('x', 120) + "…\"", BPlist.Describe(new string('x', 200)));
+    }
 }
 
 public class Tlv8Tests
