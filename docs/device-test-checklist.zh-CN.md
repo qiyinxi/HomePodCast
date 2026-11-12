@@ -194,7 +194,7 @@
 - [ ] 其他设备反馈请附 `HomePodCast.exe scan --txt`、型号、实际协议、延迟及被拒绝请求；不要把软件接收端通过当成实机通过
 
 
-- [x] 极米 Z6X 投影仪（乐播 SDK，`rhd=5.6.0.0`，自称 AppleTV3,2，`et=0,3,5`）：**不支持**。它只在 Apple 的 FairPlay 加密下才建立音频会话，不加密、RSA、TCP、PCM、AirPlay 2 式 SETUP、HomeKit 配对都只回空的 200 OK，`fp-setup` 回 FairPlay 的 142 字节应答；HomePodCast 做不了 FairPlay。现在连接时直接提示「这台设备要求 Apple 的加密，HomePodCast 不支持。」，不再重试（Claude 2026-10-14 只握手、不发音频地实测；RaopTests 覆盖）。改了 `src/Net/RaopClient.cs` 的 SETUP 处理才需要重看
+- [x] 极米 Z6X 投影仪（乐播 SDK，`rhd=5.6.0.0`，自称 AppleTV3,2，`et=0,3,5`）：**不支持**。它只在 Apple 的 FairPlay 加密下才建立音频会话，不加密、RSA、TCP、PCM、AirPlay 2 式 SETUP、HomeKit 配对都只回空的 200 OK，`fp-setup` 回 FairPlay 的 142 字节应答；HomePodCast 目前不支持 FairPlay。现在连接时直接提示「这台设备要求 Apple 的加密，HomePodCast 不支持。」，不再重试（Claude 2026-10-14 只握手、不发音频地实测；RaopTests 覆盖）。改了 `src/Net/RaopClient.cs` 的 SETUP 处理才需要重看
 - [ ] 其他第三方 AirPlay 1 / AirPlay 2 设备：连不上时请用户发日志里「RAOP SETUP reply」那一行和 `HomePodCast.exe scan --txt` 的输出
 
 #### Apple TV：PIN 配对与推流（第 7 代，接上后再测）
@@ -244,7 +244,13 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - [x] 代理把 iPhone 的 `streamConnectionTypeMediaDataControl` 连接解密后转给 Apple TV，iPhone 再投一次，2026-11-12 23:48：**解开了**，它和 130 型数据流一样用 HAP 分帧，密钥由配对的共享密钥和 `DataStream-Salt` 加种子导出。但这条连接上只有控制消息：iPhone 发一条 `flsh`（`flushUntilSeq`、`flushUntilTS`），Apple TV 回一条 `rply`，之后 15 秒没有别的；音频数据不在这条连接上，也没有 UDP 发到这个端口，SETUP 的回答里也没有别的端口。**仍然没有声音**，iPhone 自己重试了两次（重新 SETUP）。音频数据走哪条路，从代理这边看不到（可能直接发到 Apple TV 自己的地址，那样 Apple TV 会因为来源不是会话的对端而丢掉）
   - [x] 同一次抓取：iPhone 先开一个只做遥控的会话（`isRemoteControlOnly`，130 型流，MediaRemote 消息），再开音频会话，这次**音频会话的 SETUP 里带 `uglServerInfo`**（iPhone 自己的端口、24 个字符的 Base64 密码、地址）；SETUP 一回来 Apple TV 就是 0x438644（第 22 位），之后两只 HomePod 也有第 22 位。音量用 `SET_PARAMETER` 发
   - [x] 用我们自己的会话无声验证，2026-11-12 23:52：会话 SETUP 加 `uglServerInfo`（指向电脑上一个只听不答的端口；`--session uglServerInfo=@文件.json`）→ Apple TV 变成 0x438644，并且**一秒内连到那个端口**，发 `GET /info`（`qualifier=[txtAirPlay]`，User-Agent 是 `AirPlay/1005.13.2`）：它把发送端当成一台隔空播放接收端来连。没有回答时它等着，20 秒内没有再发别的
-  - [ ] 还差的两件事，都没有公开资料：一是新形式的 96 型流的音频数据走哪里（我们的旧形式，UDP 的 dataPort／controlPort，Apple TV 接受、HomePod 亮灯、但不出声）；二是那个「组长服务端」要回答到哪一步（`/info`、用密码配对、遥控会话……）家庭影院才出声。第二件可以不用 iPhone、无声地一步一步试：每答对一步，看 Apple TV 下一步发什么。我们不做也不会做 `/fp-setup`
+  - [x] 回答 Apple TV 的回连，一步一步，无声，2026-11-13 00:09–00:19（电脑上一个自己写的端点，会话 SETUP 用 `uglServerInfo` 指过去）：
+    1. 它先 `GET /info`（只要 `txtAirPlay`），接着要配对。我们的 `/info` 不声明 HAP 能力时，它用旧式配对（32 字节 Ed25519 公钥，shairplay／UxPlay 公开过的那种）：走通了，它的签名校验通过，但随后断开，每 3–4 秒重来
+    2. 声明 HAP 配对能力（features 第 38、46、48 位）后，它改用瞬时配对（`X-Apple-HKP: 4`），配对码是 3939；走通，随后断开重来
+    3. 再声明「需要密码」（状态标志 0x80、TXT `pw=true`）后，瞬时配对的配对码变成 `uglServerInfo` 里的密码；走通，随后断开重来
+    4. 能力声明换成 Apple TV 自己那一套（`0x4A7FDFD5,0x3C177FDE`）后，配对之后它在加密通道里发的第一个请求是 **`POST /fp-setup`**（`FPLY` 第 3 版，`X-Apple-ET: 32`）：**Apple TV 要求组长和它做 FairPlay 握手**。这一步我们没有回答，到此为止
+    - 顺带：其中两次 iPhone（192.168.50.126，AirPlay/960.13.1）也连上了这个端口，同样发 `/fp-setup`
+  - [ ] 还差的两件事，都没有公开资料：一是新形式的 96 型流的音频数据走哪里（我们的旧形式，UDP 的 dataPort／controlPort，Apple TV 接受、HomePod 亮灯、但不出声）；二是那个「组长服务端」要回答到哪一步（`/info`、用密码配对、遥控会话……）家庭影院才出声。第二件可以不用 iPhone、无声地一步一步试：每答对一步，看 Apple TV 下一步发什么。我们目前不发 `/fp-setup`
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
