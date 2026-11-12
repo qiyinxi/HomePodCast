@@ -23,6 +23,7 @@ public static class Program
                 "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
+                "remote" => RemoteCli.Run(args).GetAwaiter().GetResult(),
                 "dlna" => DlnaCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
@@ -139,6 +140,7 @@ public static class Program
         // experimental since 1.4: the 5.1 line below.
         Console.WriteLine("  " + SurroundCliOptions.Usage + "   5.1 buffered protocol check, digital silence only (experimental)");
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(RemoteCli.Usage + "   Apple TV remote-control channel; reads unless an output option is given (experimental)");
         Console.WriteLine(DlnaCli.Usage);
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
