@@ -25,6 +25,14 @@ internal sealed record SurroundSetup(AudioFifo Fifo)
     /// <summary>The CLI: refuse (fail closed) when /info shows another sender's session or no statusFlags.</summary>
     public bool RequireIdle { get; init; }
 
+    /// <summary>
+    /// An experiment (`stream --surround --apple-tv`): an Apple TV that lists the 5.1 format takes this sequence too, with
+    /// its stored PIN pairing. 2026-11-11: the maintainer's Apple TV 4K (tvOS 27) played our realtime NTP stream on the
+    /// TV's own speakers (arrivalToRenderLatency 108 ms) and nothing at all with its home-theater HomePods as the output
+    /// (4 ms, every request answered 200): what it passes on to them may be only what it can place on their PTP timeline.
+    /// </summary>
+    public bool AllowAppleTv { get; init; }
+
     public TimeSpan SettleTimeout { get; init; } = TimeSpan.FromSeconds(5);
     public TimeSpan StaleAfter { get; init; } = TimeSpan.FromSeconds(30);
 }
@@ -87,7 +95,10 @@ public sealed partial class AirPlayClient
                  $"{SupportedFormats.Describe(Info)}, statusFlags {(flags is { } f ? StatusFlags.Hex(f) : "none")}");
 
         // Before pairing: an Apple TV, a HomePod mini or any speaker without bit 39 never gets a pairing attempt (no PIN).
-        if (ReceiverKinds.Classify(model, null, info: Info) != ReceiverKind.HomePod || !SupportedFormats.Has(Info, BufferedAudio.Surround51Bit))
+        // The Apple TV experiment uses the pairing stored in the app, and Pair never starts a new one by itself.
+        var kind = ReceiverKinds.Classify(model, null, info: Info);
+        bool takes51 = kind == ReceiverKind.HomePod || setup.AllowAppleTv && kind == ReceiverKind.AppleTv;
+        if (!takes51 || !SupportedFormats.Has(Info, BufferedAudio.Surround51Bit))
             throw new SurroundUnavailableException(L.T("这台音箱不支持 5.1"))
                 { LogMessage = $"no 5.1 here: {model}, {SupportedFormats.Describe(Info)}" };
         if (setup.RequireIdle && (flags is not { } idle || StatusFlags.SessionActive(idle)))
@@ -123,8 +134,10 @@ public sealed partial class AirPlayClient
         body.Remove("timingPort");
         foreach (var (key, value) in PtpSessionBody(uuid, _rtsp.LocalIp, clockId)) body[key] = value;
         body["name"] = "HomePodCast";
+        if (Log.Verbose) Log.Debug($"5.1 SETUP session request: {BPlist.Describe(body)}");
         var session = BPlist.ReadDict(Expect(_rtsp.RtspPlist("SETUP", body), "SETUP session").Body);
         int eventPort = Convert.ToInt32(session.GetValueOrDefault("eventPort") ?? 0L);
+        if (Log.Verbose) Log.Debug($"5.1 SETUP session reply: {BPlist.Describe(session)}");
         _events = await EventChannel.ConnectAsync(_rtsp.RemoteIp, eventPort, shared, ct);
         _events.Closed += SignalLost;
 
@@ -132,6 +145,7 @@ public sealed partial class AirPlayClient
         var peers = _rtsp.Rtsp("SETPEERS", contentType: "application/x-apple-binary-plist",
             body: BPlist.Write(new object?[] { _rtsp.RemoteIp.ToString(), _rtsp.LocalIp.ToString() }));
         if (!peers.IsSuccess) Log.Warn($"5.1: SETPEERS answered {peers.StartLine}; continuing");
+        else if (Log.Verbose) Log.Debug($"5.1 SETPEERS reply: {BPlist.Describe(peers.Body)}");
 
         byte[] streamKey = RandomNumberGenerator.GetBytes(32);
         int latencyFrames = options.LatencyMs * SurroundSender.Rate / 1000;
@@ -149,6 +163,7 @@ public sealed partial class AirPlayClient
                 },
             },
         }), "SETUP stream").Body);
+        if (Log.Verbose) Log.Debug($"5.1 SETUP stream reply: {BPlist.Describe(stream)}");
         var reply = (stream.GetValueOrDefault("streams") as List<object?>)?[0] as Dictionary<string, object?>
             ?? throw new InvalidDataException("SETUP stream: no streams in reply");
         int dataPort = Convert.ToInt32(reply["dataPort"]);
@@ -185,6 +200,7 @@ public sealed partial class AirPlayClient
             ulong timeline = _follower.TimelineId!.Value;
             var anchor = _rtsp.RtspPlist("SETRATEANCHORTIME", BufferedAudio.Anchor(timeline,
                 startHp + (ulong)options.LatencyMs * 1_000_000, _surround.RtpBase, networkTimeFlags: 0));
+            if (Log.Verbose) Log.Debug($"5.1 SETRATEANCHORTIME (timeline 0x{timeline:X16}) reply: {anchor.StartLine} {BPlist.Describe(anchor.Body)}");
             if (anchor.IsSuccess) break;
             Log.Warn($"5.1: SETRATEANCHORTIME try {attempt} answered {anchor.StartLine}");
             if (attempt == 3)
