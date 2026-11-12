@@ -228,7 +228,10 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - [x] 只读探测，2026-11-11：带 `isRemoteControlOnly=true`、`timingProtocol=None` 的会话 SETUP，Apple TV 用已存的配对接受了（给了事件端口）；这是「让程序去改 Apple TV 当前音频输出」（MRP 隧道，pyatv 的做法）的前提。改输出本身还没有试，那会改动 Apple TV 的状态，要维护者同意
   - [x] 遥控通道（`HomePodCast.exe remote --host IP`，不带输出选项时只读），2026-11-12：在这台 Apple TV 上第一次就连通（会话、事件通道、RECORD、130 型数据流、MediaRemote 握手）。它报告自己是一个 2 型集群 `AAD51CBC…` 的主设备，成员是它自己和两只 HomePod，集群音量 42%，AirPlay 接收端叫 `TVAirPlay`。静音推流期间它只把 `isAirplayActive` 置为真，没有出现播放端、没有音量变化（我们发的 −27 dB 没有反映到集群音量上）、输出设备不变；推流结束后置回假（单元测试：RemoteControlTests，只覆盖编码和解析）
   - [x] 用 `remote` 的输出选项把家庭影院的 HomePod 从 Apple TV 的输出里拿掉，2026-11-12（维护者同意后）：**做不到**，五种写法都没有改变输出，Apple TV 的状态前后一致（集群、成员、音量 42%）。集群列表里把输出设成 Apple TV 自己：回 0，没有变化；集群列表里移除两只 HomePod、或移除集群本身：错误 28（Adding or removing devices from the AV output context has failed）；旧列表（`--plain-lists`）里移除两只 HomePod、或设成 Apple TV：错误 25（UnknownOutputDevices）。对 MediaRemote 来说家庭影院是一个整体设备，成员不能单独拿掉；pyatv 的输出切换管的是 Apple TV 临时投到别的 AirPlay 音箱，不是家庭影院的默认输出
-  - [ ] 维护者在 Apple TV 上手动把音频输出切到电视再切回，同时开着 `remote --host IP --seconds 300 --verbose` 记录：看手动切换在遥控通道上是什么样（集群是否解散、电视扬声器叫什么），以及输出是电视时静音推流的各项读数（第 20 位、`/feedback`、`isAirplayActive`、有没有播放端）。这决定「自动脱钩」还有没有别的写法，也给转发路线一份对照
+  - [x] 输出是电视时的对照，2026-11-12 16:45（维护者手动切到电视后读取；切换的那一刻没有录到，只有切换后的状态）：
+    - 遥控通道：**集群整个没有了**。Apple TV 报告集群类型 0、没有集群 ID、没有成员，组 ID 换成了新的 `0318AD6F…`，输出设备只有它自己，音量一项为空。两只 HomePod 的状态标志从 0xB8C04 / 0xBAC04 变成 0x98404 / 0x9A404（第 17 位和第 11 位没有了）。也就是说手动切换是把家庭影院这个集群解散，不是在集群里换成员，所以 `ModifyOutputContextRequest` 没有对应的写法
+    - 静音推流（实时、NTP，15 秒）：`arrivalToRenderLatencyMs=108`，其余读数和输出是 HomePod 时**完全一样**：`/feedback` 是 `{streams=[]}`，状态标志 0x38644（没有第 20 位），遥控通道上只有 `isAirplayActive` 变真，没有播放端。2026-11-11 这个配置下是出声的，所以这几项读数分不出「在响」和「不响」，唯一的区别是 108 ms 对 4 ms：转发无声不是因为少了一个播放端
+    - 脱钩后两只 HomePod 的 ping（50 ms 一次）**没有变好**：空闲 60 秒，.226 超过 108 ms 40 次、超时（400 ms）91 次，.79 超过 108 ms 39 次、超时 22 次；静音直连这一对的 60 秒里（a2r 87 ms，250 ms 延迟），.226 超过 108 ms 46 次、超时 51 次、最大 292 ms，.79 超过 108 ms 37 次、超时 39 次、最大 339 ms，75 秒里有 3 次重发请求。同一天挂着家庭影院时（30 秒）：.226 超过 60 ms 24 次、最大 91 ms、超时 9 次。Apple TV 和路由器一直是 1 ms 以内。这是切换后 2 到 6 分钟内量的，没有量更久；就这次来看，把这一对从 Apple TV 上脱钩换不来更低的延迟（单只 HomePod 在 2026-10-12 是变好的）
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
