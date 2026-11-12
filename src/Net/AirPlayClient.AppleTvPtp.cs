@@ -102,4 +102,16 @@ public sealed partial class AirPlayClient
                  $"latency={options.LatencyMs}ms, timeline 0x{follower.TimelineId:X16}, {follower.Describe}");
         StartPreparedPtpRealtime(options);
     }
+
+    /// <summary>
+    /// POST /command on the session's own connection. 2026-11-12, an iPhone's requests read in plain text through a proxy:
+    /// it tells the Apple TV its playback state this way ("updateMRPlaybackState", mrPlaybackState 1 = playing, 2 =
+    /// paused), and status-flags bit 20 of the Apple TV and of its home-theater HomePods follows that state.
+    /// </summary>
+    internal bool SendCommand(string type, Dictionary<string, object?> parameters)
+    {
+        var reply = _rtsp.RtspPlist("POST", new() { ["type"] = type, ["params"] = parameters }, "/command");
+        Log.Info($"POST /command {type} {BPlist.Describe(parameters)}: {reply.StartLine}");
+        return reply.IsSuccess;
+    }
 }
