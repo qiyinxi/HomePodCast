@@ -438,7 +438,8 @@ public static class Program
     }
     /// <summary>
     /// Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session SETUP
-    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
+    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID; "@file.json": the JSON in that file,
+    /// for a value that is a dictionary or a list).
     /// </summary>
     private static Dictionary<string, object?>? SetupOverrides(string[] args, string option)
     {
@@ -447,10 +448,23 @@ public static class Program
         {
             if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
             overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                : text.StartsWith('@') ? PlistValue(System.Text.Json.JsonDocument.Parse(File.ReadAllText(text[1..])).RootElement)
                 : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
         }
         return overrides.Count > 0 ? overrides : null;
     }
+
+    /// <summary>JSON as the values a binary plist is written from.</summary>
+    internal static object? PlistValue(System.Text.Json.JsonElement json) => json.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Object => json.EnumerateObject().ToDictionary(p => p.Name, p => PlistValue(p.Value)),
+        System.Text.Json.JsonValueKind.Array => json.EnumerateArray().Select(PlistValue).ToArray(),
+        System.Text.Json.JsonValueKind.String => json.GetString(),
+        System.Text.Json.JsonValueKind.Number => json.TryGetInt64(out long n) ? n : json.GetDouble(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        _ => null,
+    };
 
     internal const string PtpRealtimeUsage =
         "stream --ptp-realtime --apple-tv --host IP (--silent | --tone) [--latency MS] [--seconds N] [--volume PCT] [--cap PCT] [--session KEY=VALUE] [--playing]";
