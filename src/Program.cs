@@ -23,6 +23,7 @@ public static class Program
                 "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
+                "remote" => RemoteCli.Run(args).GetAwaiter().GetResult(),
                 "dlna" => DlnaCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
@@ -138,7 +139,9 @@ public static class Program
         // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
         // experimental since 1.4: the 5.1 line below.
         Console.WriteLine("  " + SurroundCliOptions.Usage + "   5.1 buffered protocol check, digital silence only (experimental)");
+        Console.WriteLine("  " + PtpRealtimeUsage + "   experiment: an Apple TV, realtime with PTP timing");
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(RemoteCli.Usage + "   Apple TV remote-control channel; reads unless an output option is given (experimental)");
         Console.WriteLine(DlnaCli.Usage);
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
@@ -386,6 +389,7 @@ public static class Program
     private static async Task<int> Stream(string[] args)
     {
         if (args.Contains("--surround")) return await StreamSurround(args);
+        if (args.Contains("--ptp-realtime")) return await StreamPtpRealtime(args);
         if (Opt(args, "--protocol") is "raop")
             return await StreamRaop(args);
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
@@ -401,19 +405,7 @@ public static class Program
         capture?.Start();
         toneGen?.Start();
 
-        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session
-        // SETUP keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
-        Dictionary<string, object?>? Overrides(string option)
-        {
-            var overrides = new Dictionary<string, object?>();
-            for (int i = 0; i < args.Length - 1; i++)
-            {
-                if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
-                overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
-                    : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
-            }
-            return overrides.Count > 0 ? overrides : null;
-        }
+        Dictionary<string, object?>? Overrides(string option) => SetupOverrides(args, option);
         // --legacy-sync: sync packets that also carry the latency (pyatv's and OwnTone's form), for a receiver that may
         // not add the SETUP latency itself as a HomePod does (the Apple TV experiment, docs/device-test-checklist.zh-CN.md).
         var options = new StreamOptions(latency, volume, LatencyInSync: args.Contains("--legacy-sync"))
@@ -444,6 +436,71 @@ public static class Program
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
     }
+    /// <summary>
+    /// Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session SETUP
+    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
+    /// </summary>
+    private static Dictionary<string, object?>? SetupOverrides(string[] args, string option)
+    {
+        var overrides = new Dictionary<string, object?>();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+            overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+        }
+        return overrides.Count > 0 ? overrides : null;
+    }
+
+    internal const string PtpRealtimeUsage =
+        "stream --ptp-realtime --apple-tv --host IP (--silent | --tone) [--latency MS] [--seconds N] [--volume PCT] [--cap PCT]";
+
+    /// <summary>
+    /// experimental since 1.4: `stream --ptp-realtime --apple-tv`, a realtime stream to an Apple TV in a session timed with
+    /// PTP (AirPlayClient.AppleTvPtp.cs). Silence unless --tone, which is for the maintainer listening; the volume ceiling
+    /// is 10 % and never above 25 % (AGENTS.md).
+    /// </summary>
+    private static async Task<int> StreamPtpRealtime(string[] args)
+    {
+        bool tone = args.Contains("--tone"), silent = args.Contains("--silent");
+        if (!args.Contains("--apple-tv") || tone == silent || Opt(args, "--host") is not { } hostText || !IPAddress.TryParse(hostText, out var host))
+        {
+            Console.WriteLine("usage: HomePodCast " + PtpRealtimeUsage);
+            return 2;
+        }
+        int latency = int.Parse(Opt(args, "--latency") ?? "250"), seconds = int.Parse(Opt(args, "--seconds") ?? "15");
+        double cap = Math.Min(25, double.Parse(Opt(args, "--cap") ?? "10"));
+        var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60); // never written without a tone
+        using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
+        toneGen?.Start();
+        var options = new StreamOptions(latency, Opt(args, "--volume") is { } v ? double.Parse(v) : cap)
+        {
+            VolumeCapPercent = cap,
+            StreamSetupOverrides = SetupOverrides(args, "--setup"),
+            SessionSetupExtras = SetupOverrides(args, "--session"),
+            Pairings = PairingStore.Default,
+            RequestLog = Log.Info,
+        };
+        Log.Info($"stream --ptp-realtime: host {host}, {seconds} s of {(tone ? "a tone" : "silence")}, latency {latency} ms, cap {cap}%");
+        using var client = await AirPlayClient.ConnectAppleTvPtpRealtimeAsync(host, 7000, options, fifo, CancellationToken.None);
+        var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Lost += reason => lost.TrySetResult(reason);
+        if (client.LostReason is { } early) lost.TrySetResult(early);
+        for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
+        {
+            await Task.WhenAny(Task.Delay(1000), lost.Task);
+            if (t == 3) Log.Info(await SurroundStatusFlags(host, CancellationToken.None));
+            if (t % 3 == 0) Log.Info($"t={t}s sent={client.PtpRealtime?.PacketsSent} ptp {client.SurroundClock?.Describe}");
+        }
+        if (lost.Task.IsCompleted)
+        {
+            Log.Warn($"PTP REALTIME LOST: {lost.Task.Result}");
+            return 1;
+        }
+        Log.Info("PTP REALTIME OK");
+        return 0;
+    }
+
     // experimental since 1.1: separate compatibility sender, including a silent protocol-test mode.
     private static async Task<int> StreamRaop(string[] args)
     {

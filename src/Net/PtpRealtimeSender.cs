@@ -8,6 +8,12 @@ using HomePodCast.Protocol;
 
 namespace HomePodCast.Net;
 
+/// <summary>
+/// The PTP timeline a realtime stream's sync packets are written in: the time (ns) at a MediaClock tick, the clock ID
+/// that names the timeline, and whether it can still be used (our own clock: while it is the master).
+/// </summary>
+internal sealed record PtpTimeline(Func<long, ulong> TimeAt, Func<ulong> ClockId, Func<bool> Usable);
+
 /// <summary>Third-party type 96 over PTP; independent of the HomePod RtpSender and NTP timeline.</summary>
 internal sealed class PtpRealtimeSender : IDisposable
 {
@@ -17,7 +23,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly CounterCipher _cipher;
     private readonly AudioFifo _fifo;
     private readonly IAudioEffect? _effects;
-    private readonly PtpMaster _clock;
+    private readonly PtpTimeline _clock;
     private readonly uint _ssrc;
     private readonly int _latency;
     private readonly bool _alac;
@@ -47,6 +53,12 @@ internal sealed class PtpRealtimeSender : IDisposable
 
     public PtpRealtimeSender(IPAddress local, IPAddress peer, int dataPort, int controlPort, UdpClient control,
         byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpMaster clock)
+        : this(local, peer, dataPort, controlPort, control, key, ssrc, latency, alac, fifo, effects,
+            new PtpTimeline(clock.TimeAt, () => clock.ClockId, () => clock.IsMaster)) { }
+
+    /// <summary>The same stream on a timeline that is not this PC's own clock (the Apple TV experiment follows the receiver's).</summary>
+    public PtpRealtimeSender(IPAddress local, IPAddress peer, int dataPort, int controlPort, UdpClient control,
+        byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpTimeline clock)
     {
         _audio = new(new IPEndPoint(local, 0));
         try { _audio.Connect(peer, dataPort); _cipher = new(key); }
@@ -130,7 +142,7 @@ internal sealed class PtpRealtimeSender : IDisposable
                     int wait = (int)MediaClock.ToMs(deadline - MediaClock.Now);
                     if (wait > 0 && stopped.WaitOne(wait)) return;
                 }
-                if (!_clock.IsMaster) throw new IOException("PTP master changed; reconnect is required");
+                if (!_clock.Usable()) throw new IOException("PTP master changed; reconnect is required");
                 long late = MediaClock.Now - deadline;
                 if (late > LateLimit)
                 {
@@ -149,7 +161,7 @@ internal sealed class PtpRealtimeSender : IDisposable
                 {
                     long syncTicks = MediaClock.Now;
                     uint now = unchecked(RtpBase + (uint)Math.Round((syncTicks - start) * 44100.0 / MediaClock.Frequency));
-                    byte[] sync = Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId, _latency);
+                    byte[] sync = Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId(), _latency);
                     _control.Send(sync, sync.Length, _controlPeer);
                     nextSync = MediaClock.Now + MediaClock.FromMs(125);
                 }
