@@ -232,6 +232,13 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
     - 遥控通道：**集群整个没有了**。Apple TV 报告集群类型 0、没有集群 ID、没有成员，组 ID 换成了新的 `0318AD6F…`，输出设备只有它自己，音量一项为空。两只 HomePod 的状态标志从 0xB8C04 / 0xBAC04 变成 0x98404 / 0x9A404（第 17 位和第 11 位没有了）。也就是说手动切换是把家庭影院这个集群解散，不是在集群里换成员，所以 `ModifyOutputContextRequest` 没有对应的写法
     - 静音推流（实时、NTP，15 秒）：`arrivalToRenderLatencyMs=108`，其余读数和输出是 HomePod 时**完全一样**：`/feedback` 是 `{streams=[]}`，状态标志 0x38644（没有第 20 位），遥控通道上只有 `isAirplayActive` 变真，没有播放端。2026-11-11 这个配置下是出声的，所以这几项读数分不出「在响」和「不响」，唯一的区别是 108 ms 对 4 ms：转发无声不是因为少了一个播放端
     - 脱钩后两只 HomePod 的 ping（50 ms 一次）**没有变好**：空闲 60 秒，.226 超过 108 ms 40 次、超时（400 ms）91 次，.79 超过 108 ms 39 次、超时 22 次；静音直连这一对的 60 秒里（a2r 87 ms，250 ms 延迟），.226 超过 108 ms 46 次、超时 51 次、最大 292 ms，.79 超过 108 ms 37 次、超时 39 次、最大 339 ms，75 秒里有 3 次重发请求。同一天挂着家庭影院时（30 秒）：.226 超过 60 ms 24 次、最大 91 ms、超时 9 次。Apple TV 和路由器一直是 1 ms 以内。这是切换后 2 到 6 分钟内量的，没有量更久；就这次来看，把这一对从 Apple TV 上脱钩换不来更低的延迟（单只 HomePod 在 2026-10-12 是变好的）
+  - [x] iPhone 投放时的对照，2026-11-12 16:58（输出是家庭影院，维护者用 iPhone 往 Apple TV 投音乐、调音量、停止；遥控通道只读记录，另外每 3 秒读一次三台设备的 `/info`）。**能响的时候和我们的推流差在分组上**：
+    - Apple TV **加入了 iPhone 的分组**：遥控通道上分组 ID 从它自己的 `AAD51CBC…` 变成 `EB5F9997…`，`isGroupLeader` 从 1 变 0（集群还在，成员不变），停止后变回。我们的推流期间这两项从不变化
+    - 状态标志：Apple TV 0x18644 → 0x438644（多了第 22 位和第 17 位）→ 约两秒后 0x538644（再多第 20 位）；两只 HomePod 同步多出第 22 位和第 20 位（0xB8C04 → 0x4B8C04 → 0x5B8C04）。停止时先掉第 20 位，再全部恢复。我们的推流只有 Apple TV 的第 17 位，HomePod 不变。这两位没有公开的名字
+    - Apple TV 的 `updateInfo` 事件多出 `uglServerInfo={Port, Password, Addresses=[iPhone 的地址]}`，TXT 记录长了 51 字节（和多出 `pgid`、`pgcgl` 两项的长度相符）。也就是说 iPhone 是一个不在网络上广播的组长，Apple TV 把「到哪里找组长」告诉了遥控通道上的其他设备
+    - 音量：iPhone 调的音量直接是集群的音量（`VolumeDidChange`，端点是 iPhone 的分组），我们发的音量从不反映到集群上
+  - [x] 用上面的读数不出声地判断「通没通」，2026-11-12（`remote` 记录 + `/info` 轮询，输出是家庭影院）：四种组合都没有让 Apple TV 入组，标志只到 0x38644，HomePod 不变，TXT 不变：实时 + NTP、缓冲 + PTP（`stream --surround --apple-tv --silent`）、实时 + NTP 加 `--session groupUUID=new-uuid --session groupContainsGroupLeader=true`（推流期间 Apple TV 的 `gid` 仍是它自己的，我们给的分组 ID 被忽略）、**实时 + PTP**（当天新增的 `stream --ptp-realtime --apple-tv --silent`：跟随 Apple TV 的 PTP 时钟，同步包写在它的时间线上；每一步都回 200，`arrivalToRenderLatencyMs=4`）。所以无声和推流类型、对时方式都无关，差的是 iPhone 让 Apple TV 入组的那一步，它不在会话 SETUP 的 `groupUUID` 里。同时开两条遥控通道再推流，流的 SETUP 会被回 400（单元测试：PtpTimelineTests，只覆盖发送器换时间线；仍需实机：没有）
+  - [ ] 看 iPhone 到底发了什么：让 iPhone 投到一个我们能读明文的接收端（pyatv 的 `atvproxy airplay` 把请求转给真的 Apple TV 并记录；或者自己写一个记录用的假接收端），重点看会话 SETUP 的键、有没有在同一会话里开 130 型数据流、`uglServerInfo` 是哪一步给出去的。需要维护者用 iPhone 投一次
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
