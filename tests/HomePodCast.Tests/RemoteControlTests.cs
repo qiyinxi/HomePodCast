@@ -85,6 +85,13 @@ public class MediaRemoteTests
         Assert.Equal(["one", "two"], Inner(MediaRemote.OutputChange.Add).Strings(5));
         Assert.Equal(["one", "two"], Inner(MediaRemote.OutputChange.Remove).Strings(6));
         Assert.Equal(["one", "two"], Inner(MediaRemote.OutputChange.Set).Strings(7));
+
+        // With an identifier the Apple TV answers (2026-11-12: error 28 for a home-theater member); the plain lists are fields 2 to 4.
+        var plain = MediaRemote.Received.From(ProtoMessage.Parse(
+            MediaRemote.ModifyOutputContextMessage(MediaRemote.OutputChange.Remove, ["one"], "REQUEST-2", clusterAware: false)));
+        Assert.Equal("REQUEST-2", plain.Identifier);
+        Assert.Equal(["one"], plain.Inner.Strings(3));
+        Assert.Empty(plain.Inner.Strings(6));
     }
 
     [Fact]

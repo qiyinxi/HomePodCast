@@ -14,7 +14,7 @@ internal static class RemoteCli
 {
     public const string Usage =
         "  remote --host IP [--port N] [--seconds N] [--volume-of UID] [--verbose]\n" +
-        "         [--set-outputs UID,... | --add-outputs UID,... | --remove-outputs UID,...] [--after N]"; // experimental since 1.4
+        "         [--set-outputs UID,... | --add-outputs UID,... | --remove-outputs UID,...] [--plain-lists] [--after N]"; // experimental since 1.4
 
     private static readonly TimeSpan AnswerTimeout = TimeSpan.FromSeconds(5);
 
@@ -76,8 +76,17 @@ internal static class RemoteCli
         {
             if (change is { } c && t == after + 1)
             {
-                Log.Info($">> ModifyOutputContextRequest {c.Change}: {string.Join(", ", c.Uids)}");
-                session.Send(MediaRemote.ModifyOutputContextMessage(c.Change, c.Uids));
+                bool clusterAware = !args.Contains("--plain-lists");
+                Log.Info($">> ModifyOutputContextRequest {c.Change}{(clusterAware ? "" : " (plain lists)")}: {string.Join(", ", c.Uids)}");
+                try
+                {
+                    var answer = await session.RequestAsync(id => MediaRemote.ModifyOutputContextMessage(c.Change, c.Uids, id, clusterAware), AnswerTimeout);
+                    Log.Info($"answer: error {answer.ErrorCode} {answer.ErrorDescription}");
+                }
+                catch (TimeoutException)
+                {
+                    Log.Warn("no answer to the output change");
+                }
             }
             await Task.WhenAny(Task.Delay(1000), lost.Task);
         }

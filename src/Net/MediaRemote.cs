@@ -105,12 +105,15 @@ internal static class MediaRemote
     /// Changes the Apple TV's current audio outputs (pyatv's add_output_devices / remove_output_devices /
     /// set_output_devices): the "cluster aware" lists, where a stereo pair or a home-theater set is one device.
     /// </summary>
-    public static byte[] ModifyOutputContextMessage(OutputChange change, IEnumerable<string> deviceUids)
+    /// <param name="identifier">With one, the Apple TV answers the request (its error code says why a change was refused).</param>
+    /// <param name="clusterAware">False: the older lists, where every speaker is a device of its own.</param>
+    public static byte[] ModifyOutputContextMessage(OutputChange change, IEnumerable<string> deviceUids,
+        string? identifier = null, bool clusterAware = true)
     {
         var inner = new ProtoWriter().Varint(1, 1); // SharedAudioPresentation
-        int field = change switch { OutputChange.Add => 5, OutputChange.Remove => 6, _ => 7 };
+        int field = (change switch { OutputChange.Add => 2, OutputChange.Remove => 3, _ => 4 }) + (clusterAware ? 3 : 0);
         foreach (var uid in deviceUids) inner.String(field, uid);
-        return Message(ModifyOutputContextRequest, null, ModifyOutputContextField, inner);
+        return Message(ModifyOutputContextRequest, identifier, ModifyOutputContextField, inner);
     }
 
     public static byte[] GetVolumeMessage(string identifier, string outputDeviceUid) =>
