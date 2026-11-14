@@ -110,7 +110,13 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         {
             var probe = rtsp.Rtsp("GET", "/info");
             var probeInfo = probe.Body.Length > 0 ? BPlist.ReadDict(probe.Body) : new Dictionary<string, object?>();
-            if ((probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true)
+            bool modernAppleTv =
+                (probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true &&
+                // Older Apple TV fakes and legacy receivers expose only the small /info shape. The modern
+                // home-theater path is advertised by the richer format/capability fields seen on tvOS 18+.
+                (probeInfo.ContainsKey("supportedFormats") || probeInfo.ContainsKey("features") ||
+                 (probeInfo.GetValueOrDefault("sourceVersion") as string)?.StartsWith("1005.", StringComparison.Ordinal) == true);
+            if (modernAppleTv)
             {
                 var modern = options with
                 {
@@ -232,9 +238,12 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         if (options.PairingOverRtsp) _rtsp.PairingOverRtsp = true;
         if (options.RequestLog != null)
             _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {method} {uri}: {status}");
-        var info = _rtsp.Rtsp("GET", "/info");
-        if (info.IsSuccess && info.Body.Length > 0)
-            Info = BPlist.ReadDict(info.Body);
+        if (Info.Count == 0)
+        {
+            var info = _rtsp.Rtsp("GET", "/info");
+            if (info.IsSuccess && info.Body.Length > 0)
+                Info = BPlist.ReadDict(info.Body);
+        }
         Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 
