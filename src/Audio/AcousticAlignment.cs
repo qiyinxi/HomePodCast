@@ -7,22 +7,20 @@ public readonly record struct AcousticMeasurement(double DelayMs, double Confide
 /// <summary>Matched chirp correlation. Relative speaker delays cancel the common microphone/driver latency.</summary>
 public static class AcousticAlignment
 {
-    /// <summary>
-    /// The speakers play the test chirp at most at this volume, whatever the volume is set to (review of #22: at 100 % a
-    /// −20 dBFS chirp is loud). The window says so next to the button.
-    /// </summary>
-    public const double MeasurementVolumeCapPercent = 25;
+    /// <summary>Calibration explicitly uses the maximum app volume for its short isolated test tones.</summary>
+    public const double MeasurementVolumeCapPercent = 100;
 
-    /// <summary>A 100 ms 400 → 1800 Hz sweep at −20 dBFS with a raised-sine envelope (no click at either end).</summary>
-    public static float[] Chirp()
+    /// <summary>A 100 ms 400 → 1800 Hz full-level sweep with a raised-sine envelope (no click at either end).</summary>
+    public static float[] Chirp(int rate = 44100)
     {
-        const int rate = 44100, length = rate / 10;
+        if (rate < 8000 || rate > 192000) throw new ArgumentOutOfRangeException(nameof(rate));
+        int length = rate / 10;
         var result = new float[length];
         for (int i = 0; i < length; i++)
         {
             double t = i / (double)rate;
             double phase = 2 * Math.PI * (400 * t + 0.5 * 14000 * t * t); // 400 → 1800 Hz in 100 ms
-            result[i] = (float)(0.1 * Math.Sin(phase) * Math.Pow(Math.Sin(Math.PI * i / (length - 1)), 2));
+            result[i] = (float)(0.95 * Math.Sin(phase) * Math.Pow(Math.Sin(Math.PI * i / (length - 1)), 2));
         }
         return result;
     }
@@ -141,6 +139,169 @@ internal static class CinemaAcousticCalibrator
                 return measurements;
             }
             finally { Volatile.Write(ref activeRecording, null); mic.CalibrationSamples -= OnSamples; source.EndCalibration(); }
+        }, cancellation);
+    }
+}
+
+/// <summary>Measures each currently streaming AirPlay 2 output in isolation; samples are transient and memory-only.</summary>
+internal static class LiveGroupAcousticCalibrator
+{
+    public static async Task<AcousticMeasurement[]> MeasureAsync(IGroupAcousticCalibration source,
+        IReadOnlyList<(string Id, string Name)> targets, Func<bool> stillPlaying, CancellationToken cancellation,
+        string? micId = null, IProgress<string>? progress = null)
+    {
+        if (!source.CanCalibrateAcoustically || targets.Count < 2)
+            throw new InvalidOperationException("The active output group cannot be microphone-calibrated");
+        return await Task.Run(() =>
+        {
+            using var mic = new MicCapture(micId);
+            float[]? activeRecording = null;
+            long pulseTicks = 0;
+            int lastFrame = 0;
+            void OnSamples(ReadOnlySpan<float> samples, long firstTicks)
+            {
+                var recording = Volatile.Read(ref activeRecording);
+                long pulse = Volatile.Read(ref pulseTicks);
+                if (recording == null || pulse == 0 || firstTicks == 0) return;
+                int first = (int)Math.Round((firstTicks - pulse) * (double)MicCapture.OutputRate / Stopwatch.Frequency);
+                for (int f = 0; f < samples.Length / 2; f++)
+                {
+                    int at = first + f;
+                    if ((uint)at < (uint)recording.Length) recording[at] = samples[f * 2];
+                }
+                if (ReferenceEquals(Volatile.Read(ref activeRecording), recording) && Volatile.Read(ref pulseTicks) == pulse)
+                    Volatile.Write(ref lastFrame, Math.Max(Volatile.Read(ref lastFrame), first + samples.Length / 2));
+            }
+            mic.CalibrationSamples += OnSamples;
+            mic.Start();
+            try
+            {
+                long readyBy = Stopwatch.GetTimestamp() + 5 * Stopwatch.Frequency;
+                while (!mic.Running)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (!stillPlaying()) throw new OperationCanceledException("The output group stopped during calibration");
+                    if (mic.AccessDenied || mic.Error != null || Stopwatch.GetTimestamp() > readyBy)
+                        throw new CinemaException(L.T("麦克风打不开：请确认它已接好，并且 Windows 允许本应用使用麦克风。"),
+                            $"microphone did not start: {(mic.AccessDenied ? "access denied" : mic.Error ?? "timeout")}");
+                    Thread.Sleep(10);
+                }
+
+                var readings = new AcousticMeasurement[targets.Count];
+                for (int index = 0; index < targets.Count; index++)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (!stillPlaying()) throw new OperationCanceledException("The output group changed");
+                    progress?.Report(L.F("正在单独播放「{0}」的最大音量测试音（{1}/{2}）…", targets[index].Name, index + 1, targets.Count));
+                    var recording = new float[MicCapture.OutputRate * 6 / 5];
+                    Volatile.Write(ref lastFrame, 0);
+                    Volatile.Write(ref activeRecording, recording);
+                    long start = source.BeginAcousticPulse(targets[index].Id);
+                    Volatile.Write(ref pulseTicks, start);
+                    long limit = Stopwatch.GetTimestamp() + 4 * Stopwatch.Frequency;
+                    while (Volatile.Read(ref lastFrame) < recording.Length)
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if (!stillPlaying()) throw new OperationCanceledException("The output group changed");
+                        if (!mic.Running || Stopwatch.GetTimestamp() > limit)
+                            throw new CinemaException(L.T("测量超时：没有及时收到麦克风的声音。"),
+                                $"no microphone audio for output {index} ({(mic.Running ? "timeout" : "the microphone stopped")})");
+                        Thread.Sleep(2);
+                    }
+                    Volatile.Write(ref activeRecording, null);
+                    var reading = AcousticAlignment.Measure(recording);
+                    Array.Clear(recording);
+                    readings[index] = reading ?? throw new CinemaException(
+                        L.F("没有可靠地听到「{0}」的测试音：把麦克风放近一些，或者把音量调大一点再试。原来的延迟没有改。", targets[index].Name),
+                        $"chirp of output {index} not detected");
+                    progress?.Report(L.F("已听到「{0}」：{1:F1} 毫秒", targets[index].Name, readings[index].DelayMs));
+                    source.EndAcousticCalibration();
+                    Volatile.Write(ref pulseTicks, 0);
+                    Thread.Sleep(150);
+                }
+                AcousticAlignment.RelativeOffsets(readings);
+                return readings;
+            }
+            finally
+            {
+                Volatile.Write(ref activeRecording, null);
+                Volatile.Write(ref pulseTicks, 0);
+                mic.CalibrationSamples -= OnSamples;
+                source.EndAcousticCalibration();
+            }
+        }, cancellation);
+    }
+}
+
+/// <summary>Measures one output played by the normal Windows audio path, with the microphone wherever it can hear it.</summary>
+internal static class HomeAcousticCalibrator
+{
+    public static async Task<AcousticMeasurement> MeasureOutputAsync(string? outputEndpointId, CancellationToken cancellation)
+    {
+        return await Task.Run(() =>
+        {
+            using var mic = new MicCapture();
+            float[]? recording = null;
+            long pulseTicks = 0;
+            int lastFrame = 0;
+            string? renderError = null;
+            void OnSamples(ReadOnlySpan<float> samples, long firstTicks)
+            {
+                var active = Volatile.Read(ref recording);
+                long pulse = Volatile.Read(ref pulseTicks);
+                if (active == null || pulse == 0 || firstTicks == 0) return;
+                int first = (int)Math.Round((firstTicks - pulse) * (double)MicCapture.OutputRate / Stopwatch.Frequency);
+                for (int frame = 0; frame < samples.Length / 2; frame++)
+                {
+                    int at = first + frame;
+                    if ((uint)at < (uint)active.Length) active[at] = samples[frame * 2];
+                }
+                if (ReferenceEquals(Volatile.Read(ref recording), active) && Volatile.Read(ref pulseTicks) == pulse)
+                    Volatile.Write(ref lastFrame, Math.Max(Volatile.Read(ref lastFrame), first + samples.Length / 2));
+            }
+            mic.CalibrationSamples += OnSamples;
+            mic.Start();
+            try
+            {
+                long readyBy = Stopwatch.GetTimestamp() + 5 * Stopwatch.Frequency;
+                while (!mic.Running)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (mic.AccessDenied || mic.Error != null || Stopwatch.GetTimestamp() > readyBy)
+                        throw new CinemaException(L.T("麦克风打不开：请确认它已接好，并且 Windows 允许本应用使用麦克风。"),
+                            $"microphone did not start: {(mic.AccessDenied ? "access denied" : mic.Error ?? "timeout")}");
+                    Thread.Sleep(10);
+                }
+
+                var samples = new float[MicCapture.OutputRate * 6 / 5];
+                Volatile.Write(ref recording, samples);
+                using var scheduled = new ManualResetEventSlim();
+                using var renderer = new ClickRenderer(outputEndpointId, calibrationChirp: true);
+                renderer.ClickScheduled += ticks => { Volatile.Write(ref pulseTicks, ticks); scheduled.Set(); };
+                renderer.Failed += message => Volatile.Write(ref renderError, message);
+                renderer.Start();
+                long deadline = Stopwatch.GetTimestamp() + 10 * Stopwatch.Frequency;
+                while (Volatile.Read(ref lastFrame) < samples.Length)
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    if (Volatile.Read(ref renderError) is { } error)
+                        throw new CinemaException(L.T("无法播放测试音，请检查本机输出设备后重试。"), $"chirp renderer failed: {error}");
+                    if (Stopwatch.GetTimestamp() > deadline)
+                        throw new CinemaException(L.T("测量超时：没有及时收到麦克风的声音。"), "home acoustic measurement timed out");
+                    Thread.Sleep(2);
+                }
+                if (!scheduled.IsSet) throw new CinemaException(L.T("没有播放测试音，请重试。"), "calibration chirp was not scheduled");
+                Volatile.Write(ref recording, null);
+                var result = AcousticAlignment.Measure(samples)
+                    ?? throw new CinemaException(L.T("没有检测到可靠的测试音：请确认麦克风能听到音箱，再重试。"), "calibration chirp not detected");
+                Array.Clear(samples);
+                return result;
+            }
+            finally
+            {
+                Volatile.Write(ref recording, null);
+                mic.CalibrationSamples -= OnSamples;
+            }
         }, cancellation);
     }
 }

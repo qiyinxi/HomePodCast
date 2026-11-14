@@ -23,6 +23,7 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentComboBox _device = new();
     private readonly FluentComboBox _outputGroups = new() { AccessibleName = L.T("已保存的分组"), MinWidth = 180 };
     private readonly FluentButton _deleteGroup = new(L.T("删除分组"), ButtonKind.Subtle);
+    private readonly FluentButton _calibrateGroup = new(L.T("自动测量并应用延迟"), ButtonKind.Primary);
     private readonly TextBlock _groupStatus = Ui.Note();
     private readonly TextBlock _compatibilityOutput = Ui.Note();
     private readonly TextBlock _destinationLatency = Ui.Note();
@@ -59,6 +60,7 @@ internal sealed class HomePage : ScrollPage
     private readonly FluentButton _mute = new("", ButtonKind.Subtle, Glyph.Volume);
     private readonly ToggleSwitch _onlyHomePod = new(L.T("仅 HomePod 输出"));
     private readonly ToggleSwitch _night = new(L.T("夜间模式"));
+    private readonly FluentButton _measureSync = new(L.T("测量同步"), ButtonKind.Secondary);
     private readonly TextBlock _capNote = Ui.Note();
     private readonly TimerDebounce _volumeWait = new(150);
 
@@ -149,7 +151,7 @@ internal sealed class HomePage : ScrollPage
         var head = Ui.Row(14, title, badge, title, _connect);
         _device.AccessibleName = L.T("音箱");
         var picker = Ui.Row(6, _device, _device, _refresh);
-        var groupRow = Ui.Row(6, _outputGroups, _outputGroups, _deleteGroup); groupRow.Wrap = true;
+        var groupRow = Ui.Row(6, _outputGroups, _outputGroups, _deleteGroup, _calibrateGroup); groupRow.Wrap = true;
         _groupPicker = Ui.Stack(3, new TextBlock(L.T("已保存的分组"), TextStyle.Caption, TextRole.Secondary), groupRow);
         _groupStatus.AccessibleName = L.T("输出状态");
         _groupStatus.Collapsed = true;
@@ -172,6 +174,7 @@ internal sealed class HomePage : ScrollPage
             if (_outputGroups.SelectedIndex >= 0 && _outputGroups.SelectedIndex < _outputGroupIds.Length)
                 _app.SelectOutputGroup(_outputGroupIds[_outputGroups.SelectedIndex]);
         };
+        _calibrateGroup.Click += async (_, _) => await _app.RunGroupAcousticCalibrationFromHomeAsync();
         _deleteGroup.Click += (_, _) =>
         {
             if (_outputGroups.SelectedIndex < 0 || _outputGroups.SelectedIndex >= _outputGroupIds.Length) return;
@@ -196,6 +199,7 @@ internal sealed class HomePage : ScrollPage
         }
         _groupPicker.Collapsed = groups.Count == 0;
         _deleteGroup.Enabled = _outputGroups.SelectedIndex >= 0;
+        _calibrateGroup.Enabled = _app.Config.SelectedOutputGroupId != null && _app.CanCalibrateGroupByMicrophone;
     }
 
     private Card BuildSceneCard()
@@ -245,12 +249,15 @@ internal sealed class HomePage : ScrollPage
         var slider = Ui.Row(10, _volume, _mute, _volume);
         var toggles = Ui.Row(28, null, _onlyHomePod, _night);
         toggles.Wrap = true; // Keep both labels whole at narrow widths and in translated UIs.
-        var card = Ui.Card(header, slider, toggles, _capNote);
+        var calibration = Ui.Row(8, _measureSync);
+        var card = Ui.Card(header, slider, toggles, calibration, _capNote);
         card.Gap = 8;
 
         _onlyHomePod.AccessibleDescription = L.T("推流时只让 HomePod 出声，电脑输出静音；关闭、断开或退出后恢复，电脑音量数值不变。实验性功能。"); // experimental since 1.2
         _tips.SetToolTip(_onlyHomePod, _onlyHomePod.AccessibleDescription);
         _tips.SetToolTip(_night, L.T("压缩动态范围：爆炸、枪声变小，对白、脚步声变大，适合夜里小音量"));
+        _measureSync.AccessibleDescription = L.T("用麦克风分别测量本机和 HomePod 的声音到达时间，并自动调整 HomePod 延迟。测量时测试音会以最大音量播放，结束后恢复原音量。");
+        _tips.SetToolTip(_measureSync, _measureSync.AccessibleDescription);
 
         _volume.Scroll += (_, _) =>
         {
@@ -271,6 +278,12 @@ internal sealed class HomePage : ScrollPage
         };
         _onlyHomePod.Toggled += (_, _) => _app.SetMutePcWhileStreaming(_onlyHomePod.Checked);
         _night.Toggled += (_, _) => _app.SetNightMode(_night.Checked);
+        _measureSync.Click += async (_, _) =>
+        {
+            _measureSync.Enabled = false;
+            try { await _app.MeasureHomeOutputSync(this); }
+            finally { _measureSync.Enabled = _app.CanCalibrateHomeOutput; }
+        };
         return card;
     }
 
@@ -607,6 +620,7 @@ internal sealed class HomePage : ScrollPage
         }
 #endif
         var c = _app.Controller;
+        _measureSync.Enabled = _app.CanCalibrateHomeOutput;
         ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
@@ -653,6 +667,8 @@ internal sealed class HomePage : ScrollPage
         ShowNetwork(verdict, live);
         ShowPcSound();
     }
+
+    internal void ApplyCalibrationLatency(int ms) => _tuner.UseCustom(ms);
 
     private void ShowGroupOutputStatus()
     {

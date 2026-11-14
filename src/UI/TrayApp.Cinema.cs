@@ -95,6 +95,6 @@ internal interface ICinemaHost
     /// <summary>The slider's debounce: saved and sent like 首页's volume, and the other volume controls follow.</summary>
     void ApplyVolume(double percent);
 
-    /// <summary>The speakers play at most 25 % until the returned object is disposed.</summary>
+    /// <summary>Calibration may temporarily use the maximum configured volume until the returned object is disposed.</summary>
     IDisposable LimitVolumeForMeasurement();
 }

@@ -581,6 +581,7 @@ internal sealed class MainWindow : Form, ISurface
     // ---------------------------------------------------------------- what TrayApp tells the window
 
     public void SetDevices(List<AirPlayDevice> devices) { _home.SetDevices(devices); _speakers.RefreshDevices(); if (CurrentPage == AppPage.Group) _group.RefreshSpeakers(); }
+    internal Task RunGroupAcousticCalibrationFromHomeAsync() => _group.RunGroupAcousticCalibrationFromHomeAsync();
     public void SetScanning(bool scanning) => _home.SetScanning(scanning);
     public void SelectScene(Scene scene) => _home.SelectScene(scene);
     public void ShowHotkeyStatus(int unavailable) => _settings.ShowHotkeyStatus(unavailable);
@@ -619,6 +620,8 @@ internal sealed class MainWindow : Form, ISurface
         _settings.ShowSoundOptions();
         _equalizer.ShowNightMode();
     }
+
+    internal void ApplyCalibrationLatency(int ms) => _home.ApplyCalibrationLatency(ms);
 
     public void ShowVolume(double percent)
     {

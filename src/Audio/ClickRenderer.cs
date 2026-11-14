@@ -13,6 +13,7 @@ public sealed class ClickRenderer : IDisposable
     private const long BufferDuration = 100_000; // 10 ms
     private readonly Thread _thread;
     private readonly string? _endpointId;
+    private readonly bool _calibrationChirp;
     private volatile bool _stop;
     private int _started;
     private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -25,9 +26,10 @@ public sealed class ClickRenderer : IDisposable
     public event Action<string>? Failed;
 
     /// <param name="endpointId">Exact render endpoint to exercise; null follows the Windows default.</param>
-    public ClickRenderer(string? endpointId = null)
+    public ClickRenderer(string? endpointId = null, bool calibrationChirp = false)
     {
         _endpointId = endpointId;
+        _calibrationChirp = calibrationChirp;
         _thread = new Thread(Run) { IsBackground = true, Name = "Click renderer", Priority = ThreadPriority.Highest };
     }
 
@@ -69,7 +71,8 @@ public sealed class ClickRenderer : IDisposable
             render = (IAudioRenderClient)svc;
 
             int rate = fmt.SampleRate;
-            int clickLen = rate * 25 / 1000;  // 25 ms 1 kHz burst with a short fade
+            int clickLen = _calibrationChirp ? rate / 10 : rate * 25 / 1000;
+            float[]? chirp = _calibrationChirp ? AcousticAlignment.Chirp(rate) : null;
             long written = 0;                  // frames handed to the engine
             long nextClick = rate / 2;
             CoreAudio.Check(client.Start(), "start");
@@ -97,11 +100,19 @@ public sealed class ClickRenderer : IDisposable
                     float s = 0;
                     if (into >= 0 && into < clickLen)
                     {
-                        float env = Math.Min(1f, Math.Min(into, clickLen - into) / (rate * 0.002f));
-                        s = 0.5f * env * MathF.Sin(2 * MathF.PI * 1000 * into / rate);
+                        if (chirp != null) s = chirp[(int)into];
+                        else
+                        {
+                            float env = Math.Min(1f, Math.Min(into, clickLen - into) / (rate * 0.002f));
+                            s = 0.5f * env * MathF.Sin(2 * MathF.PI * 1000 * into / rate);
+                        }
                     }
                     // Irregular spacing so a late click can never line up with the *next* flash.
-                    if (into == clickLen) nextClick += (long)(rate * (1.3 + Random.Shared.NextDouble() * 1.3));
+                    if (into == clickLen)
+                    {
+                        if (_calibrationChirp) _stop = true;
+                        else nextClick += (long)(rate * (1.3 + Random.Shared.NextDouble() * 1.3));
+                    }
                     WriteFrame(data, (int)i, fmt, s);
                 }
                 render.ReleaseBuffer(frames, 0);

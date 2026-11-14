@@ -94,6 +94,15 @@ internal sealed class SpeakerGroup : IOutputSink
     internal long TimelineProducedPackets => _pump?.ProducedPackets ?? 0;
     internal long TimelineSkippedPackets => _pump?.SkippedPackets ?? 0;
     internal bool TimelineRunning => _pump?.IsRunning == true;
+    internal bool CanCalibrateAcoustically => _sender?.GroupSource is Audio.IGroupAcousticCalibration source
+        && _raopOutputs == null && _dlnaOutputs == null && _receiverOutputs == null
+        && _members.Length + (_localOutputs?.Status.Count(s => s.State == OutputState.Streaming) ?? 0) >= 2
+        && source.CanCalibrateAcoustically;
+    internal Audio.IGroupAcousticCalibration? AcousticCalibrationSource => _sender?.GroupSource as Audio.IGroupAcousticCalibration;
+    internal long BeginAcousticPulse(string targetId) => (_sender?.GroupSource as Audio.IGroupAcousticCalibration
+        ?? throw new InvalidOperationException("The active output group does not support acoustic calibration")).BeginAcousticPulse(targetId);
+    internal void EndAcousticCalibration() => (_sender?.GroupSource as Audio.IGroupAcousticCalibration)?.EndAcousticCalibration();
+    internal void SetAcousticCalibrationActive(bool active) => (_sender?.GroupSource as Audio.IGroupAcousticCalibration)?.SetAcousticCalibrationActive(active);
 
     public void SetVolume(double percent, bool mute = false) => SetVolumePercent(mute ? 0 : percent);
 
@@ -167,12 +176,15 @@ internal sealed class SpeakerGroup : IOutputSink
                 if (members.Length > 0)
                     source = new TimelineGroupSource(pump.Timeline, members.Select(m => m.Target.Channels).ToArray(),
                         members.Max(m => m.LatencyFrames), groupDelayMs.Value, () => group._sender?.OnsetSent,
-                        setups.Select(s => s.DelayTrimMs).ToArray());
+                    setups.Select(s => s.DelayTrimMs).ToArray(), setups.Select(s => "airplay:" + GroupPlan.Key(s.Id ?? s.Label)).ToArray(),
+                    localOutputs?.CalibrationTargetIds);
             }
             else if (source == null)
             {
                 var timelineSource = new GroupTimelineSource(fifo, members.Select(m => m.Target.Channels).ToArray(),
-                    effects, () => group._sender?.OnsetSent, setups.Select(s => s.DelayTrimMs).ToArray());
+                    effects, () => group._sender?.OnsetSent, setups.Select(s => s.DelayTrimMs).ToArray(),
+                    setups.Select(s => "airplay:" + GroupPlan.Key(s.Id ?? s.Label)).ToArray(),
+                    members.Max(m => m.LatencyFrames));
                 source = timelineSource;
                 group.Timeline = timelineSource.Timeline;
             }
@@ -210,7 +222,8 @@ internal sealed class SpeakerGroup : IOutputSink
 
             if (coordinated)
             {
-                if (localOutputs != null) await localOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, attemptToken);
+                if (localOutputs != null) await localOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume,
+                    attemptToken, group._sender?.GroupSource as Audio.IGroupAcousticCalibration);
                 if (raopOutputs != null) await raopOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume, attemptToken);
                 if (dlnaOutputs != null) await dlnaOutputs.StartAsync(group.Timeline!, groupDelayMs!.Value, group.MasterVolume,
                     group.MasterVolume <= 0, attemptToken);
@@ -454,7 +467,6 @@ internal sealed class SpeakerGroup : IOutputSink
     {
         ThrowIfLost();
         double cap = VolumeCapPercent;
-        if (cap > 25) throw new InvalidOperationException("No measurement volume ceiling");
         // Auxiliary sources already enforce the live cap digitally. Classic members need an acknowledged
         // volume command before the first test click; their ordinary slider publication is best effort.
         await Task.WhenAll(_members.Select((member, index) => Task.Run(() =>

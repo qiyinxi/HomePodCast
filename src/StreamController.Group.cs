@@ -1,5 +1,6 @@
 using System.Net;
 using System.Collections.Frozen;
+using HomePodCast.Audio;
 using HomePodCast.Net;
 
 namespace HomePodCast;
@@ -44,6 +45,21 @@ public sealed partial class StreamController
 
     /// <summary>The sender of whatever is streaming (one speaker or a group), for stats and the sync probe.</summary>
     public RtpSender? ActiveSender => _client?.Sender ?? _groupRunner?.Current?.Sender;
+
+    internal bool CanCalibrateGroupAcoustically => _groupRunner?.Current?.CanCalibrateAcoustically == true;
+    internal long BeginGroupAcousticPulse(string targetId) => (_groupRunner?.Current
+        ?? throw new InvalidOperationException("The output group is no longer connected")).BeginAcousticPulse(targetId);
+    internal void EndGroupAcousticCalibration() => _groupRunner?.Current?.EndAcousticCalibration();
+    internal void SetGroupAcousticCalibrationActive(bool active) => _groupRunner?.Current?.SetAcousticCalibrationActive(active);
+
+    internal Task<AcousticMeasurement[]> MeasureGroupAcoustically(IReadOnlyList<(string Id, string Name)> targets,
+        Func<bool> stillPlaying, CancellationToken cancellation, string? micId = null, IProgress<string>? progress = null)
+    {
+        var group = _groupRunner?.Current;
+        if (group?.CanCalibrateAcoustically != true || group.AcousticCalibrationSource is not { } source)
+            return Task.FromException<AcousticMeasurement[]>(new OperationCanceledException("The output group cannot be microphone-calibrated"));
+        return LiveGroupAcousticCalibrator.MeasureAsync(source, targets, stillPlaying, cancellation, micId, progress);
+    }
 
     /// <summary>
     /// The audio source of the group started last (the wireless cinema's file), until Stop or the next start: null while

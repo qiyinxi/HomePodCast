@@ -23,6 +23,7 @@ internal sealed class LocalOutputSink : IOutputSink
     private Func<double>? _volumeSource;
     private volatile LocalOutputRenderer? _renderer;
     private int _groupDelayMs;
+    private IGroupAcousticCalibration? _calibration;
 
     private LocalOutputSink(LocalOutputOptions options, Func<string, ILocalRenderDevice> open, Func<string?> captured,
         Func<double> cap, Func<string, bool>? duplicate)
@@ -63,14 +64,15 @@ internal sealed class LocalOutputSink : IOutputSink
         catch { sink.Dispose(); throw; }
     }
 
-    public async Task StartAsync(TimelineBuffer timeline, int groupDelayMs, CancellationToken ct)
+    public async Task StartAsync(TimelineBuffer timeline, int groupDelayMs, CancellationToken ct,
+        IGroupAcousticCalibration? calibration = null)
     {
         ct.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (groupDelayMs + _options.TrimMs < MinLatencyMs)
             throw new InvalidOperationException(L.T("分组延迟不足以播放这台输出设备，请提高分组延迟。"));
         if (Timeline != null) throw new InvalidOperationException("Local output already started");
-        Timeline = timeline; _groupDelayMs = groupDelayMs;
+        Timeline = timeline; _groupDelayMs = groupDelayMs; _calibration = calibration;
         _go.Set();
         await _started.Task.WaitAsync(ct);
     }
@@ -118,7 +120,7 @@ internal sealed class LocalOutputSink : IOutputSink
             if (_stop) return;
             CheckCapture(Id, _captured());
             CheckDuplicate(Id, _duplicate);
-            var renderer = new LocalOutputRenderer(Timeline!, _options, device.Rate, device.BufferFrames, _groupDelayMs, _cap, ReadVolume);
+            var renderer = new LocalOutputRenderer(Timeline!, _options, device.Rate, device.BufferFrames, _groupDelayMs, _cap, ReadVolume, _calibration);
             _renderer = renderer;
             var pcm = new float[device.BufferFrames * 2];
             device.Write(pcm.AsSpan(0, fill * 2)); // only silence until the clock is running and the source exists

@@ -28,8 +28,7 @@ public sealed partial class StreamController
     public bool Muted { get; private set; }
 
     /// <summary>
-    /// A ceiling for as long as a measurement runs (the wireless cinema's speaker alignment, at most 25 %): the speakers
-    /// play at most this, <see cref="Volume"/> stays what the user set and comes back with <see cref="EndMeasurementCap"/>.
+    /// A temporary ceiling while calibration runs. Calibration may raise the live level, then restores the user's volume.
     /// </summary>
     public double? MeasurementCapPercent { get; private set; }
 
