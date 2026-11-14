@@ -110,6 +110,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         {
             var probe = rtsp.Rtsp("GET", "/info");
             var probeInfo = probe.Body.Length > 0 ? BPlist.ReadDict(probe.Body) : new Dictionary<string, object?>();
+            if (probe.IsSuccess && probeInfo.Count > 0) client.Info = probeInfo;
             bool modernAppleTv =
                 (probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true &&
                 // Older Apple TV fakes and legacy receivers expose only the small /info shape. The modern

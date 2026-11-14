@@ -487,7 +487,7 @@ public static class Program
             return 2;
         }
         int latency = int.Parse(Opt(args, "--latency") ?? "250"), seconds = int.Parse(Opt(args, "--seconds") ?? "15");
-        double cap = Math.Min(35, double.Parse(Opt(args, "--cap") ?? "10"));
+        double cap = Math.Min(25, double.Parse(Opt(args, "--cap") ?? "10"));
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60); // never written without a tone
         using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         toneGen?.Start();
@@ -660,7 +660,7 @@ public static class Program
 /// </summary>
 /// <param name="AppleTv">
 /// `--apple-tv`: the experiment of 2026-11-11, an Apple TV as the receiver (<see cref="SurroundSetup.AllowAppleTv"/>). Only
-/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 35 % at most.
+/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 25 % at most.
 /// </param>
 /// <param name="Beeps">Beeps a second of the tone; 0: digital silence.</param>
 internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds,
@@ -673,7 +673,7 @@ internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, dou
     public const double MaxCapPercent = 10;
 
     /// <summary>The Apple TV experiment's tone: the ceiling of every audible test (AGENTS.md).</summary>
-    public const double MaxToneCapPercent = 35;
+    public const double MaxToneCapPercent = 25;
 
     /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
     public static SurroundCliOptions? Parse(string[] args, out string? error)
