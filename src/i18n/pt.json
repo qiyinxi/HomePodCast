@@ -831,5 +831,10 @@
   "人声的峰值不会超过这个电平，防止削波失真。": "Os picos da voz nunca ultrapassam este nível, o que evita a distorção por clipping.",
   "峰值过后多快恢复原来的音量。": "Rapidez com que o volume original volta depois de um pico.",
   "声道 {0}": "Canal {0}",
-  "全部声道混合": "Mistura de todos os canais"
+  "全部声道混合": "Mistura de todos os canais",
+  "麦克风自动测量（实验性）": "Medição automática com microfone (experimental)",
+  "测量期间组内节目声音会暂时静音。": "O áudio do grupo é silenciado temporariamente durante a medição.",
+  "麦克风测量支持两个及以上的实时 AirPlay 2 输出。逐台播放短测试音，音量不超过 25%；录音只在内存中分析，不保存、不上传。结果写入草稿，应用分组后生效。": "A medição com microfone requer pelo menos duas saídas AirPlay 2 em tempo real. As colunas reproduzem, uma de cada vez, um breve sinal de teste, com volume máximo de 25%. A gravação é analisada apenas na memória e nunca é guardada nem enviada. O resultado é adicionado ao rascunho e fica ativo ao aplicar o grupo.",
+  "麦克风校准结果已写入编辑器，请点应用更新分组。": "A calibração com microfone foi adicionada ao editor. Aplique o grupo para a ativar.",
+  "测量已取消，原来的延迟没有改。": "Medição cancelada; os atrasos anteriores não foram alterados."
 }

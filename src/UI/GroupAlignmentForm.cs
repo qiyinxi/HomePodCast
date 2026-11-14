@@ -27,14 +27,19 @@ internal sealed class GroupAlignmentForm : FluentDialog
     private readonly FluentSlider _frames = Ui.Slider(-3000, 3000, 1, 10);
     private readonly TextBlock _result = Ui.Note();
     private readonly FluentButton _apply = new(L.T("应用微调"), ButtonKind.Primary);
+    private readonly FluentButton _automatic = new(L.T("麦克风自动测量（实验性）"), ButtonKind.Primary); // experimental since 1.3
     private readonly int[] _rates = [30, 60, 120, 240];
+    private readonly Func<IWin32Window, CancellationToken, Task<IReadOnlyList<GroupAlignmentOutput>>>? _measureAutomatically;
+    private CancellationTokenSource? _measureCancellation;
     private bool _placed;
     public GroupAlignmentOutput? Adjustment { get; private set; }
+    public IReadOnlyList<GroupAlignmentOutput>? AutomaticAdjustments { get; private set; }
 
     internal GroupAlignmentForm(IReadOnlyList<GroupAlignmentOutput> outputs, bool canPlayTest,
-        Func<IWin32Window, Task>? playTest = null) : base(L.T("手动校准"))
+        Func<IWin32Window, Task>? playTest = null, bool canMeasureMicrophone = false,
+        Func<IWin32Window, CancellationToken, Task<IReadOnlyList<GroupAlignmentOutput>>>? measureAutomatically = null) : base(L.T("手动校准"))
     {
-        _outputs = outputs; ContentWidth = 640;
+        _outputs = outputs; _measureAutomatically = measureAutomatically; ContentWidth = 640;
         _frames.AccessibleName = L.T("相对偏移帧数"); _frames.PreferredLength = 240; _frames.FillOrigin = 0;
         foreach (var output in outputs) { _reference.Items.Add(output.Name); _target.Items.Add(output.Name); }
         _reference.SelectedIndex = outputs.Count > 0 ? 0 : -1;
@@ -43,14 +48,16 @@ internal sealed class GroupAlignmentForm : FluentDialog
         _fps.SelectedIndex = 1;
         var value = new TextBlock("0");
         var start = new FluentButton(L.T("开始测试音")) { Enabled = canPlayTest && playTest != null };
+        _automatic.Enabled = canMeasureMicrophone && measureAutomatically != null;
         var close = new FluentButton(L.T("关闭")) { DialogResult = DialogResult.Cancel };
         Body.Controls.AddRange([
-            Ui.Note(L.T("先应用分组并连接，再开始测试音。测试音量最多为 25%，不会开启麦克风。")),
-            Ui.Note(L.T("用手机分别靠近两台音箱录像，记录声音相对闪光的偏移。待校准音箱比参考晚多少帧，就填正数；更早则填负数。")),
+            Ui.Note(L.T("先应用分组并连接，再开始自动测量。测量时节目声音暂时静音，每只音箱以最大音量单独播放测试音。")),
+            Ui.Note(L.T("麦克风测量支持实时分组中的 AirPlay 2 和本机输出。录音只在内存中分析，不保存、不上传；完成后恢复原音量。")),
+            Ui.Note(L.T("测量期间组内节目声音会暂时静音。")),
             new FieldRow(L.T("参考输出"), _reference), new FieldRow(L.T("待校准输出"), _target),
             new FieldRow(L.T("录像帧率"), _fps),
             new FieldRow(L.T("相对偏移帧数"), Ui.Row(6, null, _frames, value)),
-            _result, Ui.Row(8, null, start), ButtonRow(close, _apply),
+            _result, Ui.Row(8, null, start, _automatic), ButtonRow(close, _apply),
         ]);
         _reference.SelectedIndexChanged += (_, _) => UpdateResult();
         _target.SelectedIndexChanged += (_, _) => UpdateResult();
@@ -64,6 +71,27 @@ internal sealed class GroupAlignmentForm : FluentDialog
             catch (OperationCanceledException) { if (!IsDisposed) _result.Text = L.T("音源、连接或延迟已变化，请关闭后重新测试。"); }
             catch (Exception) { if (!IsDisposed) _result.Text = L.T("无法播放测试音，请检查所选音源后重新测试。"); }
             finally { if (!IsDisposed) start.Enabled = canPlayTest; }
+        };
+        _automatic.Click += async (_, _) =>
+        {
+            if (!_automatic.Enabled || _measureAutomatically == null) return;
+            _automatic.Enabled = false; start.Enabled = false;
+            using var cancellation = new CancellationTokenSource();
+            _measureCancellation = cancellation;
+            try
+            {
+                var adjustments = await _measureAutomatically(this, cancellation.Token);
+                if (adjustments.Count != _outputs.Count) throw new InvalidOperationException("The measurement did not cover every output");
+                AutomaticAdjustments = adjustments;
+                DialogResult = DialogResult.OK;
+            }
+            catch (OperationCanceledException) { if (!IsDisposed) _result.Text = L.T("测量已取消，原来的延迟没有改。"); }
+            catch (Exception ex) { if (!IsDisposed) _result.Text = ex.Message; }
+            finally
+            {
+                _measureCancellation = null;
+                if (!IsDisposed) { _automatic.Enabled = canMeasureMicrophone; start.Enabled = canPlayTest && playTest != null; }
+            }
         };
         _apply.Click += (_, _) =>
         {
@@ -93,6 +121,12 @@ internal sealed class GroupAlignmentForm : FluentDialog
     {
         base.OnDpiChanged(e);
         if (_placed) PlaceWithinWorkingArea(center: false);
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _measureCancellation?.Cancel();
+        base.OnFormClosing(e);
     }
 
     private void PlaceWithinWorkingArea(bool center)

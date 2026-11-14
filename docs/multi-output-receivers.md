@@ -33,6 +33,15 @@ or saving a named group does not start a file or activate its layout.
 | AirPlay 1 / ordinary Bluetooth / local | Basic alignment after calibration; buffering or Bluetooth adds group delay |
 | DLNA | Rough alignment for different rooms; real receiver delay and acoustic drift need measurement |
 
+**Automatic microphone alignment (experimental)** is available from Home for an active live group containing AirPlay 2
+and/or Windows local outputs. The Home button opens the multi-speaker page and starts the measurement. Each output plays
+a short chirp at maximum volume by itself while the other outputs and program audio are muted. The selected microphone
+is opened only for measurement; its recording is analyzed in memory and never saved or uploaded. Per-output trims are
+applied, the group reconnects, and measurement repeats for up to eight passes. Success is reported only when the measured
+arrival-time spread is at most 8 ms. If a pass fails, it does not apply a new correction; corrections from earlier passes
+remain active. This aligns arrival times, not frequency response, and does not create an EQ profile. Mixed hardware groups
+remain experimental.
+
 **Manual calibration** opens silently and needs no microphone. Its optional **Start test tone** is an explicit action
 after applying and connecting the group, capped at 25%, with no microphone. The cap is applied before tones start and
 kept until queued tones drain; closing the test window stops new tones immediately. Record flash and sound separately near
@@ -93,6 +102,11 @@ AirPlay 1、Windows 播放端点和 DLNA，统一选择器位于「多音箱」�
 | AirPlay 2 | 共用 NTP／PTP 时间线，目标严格同步；第三方硬件仍需验证 |
 | AirPlay 1／普通蓝牙／本机 | 校准后基本对齐；缓冲或蓝牙增加整组延迟 |
 | DLNA | 适合不同房间的大致对齐；真实接收延迟和声音漂移需要实测 |
+
+**麦克风自动对齐（实验性）**可从首页启动，适用于正在播放的 AirPlay 2 和／或 Windows 本机实时输出分组。首页按钮会打开多音箱页并开始测量。
+每路输出依次以最大音量单独播放短测试音，其他输出和节目声音暂时静音。所选麦克风只在测量时打开，录音只在内存中分析，不保存或上传。
+程序应用每路延迟微调、重连并复测，最多 8 轮；只有测得的到达时间差不超过 8 毫秒才报告成功。某轮测量失败时不会应用该轮的新修正；
+前几轮已应用的修正仍保持生效。此功能只对齐声音到达时间，不测频响、不生成均衡配置；混合硬件分组仍属实验性。
 
 「手动校准」打开时无声，不需要麦克风。可选「开始测试音」必须在应用并连接分组后明确点击，音量不超过 25%，不会开启
 麦克风。发声前先应用上限，已排队的测试音放完才解除；关闭测试窗口立即停止产生新测试音。用同一帧率、相同短距离，

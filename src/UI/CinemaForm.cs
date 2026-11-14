@@ -18,7 +18,7 @@ internal class CinemaPage : ScrollPage
     private readonly FluentButton _choose = new(L.T("选择影音文件"));
     private readonly FluentButton _play = new(L.T("播放"), ButtonKind.Primary), _pause = new(L.T("暂停")), _stop = new(L.T("停止"));
     private readonly FluentButton _calibrate = new(L.T("测量音箱延迟"));
-    private readonly FluentButton _manualAlignment = new(L.T("手动校准"));
+    private readonly FluentButton _automaticAlignment = new(L.T("自动测量并应用延迟"), ButtonKind.Primary);
     private readonly FluentButton _saveGroup = new(L.T("保存分组"));
     private readonly FluentComboBox _microphone = new() { MinWidth = 160 };
     private readonly FluentSlider _volume = Ui.Slider(0, 100, 1, 5);
@@ -39,6 +39,7 @@ internal class CinemaPage : ScrollPage
     private uint _fileMask;
     private long _playRequest;
     private long? _openingRequest;
+    private bool _groupAlignmentInProgress;
     private CinemaMediaReader.Progress? _inspection;
     private CinemaFileSource? _openingSource;
     internal Func<CinemaFileSource, Task<bool>> WaitForFileOpened { get; set; } = WaitOpenedAsync;
@@ -81,11 +82,11 @@ internal class CinemaPage : ScrollPage
         _editor.SetFound(host.Speakers.ToList());
         _layoutSignature = GroupPanel.SettingsSignature(config);
         body.Controls.Add(_editor);
-        var groupActions = Ui.Row(8, null, _apply, _saveGroup, _manualAlignment);
+        var groupActions = Ui.Row(8, null, _apply, _saveGroup, _automaticAlignment);
         groupActions.Wrap = true;
         body.Controls.Add(groupActions);
         _saveGroup.Click += (_, _) => SaveOutputGroup();
-        _manualAlignment.Click += (_, _) => AlignManually();
+        _automaticAlignment.Click += async (_, _) => await MeasureAndApplyGroupAlignmentAsync();
         _apply.Click += (_, _) =>
         {
             if (_editor.BlockReason is { } blocked) { _status.Text = blocked; return; }
@@ -120,7 +121,7 @@ internal class CinemaPage : ScrollPage
         var micRow = new FieldRow(L.T("校准麦克风"), Ui.Row(8, _microphone, _microphone, _calibrate));
         fieldRows.Add(micRow);
         body.Controls.Add(micRow);
-        body.Controls.Add(Ui.Note(L.T("播放时可以测量：每台音箱依次发出一声短促的测试音，测量期间音箱音量暂时不超过 25%。麦克风只在测量时打开，录音只在内存里分析、不保存也不上传。测量失败时原来的延迟不变。")));
+        body.Controls.Add(Ui.Note(L.T("播放时可以测量：每只音箱会单独以最大音量播放短测试音，其他音箱和节目声音暂时静音。麦克风只在测量时打开，录音只在内存中分析、不保存也不上传。测量失败时原来的延迟不变，完成后恢复原音量。")));
         body.Controls.Add(_calibrationStatus); // kept apart from the playback status, which updates 4 times a second
 
         int cap = (int)Math.Round(host.VolumeCap);
@@ -352,7 +353,12 @@ internal class CinemaPage : ScrollPage
         _choose.Enabled = _sourceKind.SelectedIndex == 1 && _measurement == null;
         _apply.Enabled = !active && !opening && _editor.BlockReason == null;
         _saveGroup.Enabled = !active && !opening && _sourceKind.SelectedIndex == 0 && _editor.LiveOutputCount > 0;
-        _manualAlignment.Enabled = !active && !opening && _sourceKind.SelectedIndex == 0 && _editor.LiveOutputCount >= 2;
+        var alignmentOutputs = _editor.AlignmentOutputs();
+        _automaticAlignment.Enabled = !_groupAlignmentInProgress && !active && !opening && _sourceKind.SelectedIndex == 0
+            && _host is TrayApp measureApp && measureApp.CanCalibrateGroupByMicrophone && _editor.HasAppliedSelection()
+            && alignmentOutputs.Count >= 2
+            && alignmentOutputs.All(o => o.Id.StartsWith("airplay:", StringComparison.OrdinalIgnoreCase)
+                || o.Id.StartsWith("local:", StringComparison.OrdinalIgnoreCase));
         _pause.Enabled = _stop.Enabled = active && _measurement == null;
         _pause.Text = source?.Paused == true ? L.T("继续") : L.T("暂停");
         _calibrate.Enabled = state == CinemaState.Playing && _measurement == null && _activeLayout.Length >= 2;
@@ -395,17 +401,91 @@ internal class CinemaPage : ScrollPage
         }
     }
 
-    private void AlignManually()
+    internal async Task RunGroupAcousticCalibrationFromHomeAsync()
     {
-        if (!_manualAlignment.Enabled) return;
-        bool test = _host is TrayApp app && app.CanTestOutputGroup && _editor.HasAppliedSelection();
-        using var dialog = new GroupAlignmentForm(_editor.AlignmentOutputs(), test,
-            _host is TrayApp live ? live.RunGroupAlignmentTest : null);
-        if (dialog.ShowDialog(FindForm()) == DialogResult.OK && dialog.Adjustment is { } adjustment)
+        RefreshSpeakers();
+        RefreshStatus();
+        if (_sourceKind.SelectedIndex != 0 || !_automaticAlignment.Enabled)
         {
-            _editor.ApplyManualTrim(adjustment);
-            _status.Text = L.T("微调已写入编辑器，请点应用更新分组。");
+            _status.Text = L.T("测量没有完成，请确认至少两个 AirPlay 2 或本机输出正在播放，并允许使用麦克风。");
+            return;
         }
+        await MeasureAndApplyGroupAlignmentAsync();
+    }
+
+    private async Task MeasureAndApplyGroupAlignmentAsync()
+    {
+        if (_host is not TrayApp app || !_automaticAlignment.Enabled) return;
+        _groupAlignmentInProgress = true;
+        var outputs = _editor.AlignmentOutputs()
+            .Where(o => o.Id.StartsWith("airplay:", StringComparison.OrdinalIgnoreCase)
+                || o.Id.StartsWith("local:", StringComparison.OrdinalIgnoreCase)).ToArray();
+        _automaticAlignment.Enabled = false;
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        IProgress<string> progress = new Progress<string>(message => { if (!IsDisposed) _status.Text = message; });
+        try
+        {
+            int micChoice = _microphone.SelectedIndex;
+            string? micId = micChoice <= 0 ? null : micChoice <= _inputs.Count ? _inputs[micChoice - 1].Id : _host.Config.Cinema.CalibrationMicId;
+            _host.Config.Cinema.CalibrationMicId = micId;
+            bool aligned = false;
+            for (int pass = 1; pass <= 8; pass++)
+            {
+                outputs = _editor.AlignmentOutputs()
+                    .Where(o => o.Id.StartsWith("airplay:", StringComparison.OrdinalIgnoreCase)
+                        || o.Id.StartsWith("local:", StringComparison.OrdinalIgnoreCase)).ToArray();
+                object? previousSession = app.Controller.AudioSessionIdentity;
+                progress.Report(L.F("第 {0} 轮：正在依次播放各音箱测试音…", pass));
+                var adjustments = await app.RunGroupAcousticCalibration(this, outputs, cancellation.Token, micId, progress);
+                int largestCorrection = adjustments.Zip(outputs)
+                    .Max(pair => Math.Abs(pair.First.TrimMs - pair.Second.TrimMs));
+                if (largestCorrection <= 8)
+                {
+                    aligned = true;
+                    _status.Text = L.F("已测量每只音箱并确认同步，剩余差值不超过 {0} 毫秒。", largestCorrection);
+                    break;
+                }
+
+                foreach (var adjustment in adjustments) _editor.ApplyManualTrim(adjustment);
+                string before = GroupPanel.PlayLayout(_host.Config);
+                _editor.Apply(activateCapture: true);
+                _layoutSignature = GroupPanel.SettingsSignature(_host.Config);
+                GroupForm.Save(app, before); // the active stream must reconnect before the new trims take effect
+                _status.Text = L.F("已调整延迟，正在重新连接并复测（{0}/8）…", pass);
+                await WaitForAlignedGroupReconnectAsync(app, previousSession, outputs.Length, cancellation.Token);
+            }
+            if (!aligned)
+                throw new CinemaException(L.T("已应用测量到的延迟修正，但复测未能确认音箱完全对齐。请再次测量。"),
+                    "iterative acoustic alignment did not converge within 8 passes");
+        }
+        catch (OperationCanceledException)
+        {
+            if (!IsDisposed) _status.Text = L.T("测量已取消，原来的延迟没有改。");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"automatic live group alignment failed: {ex.Message}");
+            if (!IsDisposed) _status.Text = ex is CinemaException ? ex.Message : L.T("测量没有完成，请确认至少两个 AirPlay 2 或本机输出正在播放，并允许使用麦克风。");
+        }
+        finally
+        {
+            _groupAlignmentInProgress = false;
+            if (!IsDisposed) RefreshStatus();
+        }
+    }
+
+    private static async Task WaitForAlignedGroupReconnectAsync(TrayApp app, object? previousSession,
+        int expectedOutputs, CancellationToken cancellation)
+    {
+        while (!cancellation.IsCancellationRequested)
+        {
+            if (app.Controller.State == StreamState.Streaming
+                && app.Controller.AudioSessionIdentity is { } current && !ReferenceEquals(current, previousSession)
+                && app.Controller.GroupOutputStatuses.Count(s => s.State == OutputState.Streaming) >= expectedOutputs
+                && app.CanCalibrateGroupByMicrophone) return;
+            await Task.Delay(100, cancellation);
+        }
+        cancellation.ThrowIfCancellationRequested();
     }
 
     // ---------------------------------------------------------------- volume

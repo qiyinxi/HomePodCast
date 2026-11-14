@@ -7,3 +7,13 @@ public interface IGroupPacketSource : IDisposable
     void ReadTarget(int index, Span<float> stereo);
     void SkipPackets(int packets);
 }
+
+/// <summary>Optional, explicit microphone calibration controls for a live multi-output timeline.</summary>
+internal interface IGroupAcousticCalibration
+{
+    bool CanCalibrateAcoustically { get; }
+    long BeginAcousticPulse(string targetId);
+    bool RenderCalibrationPulse(string targetId, long firstFrameTicks, int sampleRate, int trimMs, Span<float> stereo);
+    void SetAcousticCalibrationActive(bool active);
+    void EndAcousticCalibration();
+}

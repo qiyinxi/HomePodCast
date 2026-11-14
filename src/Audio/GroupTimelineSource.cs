@@ -8,13 +8,33 @@ namespace HomePodCast.Audio;
 /// Timestamps are the group's source-read deadlines, after the FIFO's existing adaptive capture buffering.
 /// </summary>
 internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelMode> channels, IAudioEffect? effects,
-    Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null) : IGroupPacketSource
+    Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null, IReadOnlyList<string>? targetIds = null,
+    int latencyFrames = 0) : IGroupPacketSource
 {
+    private static readonly float[] CalibrationChirp = AcousticAlignment.Chirp();
     private readonly float[] _pcm = new float[RtpSender.FramesPerPacket * 2];
     private long _packetFrame;
     private long? _nextFrame;
     private int _quietFrames;
+    private AcousticPulse? _acousticPulse;
+    private sealed record AcousticPulse(int Target, long StartTicks);
     public TimelineBuffer Timeline { get; } = new(RtpSender.SampleRate, RtpSender.SampleRate * 5, MediaClock.Now);
+    internal IReadOnlyList<string> CalibrationTargetIds { get; } = targetIds ?? [];
+    internal bool CanCalibrateAcoustically => CalibrationTargetIds.Count >= 2 && CalibrationTargetIds.Count == channels.Count;
+
+    internal long BeginAcousticPulse(string targetId)
+    {
+        int target = -1;
+        for (int i = 0; i < CalibrationTargetIds.Count; i++)
+            if (string.Equals(CalibrationTargetIds[i], targetId, StringComparison.OrdinalIgnoreCase)) { target = i; break; }
+        if (target < 0 || !CanCalibrateAcoustically) throw new InvalidOperationException("The selected live group cannot be microphone-calibrated");
+        long frame = Timeline.FrameAt(MediaClock.Now + MediaClock.FromMs(1200));
+        long start = Timeline.TicksAt(frame) + (long)((Int128)latencyFrames * MediaClock.Frequency / Timeline.SampleRate);
+        Volatile.Write(ref _acousticPulse, new(target, start));
+        return start;
+    }
+
+    internal void EndAcousticCalibration() => Volatile.Write(ref _acousticPulse, null);
 
     public bool ReadPacket(long sourceTicks)
     {
@@ -44,6 +64,23 @@ internal sealed class GroupTimelineSource(AudioFifo fifo, IReadOnlyList<ChannelM
 
     public void ReadTarget(int index, Span<float> stereo)
     {
+        if (Volatile.Read(ref _acousticPulse) is { } pulse)
+        {
+            stereo.Clear();
+            if (index == pulse.Target)
+            {
+                long firstTicks = Timeline.TicksAt(_packetFrame)
+                    + (long)((Int128)latencyFrames * MediaClock.Frequency / Timeline.SampleRate);
+                for (int frame = 0; frame < stereo.Length / 2; frame++)
+                {
+                    long at = firstTicks + (long)((Int128)frame * MediaClock.Frequency / Timeline.SampleRate);
+                    long sample = (long)Math.Round((at - pulse.StartTicks) * (double)Timeline.SampleRate / MediaClock.Frequency);
+                    if ((ulong)sample < (ulong)CalibrationChirp.Length)
+                        stereo[frame * 2] = stereo[frame * 2 + 1] = CalibrationChirp[(int)sample];
+                }
+            }
+            return;
+        }
         long trimFrames = (long)Math.Round((trimsMs?[index] ?? 0) * RtpSender.SampleRate / 1000.0);
         Timeline.ReadFrames(_packetFrame - trimFrames, stereo);
         var mode = channels[index];

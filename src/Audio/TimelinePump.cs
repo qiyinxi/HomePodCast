@@ -81,12 +81,49 @@ internal sealed class TimelinePump(AudioFifo fifo, IAudioEffect? effects, int hi
 
 /// <summary>Adapts a shared source history to the unchanged group RTP sender's transport deadlines.</summary>
 internal sealed class TimelineGroupSource(TimelineBuffer timeline, IReadOnlyList<ChannelMode> channels,
-    int latencyFrames, int groupDelayMs, Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null) : IGroupPacketSource
+    int latencyFrames, int groupDelayMs, Func<Action<long>?> onset, IReadOnlyList<int>? trimsMs = null,
+    IReadOnlyList<string>? targetIds = null, IReadOnlyList<string>? localTargetIds = null) : IGroupPacketSource, IGroupAcousticCalibration
 {
+    private static readonly float[] CalibrationChirp = AcousticAlignment.Chirp();
     private readonly float[] _pcm = new float[RtpSender.FramesPerPacket * 2];
     private int _quietFrames;
+    private int _acousticCalibrationActive;
     private long? _nextFrame;
     private long _packetFrame;
+    private AcousticPulse? _acousticPulse;
+    private sealed record AcousticPulse(string TargetId, long StartTicks);
+    public bool CanCalibrateAcoustically => targetIds != null && targetIds.Count == channels.Count
+        && targetIds.Count + (localTargetIds?.Count ?? 0) >= 2;
+
+    public long BeginAcousticPulse(string targetId)
+    {
+        if (!CanCalibrateAcoustically) throw new InvalidOperationException("This active group cannot be microphone-calibrated");
+        bool known = targetIds!.Contains(targetId, StringComparer.OrdinalIgnoreCase)
+            || (localTargetIds?.Contains(targetId, StringComparer.OrdinalIgnoreCase) ?? false);
+        if (!known) throw new InvalidOperationException("The selected output is not in the active group");
+        long start = MediaClock.Now + MediaClock.FromMs(1200);
+        Volatile.Write(ref _acousticPulse, new(targetId, start));
+        return start;
+    }
+
+    public bool RenderCalibrationPulse(string targetId, long firstFrameTicks, int sampleRate, int trimMs, Span<float> stereo)
+    {
+        if (Volatile.Read(ref _acousticCalibrationActive) == 0) return false;
+        stereo.Clear();
+        if (Volatile.Read(ref _acousticPulse) is not { } pulse) return true;
+        if (!string.Equals(targetId, pulse.TargetId, StringComparison.OrdinalIgnoreCase)) return true;
+        for (int frame = 0; frame < stereo.Length / 2; frame++)
+        {
+            long at = firstFrameTicks + (long)((Int128)frame * MediaClock.Frequency / sampleRate);
+            long sample = (long)Math.Round((at - pulse.StartTicks - MediaClock.FromMs(trimMs)) * (double)timeline.SampleRate / MediaClock.Frequency);
+            if ((ulong)sample < (ulong)CalibrationChirp.Length)
+                stereo[frame * 2] = stereo[frame * 2 + 1] = CalibrationChirp[(int)sample];
+        }
+        return true;
+    }
+
+    public void EndAcousticCalibration() => Volatile.Write(ref _acousticPulse, null);
+    public void SetAcousticCalibrationActive(bool active) => Volatile.Write(ref _acousticCalibrationActive, active ? 1 : 0);
 
     public bool ReadPacket(long deadline)
     {
@@ -113,6 +150,25 @@ internal sealed class TimelineGroupSource(TimelineBuffer timeline, IReadOnlyList
 
     public void ReadTarget(int index, Span<float> stereo)
     {
+        if (Volatile.Read(ref _acousticCalibrationActive) != 0 && Volatile.Read(ref _acousticPulse) is null)
+        { stereo.Clear(); return; }
+        if (Volatile.Read(ref _acousticPulse) is { } pulse)
+        {
+            stereo.Clear();
+            if (string.Equals(targetIds![index], pulse.TargetId, StringComparison.OrdinalIgnoreCase))
+            {
+                long firstTicks = timeline.TicksAt(_packetFrame) + MediaClock.FromMs(groupDelayMs);
+                for (int frame = 0; frame < stereo.Length / 2; frame++)
+                {
+                    long at = firstTicks + (long)((Int128)frame * MediaClock.Frequency / timeline.SampleRate);
+                    long sample = (long)Math.Round((at - pulse.StartTicks - MediaClock.FromMs(trimsMs?[index] ?? 0))
+                        * (double)timeline.SampleRate / MediaClock.Frequency);
+                    if ((ulong)sample < (ulong)CalibrationChirp.Length)
+                        stereo[frame * 2] = stereo[frame * 2 + 1] = CalibrationChirp[(int)sample];
+                }
+            }
+            return;
+        }
         int trim = trimsMs?[index] ?? 0;
         if (trim == 0) _pcm.CopyTo(stereo);
         else timeline.ReadFrames(_packetFrame - (long)Math.Round(trim * RtpSender.SampleRate / 1000.0), stereo);

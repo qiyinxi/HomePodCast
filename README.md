@@ -50,6 +50,13 @@ group delay covers the slowest output; manual delay still respects device floors
 **Saved groups** on Home, then connect. Saving an offline preference or selecting a group while idle never connects it.
 Optional Apple AirPlay, RAOP, local and DLNA outputs recover independently without reclaiming another sender's stream.
 
+**Automatic microphone alignment (experimental)** is available for a connected live group with AirPlay 2 and/or Windows
+local outputs. Start it from the Home page; the app opens the multi-speaker page to show progress. It plays a short,
+maximum-volume chirp through each output separately while muting the other outputs and program audio. The microphone
+recording is analyzed in memory and never saved or uploaded. The app applies per-output trims and repeats the measurement
+after reconnecting, up to eight passes, and reports success only when the measured spread is at most 8 ms. This aligns
+arrival times; it does not produce a REW-style frequency-response curve or an EQ profile. Hardware results remain experimental.
+
 **Manual calibration** opens silently, without a microphone. Its optional explicit test tone is capped at 25%. Film
 separately near the reference and target speakers, subtract their sound-to-flash frame offsets, then apply the result
 to the editor draft; **Apply** on the group page makes it effective. AirPlay 2 targets tight common-timeline sync;

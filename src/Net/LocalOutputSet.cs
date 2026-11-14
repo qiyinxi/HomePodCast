@@ -25,6 +25,8 @@ internal sealed class LocalOutputSet : IDisposable
     private TimelineBuffer? _timeline;
     private int _delayMs;
     private double _volume;
+    private IGroupAcousticCalibration? _calibration;
+    public IReadOnlyList<string> CalibrationTargetIds => _slots.Select(s => "local:" + LocalGroupSettings.Key(s.Options.DeviceId)).ToArray();
 
     private LocalOutputSet(IReadOnlyList<LocalOutputOptions> options, Func<string?> captured, Func<double> cap,
         CancellationToken ct, Func<string, ILocalRenderDevice>? open, Func<TimeSpan, CancellationToken, Task>? retry, Func<string, bool>? duplicate)
@@ -91,16 +93,17 @@ internal sealed class LocalOutputSet : IDisposable
         }
     }
 
-    public async Task StartAsync(TimelineBuffer timeline, int delayMs, double volume, CancellationToken ct)
+    public async Task StartAsync(TimelineBuffer timeline, int delayMs, double volume, CancellationToken ct,
+        IGroupAcousticCalibration? calibration = null)
     {
         if (_timeline != null) throw new InvalidOperationException("Local outputs already started");
-        _timeline = timeline; _delayMs = delayMs;
+        _timeline = timeline; _delayMs = delayMs; _calibration = calibration;
         SetVolume(volume);
         foreach (var slot in _slots)
         {
             if (slot.Current is { } sink)
             {
-                try { await sink.StartAsync(timeline, delayMs, ct); }
+                try { await sink.StartAsync(timeline, delayMs, ct, calibration); }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
                 catch (Exception ex)
                 {
@@ -140,7 +143,7 @@ internal sealed class LocalOutputSet : IDisposable
                     var sink = await _prepare(slot.Options, _stop.Token);
                     sink.BindVolumeSource(() => Volatile.Read(ref _volume));
                     Interlocked.Exchange(ref slot.Current, sink);
-                    await sink.StartAsync(_timeline!, _delayMs, _stop.Token);
+                    await sink.StartAsync(_timeline!, _delayMs, _stop.Token, _calibration);
                     slot.Error = null;
                 }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { throw; }
