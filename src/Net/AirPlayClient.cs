@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Reflection;
 using HomePodCast.Audio;
 using HomePodCast.Protocol;
 
@@ -133,7 +134,15 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
                         ["senderSupportsRelay"] = true,
                     },
                 };
-                await client.SetupAppleTvPtpRealtimeAsync(modern, fifo, ct);
+                // The protocol harness compiles this file without the optional Apple TV experiment source file.
+                // Resolve the experiment entry point only when that source is present in the full application.
+                var modernEntry = typeof(AirPlayClient).GetMethod(
+                    "SetupAppleTvPtpRealtimeAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (modernEntry == null)
+                    throw new NotSupportedException("Apple TV realtime PTP support is not included in this build");
+                var pending = modernEntry.Invoke(client, [modern, fifo, ct]) as Task
+                    ?? throw new InvalidOperationException("Apple TV realtime PTP setup did not return a task");
+                await pending;
             }
             else await client.SetupAsync(options, fifo, ct);
             return client;

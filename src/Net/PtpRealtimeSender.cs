@@ -117,6 +117,10 @@ internal sealed class PtpRealtimeSender : IDisposable
         return packet;
     }
 
+    // Keep the legacy test and harness surface stable while the modern Apple TV stream adds its two flags.
+    internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency) =>
+        Sync(rtp, nanoseconds, clock, latency, first: false, modern: false);
+
     private static ulong FixedPointTime(ulong nanoseconds)
     {
         ulong seconds = nanoseconds / 1_000_000_000;
