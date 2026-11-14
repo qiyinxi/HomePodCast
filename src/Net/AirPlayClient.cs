@@ -71,6 +71,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
 
     public IReadOnlyDictionary<string, object?> Info { get; private set; } = new Dictionary<string, object?>();
     public RtpSender? Sender => _sender;
+    internal long RealtimePacketsSent => PtpRealtime?.PacketsSent ?? 0;
     public int TimingRequests => _timing.RequestsAnswered;
     public double? InitialVolumeDb => Info.TryGetValue("initialVolume", out var v) && v is double d ? d : null;
 
@@ -106,7 +107,35 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         var client = new AirPlayClient(rtsp);
         try
         {
-            await client.SetupAsync(options, fifo, ct);
+            var probe = rtsp.Rtsp("GET", "/info");
+            var probeInfo = probe.Body.Length > 0 ? BPlist.ReadDict(probe.Body) : new Dictionary<string, object?>();
+            if ((probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true)
+            {
+                var modern = options with
+                {
+                    StreamSetupOverrides = new Dictionary<string, object?>
+                    {
+                        ["supportsDynamicStreamID"] = true,
+                        ["ct"] = 1L,
+                        ["audioFormat"] = 0x800L,
+                        ["isMedia"] = false,
+                        ["usingScreen"] = true,
+                        ["streamConnections"] = new Dictionary<string, object?>
+                        {
+                            ["streamConnectionTypeRTP"] = new Dictionary<string, object?>
+                            {
+                                ["streamConnectionKeyUseStreamEncryptionKey"] = true,
+                            },
+                        },
+                    },
+                    SessionSetupExtras = new Dictionary<string, object?>
+                    {
+                        ["senderSupportsRelay"] = true,
+                    },
+                };
+                await client.SetupAppleTvPtpRealtimeAsync(modern, fifo, ct);
+            }
+            else await client.SetupAsync(options, fifo, ct);
             return client;
         }
         catch

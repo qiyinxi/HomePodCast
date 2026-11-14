@@ -27,6 +27,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly uint _ssrc;
     private readonly int _latency;
     private readonly bool _alac;
+    private readonly bool _modernStream;
     private readonly CancellationTokenSource _stop = new();
     private readonly Dictionary<ushort, byte[]> _history = new();
     private readonly Queue<ushort> _order = new();
@@ -52,19 +53,21 @@ internal sealed class PtpRealtimeSender : IDisposable
     public event Action<Exception>? Failed;
 
     public PtpRealtimeSender(IPAddress local, IPAddress peer, int dataPort, int controlPort, UdpClient control,
-        byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpMaster clock)
+        byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpMaster clock,
+        bool modernStream = false)
         : this(local, peer, dataPort, controlPort, control, key, ssrc, latency, alac, fifo, effects,
-            new PtpTimeline(clock.TimeAt, () => clock.ClockId, () => clock.IsMaster)) { }
+            new PtpTimeline(clock.TimeAt, () => clock.ClockId, () => clock.IsMaster), modernStream) { }
 
     /// <summary>The same stream on a timeline that is not this PC's own clock (the Apple TV experiment follows the receiver's).</summary>
     public PtpRealtimeSender(IPAddress local, IPAddress peer, int dataPort, int controlPort, UdpClient control,
-        byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpTimeline clock)
+        byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpTimeline clock,
+        bool modernStream = false)
     {
         _audio = new(new IPEndPoint(local, 0));
         try { _audio.Connect(peer, dataPort); _cipher = new(key); }
         catch { _audio.Dispose(); throw; }
         _control = control; _controlPeer = new(peer, controlPort); _ssrc = ssrc; _latency = latency;
-        _alac = alac; _fifo = fifo; _effects = effects; _clock = clock;
+        _alac = alac; _modernStream = modernStream; _fifo = fifo; _effects = effects; _clock = clock;
     }
 
     public void Start(long? startAt = null, ReceiverPcmReader? readAudio = null)
@@ -103,16 +106,22 @@ internal sealed class PtpRealtimeSender : IDisposable
         if (_stopping != 0) throw new InvalidOperationException("Realtime sender already stopped");
     }
 
-    internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency)
+    internal static byte[] Sync(uint rtp, ulong nanoseconds, ulong clock, int latency, bool first, bool modern)
     {
-        var packet = new byte[28]; packet[0] = 0x80; packet[1] = 0xd7;
-        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), 7);
-        // 2026-10-14: shairport-sync 4.3.7 subtracts the fixed 11035-frame pipeline from frame_1.
-        BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(4), unchecked(rtp - (uint)latency + 11035));
-        BinaryPrimitives.WriteUInt64BigEndian(packet.AsSpan(8), nanoseconds);
+        var packet = new byte[28]; packet[0] = modern && first ? (byte)0x90 : (byte)0x80; packet[1] = 0xd7;
+        BinaryPrimitives.WriteUInt16BigEndian(packet.AsSpan(2), modern ? (ushort)6 : (ushort)7);
+        BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(4), modern ? unchecked(rtp - (uint)latency) : unchecked(rtp - (uint)latency + 11035));
+        BinaryPrimitives.WriteUInt64BigEndian(packet.AsSpan(8), modern ? FixedPointTime(nanoseconds) : nanoseconds);
         BinaryPrimitives.WriteUInt32BigEndian(packet.AsSpan(16), rtp);
         BinaryPrimitives.WriteUInt64BigEndian(packet.AsSpan(20), clock);
         return packet;
+    }
+
+    private static ulong FixedPointTime(ulong nanoseconds)
+    {
+        ulong seconds = nanoseconds / 1_000_000_000;
+        ulong fraction = (ulong)((UInt128)(nanoseconds % 1_000_000_000) * ((UInt128)1 << 32) / 1_000_000_000);
+        return (seconds << 32) | fraction;
     }
 
     // 2026-10-17: runtime events locate synchronous OSR on this thread around packet 14 (38 ms on a fast CI run;
@@ -128,7 +137,7 @@ internal sealed class PtpRealtimeSender : IDisposable
             var stopped = _stop.Token.WaitHandle;
             long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
             int quiet = 0;
-            bool sent = false;
+            bool sent = false, firstSync = true;
             while (!_stop.IsCancellationRequested)
             {
                 long deadline = start + (long)(n * 352.0 * MediaClock.Frequency / 44100);
@@ -161,8 +170,9 @@ internal sealed class PtpRealtimeSender : IDisposable
                 {
                     long syncTicks = MediaClock.Now;
                     uint now = unchecked(RtpBase + (uint)Math.Round((syncTicks - start) * 44100.0 / MediaClock.Frequency));
-                    byte[] sync = Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId(), _latency);
+                    byte[] sync = Sync(now, _clock.TimeAt(syncTicks), _clock.ClockId(), _latency, firstSync, _modernStream);
                     _control.Send(sync, sync.Length, _controlPeer);
+                    firstSync = false;
                     nextSync = MediaClock.Now + MediaClock.FromMs(125);
                 }
                 if (_readAudio is { } read) read(deadline, audio);
@@ -179,7 +189,7 @@ internal sealed class PtpRealtimeSender : IDisposable
                 byte[] payload = _alac ? RaopAudio.Alac(pcm) : RaopAudio.L16(pcm);
                 ushort sequence = unchecked((ushort)(FirstSeq + n));
                 var packet = RaopPackets.Audio(sequence, unchecked(RtpBase + (uint)(n * 352)), _ssrc,
-                    new byte[payload.Length + 24], !sent);
+                    new byte[payload.Length + 24], !sent && !_modernStream);
                 ulong nonce = _cipher.Counter;
                 _cipher.Encrypt(payload, packet.AsSpan(4, 8), packet.AsSpan(12, payload.Length + 16));
                 BinaryPrimitives.WriteUInt64LittleEndian(packet.AsSpan(packet.Length - 8), nonce);

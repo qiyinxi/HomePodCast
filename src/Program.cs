@@ -423,22 +423,27 @@ public static class Program
         var lost = new TaskCompletionSource<string>();
         client.Lost += reason => lost.TrySetResult(reason);
 
-        var s = client.Sender!;
+        var s = client.Sender;
         for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
         {
             await Task.WhenAny(Task.Delay(1000), lost.Task);
-            Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
-                     $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
-                     $"sent={s.PacketsSent} silent={s.SilentPackets} late={s.LateWakeups} maxLate={s.MaxLateMs:F1}ms " +
-                     $"skip={s.SkippedPackets} rtx={s.RetransmitRequests}/{s.Retransmitted}/{s.RetransmitMisses} " +
-                     $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            if (s is { } sender)
+                Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
+                         $"sent={sender.PacketsSent} silent={sender.SilentPackets} late={sender.LateWakeups} maxLate={sender.MaxLateMs:F1}ms " +
+                         $"skip={sender.SkippedPackets} rtx={sender.RetransmitRequests}/{sender.Retransmitted}/{sender.RetransmitMisses} " +
+                         $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            else Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"under={fifo.Underruns} over={fifo.Overflows} modernPackets={client.RealtimePacketsSent} " +
+                         $"peak={capture?.Peak ?? 0:F2}");
         }
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
     }
     /// <summary>
     /// Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session SETUP
-    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
+    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID; "@file.json": the JSON in that file,
+    /// for a value that is a dictionary or a list).
     /// </summary>
     private static Dictionary<string, object?>? SetupOverrides(string[] args, string option)
     {
@@ -447,18 +452,31 @@ public static class Program
         {
             if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
             overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                : text.StartsWith('@') ? PlistValue(System.Text.Json.JsonDocument.Parse(File.ReadAllText(text[1..])).RootElement)
                 : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
         }
         return overrides.Count > 0 ? overrides : null;
     }
 
+    /// <summary>JSON as the values a binary plist is written from.</summary>
+    internal static object? PlistValue(System.Text.Json.JsonElement json) => json.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Object => json.EnumerateObject().ToDictionary(p => p.Name, p => PlistValue(p.Value)),
+        System.Text.Json.JsonValueKind.Array => json.EnumerateArray().Select(PlistValue).ToArray(),
+        System.Text.Json.JsonValueKind.String => json.GetString(),
+        System.Text.Json.JsonValueKind.Number => json.TryGetInt64(out long n) ? n : json.GetDouble(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        _ => null,
+    };
+
     internal const string PtpRealtimeUsage =
-        "stream --ptp-realtime --apple-tv --host IP (--silent | --tone) [--latency MS] [--seconds N] [--volume PCT] [--cap PCT]";
+        "stream --ptp-realtime --apple-tv --host IP (--silent | --tone) [--latency MS] [--seconds N] [--volume PCT] [--cap PCT] [--session KEY=VALUE] [--playing]";
 
     /// <summary>
     /// experimental since 1.4: `stream --ptp-realtime --apple-tv`, a realtime stream to an Apple TV in a session timed with
     /// PTP (AirPlayClient.AppleTvPtp.cs). Silence unless --tone, which is for the maintainer listening; the volume ceiling
-    /// is 10 % and never above 25 % (AGENTS.md).
+    /// is 10 % and never above 35 % (AGENTS.md).
     /// </summary>
     private static async Task<int> StreamPtpRealtime(string[] args)
     {
@@ -469,7 +487,7 @@ public static class Program
             return 2;
         }
         int latency = int.Parse(Opt(args, "--latency") ?? "250"), seconds = int.Parse(Opt(args, "--seconds") ?? "15");
-        double cap = Math.Min(25, double.Parse(Opt(args, "--cap") ?? "10"));
+        double cap = Math.Min(35, double.Parse(Opt(args, "--cap") ?? "10"));
         var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60); // never written without a tone
         using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
         toneGen?.Start();
@@ -486,6 +504,8 @@ public static class Program
         var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         client.Lost += reason => lost.TrySetResult(reason);
         if (client.LostReason is { } early) lost.TrySetResult(early);
+        // --playing: say that we are playing, as an iPhone does (AirPlayClient.SendCommand).
+        if (args.Contains("--playing")) client.SendCommand("updateMRPlaybackState", new() { ["mrPlaybackState"] = 1L });
         for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
         {
             await Task.WhenAny(Task.Delay(1000), lost.Task);
@@ -556,6 +576,7 @@ public static class Program
         var options = new StreamOptions(o.LatencyMs, o.VolumePercent)
         {
             VolumeCapPercent = o.CapPercent,
+            SessionSetupExtras = o.AppleTv ? SetupOverrides(args, "--session") : null,
             Pairings = PairingStore.Default,
             RequestLog = Log.Info,
         };
@@ -585,6 +606,7 @@ public static class Program
                 var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
                 client.Lost += reason => lost.TrySetResult(reason);
                 if (client.LostReason is { } early) lost.TrySetResult(early);
+                if (o.AppleTv && args.Contains("--playing")) client.SendCommand("updateMRPlaybackState", new() { ["mrPlaybackState"] = 1L });
                 var sender = client.SurroundSender!;
                 var ptp = client.SurroundClock!;
                 var watch = Stopwatch.StartNew();
@@ -638,20 +660,20 @@ public static class Program
 /// </summary>
 /// <param name="AppleTv">
 /// `--apple-tv`: the experiment of 2026-11-11, an Apple TV as the receiver (<see cref="SurroundSetup.AllowAppleTv"/>). Only
-/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 25 % at most.
+/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 35 % at most.
 /// </param>
 /// <param name="Beeps">Beeps a second of the tone; 0: digital silence.</param>
 internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds,
     bool AppleTv = false, int Beeps = 0)
 {
     public const string Usage = "stream --surround --host IP --silent [--latency MS] [--seconds N] [--cap PCT]\n" +
-                                "         stream --surround --apple-tv --host IP (--silent | --tone [--beeps N]) [--cap PCT]   experiment: an Apple TV";
+                                "         stream --surround --apple-tv --host IP (--silent | --tone [--beeps N]) [--cap PCT] [--session KEY=VALUE] [--playing]   experiment: an Apple TV";
 
     /// <summary>Silence still goes out at a volume: never more than this.</summary>
     public const double MaxCapPercent = 10;
 
     /// <summary>The Apple TV experiment's tone: the ceiling of every audible test (AGENTS.md).</summary>
-    public const double MaxToneCapPercent = 25;
+    public const double MaxToneCapPercent = 35;
 
     /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
     public static SurroundCliOptions? Parse(string[] args, out string? error)
