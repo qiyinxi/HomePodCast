@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Reflection;
 using HomePodCast.Audio;
 using HomePodCast.Protocol;
 
@@ -71,6 +72,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
 
     public IReadOnlyDictionary<string, object?> Info { get; private set; } = new Dictionary<string, object?>();
     public RtpSender? Sender => _sender;
+    internal long RealtimePacketsSent => PtpRealtime?.PacketsSent ?? 0;
     public int TimingRequests => _timing.RequestsAnswered;
     public double? InitialVolumeDb => Info.TryGetValue("initialVolume", out var v) && v is double d ? d : null;
 
@@ -106,7 +108,50 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         var client = new AirPlayClient(rtsp);
         try
         {
-            await client.SetupAsync(options, fifo, ct);
+            var probe = rtsp.Rtsp("GET", "/info");
+            var probeInfo = probe.Body.Length > 0 ? BPlist.ReadDict(probe.Body) : new Dictionary<string, object?>();
+            if (probe.IsSuccess && probeInfo.Count > 0) client.Info = probeInfo;
+            bool modernAppleTv =
+                (probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true &&
+                // Older Apple TV fakes and legacy receivers expose only the small /info shape. The modern
+                // home-theater path is advertised by the richer format/capability fields seen on tvOS 18+.
+                (probeInfo.ContainsKey("supportedFormats") || probeInfo.ContainsKey("features") ||
+                 (probeInfo.GetValueOrDefault("sourceVersion") as string)?.StartsWith("1005.", StringComparison.Ordinal) == true);
+            if (modernAppleTv)
+            {
+                var modern = options with
+                {
+                    StreamSetupOverrides = new Dictionary<string, object?>
+                    {
+                        ["supportsDynamicStreamID"] = true,
+                        ["ct"] = 1L,
+                        ["audioFormat"] = 0x800L,
+                        ["isMedia"] = false,
+                        ["usingScreen"] = true,
+                        ["streamConnections"] = new Dictionary<string, object?>
+                        {
+                            ["streamConnectionTypeRTP"] = new Dictionary<string, object?>
+                            {
+                                ["streamConnectionKeyUseStreamEncryptionKey"] = true,
+                            },
+                        },
+                    },
+                    SessionSetupExtras = new Dictionary<string, object?>
+                    {
+                        ["senderSupportsRelay"] = true,
+                    },
+                };
+                // The protocol harness compiles this file without the optional Apple TV experiment source file.
+                // Resolve the experiment entry point only when that source is present in the full application.
+                var modernEntry = typeof(AirPlayClient).GetMethod(
+                    "SetupAppleTvPtpRealtimeAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (modernEntry == null)
+                    throw new NotSupportedException("Apple TV realtime PTP support is not included in this build");
+                var pending = modernEntry.Invoke(client, [modern, fifo, ct]) as Task
+                    ?? throw new InvalidOperationException("Apple TV realtime PTP setup did not return a task");
+                await pending;
+            }
+            else await client.SetupAsync(options, fifo, ct);
             return client;
         }
         catch
@@ -194,9 +239,12 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         if (options.PairingOverRtsp) _rtsp.PairingOverRtsp = true;
         if (options.RequestLog != null)
             _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {method} {uri}: {status}");
-        var info = _rtsp.Rtsp("GET", "/info");
-        if (info.IsSuccess && info.Body.Length > 0)
-            Info = BPlist.ReadDict(info.Body);
+        if (Info.Count == 0)
+        {
+            var info = _rtsp.Rtsp("GET", "/info");
+            if (info.IsSuccess && info.Body.Length > 0)
+                Info = BPlist.ReadDict(info.Body);
+        }
         Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 

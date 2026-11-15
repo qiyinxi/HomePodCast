@@ -423,15 +423,19 @@ public static class Program
         var lost = new TaskCompletionSource<string>();
         client.Lost += reason => lost.TrySetResult(reason);
 
-        var s = client.Sender!;
+        var s = client.Sender;
         for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
         {
             await Task.WhenAny(Task.Delay(1000), lost.Task);
-            Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
-                     $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
-                     $"sent={s.PacketsSent} silent={s.SilentPackets} late={s.LateWakeups} maxLate={s.MaxLateMs:F1}ms " +
-                     $"skip={s.SkippedPackets} rtx={s.RetransmitRequests}/{s.Retransmitted}/{s.RetransmitMisses} " +
-                     $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            if (s is { } sender)
+                Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
+                         $"sent={sender.PacketsSent} silent={sender.SilentPackets} late={sender.LateWakeups} maxLate={sender.MaxLateMs:F1}ms " +
+                         $"skip={sender.SkippedPackets} rtx={sender.RetransmitRequests}/{sender.Retransmitted}/{sender.RetransmitMisses} " +
+                         $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            else Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"under={fifo.Underruns} over={fifo.Overflows} modernPackets={client.RealtimePacketsSent} " +
+                         $"peak={capture?.Peak ?? 0:F2}");
         }
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
