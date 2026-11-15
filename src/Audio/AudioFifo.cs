@@ -222,7 +222,25 @@ public sealed partial class AudioFifo
         // Measured 2026-10-08: relaxing from 16 back to 15 ms dropped out again 10 minutes later. Remember the
         // level that failed and stay at least 2 ms above it for the rest of the session.
         _floorFrames = Math.Min(Math.Max(_floorFrames, TargetFrames + 2 * _msFrames), MaxTargetFrames);
-        if (MaxTargetFrames > TargetFrames) SetTarget(Math.Min(TargetFrames + GrowMs * _msFrames, MaxTargetFrames));
+        // Grow by what was missing, at least GrowMs. 2026-11-15: Windows delivered nothing for 26 to 100 ms a few times
+        // an hour; at 4 ms a dropout the target would have needed dozens of them to cover one.
+        long dryMs = (Clock() - _dryAt) * 1000 / Stopwatch.Frequency;
+        int grow = (int)Math.Clamp(dryMs, GrowMs, 1000) * _msFrames;
+        if (MaxTargetFrames > TargetFrames) SetTarget(Math.Min(TargetFrames + grow, MaxTargetFrames));
+    }
+
+    /// <summary>
+    /// Sets <see cref="MaxTargetFrames"/> while the FIFO is in use (a new connection's latency): a lower ceiling also
+    /// brings the target and the floor down to it, never below <see cref="BaseTargetFrames"/>.
+    /// </summary>
+    public void SetMaxTarget(int frames)
+    {
+        lock (_lock)
+        {
+            MaxTargetFrames = Math.Max(frames, BaseTargetFrames);
+            _floorFrames = Math.Min(_floorFrames, MaxTargetFrames);
+            if (TargetFrames > MaxTargetFrames) SetTarget(MaxTargetFrames);
+        }
     }
 
     private void SetTarget(int frames)

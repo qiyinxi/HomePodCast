@@ -240,7 +240,7 @@ public class AudioFifoTests
         fifo.RelaxAfterReads = 1;
         fifo.Write(new float[2000 * 2]);
         Drain(fifo);
-        advance(20);
+        advance(3);                                               // a short one: at least GrowMs
         fifo.Write(new float[352 * 2]);                           // dropout at 12 ms -> 16 ms, floor 14 ms
         Assert.Equal(529 + 176, fifo.TargetFrames);
 
@@ -269,5 +269,47 @@ public class AudioFifoTests
         Assert.Equal(baseTarget, fifo.TargetFrames);
         Assert.Equal(0, fifo.Underruns);
         Assert.Equal(5, fifo.IdleGaps);
+    }
+
+    [Fact]
+    public void A_long_dropout_grows_the_target_by_what_was_missing_up_to_the_ceiling()
+    {
+        // 2026-11-15: Windows delivered nothing for 26 to 100 ms a few times an hour; 4 ms a dropout never caught up.
+        var (fifo, advance) = Clocked();                          // 12 ms base
+        fifo.MaxTargetFrames = 44100 * 100 / 1000;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(26);
+        fifo.Write(new float[352 * 2]);
+        Assert.Equal(1, fifo.Underruns);
+        Assert.Equal(529 + 26 * 44, fifo.TargetFrames);           // 12 + 26 ms
+
+        fifo.Write(new float[2000 * 2]);                          // primed again
+        Drain(fifo);
+        advance(150);                                             // still a dropout (within 200 ms), more than the ceiling allows
+        fifo.Write(new float[352 * 2]);
+        Assert.Equal(2, fifo.Underruns);
+        Assert.Equal(fifo.MaxTargetFrames, fifo.TargetFrames);
+    }
+
+    [Fact]
+    public void A_lower_ceiling_brings_the_target_down_but_never_below_the_base()
+    {
+        var (fifo, advance) = Clocked();
+        fifo.MaxTargetFrames = 44100 * 100 / 1000;
+        int baseTarget = fifo.TargetFrames, margin = fifo.CapFrames - fifo.TargetFrames;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(80);
+        fifo.Write(new float[352 * 2]);
+        Assert.True(fifo.TargetFrames > 44100 * 30 / 1000);
+
+        fifo.SetMaxTarget(44100 * 30 / 1000);                    // the next connection has a lower latency
+        Assert.Equal(44100 * 30 / 1000, fifo.TargetFrames);
+        Assert.Equal(fifo.TargetFrames + margin, fifo.CapFrames);
+
+        fifo.SetMaxTarget(1);
+        Assert.Equal(baseTarget, fifo.MaxTargetFrames);
+        Assert.Equal(baseTarget, fifo.TargetFrames);
     }
 }

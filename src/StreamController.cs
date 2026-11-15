@@ -50,6 +50,25 @@ public sealed partial class StreamController : IDisposable
     }
 
     private const int MaxFifoTargetMs = 30;
+    private const int FifoCeilingMs = 100;
+
+    /// <summary>
+    /// How far the adaptive FIFO target may grow for a connection at this latency: half of it, at least 30 ms (the
+    /// fixed ceiling before) and at most 100 ms. 2026-11-15: on the maintainer's PC Windows delivered nothing for 26 to
+    /// 100 ms a few times an hour; each was a dropout, and raising the latency to 200 ms did not help while the FIFO
+    /// stayed at 30 ms. Who chose a higher latency accepts that much delay, so the FIFO may use part of it.
+    /// </summary>
+    internal static int FifoCeilingFor(int latencyMs, int fifoTargetMs) =>
+        Math.Max(fifoTargetMs, Math.Clamp(latencyMs / 2, MaxFifoTargetMs, FifoCeilingMs));
+
+    /// <summary>The FIFO's ceiling for the connection about to start (see <see cref="FifoCeilingFor"/>).</summary>
+    private void FitFifoTo(int latencyMs)
+    {
+        int ms = FifoCeilingFor(latencyMs, (int)Math.Round(_fifo.BaseTargetFrames * 1000.0 / RtpSender.SampleRate));
+        if (ms * RtpSender.SampleRate / 1000 == _fifo.MaxTargetFrames) return;
+        _fifo.SetMaxTarget(ms * RtpSender.SampleRate / 1000);
+        Log.Info($"fifo: may grow to {ms} ms on dropouts (latency {latencyMs} ms)");
+    }
     private readonly object _lock = new();
     private ICaptureSource? _capture;
     private AirPlayClient? _client;
@@ -224,6 +243,7 @@ public sealed partial class StreamController : IDisposable
                     EffectiveLatencyMs = SafeLatency(latencyMs);
                     if (EffectiveLatencyMs != latencyMs)
                         Log.Warn($"latency {latencyMs} ms is below what the speaker can handle; using {EffectiveLatencyMs} ms");
+                    FitFifoTo(EffectiveLatencyMs);
                     options = new StreamOptions(EffectiveLatencyMs, Muted ? 0 : Volume)
                     {
                         VolumeCapPercent = VolumeCapPercent, Effects = Effects, Pairings = Pairings, DeviceId = deviceId,

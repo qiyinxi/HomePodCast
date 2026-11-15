@@ -240,7 +240,11 @@ public sealed class RoutedCapture : ICaptureSource
             endpoint?.Start();
             long nextDeviceCheck = Stopwatch.GetTimestamp() + DeviceCheckInterval;
             long lastData = Stopwatch.GetTimestamp(), lastOutput = lastData;
-            long checkTicks = 0; // how long the cycle before spent asking Windows about the devices
+            long checkTicks = 0; // how long the cycles since the last packet spent asking Windows about the devices
+            // Waits since the last packet that ended without one. 2026-11-15: the stall log counted them as this thread's
+            // work ("worked 98 ms" while Windows delivered nothing for 100 ms and the thread only waited).
+            long emptyWaitTicks = 0;
+            int emptyWaits = 0;
             int breaks = 0, stallsLogged = 0;
 
             while (!_stop)
@@ -311,13 +315,13 @@ public sealed class RoutedCapture : ICaptureSource
                         // of it the once-a-second device check), or the wait itself (Windows signalled late, or this
                         // thread got no processor). 2026-11-10: the log could only say that a dropout happened.
                         if ((now - lastData > StallTicks || lost > 0) && stallsLogged++ < 30)
-                            Log.Info($"capture: {Ms(now - lastData):F0} ms without a packet while audio played (waited {Ms(now - waitFrom):F0} ms " +
-                                     $"for Windows' signal, which {(signalled ? "came" : "did not come")}; before that this thread worked " +
-                                     $"{Ms(waitFrom - lastData):F0} ms, {Ms(checkTicks):F0} ms of it " +
-                                     $"asking Windows about the output device), then {mixed.Count / 2 * 1000.0 / rate:F0} ms arrived at once" +
+                            Log.Info(StallMessage(Ms(now - lastData), Ms(now - waitFrom), signalled, emptyWaits, Ms(emptyWaitTicks),
+                                         Ms(waitFrom - lastData - emptyWaitTicks), Ms(checkTicks), mixed.Count / 2 * 1000.0 / rate) +
                                      (lost > 0 ? $"; Windows marked a break in the audio before it (its buffer holds {endpoint?.BufferMs:F0} ms)" : ""));
                     }
                     lastData = now;
+                    emptyWaitTicks = checkTicks = 0;
+                    emptyWaits = 0;
                     resampled.Clear();
                     resampler.Process(CollectionsMarshal.AsSpan(mixed), resampled);
                     var output = CollectionsMarshal.AsSpan(resampled);
@@ -341,10 +345,14 @@ public sealed class RoutedCapture : ICaptureSource
                     _fifo.Write(output);
                     TrackPeak(output);
                 }
+                if (lastData != now)
+                {
+                    emptyWaitTicks += now - waitFrom;
+                    emptyWaits++;
+                }
 
                 string? choice = _routing.CaptureDeviceId;
                 bool choiceChanged = !CaptureEndpoint.SameChoice(choice, chosen);
-                checkTicks = 0;
                 if (choiceChanged || _devicesChanged || now >= nextDeviceCheck)
                 {
                     _devicesChanged = false;
@@ -353,7 +361,7 @@ public sealed class RoutedCapture : ICaptureSource
                     // The default output only matters while following it (a chosen device ignores default changes).
                     string? defaultId = CaptureEndpoint.FollowsDefault(choice) ? AudioEndpoints.DefaultId(enumerator, EDataFlow.Render) : null;
                     bool reopen = CaptureEndpoint.ShouldReopen(choice, deviceId, defaultId, AudioEndpoints.IsActive(device));
-                    checkTicks = Stopwatch.GetTimestamp() - checkFrom;
+                    checkTicks += Stopwatch.GetTimestamp() - checkFrom;
                     if (reopen)
                     {
                         Log.Info(choiceChanged ? "capture device setting changed, switching"
@@ -382,6 +390,17 @@ public sealed class RoutedCapture : ICaptureSource
     private static int Id(uint root) => unchecked((int)root);
 
     private static double Ms(long ticks) => ticks * 1000.0 / Stopwatch.Frequency;
+
+    /// <summary>
+    /// Where the time of a capture stall went: waits that ended without a packet (Windows delivered nothing), the last
+    /// wait, and this thread's own work (with the device checks in it).
+    /// </summary>
+    internal static string StallMessage(double gapMs, double lastWaitMs, bool signalled, int emptyWaits, double emptyWaitMs,
+        double workedMs, double checkMs, double arrivedMs) =>
+        $"capture: {gapMs:F0} ms without a packet while audio played (" +
+        (emptyWaits > 0 ? $"{emptyWaits} {(emptyWaits == 1 ? "wait" : "waits")} of {emptyWaitMs:F0} ms in all ended without one, then " : "") +
+        $"waited {lastWaitMs:F0} ms for Windows' signal, which {(signalled ? "came" : "did not come")}; this thread worked " +
+        $"{Math.Max(0, workedMs):F0} ms, {checkMs:F0} ms of it asking Windows about the output device), then {arrivedMs:F0} ms arrived at once";
 
     /// <summary>Open clients for new targets (one per cycle: activation can take a few ms), close stale ones.</summary>
     private void Reconcile(RoutePlan plan, Dictionary<uint, Client> clients, Dictionary<uint, long> failed,
