@@ -39,7 +39,7 @@ It releases a snapshot of `origin/dev`: the commit `dev` is at when it starts. P
 The script:
 
 - takes `origin/dev`'s commit after `git fetch` and reads everything from that commit (`<Version>` through `git show`), not from the working tree, so it runs from any clone or worktree, whatever is checked out there;
-- refuses when `vX.Y.Z` exists already, when the commit has a release tag already, and while another release is going on: an open PR to `main`, a promotion branch's CI or another tag build running, or a snapshot branch pushed from another checkout;
+- refuses when `vX.Y.Z` exists already, when the commit has a release tag already, and while another release is going on: an open release PR to `main` (`release/X.Y.Z` of this repository; other PRs to `main`, such as a fork's feature PR, are only named with a warning), a promotion branch's CI or another tag build running, or a snapshot branch pushed from another checkout;
 - takes N = 1 + the highest `vX.Y.Z-beta.N` here or on origin, counting tags whose build failed;
 - tags the commit right away if a push run of `build.yml` has already passed on it (on `dev`, `main` or `release/**`, which is what the release checks accept), and refuses if `dev`'s CI failed on it. Otherwise it pushes the snapshot branch `release/snapshot/vX.Y.Z-beta.N` at the commit and waits for that branch's CI (`gh run watch`). build.yml runs on `release/**`, and each branch has a concurrency group of its own, so pushes to `dev` can't cancel this run;
 - creates the annotated tag `vX.Y.Z-beta.N` ("HomePodCast X.Y.Z beta N") on the commit and pushes it;
@@ -250,7 +250,7 @@ The tag stays: never move or delete a pushed tag, not even one whose build faile
 脚本会：
 
 - `git fetch` 之后取 `origin/dev` 的提交，所有内容都从这个提交读取（`<Version>` 用 `git show` 读），不读工作区，所以在任何克隆或工作树里都能运行，不管那里检出的是什么；
-- 在这些情况下拒绝：`vX.Y.Z` 已经存在；这个提交已经有发布标签；还有别的发布正在进行：有打开的到 `main` 的 PR、转正分支的 CI 或另一个标签构建正在运行、或者有从另一个检出推送的快照分支；
+- 在这些情况下拒绝：`vX.Y.Z` 已经存在；这个提交已经有发布标签；还有别的发布正在进行：有打开的到 `main` 的发布 PR（本仓库的 `release/X.Y.Z`；其他到 `main` 的 PR，比如外部仓库的功能 PR，只警告、不等待）、转正分支的 CI 或另一个标签构建正在运行、或者有从另一个检出推送的快照分支；
 - 取 N = 本地或 origin 上最大的 `vX.Y.Z-beta.N` + 1，构建失败的标签也算；
 - 如果这个提交已经有一次 `build.yml` 的推送运行通过了（在 `dev`、`main` 或 `release/**` 上，也就是发布检查认可的那些），就直接打标签；如果 `dev` 的 CI 在它上面失败了，就拒绝。否则把快照分支 `release/snapshot/vX.Y.Z-beta.N` 推送到这个提交上，等这个分支的 CI（`gh run watch`）。build.yml 对 `release/**` 也会运行，而且每个分支有自己的并发组，所以推送 `dev` 取消不了这次运行；
 - 在这个提交上创建附注标签 `vX.Y.Z-beta.N`（"HomePodCast X.Y.Z beta N"）并推送；
