@@ -109,7 +109,11 @@ public sealed class EventChannel : IDisposable
                     var proto = req.StartLine.Split(' ').LastOrDefault() ?? "RTSP/1.0";
                     var resp = HttpMessage.Format($"{proto} 200 OK", headers, null);
                     _stream.Write(_session.Encrypt(resp));
-                    Log.Debug($"event: {req.StartLine} ({req.Body.Length} bytes)");
+                    // Verbose only: what the receiver asks of us. 2026-11-11: an Apple TV whose output is its home-theater
+                    // HomePods accepts the whole stream and plays nothing; every request here was answered 200 unread.
+                    if (Log.Verbose)
+                        Log.Debug($"event: {req.StartLine} ({req.Body.Length} bytes) " +
+                                  $"[{string.Join("; ", req.Headers.Select(h => $"{h.Key}: {h.Value}"))}] {BPlist.Describe(req.Body)}");
                 }
             }
         }

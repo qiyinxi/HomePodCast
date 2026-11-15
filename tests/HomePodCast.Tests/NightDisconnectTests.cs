@@ -233,6 +233,20 @@ public class NightDisconnectTests
     }
 
     [Fact]
+    public void A_surround_block_with_sound_only_in_its_last_channel_is_heard()
+    {
+        // The 5.1 sender bypasses the stereo chain and hands every 6-channel block to Observe: a film's surround effect
+        // alone keeps 夜间自动断开 away.
+        var activity = new SoundActivity(() => 1000);
+        var block = new float[1024 * 6];
+        block[1023 * 6 + 5] = 0.05f; // Rs of the last frame
+        activity.Process(block, 1024); // stereo Process looks at frames * 2 samples only
+        Assert.Equal(TimeSpan.MaxValue, activity.SilentFor(1000));
+        activity.Observe(block);
+        Assert.Equal(TimeSpan.Zero, activity.SilentFor(1000));
+    }
+
+    [Fact]
     public void It_measures_after_the_other_effects()
     {
         // Added last to the chain, it hears what the speaker plays: here an effect that mutes everything.

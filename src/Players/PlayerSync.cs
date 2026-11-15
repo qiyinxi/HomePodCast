@@ -1,7 +1,7 @@
 namespace HomePodCast.Players;
 
 /// <summary>What PlayerSync needs to know about the app, read on every step.</summary>
-/// <param name="Enabled">The setting is on and the 影视 scene is selected.</param>
+/// <param name="Enabled">The setting is on and the 影视 scene is selected, or 5.1 streams (TrayApp.PlayersFollow).</param>
 /// <param name="State">The stream's state.</param>
 /// <param name="VideoDelayMs">How late the HomePod is heard (only meaningful while streaming).</param>
 internal readonly record struct PlayerSyncInput(bool Enabled, StreamState State, int VideoDelayMs)

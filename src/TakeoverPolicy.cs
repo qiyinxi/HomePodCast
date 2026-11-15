@@ -103,9 +103,33 @@ public static class TakeoverPolicy
 
     /// <summary>
     /// The trigger of the next attempt of one connection's retry loop: once it has streamed, a retry is our own session
-    /// again; before that it keeps the first one's (a startup that never got through still never takes over).
+    /// again; before that it keeps the first one's (a startup that never got through still never takes over). Once the
+    /// speaker has ended this connection itself (<paramref name="endedBySpeaker"/>: another sender took it back), a retry
+    /// is never the user's 仍然连接 again: that answer was given once, not for every retry.
     /// </summary>
-    public static ConnectTrigger RetryTrigger(ConnectTrigger first, bool streamed) => streamed ? ConnectTrigger.Reconnect : first;
+    public static ConnectTrigger RetryTrigger(ConnectTrigger first, bool streamed, bool endedBySpeaker = false) =>
+        streamed || endedBySpeaker ? ConnectTrigger.Reconnect : first;
+
+    /// <summary>
+    /// Attempts in a row that take a speaker over and have it close our connection before anything streams, after which
+    /// the speaker counts as taken back (<c>endedBySpeaker</c>) and the retries wait instead of taking it again.
+    /// 2026-11-07: a stereo pair whose home-theater Apple TV was playing closed every attempt within a second; a session
+    /// that never streamed never counted as ended by the speaker, so the retries took the pair again every 30 s, 160
+    /// times in 80 minutes. Not the first: 2026-11-03 the first attempt after a takeover failed once (a timeout) and
+    /// the retry 2 s later played.
+    /// </summary>
+    public const int ClosedTakeoversBeforeWaiting = 2;
+
+    /// <summary>
+    /// The speaker itself ended the attempt that failed with <paramref name="ex"/>: it closed the control connection
+    /// instead of answering (<see cref="SpeakerClosedException"/>), or its event channel while the session was set up.
+    /// </summary>
+    public static bool ClosedBySpeaker(Exception? ex)
+    {
+        for (; ex != null; ex = ex.InnerException)
+            if (ex is SpeakerClosedException or AirPlayException { EndedBySpeaker: true }) return true;
+        return false;
+    }
 
     /// <summary>A waiting connect waits for our own last session to end (it may still hold the flag), not for another sender.</summary>
     public static bool WaitsForOwnSession(ConnectTrigger trigger, bool oursRecently) =>

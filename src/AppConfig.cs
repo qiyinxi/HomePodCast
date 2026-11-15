@@ -160,6 +160,12 @@ public sealed class AppConfig
     public bool MoviePlayerSync { get; set; } = true;
 
     /// <summary>
+    /// 5.1 环绕声 (experimental since 1.4): a single HomePod that offers 5.1 gets Windows' 5.1/7.1 output over the buffered
+    /// PTP path (StreamController.Surround.cs); everything else stays stereo. Off by default.
+    /// </summary>
+    public bool Surround51 { get; set; }
+
+    /// <summary>
     /// The VLC web-interface password typed in 设置 (used only when the one in VLC's own settings is missing or
     /// refused): base64 of a DPAPI blob for the current Windows user (Players.VlcPassword). Never plaintext.
     /// </summary>

@@ -13,6 +13,13 @@ public static class StatusFlags
     /// <summary>Bit 17, ReceiverSessionIsActive: some sender has a session with the speaker right now.</summary>
     public const long ReceiverSessionIsActive = 1L << 17;
 
+    /// <summary>
+    /// Bit 20: the speaker's playback timeline is running; on 2026-10-28 it came with an anchored buffered stream, and it is
+    /// set while a realtime sender streams too (0x1A0404 above). It also appears for data the speaker can't decode, so it
+    /// confirms the anchor, not the audio. Only `stream --surround` logs it.
+    /// </summary>
+    public const long AnchoredTimelineRunning = 1L << 20;
+
     /// <summary>A TXT "flags" value: hex, with or without "0x". Null when missing or unreadable.</summary>
     public static long? Parse(string? txtValue)
     {

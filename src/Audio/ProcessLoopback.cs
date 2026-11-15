@@ -135,6 +135,17 @@ internal sealed class LoopbackStream : IDisposable
     /// <summary>Called for every packet with (frames, flags, QPC position in 100 ns units).</summary>
     public Action<uint, uint, ulong>? PacketObserver { get; set; }
 
+    /// <summary>
+    /// Packets Windows marked as following a break in the audio (the buffer ran full before it was drained, or the
+    /// engine itself glitched), not counting the stream's first packet, which always carries the mark.
+    /// </summary>
+    public int Discontinuities { get; private set; }
+
+    /// <summary>The buffer Windows gave the stream, in ms (it rounds the requested duration up); 0 if unknown.</summary>
+    public double BufferMs { get; private set; }
+
+    private bool _drained;
+
     private LoopbackStream(IAudioClient client, WaveFormat format, string label)
     {
         _client = client;
@@ -202,6 +213,7 @@ internal sealed class LoopbackStream : IDisposable
         CoreAudio.Check(_client!.SetEventHandle(readyEvent), "event");
         CoreAudio.Check(_client.GetService(ref CoreAudio.IidAudioCaptureClient, out var svc), "capture client");
         _capture = (IAudioCaptureClient)svc;
+        if (_client.GetBufferSize(out uint frames) >= 0) BufferMs = frames * 1000.0 / Format.SampleRate;
     }
 
     public void Start() => CoreAudio.Check(_client!.Start(), "start");
@@ -224,11 +236,46 @@ internal sealed class LoopbackStream : IDisposable
             if (hr == CoreAudio.DeviceInvalidated) return false;
             CoreAudio.Check(hr, "get buffer");
             PacketObserver?.Invoke(frames, flags, qpc);
+            if (_drained && (flags & CoreAudio.BufferFlagsDataDiscontinuity) != 0) Discontinuities++;
+            _drained = true;
 
             if (_stereo.Length < frames * 2) _stereo = new float[frames * 2];
             var span = _stereo.AsSpan(0, (int)frames * 2);
             if ((flags & CoreAudio.BufferFlagsSilent) != 0) span.Clear();
             else LoopbackCapture.ToStereo(data, (int)frames, Format, span);
+            capture.ReleaseBuffer(frames);
+
+            foreach (var s in span) dest.Add(s);
+        }
+    }
+
+    private float[]? _surround;
+
+    /// <summary>
+    /// As <see cref="Drain"/>, but keeps the channels: every pending packet goes to <paramref name="dest"/> as 6-float
+    /// 5.1 frames (FL FR FC LFE Ls Rs, <see cref="SurroundLayout"/>) at <see cref="Format"/>'s rate; a silent packet as
+    /// zeros. Only for an endpoint stream whose layout <see cref="SurroundLayout.For"/> accepted (experimental since 1.4).
+    /// </summary>
+    public bool DrainSurround(List<float> dest, SurroundLayout layout)
+    {
+        var capture = _capture!;
+        while (true)
+        {
+            int hr = capture.GetNextPacketSize(out uint pending);
+            if (hr == CoreAudio.DeviceInvalidated) return false;
+            CoreAudio.Check(hr, "packet size");
+            if (pending == 0) return true;
+
+            hr = capture.GetBuffer(out var data, out uint frames, out uint flags, out _, out ulong qpc);
+            if (hr == CoreAudio.DeviceInvalidated) return false;
+            CoreAudio.Check(hr, "get buffer");
+            PacketObserver?.Invoke(frames, flags, qpc);
+
+            int size = (int)frames * SurroundLayout.Slots;
+            if (_surround == null || _surround.Length < size) _surround = new float[Math.Max(size, 4096 * 3)];
+            var span = _surround.AsSpan(0, size);
+            if ((flags & CoreAudio.BufferFlagsSilent) != 0) span.Clear();
+            else layout.Convert(data, (int)frames, Format, span);
             capture.ReleaseBuffer(frames);
 
             foreach (var s in span) dest.Add(s);

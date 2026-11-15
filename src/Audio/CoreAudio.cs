@@ -155,6 +155,9 @@ internal static class CoreAudio
     public const uint StreamFlagsSrcDefaultQuality = 0x08000000;
     public const uint StreamFlagsAutoConvertPcm = 0x80000000;
     public const uint BufferFlagsSilent = 0x2;
+
+    /// <summary>AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY: audio before this packet is missing (the capture buffer ran full, or a glitch).</summary>
+    public const uint BufferFlagsDataDiscontinuity = 0x1;
     public const int ClsCtxAll = 0x17;
     public const int DeviceInvalidated = unchecked((int)0x88890004);
 
@@ -205,6 +208,12 @@ internal static class CoreAudio
 /// <summary>Parsed WAVEFORMATEX / WAVEFORMATEXTENSIBLE.</summary>
 internal readonly record struct WaveFormat(int SampleRate, int Channels, int BitsPerSample, int BlockAlign, bool IsFloat)
 {
+    /// <summary>
+    /// WAVEFORMATEXTENSIBLE dwChannelMask (KSAUDIO_SPEAKER_* bits, which also give the interleaving order); 0 for a plain
+    /// WAVEFORMATEX. 5.1 surround (experimental since 1.4) reads it to tell 0x3F (back) from 0x60F (side) and 0x63F (7.1).
+    /// </summary>
+    public uint ChannelMask { get; init; }
+
     public static WaveFormat FromPointer(IntPtr p)
     {
         ushort tag = (ushort)Marshal.ReadInt16(p, 0);
@@ -213,12 +222,14 @@ internal readonly record struct WaveFormat(int SampleRate, int Channels, int Bit
         int blockAlign = (ushort)Marshal.ReadInt16(p, 12);
         int bits = (ushort)Marshal.ReadInt16(p, 14);
         bool isFloat = tag == 3;
+        uint mask = 0;
         if (tag == 0xFFFE)
         {
             var sub = Marshal.PtrToStructure<Guid>(p + 24);
             isFloat = sub == CoreAudio.SubtypeFloat;
+            mask = (uint)Marshal.ReadInt32(p, 20);
         }
-        return new WaveFormat(rate, channels, bits, blockAlign, isFloat);
+        return new WaveFormat(rate, channels, bits, blockAlign, isFloat) { ChannelMask = mask };
     }
 }
 

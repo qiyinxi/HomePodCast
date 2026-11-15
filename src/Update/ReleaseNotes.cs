@@ -51,13 +51,16 @@ internal static class ReleaseNotes
         return language is "zh-CN" or "zh-TW" ? zh : en;
     }
 
-    /// <summary>Only HTTPS pages in this exact repository. No credentials, ports, escapes or lookalike hosts.</summary>
+    /// <summary>
+    /// Only HTTPS pages in this exact repository, under either of its names (<see cref="GitHubReleases.RepositoryPaths"/>).
+    /// No credentials, ports, escapes or lookalike hosts.
+    /// </summary>
     public static bool CanOpen(string? url)
     {
         if (string.IsNullOrEmpty(url) || url.Any(c => char.IsControl(c) || char.IsWhiteSpace(c) || c is '\\' or '%')) return false;
         return Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.Host == "github.com"
             && uri.IsDefaultPort && uri.UserInfo.Length == 0
-            && (uri.AbsolutePath == "/qiyinxi/HomePodCast" || uri.AbsolutePath.StartsWith("/qiyinxi/HomePodCast/", StringComparison.Ordinal));
+            && GitHubReleases.RepositoryPaths.Any(p => uri.AbsolutePath == p || uri.AbsolutePath.StartsWith(p + "/", StringComparison.Ordinal));
     }
 
     /// <summary>The small Markdown subset used by announcements. Unsupported syntax stays inert text.</summary>

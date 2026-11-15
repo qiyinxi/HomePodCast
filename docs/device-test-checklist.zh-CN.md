@@ -37,6 +37,7 @@
 - [ ] 出现黄色提示（「HomePod 那边 / 电脑这边的 Wi-Fi 最近不太稳……建议把延迟调到 … ms」）时：截图，记下时间。点「应用」：场景切到「自定义」、延迟变成建议值、重连一次，提示消失；不点就不会改延迟（单元测试：HomeNetworkTextTests、LatencyTunerTests；仍需实机：之后卡顿是否变少）。改了 `src/Net/NetworkHealth.cs` 或 `src/UI/LatencyTuner.cs` 才需要重测
 - [ ] 推流中切到「音乐」再切回来：重连约 1 秒，有没有异常（单元测试：LatencyTunerTests，来回切只在停下 1 秒后重连一次；仍需实机：重连多久、有没有异常）。改了 `src/UI/LatencyTuner.cs`、`src/Scenes.cs` 或 `src/StreamController.cs` 的重连才需要重测
 - [ ] 连着推流一个下午后看日志里的 `stats:` 行：音箱的 `lost=` 几乎都是 0，只有真的网络抖动时才有几个；任务管理器「详细信息」里加上「句柄」列，HomePodCast 的句柄数不再每秒涨约 20。2026-10-14 之前会连续一两个小时 `lost=100/600`、每秒一行 `ping to the speaker lost`，那是 Windows 按自己 500 ms 的节拍提前判超时，音箱其实都回了（单元测试：NetworkWatchTests；句柄：NetworkWatchSoakTests；仍需实机：真实 HomePod 上的 lost）。改了 `src/Net/NetworkWatch.cs` 才需要重测
+- [ ] 采集断音（2026-11-10 新增）：连着推流两小时后看日志，`fifo dropout` 应该只剩零星几次（以前约每 5 分钟一次：10-28 到 11-10 的日志里记了 630 次，其中 544 次写入的正好是 22.0 ms，也就是 Windows 的 20 ms 采集缓冲满了、多出来的声音被丢掉）。原因：Windows 偶尔不发「有新数据」的信号，程序用的 `WaitOne(20)` 落在系统 15.6 ms 的时钟节拍上，实际等了 31–47 ms（这台电脑上实测中位数 32 ms）。现在改成 12 ms 的高精度等待，采集缓冲加到 200 ms（不增加延迟）。日志里如果出现 `capture: N ms without a packet while audio played …` 的行，发我（它写明时间花在哪）。不连音箱也能单独测：`HomePodCast.exe capturetest --seconds 600 --silence`（不出声）（单元测试：PreciseTimerTests；仍需实机：长时间不再断音）。改了 `src/Audio/RoutedCapture.cs`、`src/Audio/SurroundCapture.cs` 的等待或 `src/Native.cs` 的 `PreciseTimer` 才需要重测
 
 听到卡顿时：
 
@@ -218,7 +219,27 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
 - [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
-- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低
+- [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低。2026-11-07（Apple TV 4K 第三代，tvOS 27，家庭影院是一对 HomePod）：配对、会话、对时都正常，没有重发请求，但没有声音，HomePod 的灯也不亮。已经排除和还要试的：
+  - [x] 界面里连 Apple TV，连上约 2 秒后补发一次音量（日志 `Apple TV: sending the volume again now that audio flows`）。2026-11-11（1.4.0 测试版 3）：补发了，仍然没有声音（单元测试：PairingFlowTests，只补发一次、HomePod 不补发）
+  - [x] 命令行推提示音，维护者在听，2026-11-11：提前量 2 秒、同步包带延迟（`--legacy-sync`）、完全照 pyatv 的参数（自报 iPhone、latencyMin 11025、同步包提前 1.5 秒）、音量 50%、换会话参数（`isMultiSelectAirPlay=false`、`groupUUID`、`senderSupportsRelay=true`），全部没有声音。每次 Apple TV 都回 200、一直向电脑对时、没有重发请求，状态里多出第 17 位（会话进行中），两只 HomePod 的 TXT 不变
+  - [x] 把 Apple TV 的音频输出改成电视再推（250 ms，原始参数），2026-11-11：**电视出声**，`arrivalToRenderLatency=108ms`（输出是 HomePod 时报 4 ms）。所以推流本身 tvOS 27 能播，问题在 Apple TV 转给家庭影院 HomePod 的那一段。改输出后的第一次连接，流的 SETUP 回了 400，再连一次正常
+  - [ ] 实验（2026-11-11 新增）：用给 HomePod 做 5.1 的那套缓冲推流（type 103，跟随对方的 PTP 时钟，`SETRATEANCHORTIME`）推 Apple TV。程序先断开，Apple TV 的输出是 HomePod，在安装目录运行 `HomePodCast.exe stream --surround --apple-tv --host 电视IP --tone --volume 20 --seconds 20`（前左、前右每秒一声，上限 25%）：HomePod 出声吗？输出里有没有 `5.1 streaming:` 和 `SURROUND OK`。2026-11-11（维护者在听，20% 和 25% 各 20 秒）：每一步都回 200，跟上了 Apple TV 的 PTP 时钟，`SETRATEANCHORTIME` 被接受，`SURROUND OK`，但 HomePod 仍然没有声音。想先不出声地看握手：把 `--tone --volume 20` 换成 `--silent`（单元测试：SurroundCliTests、SurroundSessionTests，只有 `--apple-tv` 才放行 Apple TV，用已存的配对、从不发起新配对；仍需实机：有没有声音）。改了 `src/Net/AirPlayClient.Surround.cs` 才需要重测
+  - [x] 静音探索，2026-11-11 夜（`--silent --verbose`，输出是 HomePod）：实时推流和缓冲推流两种方式下，Apple TV 的事件通道都没有发来任何请求，`/feedback` 的应答一直是 `{streams=[]}`，状态标志从 0x18644 变成 0x38644（第 17 位）后不再变化，**第 20 位（播放时间线在走）始终没有出现**，两只 HomePod 的标志不变；换会话参数（`senderSupportsRelay=true`、`groupUUID` 用家庭影院的组 ID、`groupContainsGroupLeader=true`、`isMultiSelectAirPlay=false`）结果相同。PTP 会话的应答里有 `timingPeerInfo.HTGroupUUID`（家庭影院的组 ID）和 `ClockPorts={我们的 peer ID=327xx}`（给我们单独分配的时钟端口，每次不同）。也就是说 Apple TV 收下了会话，但没有开始播放。还缺一个对照：输出改成电视时这几项是什么样（第 20 位、`/feedback`）
+  - [x] 只读探测，2026-11-11：带 `isRemoteControlOnly=true`、`timingProtocol=None` 的会话 SETUP，Apple TV 用已存的配对接受了（给了事件端口）；这是「让程序去改 Apple TV 当前音频输出」（MRP 隧道，pyatv 的做法）的前提。改输出本身还没有试，那会改动 Apple TV 的状态，要维护者同意
+  - [x] 遥控通道（`HomePodCast.exe remote --host IP`，不带输出选项时只读），2026-11-12：在这台 Apple TV 上第一次就连通（会话、事件通道、RECORD、130 型数据流、MediaRemote 握手）。它报告自己是一个 2 型集群 `AAD51CBC…` 的主设备，成员是它自己和两只 HomePod，集群音量 42%，AirPlay 接收端叫 `TVAirPlay`。静音推流期间它只把 `isAirplayActive` 置为真，没有出现播放端、没有音量变化（我们发的 −27 dB 没有反映到集群音量上）、输出设备不变；推流结束后置回假（单元测试：RemoteControlTests，只覆盖编码和解析）
+  - [x] 用 `remote` 的输出选项把家庭影院的 HomePod 从 Apple TV 的输出里拿掉，2026-11-12（维护者同意后）：**做不到**，五种写法都没有改变输出，Apple TV 的状态前后一致（集群、成员、音量 42%）。集群列表里把输出设成 Apple TV 自己：回 0，没有变化；集群列表里移除两只 HomePod、或移除集群本身：错误 28（Adding or removing devices from the AV output context has failed）；旧列表（`--plain-lists`）里移除两只 HomePod、或设成 Apple TV：错误 25（UnknownOutputDevices）。对 MediaRemote 来说家庭影院是一个整体设备，成员不能单独拿掉；pyatv 的输出切换管的是 Apple TV 临时投到别的 AirPlay 音箱，不是家庭影院的默认输出
+  - [x] 输出是电视时的对照，2026-11-12 16:45（维护者手动切到电视后读取；切换的那一刻没有录到，只有切换后的状态）：
+    - 遥控通道：**集群整个没有了**。Apple TV 报告集群类型 0、没有集群 ID、没有成员，组 ID 换成了新的 `0318AD6F…`，输出设备只有它自己，音量一项为空。两只 HomePod 的状态标志从 0xB8C04 / 0xBAC04 变成 0x98404 / 0x9A404（第 17 位和第 11 位没有了）。也就是说手动切换是把家庭影院这个集群解散，不是在集群里换成员，所以 `ModifyOutputContextRequest` 没有对应的写法
+    - 静音推流（实时、NTP，15 秒）：`arrivalToRenderLatencyMs=108`，其余读数和输出是 HomePod 时**完全一样**：`/feedback` 是 `{streams=[]}`，状态标志 0x38644（没有第 20 位），遥控通道上只有 `isAirplayActive` 变真，没有播放端。2026-11-11 这个配置下是出声的，所以这几项读数分不出「在响」和「不响」，唯一的区别是 108 ms 对 4 ms：转发无声不是因为少了一个播放端
+    - 脱钩后两只 HomePod 的 ping（50 ms 一次）**没有变好**：空闲 60 秒，.226 超过 108 ms 40 次、超时（400 ms）91 次，.79 超过 108 ms 39 次、超时 22 次；静音直连这一对的 60 秒里（a2r 87 ms，250 ms 延迟），.226 超过 108 ms 46 次、超时 51 次、最大 292 ms，.79 超过 108 ms 37 次、超时 39 次、最大 339 ms，75 秒里有 3 次重发请求。同一天挂着家庭影院时（30 秒）：.226 超过 60 ms 24 次、最大 91 ms、超时 9 次。Apple TV 和路由器一直是 1 ms 以内。这是切换后 2 到 6 分钟内量的，没有量更久；就这次来看，把这一对从 Apple TV 上脱钩换不来更低的延迟（单只 HomePod 在 2026-10-12 是变好的）
+  - [x] iPhone 投放时的对照，2026-11-12 16:58（输出是家庭影院，维护者用 iPhone 往 Apple TV 投音乐、调音量、停止；遥控通道只读记录，另外每 3 秒读一次三台设备的 `/info`）。**能响的时候和我们的推流差在分组上**：
+    - Apple TV **加入了 iPhone 的分组**：遥控通道上分组 ID 从它自己的 `AAD51CBC…` 变成 `EB5F9997…`，`isGroupLeader` 从 1 变 0（集群还在，成员不变），停止后变回。我们的推流期间这两项从不变化
+    - 状态标志：Apple TV 0x18644 → 0x438644（多了第 22 位和第 17 位）→ 约两秒后 0x538644（再多第 20 位）；两只 HomePod 同步多出第 22 位和第 20 位（0xB8C04 → 0x4B8C04 → 0x5B8C04）。停止时先掉第 20 位，再全部恢复。我们的推流只有 Apple TV 的第 17 位，HomePod 不变。这两位没有公开的名字
+    - Apple TV 的 `updateInfo` 事件多出 `uglServerInfo={Port, Password, Addresses=[iPhone 的地址]}`，TXT 记录长了 51 字节（和多出 `pgid`、`pgcgl` 两项的长度相符）。也就是说 iPhone 是一个不在网络上广播的组长，Apple TV 把「到哪里找组长」告诉了遥控通道上的其他设备
+    - 音量：iPhone 调的音量直接是集群的音量（`VolumeDidChange`，端点是 iPhone 的分组），我们发的音量从不反映到集群上
+  - [x] 用上面的读数不出声地判断「通没通」，2026-11-12（`remote` 记录 + `/info` 轮询，输出是家庭影院）：四种组合都没有让 Apple TV 入组，标志只到 0x38644，HomePod 不变，TXT 不变：实时 + NTP、缓冲 + PTP（`stream --surround --apple-tv --silent`）、实时 + NTP 加 `--session groupUUID=new-uuid --session groupContainsGroupLeader=true`（推流期间 Apple TV 的 `gid` 仍是它自己的，我们给的分组 ID 被忽略）、**实时 + PTP**（当天新增的 `stream --ptp-realtime --apple-tv --silent`：跟随 Apple TV 的 PTP 时钟，同步包写在它的时间线上；每一步都回 200，`arrivalToRenderLatencyMs=4`）。所以无声和推流类型、对时方式都无关，差的是 iPhone 让 Apple TV 入组的那一步，它不在会话 SETUP 的 `groupUUID` 里。同时开两条遥控通道再推流，流的 SETUP 会被回 400（单元测试：PtpTimelineTests，只覆盖发送器换时间线；仍需实机：没有）
+  - [ ] 看 iPhone 到底发了什么：让 iPhone 投到一个我们能读明文的接收端（pyatv 的 `atvproxy airplay` 把请求转给真的 Apple TV 并记录；或者自己写一个记录用的假接收端），重点看会话 SETUP 的键、有没有在同一会话里开 130 型数据流、`uglServerInfo` 是哪一步给出去的。需要维护者用 iPhone 投一次
+  - [x] 2026-11-14（1.4.0 测试版 5，`AirPlayClient.ConnectAsync` 对新版 Apple TV 改发镜像式实时 PCM 流）：维护者在界面里连 Apple TV，**家庭影院 HomePod 出声，延迟很低**。音量最大只到 Apple TV 自己的音量：我们发的音量在它上面再往下调，这个版本不改。据此去掉了 Apple TV 和家庭影院的「实验性」标注。改了 `src/Net/AirPlayClient.AppleTvPtp.cs`、`src/Net/PtpRealtimeSender.cs` 或 `ConnectAsync` 里的判断才需要重测
 - [ ] 家庭影院模式开着时，直连 HomePod 还能用吗？音箱报告的处理时间还是 85 ms 吗（日志里 arrivalToRenderLatency）
 - [ ] Apple TV 上在播放时，电脑去连：是否会抢占、托盘状态是否正确
 
@@ -237,6 +258,8 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 9. - [ ] 用 iPhone 往卧室推送（不是 Apple TV）：点「连接」照旧弹「比如 iPhone 或 Mac」的框；自动连接照旧等待，不会因为「临时接管」把 iPhone 挤掉。这时 `scan --txt` 里卧室那行是 `held by it now=False` 吗（单元测试：TakeoverPolicyTests、HomeTheaterTests；仍需实机：`scan --txt` 的结果）
 10. - [ ] Apple TV 正在播放（比如在 Apple TV 上看视频）和空闲时各跑一次 `scan --txt`，两段都发我：看 Apple TV 和卧室的 flags、gid、pgid、igl 有没有区别（用来判断以后能不能做到「Apple TV 空闲时才接管」）
 11. - [ ] 接管后重连（2026-10-16 新增）：卧室被占着（日志 `statusFlags 0xA0C04`）时点「连接」→「仍然连接」：约 5 秒后日志有 `takeover: starting our session once more`，状态闪一下「正在连接…」后回到已连接，**之后一直有声音**（2026-10-16 那次没有这一步：响一声后就没声音了，会话却一直在）。stats 行里的 `ntp=` 每分钟都在涨吗（单元测试：TakeoverRestartTests，只重连一次、断开时不再重连；仍需实机：重连后有声音）。改了 `src/StreamController.cs` 里的 `RunAsync` 才需要重测
+12. - [ ] 立体声对被接管时卡顿（2026-11-10 新增）：卧室这对是 Apple TV 的家庭影院音箱，首页连上、延迟低于 300 ms：首页出现「卧室是 Apple TV「…」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi……」和「应用」（以前只有单只 HomePod 有）；点「应用」后延迟变成 300 ms，还卡吗？____。日志每分钟有一行 `group network: ping=…`，卡顿前后的几行和 `group stats` 一起发我。2026-11-10：这对音箱在 200 ms 下仍然卡，45 分钟里没有一次重发请求；从接网线的电脑每 50 ms ping 一次、连续 5 分钟，两只音箱每秒约两次同时晚回，几乎每次都超过 60 ms，超过 108 ms（200 ms 留给网络的全部）的有 27 和 32 次，最大 172 ms，Apple TV 和路由器始终 1 ms 以内，所以提示的延迟从 200 改成 300 ms。2026-11-11（1.4.0 测试版 3，500 ms 下 50 分钟）：没有重发请求；音箱晚回超过 60 ms 的有 1424 次（约每分钟 28 次），超过 108 ms 的 106 次，超过 150 ms 的 12 次，最大 173 ms，没有超过 208 ms 的；之后改成 155 ms 仍然卡，而首页没有提示：那次是程序更新后重连自己的会话，没有经过「接管」，提示只认接管。现在只要选中的音箱（或立体声对的任何一只）是某台 Apple TV 的家庭影院音箱就提示，不管这次连接有没有接管（单元测试：TakeoverControllerTests、HomeNetworkTextTests、HomeTheaterTests，立体声对有网络监测和提示、多房间分组没有；仍需实机：提示出现、300 ms 够不够）。改了 `src/StreamController.Network.cs` 的 `WatchGroupNetwork` 才需要重测
+13. - [ ] Apple TV 正在播放时去连这对（2026-11-10 新增）：Apple TV 的声音最多被打断两次，之后状态停在「卧室是 Apple TV「…」的家庭影院音箱，Apple TV 正连着它」，日志有 `takeover: the speaker closed our connection 2 times in a row`，不再每 30 秒抢一次（2026-11-07 抢了 160 次）；再点「连接」会重新试两次（单元测试：TakeoverPolicyTests、TakeoverControllerTests；仍需实机：Apple TV 的声音只断两次）
 
 #### 立体声对（等有两只 HomePod 配成立体声对时再测）
 
@@ -244,8 +267,8 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 1. - [ ] `HomePodCast.exe scan --txt`：整段输出发我。同时写下 Home App 里哪只是左、哪只是右（用来核对：flags 第 13 位标的主音箱是哪只，gid 里的 `+0+` / `+1+` 是不是对应左 / 右）
 2. - [ ] `HomePodCast.exe info --host 左边IP` 和 `info --host 右边IP`：两段输出都发我（找有没有声道或主从字段）
-3. - [ ] 默认模式：`HomePodCast.exe group --pair --tone --seconds 20 --volume 20 --verbose`，然后在界面里选这对音箱连接，放一段左右声道测试视频：左边只出左、右边只出右吗？两只之间有没有回声 / 一前一后的感觉？
-4. - [ ] 只连主音箱：`group --pair --leader-only --tone --seconds 20 --volume 20`。另一只响不响？主音箱放的是完整立体声还是只有它那一侧？
+3. - [ ] 默认模式：`HomePodCast.exe group --pair --tone --seconds 20 --volume 20 --verbose`，然后在界面里选这对音箱连接，放一段左右声道测试视频：左边只出左、右边只出右吗？两只之间有没有回声 / 一前一后的感觉？2026-11-03：界面里能连上（接管后第一次卧室 (2) 超时，2 秒后自动重连成功）；2% 音量下听着比 iPhone 单薄，调到正常音量后听着没问题（单薄是音量太小）。左右声道和回声还没专门听
+4. - [x] 只连主音箱：`group --pair --leader-only --tone --seconds 20 --volume 20`。另一只响不响？主音箱放的是完整立体声还是只有它那一侧？2026-11-03（界面里的「只连接主音箱」，主音箱卧室 (2) 是 OS 22K557、另一只是 24K122）：另一只不响，主音箱不转发，默认模式两路都要连。主音箱放的是哪一侧还没听
 5. - [ ] 只连非主音箱：`stream --host 非主音箱IP --tone --seconds 20 --volume 20`。只有它响，还是两只都响？
 6. - [ ] 第 3 步连不上，或者一只很快断开：用 `group --pair --no-group-uuid --tone --seconds 20 --volume 20` 再试一次，看是不是 groupUUID 引起的
 7. - [ ] 音量：在本程序里调音量，两只是否一起变；iPhone 控制中心里这对音箱的音量是否跟着变
@@ -321,7 +344,33 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 4. - [ ] 「全部切到」的覆盖数包含未运行程序；取消不改变设置，确认后还能逐个改。独立程序音量和 Windows 默认输出不变；确认期间的设置变化会要求重新确认数量
 5. - [ ] 所有程序切回同一台 HomePod、关闭独立推送音量后，回到「全部推送」的原体验。录真实画面／声音比较属于维护者的实机项目，不把软件帧／时间戳回归当作实测
 
+#### 单台 HomePod 5.1 环绕声（首次发布于 1.4，实验性，尚未用本程序实机验证）
+
+2026-10-28 用实验工具在一台 HomePod（第二代，软件 27.0）上验证过协议，五个主声道的测试音都从对的方向出来；程序里的 5.1 路径（采集、编码、PTP 对时、发送、退回立体声）只用进程内的假 HomePod 测过（见「已自动化」）。HomePod 音量不超过 25%；先确认没有 iPhone 或 Apple TV 正在用这台 HomePod。准备：被采集的 Windows 输出设备配置为 5.1（控制面板 → 声音 →「播放」→ 选中设备 →「配置」），可以是实体声卡，也可以把 VB-CABLE 配置为 5.1、再在「混音器 → 采集设备」选它（按声卡分流）；这个设备的空间音效关闭；没有按程序分流，只连一台 HomePod。本节各项：改了 `src/Net/AirPlayClient.Surround.cs`、`src/Net/SurroundSender.cs`、`src/Net/PtpFollower.cs`、`src/Audio/SurroundCapture.cs`、`src/Audio/SurroundLayout.cs` 才需要重测。
+
+1. - [ ] 先在 HomePodCast 里断开（音箱正被使用时这个命令会拒绝，程序自己连着也算），再运行 `HomePodCast.exe stream --surround --host <IP> --silent --cap 10 --seconds 30`：最后一行是 `SURROUND OK`，输出里 SETRATEANCHORTIME 的回应是 200，第 2 秒那行是 `bit20 timeline=yes`；全程听不到任何声音。如果 1800 ms 下失败，再加 `--latency 2000` 跑一次，两次的输出都发给我
+2. - [ ] 在「设置 → 音频」打开「5.1 环绕声（实验性）」再连接：首页状态是「已连接 · <音箱> · 实验性 5.1 环绕声」，「实际延迟」约 1843 ms，日志有 `surround capture: … → 5.1` 和 `5.1 streaming: …`。在 Windows 声音设置里对这个设备点「配置」→「测试」：前左、前右、中置、左环绕、右环绕依次从合理的方向出来
+3. - [ ] 「测试」到低音声道（LFE）时听不听得到，写下来；整体的空间感、环绕的包围感怎么样
+4. - [ ] Windows 里把这个设备配置成 7.1 再重新连接：仍是「实验性 5.1 环绕声」，日志 `surround capture:` 那行写着 `8 ch mask 0x63F → 5.1 (7.1 folded: back+side→surround)`；「测试」时侧环绕和后环绕都听得到，都从环绕的方向出来
+5. - [ ] Windows 里配置回立体声再重新连接：照常推送立体声，首页是「已连接 · <音箱> · 立体声。未用 5.1 环绕声：Windows 输出设备不是 5.1 或 7.1：现在是 2 声道」
+6. - [ ] 关掉「5.1 环绕声（实验性）」：重连一次，回到低延迟立体声，延迟是场景的延迟
+7. - [ ] 用 5.1 放完一部电影：没有断音；日志里每分钟一行的 `stats: surround` 里 `underruns=` 不往上涨，`ptpDrift=` 基本不变
+8. - [ ] 音量键、静音、音量上限：照常作用于 HomePod，5.1 下音量也不超过上限
+9. - [ ] 口型：浏览器插件放一个有人说话的 5.1 视频，开了「影视场景自动调整播放器」的 VLC 或 mpv 放一部 5.1 电影：口型和声音对得上吗？插件弹窗显示的画面延迟是多少
+10. - [ ] iPhone 隔空播放到这台 HomePod：首页变成「已断开（音箱可能被其他设备占用）」，电脑端不抢回
+11. - [ ] 推流中拔掉电脑的网线 10 秒再插回：自动重新连上，仍是 5.1
+12. - [ ] 推流中让电脑睡眠再唤醒：自动重新连上，仍是 5.1
+
 ## 已自动化（不用手测）
+
+- **SurroundSessionTests / SurroundControllerTests**（5.1 环绕声，实验性）：报告 5.1、带假 PTP 主时钟的假 HomePod 上按实测的顺序建立会话：GET /info → 瞬时配对 → SETUP（PTP，没有 timingPort）→ SETPEERS → SETUP 数据流（type 103、AAC 5.1、48 kHz）→ RECORD → 音量（不超过上限）→ FLUSHBUFFERED → SETRATEANCHORTIME（带 networkTimeFlags，锚在 HomePod 时间线上约 1.8 秒后）；数据包加密，时间戳每包加 1024；音箱不报告 5.1 或是 Apple TV 时在配对之前拒绝；没有 PTP、锚点或其他步骤被拒时退回立体声并 TEARDOWN；音箱关掉数据连接、主时钟变了或停了、采集不再是 5.1 时结束会话，被其他设备接管时按接管处理；命令行不碰正被使用的音箱。控制器：开关关着时请求和参数与没有 5.1 代码时完全一样；开着时用 5.1，延迟 1843 ms，音量和停止照常；采集不是 5.1、音箱不支持 5.1、多个去处时在同一次连接里退回立体声并写明原因，之后的重连直接走立体声。连接期间积压在 FIFO 里的声音不发：第一个包从 FIFO 的目标深度开始，新的 5.1 采集从空 FIFO 开始；按程序实际的算法，5.1 时给插件和播放器的画面延迟在插件 2000 ms 上限以内
+- **PtpFollowerTests**：Sync + Follow_Up 和一步式 Sync 算出偏移和时间线；其他主机和坏包只计数不用；序号回绕时按先后淘汰；停了 30 秒（测试里缩短）或主时钟变了就报问题；UDP 319／320 被占用时重试约 3 秒后拒绝，释放后能重新绑定
+- **SurroundLayoutTests / AudioFifoChannelTests / SurroundCaptureTests / SurroundPacingTests / SupportedFormatsTests / SurroundPolicyTests**：5.1、侧环绕 5.1、7.1、0xFF 等掩码到 5.1 的声道映射（7.1 的侧环绕和后环绕相加合并，5.1 片源放在 7.1 设备上环绕音量不变；0xFF 的前中左右分到前置和中置；LFE 独立；不到 5.1 的拒绝）和 16／24／32 位、浮点输入；6 声道 FIFO 按帧计数；三对声道重采样后不错位；发送按 HomePod 的时钟定时，一小时 ±100 ppm 漂移下误差不到 1 µs；bufferStream 第 39 位的各种写法；默认关，分组从不尝试 5.1，多个去处和按程序分流先拒绝；只有 HomePod、Apple TV 和还没找到的音箱会尝试 5.1，和连接时的分派一致
+- **MixerCoordinatorTests**（5.1 部分）：切换「5.1 环绕声（实验性）」只让会尝试 5.1 的单台音箱重连；分组、第三方 AirPlay 2 和 AirPlay 1 接收端（扫描到的或只在接收端设置里的）不重连，开关关着时什么都不变
+- **AacMultichannelTests / BackgroundCheckTests**：立体声编码器不变；Windows 的 AAC 编码器能编 5.1 时 AudioSpecificConfig 是 `11 B0`，不能时报告不支持（程序随后退回立体声）；7.1 拒绝。编码器检查 5 秒没答复只拒绝那一次连接，之后的连接用迟到的答复；卡住不答的检查只让第一次连接等
+- **HomeVolumeTests / PlayerSyncTests**（5.1 部分）：开关单独一行、各语言都不出界，切换会保存；开关说明的每一行在全部语言里都不超过约 800 px（工具提示不会横跨整个屏幕）；5.1 时播放器在任何场景都跟随，首页的播放器提示也显示
+- **SurroundCliTests**：`stream --surround` 必须带 `--silent`，拒绝测试音和高于 10% 的音量；默认 1800 ms、30 秒、10%
+- **gui-smoke 的 surround-fallback 场景**：每轮都检查首页没有 5.1 开关、「设置 → 音频」有「5.1 环绕声（实验性）」开关、默认关；这个场景把开关打开后连假 HomePod（运行器上没有 5.1 输出，假音箱也不报告 5.1，哪一种拒绝都算）：首页是「已连接 · … · 立体声。未用 5.1 环绕声：…」，照常推送立体声（有 RECORD 和 RTP，没有 SETRATEANCHORTIME），设置里的开关是开着的，布局检查和截图通过，日志里没有 ERROR
 
 - **ParametricEqTests / EqualizerTests / DynamicsTests / MicrophonePagesTests**：每种频段类型的实测频率响应和曲线一致；拖频率、改 Q、换类型、开关频段时没有不连续（二阶差分）；旧五段预设和旧配置得到同样的滤波器；关掉均衡后逐位不变；NaN 样本不会让之后全部静音；处理时不分配内存。压缩器静态曲线、齿音消除只压高频、限制器不超过上限；麦克风页的开关和滑块改到设置和引擎，不打开麦克风；配置档案恢复全部音效设置。gui-smoke 检查均衡页和麦克风页的新控件并截图。
 
@@ -329,7 +378,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 - **MixerDestinationLatencyTests**：旧入口与协调器的单台 HomePod 旁路比较相同 FIFO、协商帧、marker 位置及 RTP 时间，额外一包缓冲的负对照会失败；保存许多高延迟组、迁移或刷新选项仍不创建共享 hub／组历史。原有延迟、FIFO、路由及 FanOut 回归原样保留。
 - **gui-output-groups 的 mixer-destinations 场景**：CI 隔离窗口只装载产品混音器控件及上述假设备管线，覆盖全部 15 种语言、强制 150%。检查默认／单行／全部切换下拉框、离线项、同处复用、冲突禁用与无障碍旁路、每处实际状态／延迟、单处丢失、默认不覆盖规则、运行及未运行规则计数、取消／一次保存／并发修改后重算、之后逐行调整，以及假 Windows 默认输出不变。折叠／展开帮助、35 ms 提示、身份与延迟窗口均截图；Windows 设置 URI 被拦截，不访问真实端点或发现服务。
 
-- **DiagnosticsPageTests / gui-smoke / gui-output-groups**：诊断页沿用原音画同步测试的导航位置，播放统计及三个排障操作可达，关于页不再显示日志和诊断报告。离屏假动作分别验证测试、日志和导出按钮的事件及所属窗口；仅打开、离开或重新打开页面不触发动作，不更改配置、连接或麦克风。CI 在全部 15 种界面语言和 150% 缩放下滚动截图并检查诊断页，不点击测试、打开日志或导出。
+- **DiagnosticsPageTests / gui-smoke / gui-output-groups**：诊断页在导航栏下方那一组（设置之后、关于之前），播放统计及三个排障操作可达，关于页不再显示日志和诊断报告。离屏假动作分别验证测试、日志和导出按钮的事件及所属窗口；仅打开、离开或重新打开页面不触发动作，不更改配置、连接或麦克风。CI 在全部 15 种界面语言和 150% 缩放下滚动截图并检查诊断页，不点击测试、打开日志或导出。
 - **DiagnosticsPageTests**：首页移除合并的断音卡片；诊断页的缓冲欠载和网络波动分开、不相加，明确不等于可听中断；切页和重新打开不清零，连接变化在页面隐藏时仍更新基线，重连后重新计数；断开和未监测网络均显示破折号。全部 14 张翻译表同步。
 
 - **GroupOutputEditorTests / OutputGroupSettingsTests / GroupPlanTests**：注入本机和 DLNA 发现、假主机与调用记录，检查打开／换源／等待时发现、采集、播放、校准精确为零；按完整端点 ID 和 UDN 添加、离线偏好库不激活、必需／可选、声道／音量／±5000 毫秒微调、自动／手动下限、实时／文件草稿隔离、命名分组存取、无麦克风手机帧差和手动助手只有明确测试才调用发声入口。这些配置／界面项不再列为实机重复验证。
@@ -380,7 +429,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - .NET 被替换后的重启提示：只检查共享的运行时（`…\shared\Microsoft.NETCore.App\<版本>`），商店版这类自带运行时的副本不检查；运行时文件夹里的 deps.json 不在了才算被替换；启动时、每 5 分钟、睡眠唤醒后、程序集加载失败时（日志写明是哪个程序集，同一个只写一次；不是程序集的文件找不到不算）各查一次，找到后停止、只通知一次；首页的提示找到之前不出现，推流时多一句声音会中断，「立即重启」只有点了才重启，中文、德语、英语在默认和最小窗口宽度下按钮不被挤小、不压住文字；重启的命令在窗口隐藏时带 `--tray`，带 `--resume=connected` 或 `--resume=idle`，商店版仍经资源管理器启动自己的包；新进程拿到这些参数和同样的环境变量（测试配置文件仍是测试配置文件），直接启动和以资源管理器为父进程（管理员运行时）都行，启动不了时说明原因（RuntimeWatchTests、AppRestartTests、RuntimeRestartNoticeTests）
   - 仅 HomePod 输出（实验性）：默认关；推流开始时把 Windows 默认输出静音，原来就静音的不算自己的、结束时不动；重试、连接中和重连时一瞬间的闲置都保持静音，闲置 1 秒以上才算会话结束，只取消自己设的、而且仍是静音的；推流中被手动取消静音后这次会话不再静音、结束时不动，下次连接重新判断；推流中打开立即静音、关闭立即恢复；默认输出换了设备时旧的恢复、新的静音，没有默认输出时放开；采集设备选了别的声卡、无线影院、分组里有本机输出就在默认设备上时都不静音；静音失败不会在结束时去取消；退出时恢复；自己的静音一开始就记进配置，交还、被手动取消后清掉，取消静音失败时留着；下次启动时（推流之前）记录还在，就把仍静音的那个设备恢复，已经取消静音的、已经不在的不动，记录都清掉；闲置且没有自己的静音时不读声卡；自己的静音用固定的事件 GUID，「跟随 Windows」不跟随它；打开时「HomePod 跟随 Windows 音量」按「推流时控制 HomePod」处理，使用配置带回「跟随 Windows」也一样，这个设置不属于使用配置。首页「电脑也在出声」只在推流、设置关、没点过「不再提示」、采集的是默认输出、没按程序分流时出现，而且默认输出是扬声器、耳机或耳麦（HDMI、S/PDIF、线路输出等不算），名字不像虚拟声卡（CABLE、VB-Audio、VoiceMeeter、Virtual、Steam Streaming、单独的 UU、虚拟），没静音、音量高于 0；「只用 HomePod 播放」打开设置、把「跟随 Windows」和「关」改成「推流时控制 HomePod」（「仅在 Windows 静音时」不变）并立即静音，「不再提示」只记下不再提示；按钮只有点了才起作用，中文、德语、英语在默认和最小窗口宽度下按钮不被挤小、不压住文字（PcMuteTests、PcMuteAppTests；全部用模拟的默认输出，不碰真实声卡）
   - 首页音量图标点击切换 HomePod 静音、状态跟随快捷键和托盘；点击前保存拖动的音量，延迟保存不会撤销静音。「仅 HomePod 输出」开关在推流时静音或恢复模拟的电脑输出，电脑音量数值和 HomePod 静音互不影响，连接前可保存，首页提示按钮也会同步开关；中文、英语、德语在窄音量卡片内两个开关的文字完整且不重叠（HomeVolumeTests）；gui-smoke 在首页检查可用的静音按钮、「仅 HomePod 输出」默认关闭和「夜间模式」开关，并确认设置页没有重复的输出开关；自检覆盖这些控件在所有语言中的名称
-  - Apple TV 家庭影院（实验性）：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
+  - Apple TV 家庭影院：设置 → 常规 →「HomePod 当 Apple TV 家庭影院音箱时」默认「临时接管」，下面写着连接期间 Apple TV 的声音不会从这台 HomePod 出来、断开后 Apple TV 下次播放时会重新连上它（HomeTheaterTests）；「先询问」时开着自动连接重启 HomePodCast：不连接，扫描完成后马上显示「卧室是 Apple TV「客厅」的家庭影院音箱，Apple TV 正连着它」（不先显示「正在被其他设备使用」超过几秒），这时改回「临时接管」马上连上（TakeoverControllerTests）；音箱信息里卧室的「分组」是「家庭影院：Apple TV「客厅」的音箱」、「状态」是「Apple TV「客厅」正连着它（家庭影院）」，Apple TV 的型号是「Apple TV 4K 第三代（AppleTV14,1）」、分组是「家庭影院：卧室」（SpeakerInfoTests）
 
 ## 测试记录
 

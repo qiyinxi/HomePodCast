@@ -18,9 +18,14 @@ public sealed class SoundActivity : IAudioEffect
 
     public SoundActivity(Func<long>? clock = null) => _clock = clock ?? (() => Environment.TickCount64);
 
-    public void Process(Span<float> interleaved, int frames)
+    public void Process(Span<float> interleaved, int frames) => Observe(interleaved[..Math.Min(interleaved.Length, frames * 2)]);
+
+    /// <summary>
+    /// Notes sound in any interleaved block, whatever its channel count: the 5.1 sender (experimental since 1.4) bypasses
+    /// the stereo effect chain but still passes every block here, so 夜间自动断开 never cuts a film.
+    /// </summary>
+    public void Observe(ReadOnlySpan<float> samples)
     {
-        var samples = interleaved[..Math.Min(interleaved.Length, frames * 2)];
         foreach (float s in samples)
         {
             if (s > Threshold || s < -Threshold)

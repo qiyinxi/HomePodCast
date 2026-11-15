@@ -9,6 +9,7 @@ namespace HomePodCast
         public static void Info(string text) => Console.WriteLine(text);
         public static void Warn(string text) { WarningObserved?.Invoke(text); Console.WriteLine(text); }
         public static void Debug(string text) => Console.WriteLine(text);
+        public static bool Verbose => false; // the app's --verbose: replies and the receiver's requests in full
         public static string Name(object? name) => name?.ToString() ?? "";
     }
     internal static class AppEnvironment { public static bool IsPackaged => false; }

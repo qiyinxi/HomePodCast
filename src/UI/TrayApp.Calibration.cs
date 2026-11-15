@@ -45,11 +45,12 @@ internal sealed partial class TrayApp
     /// The calibration key of what is captured now: the selected speaker or group, the endpoint actually open, whether it
     /// follows the default output, and per-app routing (a capture path that adds latency). Null while nothing usable is
     /// captured: no output device, the chosen device missing, or an open endpoint that is not the chosen one (the
-    /// capture has not switched yet).
+    /// capture has not switched yet). Also null for a 5.1 capture (experimental since 1.4): its fixed 1.8 s path has no
+    /// sync test yet, and the stereo path's calibration of the same endpoint would be wrong there.
     /// </summary>
     /// <param name="captureDeviceId">The chosen capture device as the routing reads it (null: the default output).</param>
     internal static AvCalibrationContext? CalibrationContextFor(AppConfig cfg, Audio.ICaptureSource? capture, string? captureDeviceId) =>
-        capture is { } c && !c.NoOutputDevice && !c.CaptureDeviceMissing
+        capture is { } c && c is not Audio.ISurroundCapture && !c.NoOutputDevice && !c.CaptureDeviceMissing
         && (Audio.CaptureEndpoint.FollowsDefault(captureDeviceId) || Audio.CaptureEndpoint.Same(captureDeviceId, c.EndpointId))
             ? AvCalibrationContext.For(cfg, c.EndpointId, c.ExtraLatencyMs > 0) : null;
 

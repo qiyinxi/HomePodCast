@@ -5,7 +5,7 @@ namespace HomePodCast.UI.Pages;
 
 /// <summary>
 /// 首页: which speaker, what latency now, is anything wrong. Speaker card (picker, state, connect), scene
-/// card (scene, latency, how far the sound lags the picture), volume card (volume, mute, night mode), and
+/// card (scene, latency, how far the sound lags the picture), volume card (volume, mute, night mode, 5.1 surround), and
 /// tiles with the stream statistics the app actually measures, and the network's line (or a hint when Wi-Fi jitter
 /// threatens the latency's margin).
 /// </summary>
@@ -433,7 +433,8 @@ internal sealed class HomePage : ScrollPage
         _loading = true;
         var cfg = _app.PlaybackConfig;
         var selection = _app.ReceiverSelection;
-        bool scopedGroup = _app.Mixer?.IsConnected == true && GroupPlan.FromConfig(cfg) != null;
+        // A stereo pair is one speaker: the scene card as for a single HomePod, not 各去处状态 (IsOneSpeaker).
+        bool scopedGroup = _app.Mixer?.IsConnected == true && GroupPlan.FromConfig(cfg) is { } scoped && !IsOneSpeaker(scoped);
         _homePodLatency.Collapsed = selection != null || scopedGroup || _app.NativeMixerView;
         _destinationLatency.Collapsed = !scopedGroup && !_app.NativeMixerView;
         _destinationLatency.Text = _app.NativeMixerView ? L.T("本机播放由 Windows 决定；不创建播放副本，也不提供网络延迟设置。") : scopedGroup
@@ -462,11 +463,14 @@ internal sealed class HomePage : ScrollPage
         _loading = loading;
     }
 
-    /// <summary>The 影视 hint: what the local players were set to, and the value for the others.</summary>
+    /// <summary>
+    /// The 影视 hint: what the local players were set to, and the value for the others. Shown whenever the players follow
+    /// the HomePod, so also in 5.1 whatever the scene (UpdateState calls this through ShowLatency when 5.1 starts or ends).
+    /// </summary>
     public void ShowPlayers()
     {
         var cfg = _app.PlaybackConfig;
-        _movieHint.Collapsed = cfg.Scene != Scene.Movie;
+        _movieHint.Collapsed = !TrayApp.PlayersFollow(cfg.Scene, _app.Controller.SurroundActive);
         if (_movieHint.Collapsed) return;
         _movieHint.Text = Players.PlayerText.MovieHint(cfg.MoviePlayerSync, _app.Controller.State == StreamState.Streaming,
             _app.PlayerStatuses, _lagMs);
@@ -520,7 +524,8 @@ internal sealed class HomePage : ScrollPage
         {
             string label = DeviceLabel(d, scan);
             string kind = ReceiverKinds.Label(d.Kind);
-            _device.Items.Add(d.Kind is ReceiverKind.HomePod ? label : $"{label} · {kind}");
+            // A pair's entry has no model of its own (Unknown), but is two HomePods: no 「· 未知 AirPlay 设备」 after it.
+            _device.Items.Add(d.Kind is ReceiverKind.HomePod || StereoPairs.IsPairId(d.DeviceId) ? label : $"{label} · {kind}");
         }
         _device.SelectedIndex = SelectedIndex(devices, _app.Config.DeviceId);
         ShowSpeaker();
@@ -543,7 +548,9 @@ internal sealed class HomePage : ScrollPage
         var device = _device.SelectedIndex >= 0 && _device.SelectedIndex < _devices.Count ? _devices[_device.SelectedIndex] : null;
         _model.Text = device == null ? (cfg.DeviceId == null ? L.T("在下面选择一台 AirPlay 音箱") : "")
             : string.IsNullOrEmpty(device.Model) ? "" : FriendlyModel(device.Model);
-        if (plan != null)
+        if (plan != null && IsOneSpeaker(plan))
+            _model.Text = PairModelText(plan, _app.LastScan);
+        else if (plan != null)
             _model.Text = L.F("{0} 个输出 · {1}", plan.Kind == GroupKind.StereoPair ? (plan.PairLeaderOnly ? 1 : 2) + plan.LocalOutputs.Count + plan.DlnaOutputs.Count
                 : plan.Members.Count + plan.LocalOutputs.Count + plan.DlnaOutputs.Count,
                 plan.DlnaOutputs.Count > 0 ? L.T("大致同步") : plan.LocalOutputs.Count > 0
@@ -557,6 +564,24 @@ internal sealed class HomePage : ScrollPage
     }
 
     internal static string FriendlyModel(string model) => SpeakerModels.Name(model);
+
+    /// <summary>
+    /// A stereo pair on its own (no local or DLNA outputs beside it) is one speaker on this page: 「立体声对 · HomePod 第二代」
+    /// under its name, no line per member and the scene card as for a single HomePod. 2026-11-03: 「2 个输出 · AirPlay
+    /// 时间线同步」, a line per member and 各去处状态 made it read as two speakers, and the member lines, coming and going
+    /// with each connection attempt, moved the volume card below them up and down. Both members are required, so one that
+    /// fails ends the session and the status line says so.
+    /// </summary>
+    internal static bool IsOneSpeaker(GroupPlan plan) =>
+        plan.Kind == GroupKind.StereoPair && plan.LocalOutputs.Count == 0 && plan.DlnaOutputs.Count == 0;
+
+    /// <summary>「立体声对 · HomePod 第二代」 (the members' model from the scan), or 「立体声对」 before they were found.</summary>
+    internal static string PairModelText(GroupPlan plan, IReadOnlyList<AirPlayDevice> scan)
+    {
+        string? model = plan.PairTsid is { } tsid
+            ? StereoPairs.Members(scan, tsid).Select(m => m.Model).FirstOrDefault(m => !string.IsNullOrEmpty(m)) : null;
+        return model == null ? L.T("立体声对") : L.T("立体声对") + " · " + FriendlyModel(model);
+    }
 
     /// <summary>
     /// A speaker in the picker: "卧室（HomePod 第二代）"; an Apple TV with home-theater speakers "客厅（Apple TV，家庭影院：卧室）"
@@ -610,8 +635,8 @@ internal sealed class HomePage : ScrollPage
         ShowGroupOutputStatus();
         var s = c.ActiveSender;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
-        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker: the network is watched
-        int arrivalToRender = c.SafeLatency(0) - StreamController.SafetyMarginMs; // the speaker's own time, as the floor assumes it
+        bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker or a stereo pair: the network is watched
+        int arrivalToRender = c.SpeakerProcessingMs; // the speaker's own time, as the floor assumes it (a group: its slowest member's)
         var verdict = live
             ? c.Health.Assess(StreamController.HealthClockMs(), c.EffectiveLatencyMs, arrivalToRender, c.RouterWatched, c.PcWired)
             : DemoVerdict(arrivalToRender);
@@ -644,10 +669,14 @@ internal sealed class HomePage : ScrollPage
             _streamStats.Text = source;
         }
 
-        _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}" : null);
+        // The FIFO in use: 48 kHz in 5.1 (experimental since 1.4), 44.1 kHz otherwise.
+        _buffer.SetValue(streaming ? $"{c.Fifo.Depth * 1000.0 / c.Fifo.SampleRate:F0}" : null);
         // Like the other tiles, only while streaming: the value saved from the last connection still sets the latency
-        // floor and the estimates, but shown while disconnected it looked like a live reading.
-        _speakerDelay.SetValue(streaming ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString() : null);
+        // floor and the estimates, but shown while disconnected it looked like a live reading. Blank in 5.1: the buffered
+        // session's speaker reports no processing time, and the realtime one saved would be no reading of this one.
+        _speakerDelay.SetValue(streaming && !c.SurroundActive
+            ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString()
+            : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
         _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
         ShowNetwork(verdict, live);
@@ -658,8 +687,8 @@ internal sealed class HomePage : ScrollPage
     {
         var cfg = _app.PlaybackConfig;
         var plan = GroupPlan.FromConfig(cfg);
-        _groupStatus.Collapsed = plan == null;
-        if (plan == null) { _groupStatus.Text = ""; return; }
+        _groupStatus.Collapsed = plan == null || IsOneSpeaker(plan);
+        if (plan == null || _groupStatus.Collapsed) { _groupStatus.Text = ""; return; }
         var actual = _app.Controller.GroupOutputStatuses;
         var names = plan.Members.Select(m => (m.DeviceId, m.Name))
             .Concat(plan.LocalOutputs.Select(o => (o.DeviceId, o.Name)))
@@ -683,8 +712,8 @@ internal sealed class HomePage : ScrollPage
 
     /// <summary>
     /// The 网络 line (jitter episodes in the last 10 minutes) or, when they threaten the margin, the hint naming the
-    /// Wi-Fi hop with a suggested latency; for a HomePod taken over from its home-theater Apple TV below
-    /// <see cref="HomeTheaterLatencyMs"/>, the home-theater notice right away. Never changes anything by itself; hidden
+    /// Wi-Fi hop with a suggested latency; for a HomePod that is an Apple TV's home-theater speaker (taken over from it
+    /// or not) below <see cref="HomeTheaterLatencyMs"/>, the home-theater notice right away. Never changes anything by itself; hidden
     /// while not streaming.
     /// </summary>
     /// <param name="v">The current connection's verdict (or the demo's); null while not streaming.</param>
@@ -692,7 +721,9 @@ internal sealed class HomePage : ScrollPage
     private void ShowNetwork(NetworkVerdict? v, bool live)
     {
         var c = _app.Controller;
-        string? theaterTv = live ? c.TakenFromAppleTv : null;
+        // The Apple TV this connection took the speaker from, or the one whose home theater it belongs to anyway: a
+        // reconnect of our own session takes nothing over, and the home theater's link is there all the same.
+        string? theaterTv = live ? c.TakenFromAppleTv ?? HomeTheater.OwnerOfSelection(_app.PlaybackConfig.DeviceId, _app.LastScan)?.Name : null;
         bool applied = c.Health.Session == _appliedSession;
         var notice = NoticeFor(v, theaterTv, applied, c.EffectiveLatencyMs, _app.Config.DeviceName ?? "HomePod");
         bool threatened = notice.Threatened, show = notice.Show;
@@ -715,7 +746,7 @@ internal sealed class HomePage : ScrollPage
             Log.Info(threatened
                 ? $"network: jitter threatens the {c.EffectiveLatencyMs} ms latency ({v!.Threats} of {v.Episodes} episodes in " +
                   $"10 min beyond its {v.MarginMs} ms margin, hop: {v.Hop}, PC on {pc}); suggesting {_suggestedMs?.ToString() ?? "-"} ms"
-                : $"network: taken over from its home-theater Apple TV at {c.EffectiveLatencyMs} ms: their link takes up the Wi-Fi " +
+                : $"network: a home-theater speaker of an Apple TV at {c.EffectiveLatencyMs} ms: their link takes up the Wi-Fi " +
                   $"at regular intervals; suggesting {HomeTheaterLatencyMs} ms or the Apple TV's audio back on the TV");
         }
     }
@@ -758,10 +789,14 @@ internal sealed class HomePage : ScrollPage
     /// <summary>
     /// The latency a HomePod taken over from its home-theater Apple TV needs. 2026-10-12 (HomePod 2, Apple TV 4K): with
     /// the home theater on, the two answered pings 60–90 ms late every 2.1 s in step (up to ~145 ms now and then), also
-    /// with nothing streaming and whatever our session SETUP said; 105–135 ms stuttered, 500 ms played clean. 200 ms
-    /// leaves 110 ms for it (not yet heard on the device).
+    /// with nothing streaming and whatever our session SETUP said; 105–135 ms stuttered, 500 ms played clean. 200 ms,
+    /// which leaves 110 ms for it, was the first guess. 2026-11-10 (a stereo pair of HomePod 2 on OS 27, the Apple TV on
+    /// tvOS 27): the pair stuttered at 200 ms, with not one resend request in 45 minutes. Pinged every 50 ms for 5
+    /// minutes from the wired PC, both members answered late about twice a second, in step: over 60 ms nearly every
+    /// time, over 108 ms (all that 200 ms leaves) 27 and 32 times, over 150 ms 5 and 10 times, 172 ms at most; the
+    /// Apple TV and the router within 1 ms throughout. 300 ms leaves 208 ms.
     /// </summary>
-    internal const int HomeTheaterLatencyMs = NetworkHealth.MaxSuggestedMs;
+    internal const int HomeTheaterLatencyMs = 300;
 
     /// <summary>Shown as soon as such a HomePod streams below <see cref="HomeTheaterLatencyMs"/>, before any dropout.</summary>
     internal static string HomeTheaterNotice(string speaker, string appleTv) =>

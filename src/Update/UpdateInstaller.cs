@@ -106,7 +106,19 @@ internal static partial class UpdateInstaller
     {
         /// <summary>The install folder, without a trailing backslash (msiexec reads <c>\"</c> as an escaped quote).</summary>
         public string InstallDir => Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(Exe) ?? "");
+
+        /// <summary>The process the helper waits for: this exe's own name, whatever the exe is called.</summary>
+        public string ProcessName => Path.GetFileNameWithoutExtension(Exe);
+
+        /// <summary>Started instead of <see cref="Exe"/> when the update put it into the install folder.</summary>
+        public string RenamedExe => Path.Combine(InstallDir, RenamedExeName);
     }
+
+    /// <summary>
+    /// The exe's name from 2.0 on (2026-10-30: the app is to be renamed Akoustra, exe included). An update from this
+    /// version to 2.0 removes HomePodCast.exe, so the helper starts the renamed exe when the install left one.
+    /// </summary>
+    internal const string RenamedExeName = "Akoustra.exe";
 
     /// <summary>Starts the helper (non-elevated, no window). It does nothing until this process has exited.</summary>
     public static void StartHelper(Helper helper)
@@ -119,7 +131,8 @@ internal static partial class UpdateInstaller
             WorkingDirectory = Path.GetTempPath(), // not the update folder: it is removed on the next start
         }) ?? throw new InvalidOperationException("PowerShell did not start");
         Log.Info($"update: helper started (PowerShell, pid {p.Id}); once pid {helper.ProcessId} has exited it runs " +
-                 $"msiexec /i \"{helper.Msi}\" INSTALLFOLDER=\"{helper.InstallDir}\" through UAC, then starts {helper.Exe}");
+                 $"msiexec /i \"{helper.Msi}\" INSTALLFOLDER=\"{helper.InstallDir}\" through UAC, then starts {helper.Exe} " +
+                 $"({RenamedExeName} instead if the update installed it)");
     }
 
     /// <summary>powershell.exe arguments: the script as -EncodedCommand, so no command line parses a path (as in Firewall).</summary>
@@ -141,6 +154,8 @@ internal static partial class UpdateInstaller
             $installDir = {Firewall.PowerShellLiteral(h.InstallDir)}
             $result = {Firewall.PowerShellLiteral(h.Result)}
             $exe = {Firewall.PowerShellLiteral(h.Exe)}
+            $appName = {Firewall.PowerShellLiteral(h.ProcessName)}
+            $renamedExe = {Firewall.PowerShellLiteral(h.RenamedExe)}
             $appArgs = @({string.Join(", ", args.Select(Firewall.PowerShellLiteral))})
             """.ReplaceLineEndings("\n"); // the same script whatever line endings the checkout gave this file (CI: CRLF)
     }
@@ -150,13 +165,13 @@ internal static partial class UpdateInstaller
     /// msiexec elevated (UAC) with a progress bar and no reboot, into the folder the app runs from (a major upgrade
     /// would otherwise go to the default folder), with a verbose log. msiexec's exit code, or 1223 when UAC was
     /// declined, or "timeout" when the app never quit, goes to the result file; then the app starts again from this
-    /// non-elevated PowerShell, so it runs as the user.
+    /// non-elevated PowerShell, so it runs as the user: the renamed exe if the update installed one (<see cref="RenamedExeName"/>).
     /// </summary>
     internal static string HelperScript(Helper h) => HelperVariables(h) + "\n" + HelperSteps;
 
     private static readonly string HelperSteps = $$"""
         $ErrorActionPreference = 'Stop'
-        $app = Get-Process -Id $appPid -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq 'HomePodCast' }
+        $app = Get-Process -Id $appPid -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq $appName }
         if ($app -and -not $app.WaitForExit({{QuitTimeoutMs}})) {
             Set-Content -LiteralPath $result -Value 'timeout' -Encoding Ascii
             exit 1
@@ -177,6 +192,7 @@ internal static partial class UpdateInstaller
             if ($e -is [System.ComponentModel.Win32Exception]) { $code = $e.NativeErrorCode } else { $code = 'error: ' + $e.Message }
         }
         Set-Content -LiteralPath $result -Value $code -Encoding UTF8
+        if (Test-Path -LiteralPath $renamedExe -PathType Leaf) { $exe = $renamedExe }
         Start-Process -FilePath $exe -ArgumentList $appArgs -WorkingDirectory $installDir
         """.ReplaceLineEndings("\n");
 

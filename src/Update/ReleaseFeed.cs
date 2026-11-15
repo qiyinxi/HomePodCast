@@ -8,24 +8,26 @@ namespace HomePodCast.Update;
 /// </summary>
 internal sealed class ReleaseFeed
 {
-    private ReleaseFeed(string apiUrl, string downloadPrefix, bool followRedirects)
+    private ReleaseFeed(string apiUrl, IReadOnlyList<string> downloadPrefixes, bool followRedirects)
     {
         ApiUrl = apiUrl;
-        DownloadPrefix = downloadPrefix;
+        DownloadPrefixes = downloadPrefixes;
         FollowRedirects = followRedirects;
     }
 
     /// <summary>The release list (one GET).</summary>
     public string ApiUrl { get; }
 
-    /// <summary>An MSI is downloaded only from a URL that starts with this, whatever the list says.</summary>
-    public string DownloadPrefix { get; }
+    /// <summary>An MSI is downloaded only from a URL that starts with one of these, whatever the list says.</summary>
+    public IReadOnlyList<string> DownloadPrefixes { get; }
+
+    public bool Downloads(string url) => DownloadPrefixes.Any(p => url.StartsWith(p, StringComparison.Ordinal));
 
     /// <summary>GitHub answers a download with a redirect to its file host; a loopback feed's files never leave the PC.</summary>
     public bool FollowRedirects { get; }
 
     /// <summary>The repository's releases on GitHub: what the app checks.</summary>
-    public static ReleaseFeed GitHub { get; } = new(GitHubReleases.ApiUrl, GitHubReleases.DownloadPrefix, followRedirects: true);
+    public static ReleaseFeed GitHub { get; } = new(GitHubReleases.ApiUrl, GitHubReleases.DownloadPrefixes, followRedirects: true);
 
     /// <summary>Only CI can substitute a loopback list for GUI smoke. No persistent feed setting.</summary>
     internal static ReleaseFeed ForGuiSmoke(string[] args, bool ci)
@@ -45,7 +47,7 @@ internal sealed class ReleaseFeed
     {
         if (!IsLoopbackUrl(url, out var uri))
             throw new ArgumentException($"--feed must be an http://127.0.0.1 or http://localhost URL (a fake release list on this PC), not \"{url}\"");
-        return new ReleaseFeed(uri.AbsoluteUri, uri.GetLeftPart(UriPartial.Authority) + "/", followRedirects: false);
+        return new ReleaseFeed(uri.AbsoluteUri, [uri.GetLeftPart(UriPartial.Authority) + "/"], followRedirects: false);
     }
 
     private static readonly string[] LoopbackHosts = ["127.0.0.1", "localhost"];

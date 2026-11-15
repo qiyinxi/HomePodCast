@@ -11,7 +11,8 @@ internal static class StatusDelay
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
-        if (root.GetProperty("app").GetString() != "HomePodCast") throw new InvalidDataException("Unexpected status service.");
+        // "Akoustra": the app's coming name (2026-10-30), so this module keeps working if the app ever reports it.
+        if (root.GetProperty("app").GetString() is not ("HomePodCast" or "Akoustra")) throw new InvalidDataException("Unexpected status service.");
         string? version = root.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
         if (!root.GetProperty("streaming").GetBoolean()) return new(0, version);
         int value = root.GetProperty("videoDelayMs").GetInt32();

@@ -23,12 +23,14 @@ public static class Program
                 "info" => Info(args).GetAwaiter().GetResult(),
                 "stream" => Stream(args).GetAwaiter().GetResult(),
                 "group" => GroupCli.Run(args).GetAwaiter().GetResult(),
+                "remote" => RemoteCli.Run(args).GetAwaiter().GetResult(),
                 "dlna" => DlnaCli.Run(args).GetAwaiter().GetResult(),
                 "clicks" => Clicks(),
                 "mutetest" => MuteTest(),
                 "proctest" => ProcTest.Run(args),
                 "tone" => ProcTest.Tone(args),
                 "routetest" => RouteTest.Run(args),
+                "capturetest" => CaptureTest(args),
                 "fakeapi" => FakeApi(args),
                 "players" => Players.PlayersCommand.Run(name => Opt(args, name)),
                 "firewall" => FirewallCommand.Run(), // CI: tools/ci/msi-e2e.ps1
@@ -127,6 +129,7 @@ public static class Program
               info --host IP [--port N]                         dump the speaker's /info (read-only)
               stream --host IP [--latency MS] [--seconds N] [--volume PCT] [--tone | --silent] [--verbose]
                      [--setup KEY=VALUE] [--session KEY=VALUE]   experiments: stream / session SETUP keys
+                     [--legacy-sync] [--cap PCT]                 experiments: sync packets carrying the latency; volume ceiling
               stream --protocol raop --host IP [--port N] [--latency 1000|1500|2000] [--silent | --tone] [--cap 10]
                      [--encryption 0|1|4]           experimental; password via HOMEPODCAST_RAOP_PASSWORD
               players [--apply MS [--seconds N]]     list local players; --apply sets their audio delay to -MS, then restores it
@@ -134,7 +137,11 @@ public static class Program
               firewall                               the startup firewall check for this exe (read-only; exit code 0: no prompt)
             """);
         // experimental since 1.1: the RAOP CLI above stays separate from the existing realtime command.
+        // experimental since 1.4: the 5.1 line below.
+        Console.WriteLine("  " + SurroundCliOptions.Usage + "   5.1 buffered protocol check, digital silence only (experimental)");
+        Console.WriteLine("  " + PtpRealtimeUsage + "   experiment: an Apple TV, realtime with PTP timing");
         Console.WriteLine(GroupCli.Usage + "   (experimental)");
+        Console.WriteLine(RemoteCli.Usage + "   Apple TV remote-control channel; reads unless an output option is given (experimental)");
         Console.WriteLine(DlnaCli.Usage);
         Console.WriteLine(Update.UpdateSelfTest.Usage);
         return 0;
@@ -194,6 +201,86 @@ public static class Program
         r.ClickScheduled += when => Log.Info($"click scheduled {Net.MediaClock.ToMs(when - Net.MediaClock.Now):F1} ms from now");
         r.Start();
         Thread.Sleep(3500);
+        return 0;
+    }
+
+    /// <summary>
+    /// `capturetest [--seconds N] [--silence]`: the app's capture (the whole default output, no routing rules) into the app's FIFO,
+    /// read at the sender's pace by a thread of the sender's priority, with nothing connected and nothing played: only
+    /// what this PC already plays is captured. Shows whether the capture side alone drops out on this PC, and where the
+    /// time went (the "capture: … ms without a packet" lines). 2026-11-10: the maintainer's dropouts.
+    /// </summary>
+    private static int CaptureTest(string[] args)
+    {
+        int seconds = int.Parse(Opt(args, "--seconds") ?? "600");
+        var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: AppConfig.DefaultFifoTargetMs, capMs: AppConfig.DefaultFifoTargetMs * 3 + 10)
+        {
+            MaxTargetFrames = 30 * RtpSender.SampleRate / 1000,
+            RelaxAfterReads = 600L * RtpSender.SampleRate / RtpSender.FramesPerPacket,
+        };
+        using var capture = new RoutedCapture(fifo, RtpSender.SampleRate, new AppRouting(new AppConfig(), save: () => { }));
+        capture.Start();
+        bool stop = false;
+        // --silence: digital silence into the default output for the whole test, so that Windows keeps delivering
+        // packets when nothing else plays. Nothing can be heard, here or on a speaker another copy streams to.
+        Thread? silence = null;
+        if (args.Contains("--silence") && AudioEndpoints.DefaultOutputId() is { } output)
+        {
+            silence = new Thread(() =>
+            {
+                while (!Volatile.Read(ref stop))
+                {
+                    try
+                    {
+                        // The default output as it is now: it may change during the test (the capture follows it too).
+                        using var device = new WasapiOutputDevice(AudioEndpoints.DefaultOutputId() ?? output);
+                        var zeros = new float[device.BufferFrames * 2];
+                        device.Start();
+                        while (!Volatile.Read(ref stop))
+                        {
+                            device.WaitReady();
+                            int room = device.BufferFrames - device.PaddingFrames;
+                            if (room > 0) device.Write(zeros.AsSpan(0, room * 2));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"capturetest: the silent stream ended ({ex.Message}); opening it again");
+                        Thread.Sleep(500);
+                    }
+                }
+            }) { IsBackground = true, Name = "capturetest silence" };
+            silence.SetApartmentState(ApartmentState.MTA);
+            silence.Start();
+        }
+        long late = 0;
+        double maxLateMs = 0;
+        var reader = new Thread(() =>
+        {
+            using var mmcss = Native.EnterMmcss("Pro Audio");
+            using var timer = new Native.PreciseTimer();
+            var pcm = new float[RtpSender.FramesPerPacket * 2];
+            long t0 = MediaClock.Now;
+            for (long n = 0; !Volatile.Read(ref stop); n++)
+            {
+                long deadline = t0 + (long)(n * (double)RtpSender.FramesPerPacket * MediaClock.Frequency / RtpSender.SampleRate);
+                long now = MediaClock.Now;
+                if (now < deadline) timer.Sleep(deadline - now);
+                double lateMs = MediaClock.ToMs(MediaClock.Now - deadline);
+                if (lateMs > 2) { late++; maxLateMs = Math.Max(maxLateMs, lateMs); }
+                fifo.Read(pcm);
+            }
+        }) { IsBackground = true, Name = "capturetest reader", Priority = ThreadPriority.Highest };
+        reader.Start();
+        for (int t = 10; t <= seconds; t += 10)
+        {
+            Thread.Sleep(10_000);
+            Log.Info($"t={t,4}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,3:F0}ms target={fifo.TargetMs:F0}ms underruns={fifo.Underruns} idle={fifo.IdleGaps} " +
+                     $"overflows={fifo.Overflows} maxGap={capture.TakeMaxGapMs():F0}ms peak={capture.Peak:F2} readerLate={late} maxLate={maxLateMs:F1}ms");
+        }
+        Volatile.Write(ref stop, true);
+        reader.Join(1000);
+        silence?.Join(1000);
         return 0;
     }
 
@@ -301,6 +388,8 @@ public static class Program
 
     private static async Task<int> Stream(string[] args)
     {
+        if (args.Contains("--surround")) return await StreamSurround(args);
+        if (args.Contains("--ptp-realtime")) return await StreamPtpRealtime(args);
         if (Opt(args, "--protocol") is "raop")
             return await StreamRaop(args);
         var host = IPAddress.Parse(Opt(args, "--host") ?? throw new ArgumentException("--host required"));
@@ -316,20 +405,10 @@ public static class Program
         capture?.Start();
         toneGen?.Start();
 
-        // Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session
-        // SETUP keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID).
-        Dictionary<string, object?>? Overrides(string option)
-        {
-            var overrides = new Dictionary<string, object?>();
-            for (int i = 0; i < args.Length - 1; i++)
-            {
-                if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
-                overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
-                    : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
-            }
-            return overrides.Count > 0 ? overrides : null;
-        }
-        var options = new StreamOptions(latency, volume)
+        Dictionary<string, object?>? Overrides(string option) => SetupOverrides(args, option);
+        // --legacy-sync: sync packets that also carry the latency (pyatv's and OwnTone's form), for a receiver that may
+        // not add the SETUP latency itself as a HomePod does (the Apple TV experiment, docs/device-test-checklist.zh-CN.md).
+        var options = new StreamOptions(latency, volume, LatencyInSync: args.Contains("--legacy-sync"))
         {
             VolumeCapPercent = double.Parse(Opt(args, "--cap") ?? "100"),
             StreamSetupOverrides = Overrides("--setup"),
@@ -344,19 +423,104 @@ public static class Program
         var lost = new TaskCompletionSource<string>();
         client.Lost += reason => lost.TrySetResult(reason);
 
-        var s = client.Sender!;
+        var s = client.Sender;
         for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
         {
             await Task.WhenAny(Task.Delay(1000), lost.Task);
-            Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
-                     $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
-                     $"sent={s.PacketsSent} silent={s.SilentPackets} late={s.LateWakeups} maxLate={s.MaxLateMs:F1}ms " +
-                     $"skip={s.SkippedPackets} rtx={s.RetransmitRequests}/{s.Retransmitted}/{s.RetransmitMisses} " +
-                     $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            if (s is { } sender)
+                Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"drift={capture?.DriftPpm ?? 0,6:F0}ppm under={fifo.Underruns} over={fifo.Overflows} " +
+                         $"sent={sender.PacketsSent} silent={sender.SilentPackets} late={sender.LateWakeups} maxLate={sender.MaxLateMs:F1}ms " +
+                         $"skip={sender.SkippedPackets} rtx={sender.RetransmitRequests}/{sender.Retransmitted}/{sender.RetransmitMisses} " +
+                         $"ntp={client.TimingRequests} peak={capture?.Peak ?? 0:F2}");
+            else Log.Info($"t={t,3}s fifo={fifo.Depth * 1000.0 / RtpSender.SampleRate,5:F1}ms " +
+                         $"under={fifo.Underruns} over={fifo.Overflows} modernPackets={client.RealtimePacketsSent} " +
+                         $"peak={capture?.Peak ?? 0:F2}");
         }
         if (lost.Task.IsCompleted) Log.Warn($"stopped: {lost.Task.Result}");
         return 0;
     }
+    /// <summary>
+    /// Experiments: --setup key=value (repeatable) replaces/adds stream SETUP keys, --session key=value session SETUP
+    /// keys; integers, true/false or text ("new-uuid": a fresh upper-case UUID; "@file.json": the JSON in that file,
+    /// for a value that is a dictionary or a list).
+    /// </summary>
+    private static Dictionary<string, object?>? SetupOverrides(string[] args, string option)
+    {
+        var overrides = new Dictionary<string, object?>();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] != option || args[i + 1].Split('=', 2) is not [var key, var text]) continue;
+            overrides[key] = text == "new-uuid" ? Guid.NewGuid().ToString().ToUpperInvariant()
+                : text.StartsWith('@') ? PlistValue(System.Text.Json.JsonDocument.Parse(File.ReadAllText(text[1..])).RootElement)
+                : long.TryParse(text, out var n) ? n : bool.TryParse(text, out var b) ? b : text;
+        }
+        return overrides.Count > 0 ? overrides : null;
+    }
+
+    /// <summary>JSON as the values a binary plist is written from.</summary>
+    internal static object? PlistValue(System.Text.Json.JsonElement json) => json.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Object => json.EnumerateObject().ToDictionary(p => p.Name, p => PlistValue(p.Value)),
+        System.Text.Json.JsonValueKind.Array => json.EnumerateArray().Select(PlistValue).ToArray(),
+        System.Text.Json.JsonValueKind.String => json.GetString(),
+        System.Text.Json.JsonValueKind.Number => json.TryGetInt64(out long n) ? n : json.GetDouble(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        _ => null,
+    };
+
+    internal const string PtpRealtimeUsage =
+        "stream --ptp-realtime --apple-tv --host IP (--silent | --tone) [--latency MS] [--seconds N] [--volume PCT] [--cap PCT] [--session KEY=VALUE] [--playing]";
+
+    /// <summary>
+    /// experimental since 1.4: `stream --ptp-realtime --apple-tv`, a realtime stream to an Apple TV in a session timed with
+    /// PTP (AirPlayClient.AppleTvPtp.cs). Silence unless --tone, which is for the maintainer listening; the volume ceiling
+    /// is 10 % and never above 35 % (AGENTS.md).
+    /// </summary>
+    private static async Task<int> StreamPtpRealtime(string[] args)
+    {
+        bool tone = args.Contains("--tone"), silent = args.Contains("--silent");
+        if (!args.Contains("--apple-tv") || tone == silent || Opt(args, "--host") is not { } hostText || !IPAddress.TryParse(hostText, out var host))
+        {
+            Console.WriteLine("usage: HomePodCast " + PtpRealtimeUsage);
+            return 2;
+        }
+        int latency = int.Parse(Opt(args, "--latency") ?? "250"), seconds = int.Parse(Opt(args, "--seconds") ?? "15");
+        double cap = Math.Min(25, double.Parse(Opt(args, "--cap") ?? "10"));
+        var fifo = new AudioFifo(RtpSender.SampleRate, targetMs: 20, capMs: 60); // never written without a tone
+        using var toneGen = tone ? new ToneGenerator(fifo, int.Parse(Opt(args, "--beeps") ?? "1")) : null;
+        toneGen?.Start();
+        var options = new StreamOptions(latency, Opt(args, "--volume") is { } v ? double.Parse(v) : cap)
+        {
+            VolumeCapPercent = cap,
+            StreamSetupOverrides = SetupOverrides(args, "--setup"),
+            SessionSetupExtras = SetupOverrides(args, "--session"),
+            Pairings = PairingStore.Default,
+            RequestLog = Log.Info,
+        };
+        Log.Info($"stream --ptp-realtime: host {host}, {seconds} s of {(tone ? "a tone" : "silence")}, latency {latency} ms, cap {cap}%");
+        using var client = await AirPlayClient.ConnectAppleTvPtpRealtimeAsync(host, 7000, options, fifo, CancellationToken.None);
+        var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Lost += reason => lost.TrySetResult(reason);
+        if (client.LostReason is { } early) lost.TrySetResult(early);
+        // --playing: say that we are playing, as an iPhone does (AirPlayClient.SendCommand).
+        if (args.Contains("--playing")) client.SendCommand("updateMRPlaybackState", new() { ["mrPlaybackState"] = 1L });
+        for (int t = 1; t <= seconds && !lost.Task.IsCompleted; t++)
+        {
+            await Task.WhenAny(Task.Delay(1000), lost.Task);
+            if (t == 3) Log.Info(await SurroundStatusFlags(host, CancellationToken.None));
+            if (t % 3 == 0) Log.Info($"t={t}s sent={client.PtpRealtime?.PacketsSent} ptp {client.SurroundClock?.Describe}");
+        }
+        if (lost.Task.IsCompleted)
+        {
+            Log.Warn($"PTP REALTIME LOST: {lost.Task.Result}");
+            return 1;
+        }
+        Log.Info("PTP REALTIME OK");
+        return 0;
+    }
+
     // experimental since 1.1: separate compatibility sender, including a silent protocol-test mode.
     private static async Task<int> StreamRaop(string[] args)
     {
@@ -391,6 +555,159 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    /// experimental since 1.4: `stream --surround --host IP --silent`, the app's 5.1 session (AirPlayClient.Surround.cs)
+    /// sending AAC-encoded digital silence: a FIFO nobody writes to, no capture, no tone. Refuses a speaker another sender
+    /// is using (no override: AGENTS.md). Exit code 0: anchored and nothing lost; 2: refused or in use; 1: lost or failed.
+    /// </summary>
+    private static async Task<int> StreamSurround(string[] args)
+    {
+        if (SurroundCliOptions.Parse(args, out var error) is not { } o)
+        {
+            Console.WriteLine(error);
+            Console.WriteLine("usage: HomePodCast " + SurroundCliOptions.Usage);
+            return 2;
+        }
+        Log.Info($"stream --surround: host {o.Host}, {o.Seconds} s of {(o.Beeps > 0 ? $"a tone ({o.Beeps} beeps a second, front left and right)" : "digital silence")}, " +
+                 $"latency {o.LatencyMs} ms, volume {o.VolumePercent}% (cap {o.CapPercent}%){(o.AppleTv ? ", Apple TV experiment" : "")}");
+        var fifo = new AudioFifo(SurroundSender.Rate, targetMs: 40, capMs: 250, channels: SurroundSender.Channels); // never written without a tone
+        using var tone = o.Beeps > 0 ? new ToneGenerator(fifo, o.Beeps) : null;
+        tone?.Start();
+        var options = new StreamOptions(o.LatencyMs, o.VolumePercent)
+        {
+            VolumeCapPercent = o.CapPercent,
+            SessionSetupExtras = o.AppleTv ? SetupOverrides(args, "--session") : null,
+            Pairings = PairingStore.Default,
+            RequestLog = Log.Info,
+        };
+        using var stop = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; Log.Info("Ctrl+C: stopping; TEARDOWN follows"); stop.Cancel(); };
+        Console.CancelKeyPress += cancel;
+        try
+        {
+            AirPlayClient client;
+            try
+            {
+                client = await AirPlayClient.ConnectSurroundAsync(o.Host, 7000, options,
+                    new SurroundSetup(fifo) { RequireIdle = true, AllowAppleTv = o.AppleTv }, stop.Token);
+            }
+            catch (Exception ex) when (ex is SurroundUnavailableException or SpeakerInUseException)
+            {
+                Log.Info($"SURROUND REFUSED: {AirPlayException.ForLog(ex)}");
+                return 2;
+            }
+            catch (Exception ex)
+            {
+                Log.Info($"SURROUND FAILED: {ex.GetType().Name}: {AirPlayException.ForLog(ex)}");
+                return 1;
+            }
+            using (client)
+            {
+                var lost = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                client.Lost += reason => lost.TrySetResult(reason);
+                if (client.LostReason is { } early) lost.TrySetResult(early);
+                if (o.AppleTv && args.Contains("--playing")) client.SendCommand("updateMRPlaybackState", new() { ["mrPlaybackState"] = 1L });
+                var sender = client.SurroundSender!;
+                var ptp = client.SurroundClock!;
+                var watch = Stopwatch.StartNew();
+                for (int t = 1; t <= o.Seconds && !lost.Task.IsCompleted && !stop.IsCancellationRequested; t++)
+                {
+                    var wait = TimeSpan.FromSeconds(t) - watch.Elapsed;
+                    if (wait > TimeSpan.Zero)
+                        await Task.WhenAny(Task.Delay(wait, stop.Token).ContinueWith(_ => { }, TaskScheduler.Default), lost.Task);
+                    if (lost.Task.IsCompleted || stop.IsCancellationRequested) break;
+                    if (t == 2) Log.Info(await SurroundStatusFlags(o.Host, stop.Token));
+                    if (t % 2 == 0)
+                        Log.Info($"t={t}s sent={sender.PacketsSent} bytes={sender.BytesSent} maxLate={sender.MaxLateMs:F1}ms " +
+                                 $"ptp syncAge={ptp.SyncAgeMs?.ToString() ?? "?"}ms drift={ptp.DriftPpm?.ToString("F1") ?? "?"}ppm");
+                }
+                Log.Info(ptp.Describe);
+                if (lost.Task.IsCompleted)
+                {
+                    Log.Info($"SURROUND LOST: {lost.Task.Result}");
+                    return 1;
+                }
+                Log.Info(stop.IsCancellationRequested ? "SURROUND OK (stopped early with Ctrl+C)" : "SURROUND OK");
+                return 0;
+            }
+        }
+        finally { Console.CancelKeyPress -= cancel; }
+    }
+
+    /// <summary>One read-only GET /info on its own connection: bit 17 (a session) and bit 20 (an anchored timeline running).</summary>
+    private static async Task<string> SurroundStatusFlags(IPAddress host, CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(3));
+            var info = await SpeakerInfoReader.ReadAsync(host, 7000, timeout.Token);
+            return StatusFlags.FromInfo(info) is { } flags
+                ? $"statusFlags {StatusFlags.Hex(flags)} bit17 session={StatusFlags.SessionActive(flags)}, " +
+                  $"bit20 timeline={((flags & StatusFlags.AnchoredTimelineRunning) != 0 ? "yes" : "no")}"
+                : "statusFlags unreadable: /info has none";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            return $"statusFlags unreadable: {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+}
+
+/// <summary>
+/// experimental since 1.4: the options of `stream --surround`. Silence only, and a low ceiling: it talks to a real
+/// HomePod (the maintainer's checklist), so --silent is required, --tone/--beeps are refused, --cap stays at or below 10 %.
+/// </summary>
+/// <param name="AppleTv">
+/// `--apple-tv`: the experiment of 2026-11-11, an Apple TV as the receiver (<see cref="SurroundSetup.AllowAppleTv"/>). Only
+/// there a tone is allowed in place of silence, with the maintainer listening: `--tone [--beeps N]`, at 25 % at most.
+/// </param>
+/// <param name="Beeps">Beeps a second of the tone; 0: digital silence.</param>
+internal sealed record SurroundCliOptions(IPAddress Host, double CapPercent, double VolumePercent, int LatencyMs, int Seconds,
+    bool AppleTv = false, int Beeps = 0)
+{
+    public const string Usage = "stream --surround --host IP --silent [--latency MS] [--seconds N] [--cap PCT]\n" +
+                                "         stream --surround --apple-tv --host IP (--silent | --tone [--beeps N]) [--cap PCT] [--session KEY=VALUE] [--playing]   experiment: an Apple TV";
+
+    /// <summary>Silence still goes out at a volume: never more than this.</summary>
+    public const double MaxCapPercent = 10;
+
+    /// <summary>The Apple TV experiment's tone: the ceiling of every audible test (AGENTS.md).</summary>
+    public const double MaxToneCapPercent = 25;
+
+    /// <summary>Null with a reason when the arguments ask for anything but a silent, low-volume check.</summary>
+    public static SurroundCliOptions? Parse(string[] args, out string? error)
+    {
+        error = null;
+        string? Opt(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        bool Number(string name, double fallback, out double value)
+        {
+            value = fallback;
+            if (Opt(name) is not { } text) return !args.Contains(name);
+            return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value)
+                   && double.IsFinite(value);
+        }
+
+        bool appleTv = args.Contains("--apple-tv");
+        bool tone = appleTv && (args.Contains("--tone") || args.Contains("--beeps"));
+        double maxCap = tone ? MaxToneCapPercent : MaxCapPercent;
+        if (tone && args.Contains("--silent")) error = "--silent or --tone, not both";
+        else if (!tone && !args.Contains("--silent")) error = appleTv
+            ? "--surround --apple-tv: add --silent, or --tone with the maintainer listening"
+            : "--surround sends digital silence only: add --silent";
+        else if (!appleTv && (args.Contains("--tone") || args.Contains("--beeps"))) error = "--surround sends digital silence only: --tone and --beeps are refused";
+        else if (Opt("--host") is not { } hostText || !IPAddress.TryParse(hostText, out _)) error = "--host IP required";
+        else if (!Number("--cap", maxCap, out double cap) || cap < 0) error = "--cap: a percentage";
+        else if (cap > maxCap) error = $"--cap {cap} refused: at most {maxCap} %";
+        else if (!Number("--volume", cap, out double volume) || volume < 0) error = "--volume: a percentage";
+        else if (volume > cap) error = $"--volume {volume} refused: above --cap {cap}";
+        else if (!Number("--latency", SurroundPolicy.LatencyMs, out double latency)) error = "--latency: milliseconds"; // the app's 5.1 latency
+        else if (!Number("--seconds", 30, out double seconds) || seconds < 1) error = "--seconds: at least 1";
+        else if (!Number("--beeps", 1, out double beeps) || beeps < 1 || beeps > 6) error = "--beeps: 1 to 6";
+        else return new(IPAddress.Parse(hostText), cap, volume, (int)Math.Clamp(latency, 1000, 4000), (int)Math.Min(seconds, 3600),
+            appleTv, tone ? (int)beeps : 0);
+        return null;
+    }
 }
 
 /// <summary>Test source: N short 880 Hz beeps at the start of every second, generated in real time.</summary>
@@ -403,8 +720,9 @@ internal sealed class ToneGenerator(AudioFifo fifo, int beeps = 1) : IDisposable
     {
         _thread = new Thread(() =>
         {
-            const int rate = RtpSender.SampleRate, chunk = rate / 100;
-            var buf = new float[chunk * 2];
+            // The FIFO's own format: 44.1 kHz stereo, or 48 kHz 5.1 with the tone in front left and right only.
+            int rate = fifo.SampleRate, channels = fifo.Channels, chunk = rate / 100;
+            var buf = new float[chunk * channels];
             long frame = 0;
             var sw = Stopwatch.StartNew();
             while (!_stop)
@@ -415,7 +733,7 @@ internal sealed class ToneGenerator(AudioFifo fifo, int beeps = 1) : IDisposable
                     int slot = (int)(t / 0.16);                  // 80 ms beep + 80 ms gap
                     bool on = slot < beeps && t - slot * 0.16 < 0.08;
                     float s = on ? (float)(0.5 * Math.Sin(2 * Math.PI * 880 * frame / rate)) : 0f;
-                    buf[i * 2] = buf[i * 2 + 1] = s;
+                    buf[i * channels] = buf[i * channels + 1] = s;
                 }
                 fifo.Write(buf);
                 double ahead = frame * 1000.0 / rate - sw.Elapsed.TotalMilliseconds;

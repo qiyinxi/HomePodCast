@@ -107,7 +107,7 @@ public class DiagnosticsPageTests
     });
 
     [Fact]
-    public void Diagnostics_reuses_the_sync_navigation_slot_and_about_keeps_application_information() => Sta.Run(() =>
+    public void Diagnostics_sits_in_the_lower_navigation_group_and_about_keeps_application_information() => Sta.Run(() =>
     {
         var config = TestApp.Config();
         var app = TestApp.Create(config);
@@ -115,12 +115,15 @@ public class DiagnosticsPageTests
         using var window = new MainWindow(app);
         string before = JsonSerializer.Serialize(config); // MainWindow may normalize existing group preferences on construction.
         var rail = TestApp.Field<NavRail>(window, "_rail");
-        Assert.Equal(7, (int)AppPage.Sync);
-        Assert.Equal("诊断", rail.Items[(int)AppPage.Sync].Text);
-        Assert.False(rail.Items[(int)AppPage.Sync].Collapsed);
+        Assert.Equal("诊断", rail.Items[(int)AppPage.Diagnostics].Text);
+        Assert.False(rail.Items[(int)AppPage.Diagnostics].Collapsed);
+        // The lower group is the rail's footer, in this order: the pages people open daily stay in the scrolling list above it.
+        var footer = TestApp.Field<List<NavItem>>(rail, "_footer");
+        Assert.Equal(new[] { "设置", "诊断", "关于" }, footer.Select(item => item.AccessibleName));
+        Assert.Equal(new[] { AppPage.Settings, AppPage.Diagnostics, AppPage.About }, footer.Select(item => (AppPage)rail.Items.ToList().IndexOf(item)));
         var pages = TestApp.Field<ScrollPage[]>(window, "_pages");
-        var diagnostics = Assert.IsType<DiagnosticsPage>(pages[(int)AppPage.Sync]);
-        window.ShowPage(AppPage.Sync);
+        var diagnostics = Assert.IsType<DiagnosticsPage>(pages[(int)AppPage.Diagnostics]);
+        window.ShowPage(AppPage.Diagnostics);
         diagnostics.PageShown();
         diagnostics.PageHidden();
         var about = TestApp.Field<AboutPage>(window, "_about");

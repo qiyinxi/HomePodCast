@@ -102,6 +102,11 @@ internal sealed partial class TrayApp
         controller.CompatibilityLatency = id => controller.ReceiverSettings(id)?.CompatibilityLatencyMs ?? 2000;
         controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
         controller.CapturedOutputId = () => CaptureEndpoint.Captured(Routing.CaptureDeviceId, _knownDefaultOutputId);
+        // 5.1 环绕声 (experimental since 1.4): only a single speaker played alone. The hub and the routing are read when a
+        // connect attempt asks, and the capture reads the device choice and per-app routing live: routing turned on
+        // mid-session changes no signature, so the 5.1 capture has to notice it itself (and end the session).
+        controller.SurroundFor = _ => SurroundPolicy.Request(config, Mixer?.UsesHub == true, Routing.Active,
+            () => Routing.CaptureDeviceId, () => Routing.Active ? L.T("按程序分流开启时不能用") : null);
         if (useLegacy && _legacyMicMix != null)
         {
             controller.Effects.Remove(_legacyMicMix);

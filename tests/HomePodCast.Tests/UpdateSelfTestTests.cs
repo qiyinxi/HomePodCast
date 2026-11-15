@@ -20,7 +20,7 @@ public class ReleaseFeedTests
     {
         var feed = ReleaseFeed.Loopback(url);
         Assert.Equal(api, feed.ApiUrl);
-        Assert.Equal(downloads, feed.DownloadPrefix);
+        Assert.Equal([downloads], feed.DownloadPrefixes);
         Assert.False(feed.FollowRedirects);
     }
 
@@ -60,7 +60,8 @@ public class ReleaseFeedTests
     public void The_app_uses_githubs_feed_unchanged()
     {
         Assert.Equal("https://api.github.com/repos/qiyinxi/HomePodCast/releases?per_page=20", ReleaseFeed.GitHub.ApiUrl);
-        Assert.Equal("https://github.com/qiyinxi/HomePodCast/releases/download/", ReleaseFeed.GitHub.DownloadPrefix);
+        Assert.Equal(["https://github.com/qiyinxi/HomePodCast/releases/download/", "https://github.com/qiyinxi/Akoustra/releases/download/"],
+            ReleaseFeed.GitHub.DownloadPrefixes); // today's name and the one the repository is to get
         Assert.True(ReleaseFeed.GitHub.FollowRedirects); // GitHub's downloads redirect to its file host
         var byDefault = GitHubReleases.Parse(ReleaseSelectionTests.Fixture);
         var github = GitHubReleases.Parse(ReleaseSelectionTests.Fixture, ReleaseFeed.GitHub);

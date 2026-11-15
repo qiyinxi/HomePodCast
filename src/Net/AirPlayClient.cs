@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Reflection;
 using HomePodCast.Audio;
 using HomePodCast.Protocol;
 
@@ -42,6 +43,9 @@ public sealed record StreamOptions(int LatencyMs, double? VolumePercent, bool La
 
     /// <summary>Third-party pairing over RTSP. HomePods and Apple TVs retain HTTP by default.</summary>
     internal bool PairingOverRtsp { get; init; }
+
+    /// <summary>An Apple TV is sent its volume once more this long after the stream starts (<see cref="AirPlayClient"/>; tests shorten it).</summary>
+    internal TimeSpan AppleTvVolumeResendAfter { get; init; } = TimeSpan.FromSeconds(2);
 }
 
 /// <summary>
@@ -63,10 +67,12 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     private int _feedbackFailures;
     private int _feedbackBusy;
     private volatile bool _lostByFeedback;
+    private string? _feedbackAnswer;
     private int _lostSignalled;
 
     public IReadOnlyDictionary<string, object?> Info { get; private set; } = new Dictionary<string, object?>();
     public RtpSender? Sender => _sender;
+    internal long RealtimePacketsSent => PtpRealtime?.PacketsSent ?? 0;
     public int TimingRequests => _timing.RequestsAnswered;
     public double? InitialVolumeDb => Info.TryGetValue("initialVolume", out var v) && v is double d ? d : null;
 
@@ -102,7 +108,50 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         var client = new AirPlayClient(rtsp);
         try
         {
-            await client.SetupAsync(options, fifo, ct);
+            var probe = rtsp.Rtsp("GET", "/info");
+            var probeInfo = probe.Body.Length > 0 ? BPlist.ReadDict(probe.Body) : new Dictionary<string, object?>();
+            if (probe.IsSuccess && probeInfo.Count > 0) client.Info = probeInfo;
+            bool modernAppleTv =
+                (probeInfo.GetValueOrDefault("model") as string)?.StartsWith("AppleTV", StringComparison.Ordinal) == true &&
+                // Older Apple TV fakes and legacy receivers expose only the small /info shape. The modern
+                // home-theater path is advertised by the richer format/capability fields seen on tvOS 18+.
+                (probeInfo.ContainsKey("supportedFormats") || probeInfo.ContainsKey("features") ||
+                 (probeInfo.GetValueOrDefault("sourceVersion") as string)?.StartsWith("1005.", StringComparison.Ordinal) == true);
+            if (modernAppleTv)
+            {
+                var modern = options with
+                {
+                    StreamSetupOverrides = new Dictionary<string, object?>
+                    {
+                        ["supportsDynamicStreamID"] = true,
+                        ["ct"] = 1L,
+                        ["audioFormat"] = 0x800L,
+                        ["isMedia"] = false,
+                        ["usingScreen"] = true,
+                        ["streamConnections"] = new Dictionary<string, object?>
+                        {
+                            ["streamConnectionTypeRTP"] = new Dictionary<string, object?>
+                            {
+                                ["streamConnectionKeyUseStreamEncryptionKey"] = true,
+                            },
+                        },
+                    },
+                    SessionSetupExtras = new Dictionary<string, object?>
+                    {
+                        ["senderSupportsRelay"] = true,
+                    },
+                };
+                // The protocol harness compiles this file without the optional Apple TV experiment source file.
+                // Resolve the experiment entry point only when that source is present in the full application.
+                var modernEntry = typeof(AirPlayClient).GetMethod(
+                    "SetupAppleTvPtpRealtimeAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (modernEntry == null)
+                    throw new NotSupportedException("Apple TV realtime PTP support is not included in this build");
+                var pending = modernEntry.Invoke(client, [modern, fifo, ct]) as Task
+                    ?? throw new InvalidOperationException("Apple TV realtime PTP setup did not return a task");
+                await pending;
+            }
+            else await client.SetupAsync(options, fifo, ct);
             return client;
         }
         catch
@@ -162,7 +211,26 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
 
         double volumeDb = options.VolumePercent is { } pct ? PercentToDb(pct) : InitialVolumeDb ?? -20.0;
         SetVolumeDb(volumeDb);
+
+        // An Apple TV gets the volume once more when audio flows. 2026-11-07: the maintainer's Apple TV 4K (AppleTV14,1,
+        // tvOS 27, its HomePods as home-theater speakers) took the whole session, answered 200 to everything and asked
+        // for no packet again, and played nothing. pyatv #2642 has the same model and system silent after a volume set
+        // before the stream, and audible once it was set while the stream ran. Not yet heard on the maintainer's device.
+        if (ReceiverKinds.Classify(Info.GetValueOrDefault("model") as string ?? "", null, info: Info) == ReceiverKind.AppleTv)
+            _volumeResend = new System.Threading.Timer(_ =>
+            {
+                try
+                {
+                    if (_lastVolumeDb is not { } db) return;
+                    Log.Info($"Apple TV: sending the volume again now that audio flows ({db:F1} dB)");
+                    SetVolumeDb(db);
+                }
+                catch (Exception ex) { Log.Debug($"volume resend failed: {ex.Message}"); }
+            }, null, options.AppleTvVolumeResendAfter, Timeout.InfiniteTimeSpan);
     }
+
+    private System.Threading.Timer? _volumeResend;
+    private double? _lastVolumeDb; // the last volume sent, after the cap
 
     /// <summary>/info, pairing (<see cref="Pair"/>), encrypted session SETUP, event channel and stream SETUP.</summary>
     private async Task<RtpTarget> NegotiateAsync(StreamOptions options, CancellationToken ct)
@@ -171,9 +239,12 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         if (options.PairingOverRtsp) _rtsp.PairingOverRtsp = true;
         if (options.RequestLog != null)
             _rtsp.RequestTrace = (method, uri, status) => options.RequestLog($"AirPlay 2 {method} {uri}: {status}");
-        var info = _rtsp.Rtsp("GET", "/info");
-        if (info.IsSuccess && info.Body.Length > 0)
-            Info = BPlist.ReadDict(info.Body);
+        if (Info.Count == 0)
+        {
+            var info = _rtsp.Rtsp("GET", "/info");
+            if (info.IsSuccess && info.Body.Length > 0)
+                Info = BPlist.ReadDict(info.Body);
+        }
         Log.Info($"connected to {Log.Name(Info.GetValueOrDefault("name"))} ({Info.GetValueOrDefault("model")}, " +
                  $"AirTunes/{Info.GetValueOrDefault("sourceVersion")}, OS {Info.GetValueOrDefault("osBuildVersion")})");
 
@@ -190,6 +261,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         var s1 = BPlist.ReadDict(setup1.Body);
         int eventPort = Convert.ToInt32(s1.GetValueOrDefault("eventPort") ?? 0L);
         Log.Debug($"SETUP session -> eventPort={eventPort} timingPort={s1.GetValueOrDefault("timingPort")}");
+        if (Log.Verbose) Log.Debug($"SETUP session reply: {BPlist.Describe(s1)}");
 
         if (eventPort > 0 || !options.AllowMissingEventChannel)
         {
@@ -227,6 +299,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         }), "SETUP stream");
         var stream = (BPlist.ReadDict(setup2.Body)["streams"] as List<object?>)?[0] as Dictionary<string, object?>
                      ?? throw new InvalidDataException("SETUP stream: no streams in reply");
+        if (Log.Verbose) Log.Debug($"SETUP stream reply: {BPlist.Describe(setup2.Body)}");
         int dataPort = Convert.ToInt32(stream["dataPort"]);
         int controlPort = Convert.ToInt32(stream["controlPort"]);
         if (stream.GetValueOrDefault("arrivalToRenderLatencyMs") is long a2r) ArrivalToRenderMs = (int)a2r;
@@ -308,7 +381,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     /// <summary>
     /// The speaker only answers the stream SETUP once it has synced to our NTP clock, so a timeout here
     /// with zero timing requests means its packets never reached us (almost always the firewall; on a Public
-    /// network, always: our rule only applies on Private ones).
+    /// network, always: our rule only applies on Private ones). Not when the speaker closed the connection itself: that
+    /// is another sender taking it, and no firewall's doing.
     /// </summary>
     private HttpMessage SetupStream(Dictionary<string, object?> body)
     {
@@ -316,7 +390,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         {
             return _rtsp.RtspPlist("SETUP", body);
         }
-        catch (IOException) when (_timing.RequestsAnswered == 0)
+        catch (IOException ex) when (ex is not SpeakerClosedException && _timing.RequestsAnswered == 0)
         {
             throw new FirewallBlockedException(NetworkProfile.ForLocalAddress(_rtsp.LocalIp));
         }
@@ -415,6 +489,8 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
             {
                 var r = _rtsp.Rtsp("POST", "/feedback");
                 _feedbackFailures = r.IsSuccess ? 0 : _feedbackFailures + 1;
+                if (Log.Verbose && r.Body.Length > 0 && BPlist.Describe(r.Body) is var answer && answer != _feedbackAnswer)
+                    Log.Debug($"feedback answer: {_feedbackAnswer = answer}"); // only when it changes: one line, not one every 2 s
             }
             catch (Exception ex)
             {
@@ -453,6 +529,7 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     public void SetVolumeDb(double db)
     {
         db = VolumeLimit.ClampDb(db, VolumeCapPercent);
+        _lastVolumeDb = db;
         var body = System.Text.Encoding.UTF8.GetBytes($"volume: {db.ToString("F6", CultureInfo.InvariantCulture)}");
         _rtsp.Rtsp("SET_PARAMETER", contentType: "text/parameters", body: body);
     }
@@ -463,9 +540,11 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
     {
         _lostSignalled = 1; // no Lost events during deliberate teardown
         _feedbackTimer?.Dispose();
+        _volumeResend?.Dispose();
         _sender?.Dispose();
         _buffered?.Dispose();
         PtpRealtime?.Dispose();
+        DisposeSurroundSender();
         // A session lost to three failed heartbeats in a row (as a rule, no answer within the receive timeout) would not
         // get a TEARDOWN answered either: it would only hold up the reconnect for another receive timeout. One failed
         // heartbeat and then 断开 still ends the session cleanly.
@@ -482,8 +561,13 @@ public sealed partial class AirPlayClient : IDisposable, IGroupMember
         _control.Dispose();
         _timing.Dispose();
         _ptp?.Dispose();
+        DisposeSurroundClock();
         _rtsp.Dispose();
     }
+
+    // The 5.1 path (AirPlayClient.Surround.cs) fills these in; the protocol harness compiles this file without it.
+    partial void DisposeSurroundSender();
+    partial void DisposeSurroundClock();
 }
 
 /// <param name="network">

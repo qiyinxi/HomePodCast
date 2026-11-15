@@ -211,7 +211,8 @@ public sealed class LoopbackCapture : ICaptureSource
         }
     }
 
-    private static unsafe float ReadSample(byte* frame, int channel, WaveFormat fmt)
+    /// <summary>One sample as float: 16/24/32-bit PCM, or float with non-finite values cleaned. Also read by SurroundLayout.</summary>
+    internal static unsafe float ReadSample(byte* frame, int channel, WaveFormat fmt)
     {
         int bytes = fmt.BitsPerSample / 8;
         byte* s = frame + channel * bytes;

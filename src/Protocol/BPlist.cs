@@ -155,6 +155,29 @@ public static class BPlist
     public static Dictionary<string, object?> ReadDict(ReadOnlySpan<byte> data) =>
         Read(data) as Dictionary<string, object?> ?? throw new InvalidDataException("bplist root is not a dict");
 
+    /// <summary>
+    /// A plist on one line for the verbose log ("{eventPort=49152, streams=[{type=96, …}]}"): keys in order, byte strings
+    /// as their length and first bytes (a stream key never whole), long texts cut. For reading what a receiver answers or
+    /// asks; a body that is no binary plist comes back as its length.
+    /// </summary>
+    public static string Describe(ReadOnlySpan<byte> data)
+    {
+        if (data.Length == 0) return "(empty)";
+        try { return Describe(Read(data)); }
+        catch (Exception) { return $"({data.Length} bytes, no binary plist)"; }
+    }
+
+    public static string Describe(object? value) => value switch
+    {
+        null => "null",
+        IReadOnlyDictionary<string, object?> d => "{" + string.Join(", ", d.Select(kv => $"{kv.Key}={Describe(kv.Value)}")) + "}",
+        byte[] b => $"<{b.Length} bytes{(b.Length > 0 ? " " + Convert.ToHexString(b.AsSpan(0, Math.Min(b.Length, 8))) : "")}{(b.Length > 8 ? "…" : "")}>",
+        string s => s.Length > 120 ? "\"" + s[..120] + "…\"" : "\"" + s + "\"",
+        System.Collections.IEnumerable list => "[" + string.Join(", ", list.Cast<object?>().Select(Describe)) + "]",
+        IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => value.ToString() ?? "",
+    };
+
     private sealed class Reader(byte[] buf)
     {
         private int _offsetSize, _refSize;

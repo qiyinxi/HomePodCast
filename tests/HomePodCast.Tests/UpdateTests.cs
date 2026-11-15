@@ -207,6 +207,25 @@ public class ReleaseSelectionTests
     }
 
     [Fact]
+    public void Files_and_pages_under_the_repositorys_new_name_count_too()
+    {
+        // After the rename to Akoustra GitHub redirects the API call and lists everything under the new name.
+        const string msi = "https://github.com/qiyinxi/Akoustra/releases/download/v9.0.0/Akoustra-9.0.0-x64.msi";
+        const string page = "https://github.com/qiyinxi/Akoustra/releases/tag/v9.0.0";
+        var json = $$"""
+            [ { "tag_name": "v9.0.0", "prerelease": false, "html_url": "{{page}}", "assets": [ {{Msi("9.0.0", Digest1, url: msi)}} ] } ]
+            """;
+        var r = Assert.Single(GitHubReleases.Parse(json));
+        Assert.Equal(msi, r.Msi!.Url);
+        Assert.Equal(page, r.PageUrl);
+        // Lookalikes of the new name are still ignored.
+        foreach (var other in new[] { "https://github.com/qiyinxi/Akoustra2/releases/download/v9.0.0/Akoustra-9.0.0-x64.msi",
+                                      "https://github.com/qiyinxi/akoustra/releases/download/v9.0.0/Akoustra-9.0.0-x64.msi",
+                                      "https://github.com/someone/Akoustra/releases/download/v9.0.0/Akoustra-9.0.0-x64.msi" })
+            Assert.Null(Assert.Single(GitHubReleases.Parse($"[ {{ \"tag_name\": \"v9.0.0\", \"assets\": [ {Msi("9.0.0", Digest1, url: other)} ] }} ]")).Msi);
+    }
+
+    [Fact]
     public void An_msi_still_uploading_is_not_ready()
     {
         var json = $"[ {{ \"tag_name\": \"v9.0.0\", \"prerelease\": false, \"assets\": [ {Msi("9.0.0", Digest1, state: "new")} ] }} ]";
@@ -708,9 +727,25 @@ public class UpdateInstallerTests(ITestOutputHelper output)
         Assert.Contains("$info.Verb = 'runas'", script);
         Assert.Contains("Start-Process -FilePath $exe -ArgumentList $appArgs", script);
         Assert.DoesNotContain("-Verb RunAs", script); // the app itself is never started elevated
-        Assert.Contains("$_.ProcessName -eq 'HomePodCast'", script);
+        Assert.Contains("$_.ProcessName -eq $appName", script);
+        Assert.Contains("$appName = 'HomePodCast'\n", script);
         Assert.True(script.IndexOf("Set-Content -LiteralPath $result -Value $code", StringComparison.Ordinal)
                     < script.IndexOf("Start-Process -FilePath $exe", StringComparison.Ordinal)); // the result is there before the app starts
+    }
+
+    [Fact]
+    public void Helper_starts_the_renamed_exe_when_the_update_installed_it()
+    {
+        // 2.0 renames the exe to Akoustra.exe; an update from here then leaves no HomePodCast.exe to start.
+        var h = Helper(@"C:\Program Files\HomePodCast\HomePodCast.exe");
+        Assert.Equal(@"C:\Program Files\HomePodCast\Akoustra.exe", h.RenamedExe);
+        var script = UpdateInstaller.HelperScript(h);
+        Assert.Contains(@"$renamedExe = 'C:\Program Files\HomePodCast\Akoustra.exe'" + "\n", script);
+        const string pick = "if (Test-Path -LiteralPath $renamedExe -PathType Leaf) { $exe = $renamedExe }";
+        Assert.Contains(pick, script);
+        Assert.True(script.IndexOf(pick, StringComparison.Ordinal) < script.IndexOf("Start-Process -FilePath $exe", StringComparison.Ordinal));
+        // Once the exe is Akoustra.exe, the helper waits for that process.
+        Assert.Equal("Akoustra", Helper(@"D:\Apps\HPC\Akoustra.exe").ProcessName);
     }
 
     [Fact]
@@ -745,7 +780,7 @@ public class UpdateInstallerTests(ITestOutputHelper output)
                          $"[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{script}')), [ref]$null, [ref]$errors)\n");
             check.Append("[Console]::Out.WriteLine('errors:' + $errors.Count)\n");
             check.Append(UpdateInstaller.HelperVariables(h)).Append('\n');
-            foreach (var v in new[] { "$msi", "$msiLog", "$installDir", "$result", "$exe" })
+            foreach (var v in new[] { "$msi", "$msiLog", "$installDir", "$result", "$exe", "$appName", "$renamedExe" })
                 check.Append($"[Console]::Out.WriteLine([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes({v})))\n");
             check.Append("[Console]::Out.WriteLine(($appArgs -join ' ') + '|' + $appPid)\n");
 
@@ -770,6 +805,8 @@ public class UpdateInstallerTests(ITestOutputHelper output)
             Assert.Equal(h.InstallDir, Decode(lines.Dequeue()));
             Assert.Equal(h.Result, Decode(lines.Dequeue()));
             Assert.Equal(h.Exe, Decode(lines.Dequeue()));
+            Assert.Equal(h.ProcessName, Decode(lines.Dequeue()));
+            Assert.Equal(h.RenamedExe, Decode(lines.Dequeue()));
             Assert.Equal("--updated-from=0.2.2-beta.1|4242", lines.Dequeue());
             Assert.Empty(lines);
         }));

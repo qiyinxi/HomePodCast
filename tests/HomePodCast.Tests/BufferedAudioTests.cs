@@ -57,6 +57,9 @@ public sealed class BufferedAudioTests
         using var cipher = new ChaCha20Poly1305(fake.StreamKey!);
         cipher.Decrypt(nonce, packet.AsSpan(12, decoded.Length), packet.AsSpan(12 + decoded.Length, 16), decoded, packet.AsSpan(4, 8));
         Assert.InRange(decoded.Length, 4, 8192);
+        // The third-party wire stays as it was before the HomePod 5.1 path: no anchor flags, the session id as SSRC.
+        Assert.False(fake.RateAnchor.ContainsKey("networkTimeFlags"));
+        Assert.Equal(unchecked((uint)(long)fake.StreamSetup["streamConnectionID"]!), BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(8)));
         Assert.Empty(fake.Errors);
     }
 
@@ -180,6 +183,34 @@ public sealed class BufferedAudioTests
         ulong recovered = seconds * 1_000_000_000 + (ulong)(((UInt128)fraction * 1_000_000_000) >> 64);
         Assert.InRange(time - recovered, 0UL, 1UL);
         Assert.Equal((long)uint.MaxValue, anchor["rtpTime"]);
+    }
+
+    [Fact]
+    public void The_third_party_anchor_is_unchanged_and_the_HomePod_anchor_adds_its_flags()
+    {
+        const ulong time = 1_700_000_001_987_654_321, clock = 0xfedcba9876543210;
+        var before = new Dictionary<string, object?> // the anchor as the third-party path always sent it
+        {
+            ["networkTimeTimelineID"] = clock,
+            ["networkTimeSecs"] = time / 1_000_000_000,
+            ["networkTimeFrac"] = (ulong)(((UInt128)(time % 1_000_000_000) << 64) / 1_000_000_000),
+            ["rtpTime"] = 1234u,
+            ["rate"] = 1,
+        };
+        Assert.Equal(BPlist.Write(before), BPlist.Write(BufferedAudio.Anchor(clock, time, 1234)));
+        Assert.DoesNotContain("networkTimeFlags", BufferedAudio.Anchor(clock, time, 1234).Keys);
+
+        var homePod = BPlist.ReadDict(BPlist.Write(BufferedAudio.Anchor(clock, time, 1234, networkTimeFlags: 0)));
+        Assert.Equal(0L, homePod["networkTimeFlags"]);
+        Assert.Equal(6, homePod.Count);
+    }
+
+    [Fact]
+    public void The_format_SSRC_carries_the_format_bit_in_its_top_byte()
+    {
+        Assert.Equal(39, BufferedAudio.Surround51Bit);
+        Assert.Equal(0x27000000u, BufferedAudio.FormatSsrc(BufferedAudio.Surround51Bit));
+        Assert.Equal(0x16000000u, BufferedAudio.FormatSsrc(22));
     }
 
     [Fact]

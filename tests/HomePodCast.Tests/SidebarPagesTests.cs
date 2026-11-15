@@ -84,7 +84,8 @@ public class SidebarPagesTests
             Assert.Equal(id, TestApp.Field<string>(page, "_selected"));
             var texts = Shown(page).ToList();
             if (kind == ReceiverKind.HomePod) Assert.Single(texts, t => t == "HomePod");
-            else Assert.Single(texts, t => t.Contains(ReceiverKinds.Label(kind)));
+            // Exact: plain 「Apple TV」 (2026-11-14) is part of the model line too.
+            else Assert.Single(texts, t => t == ReceiverKinds.Label(kind));
             Assert.DoesNotContain(texts, t => t.Contains("连接后显示实际协议"));
             // 连接方式 only where there is a choice; the card says the rest.
             Assert.Equal(kind is ReceiverKind.HomePod or ReceiverKind.AppleTv, connection.Collapsed);

@@ -17,6 +17,8 @@ public sealed record GroupMemberRef(string DeviceId, string Name, string? Host);
 /// and PTP): one full session per member, each sent the same full-stereo stream on one timeline, and the
 /// pair itself plays its left and right side. With one session to one member only, that member alone played
 /// (OwnTone #704, #1291), so no relay by the leader is assumed; PairLeaderOnly exists to test exactly that.
+/// 2026-11-03, the maintainer's pair (leader on OS 22K557, the other on 24K122): with PairLeaderOnly the other
+/// member stayed silent, so the leader does not relay here either.
 /// All members of one connection share one groupUUID, like the members of an iOS group, which re-advertise
 /// the sender's group as their "gid".
 /// </remarks>

@@ -104,6 +104,30 @@ public class ConfigFileTests
     }
 
     [Fact]
+    public void The_surround_switch_is_off_in_an_older_file_and_reads_back_when_saved()
+    {
+        string folder = NewFolder(), path = Path.Combine(folder, "config.json");
+        try
+        {
+            Directory.CreateDirectory(folder);
+            // 1.3 wrote no Surround51 (experimental since 1.4): such a file streams stereo as before.
+            File.WriteAllText(path, """{ "DeviceId": "AA:BB:CC:DD:EE:FF", "AutoConnect": true, "Scene": "Movie" }""");
+            var older = AppConfig.Load(path);
+            Assert.False(older.Surround51);
+            Assert.True(older.AutoConnect);
+
+            older.Surround51 = true;
+            older.Save(path);
+            Assert.Contains("\"Surround51\": true", File.ReadAllText(path));
+            Assert.True(AppConfig.Load(path).Surround51);
+            older.Surround51 = false;
+            older.Save(path);
+            Assert.False(AppConfig.Load(path).Surround51);
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
     public void TrySave_never_throws_while_another_program_holds_the_file()
     {
         string folder = NewFolder(), path = Path.Combine(folder, "config.json");

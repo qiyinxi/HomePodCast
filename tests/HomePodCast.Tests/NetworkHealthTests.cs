@@ -589,10 +589,11 @@ public class HomeNetworkTextTests
     [Fact]
     public void The_home_theater_notice_names_both_and_the_latency_that_absorbs_it()
     {
-        // Shown at once while such a HomePod streams below 200 ms, before any dropout is counted.
-        Assert.Equal(200, HomePage.HomeTheaterLatencyMs);
-        Assert.Equal("卧室是 Apple TV「客厅」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 200 ms 时可能断音。" +
-                     "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 200 ms",
+        // Shown at once while such a HomePod streams below 300 ms, before any dropout is counted. 2026-11-10: 200 ms still
+        // stuttered on the maintainer's pair (its members answered pings up to 172 ms late, twice a second).
+        Assert.Equal(300, HomePage.HomeTheaterLatencyMs);
+        Assert.Equal("卧室是 Apple TV「客厅」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 300 ms 时可能断音。" +
+                     "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 300 ms",
             HomePage.HomeTheaterNotice("卧室", "客厅"));
     }
 
@@ -673,37 +674,37 @@ public class HomeNetworkTextTests
     }
 
     [Fact]
-    public void A_homepod_taken_over_from_its_apple_tv_gets_the_home_theater_notice_below_200_ms_at_once()
+    public void A_homepod_taken_over_from_its_apple_tv_gets_the_home_theater_notice_below_300_ms_at_once()
     {
-        foreach (int latency in new[] { 105, 120, 199 })
+        foreach (int latency in new[] { 105, 120, 200, 299 })      // 200: 影视, where the maintainer's pair still stuttered
         {
             var notice = HomePage.NoticeFor(Calm, "客厅", applied: false, latency, "卧室");
             Assert.True(notice.Show);                              // before any dropout is counted
             Assert.True(notice.HomeTheater);
             Assert.False(notice.Threatened);
-            Assert.Equal(200, notice.SuggestedMs);
+            Assert.Equal(300, notice.SuggestedMs);
             Assert.Equal(HomePage.HomeTheaterNotice("卧室", "客厅"), notice.Text);
         }
-        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 200, "卧室").Show);   // at 200 ms: the plain line
+        Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 300, "卧室").Show);   // at 300 ms: the plain line
         Assert.False(HomePage.NoticeFor(Calm, "客厅", false, 500, "卧室").Show);
         Assert.False(HomePage.NoticeFor(Calm, null, false, 105, "卧室").Show);     // not taken from an Apple TV
         Assert.False(HomePage.NoticeFor(Calm, "客厅", applied: true, 105, "卧室").Show); // 应用 pressed on this connection
     }
 
     [Fact]
-    public void Once_dropouts_threaten_a_homepod_taken_from_its_apple_tv_the_hint_names_the_home_theater_and_suggests_200_ms()
+    public void Once_dropouts_threaten_a_homepod_taken_from_its_apple_tv_the_hint_names_the_home_theater_and_suggests_300_ms()
     {
         var threatened = new NetworkVerdict(12, 4, true, NetworkHop.Speaker, 15, 135, 4);
         var hint = HomePage.NoticeFor(threatened, "客厅", false, 120, "卧室");
         Assert.True(hint.Threatened && hint.HomeTheater);
-        Assert.Equal(200, hint.SuggestedMs);                      // not 135: that would still stutter
-        Assert.Contains("建议把延迟调到 200 ms", hint.Text);
+        Assert.Equal(300, hint.SuggestedMs);                      // not 135: that would still stutter
+        Assert.Contains("建议把延迟调到 300 ms", hint.Text);
         Assert.Contains("Apple TV「客厅」的家庭影院音箱", hint.Text);
         Assert.DoesNotContain("5G", hint.Text);
 
-        // At 200 ms or more the verdict's own suggestion stands.
-        var above = HomePage.NoticeFor(threatened with { SuggestedMs = 250 }, "客厅", false, 200, "卧室");
+        // At 300 ms or more the verdict's own suggestion stands.
+        var above = HomePage.NoticeFor(threatened with { SuggestedMs = 350 }, "客厅", false, 300, "卧室");
         Assert.False(above.HomeTheater);
-        Assert.Equal(250, above.SuggestedMs);
+        Assert.Equal(350, above.SuggestedMs);
     }
 }

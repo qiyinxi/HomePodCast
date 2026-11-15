@@ -3,7 +3,8 @@ using System.Diagnostics;
 namespace HomePodCast.Audio;
 
 /// <summary>
-/// Stereo float FIFO between capture (producer) and the RTP sender (consumer), at the stream rate.
+/// Interleaved float FIFO between capture (producer) and the RTP sender (consumer), at the stream rate: stereo, or 6
+/// channels for a HomePod's 5.1 stream (experimental since 1.4). Sizes, targets and counts are in frames.
 /// Keeps latency bounded: overflow trims back to the target; underflow pads silence and re-primes.
 /// </summary>
 /// <remarks>
@@ -19,6 +20,7 @@ public sealed partial class AudioFifo
 
     private readonly float[] _buf;
     private readonly int _capacity; // frames
+    private readonly int _channels;
     private readonly int _msFrames;
     private readonly int _capMargin;
     private readonly object _lock = new();
@@ -63,10 +65,18 @@ public sealed partial class AudioFifo
     public int Depth => Volatile.Read(ref _count);
     public double TargetMs => TargetFrames / (double)_msFrames;
 
-    public AudioFifo(int sampleRate, int targetMs, int capMs)
+    /// <summary>Interleaved channels per frame: 2, or 6 for 5.1.</summary>
+    public int Channels => _channels;
+
+    public int SampleRate { get; }
+
+    public AudioFifo(int sampleRate, int targetMs, int capMs, int channels = 2)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(channels, 1);
         _capacity = sampleRate; // 1 s
-        _buf = new float[_capacity * 2];
+        _channels = channels;
+        SampleRate = sampleRate;
+        _buf = new float[_capacity * channels];
         _msFrames = sampleRate / 1000;
         TargetFrames = BaseTargetFrames = sampleRate * targetMs / 1000;
         CapFrames = sampleRate * capMs / 1000;
@@ -75,10 +85,11 @@ public sealed partial class AudioFifo
 
     public void Write(ReadOnlySpan<float> interleaved)
     {
-        int frames = interleaved.Length / 2;
+        int channels = _channels;
+        int frames = interleaved.Length / channels;
         if (frames > _capacity)
         {
-            interleaved = interleaved[^(_capacity * 2)..];
+            interleaved = interleaved[^(_capacity * channels)..];
             frames = _capacity;
         }
         lock (_lock)
@@ -86,11 +97,22 @@ public sealed partial class AudioFifo
             if (_dryPending) ClassifyDry();
             if (_count + frames > _capacity) Skip(_count + frames - _capacity); // ring full: oldest go first
             int write = (_read + _count) % _capacity;
-            for (int i = 0; i < frames; i++)
+            if (channels == 2)
             {
-                _buf[write * 2] = interleaved[i * 2];
-                _buf[write * 2 + 1] = interleaved[i * 2 + 1];
-                if (++write == _capacity) write = 0;
+                for (int i = 0; i < frames; i++)
+                {
+                    _buf[write * 2] = interleaved[i * 2];
+                    _buf[write * 2 + 1] = interleaved[i * 2 + 1];
+                    if (++write == _capacity) write = 0;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    for (int c = 0; c < channels; c++) _buf[write * channels + c] = interleaved[i * channels + c];
+                    if (++write == _capacity) write = 0;
+                }
             }
             _count += frames;
 
@@ -125,10 +147,11 @@ public sealed partial class AudioFifo
 
     public const int SessionGraceMs = 1000;
 
-    /// <summary>Fill dest (frames*2 floats). Returns false if any silence had to be inserted.</summary>
+    /// <summary>Fill dest (frames × <see cref="Channels"/> floats). Returns false if any silence had to be inserted.</summary>
     public bool Read(Span<float> dest)
     {
-        int frames = dest.Length / 2;
+        int channels = _channels;
+        int frames = dest.Length / channels;
         lock (_lock)
         {
             if (!_reader)
@@ -147,16 +170,27 @@ public sealed partial class AudioFifo
             }
 
             int n = Math.Min(frames, _count);
-            for (int i = 0; i < n; i++)
+            if (channels == 2)
             {
-                dest[i * 2] = _buf[_read * 2];
-                dest[i * 2 + 1] = _buf[_read * 2 + 1];
-                if (++_read == _capacity) _read = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    dest[i * 2] = _buf[_read * 2];
+                    dest[i * 2 + 1] = _buf[_read * 2 + 1];
+                    if (++_read == _capacity) _read = 0;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    for (int c = 0; c < channels; c++) dest[i * channels + c] = _buf[_read * channels + c];
+                    if (++_read == _capacity) _read = 0;
+                }
             }
             _count -= n;
             if (n < frames)
             {
-                dest[(n * 2)..].Clear();
+                dest[(n * channels)..].Clear();
                 _priming = true;
                 _dryPending = true;
                 _dryAt = Clock();

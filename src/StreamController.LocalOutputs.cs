@@ -47,7 +47,7 @@ public sealed partial class StreamController
         var sessionExtras = plan.SessionExtras(Guid.NewGuid());
         int appleLatency = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         var required = airplay.Select(m => m.Member).Concat(raop.Where(m => plan.IsRequiredOutput(m.Member.DeviceId)).Select(m => m.Member)).ToArray();
-        await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed), run.Key,
+        run.TookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed, run.EndedBySpeaker), run.Key,
             required.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address, m.Port)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
         EnsureCapture(ct);
         LocalOutputSet? locals = null;

@@ -4,7 +4,12 @@ using HomePodCast.UI.Pages;
 
 namespace HomePodCast.UI;
 
-internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Viewing, Sync, Profiles, Settings, About }
+/// <summary>
+/// The pages in navigation order: <c>(int)page</c> is the rail item's index and the page's index in <c>_pages</c>.
+/// Settings, Diagnostics and About are the rail's lower group (2026-11-07: Diagnostics moved down from beside the pages
+/// people open daily).
+/// </summary>
+internal enum AppPage { Home, Mixer, Effects, Equalizer, Speakers, Group, Viewing, Profiles, Settings, Diagnostics, About }
 
 /// <summary>
 /// The one window: a scrolling navigation rail, fixed theme/settings/about actions and focused pages. Light or dark
@@ -57,9 +62,9 @@ internal sealed class MainWindow : Form, ISurface
         _rail.Add(Glyph.Speaker, L.T("音箱信息"));
         _rail.Add(Glyph.Devices, L.T("多音箱（实验性）"), label: L.T("多音箱")); // experimental since 1.1; hardware untested
         _rail.Add(Glyph.Screen, L.T("音画同步"));
-        _rail.Add(Glyph.Gauge, L.T("诊断"));
         _rail.Add(Glyph.Profiles, L.T("使用配置"));
         _rail.Add(Glyph.Settings, L.T("设置"), bottom: true);
+        _rail.Add(Glyph.Gauge, L.T("诊断"), bottom: true);
         _rail.Add(Glyph.Info, L.T("关于"), bottom: true);
         // Once the click is done: the fade captures the window as it stays, the theme button hovered, not pressed.
         _rail.ThemeRequested += () => Later(ToggleTheme);
@@ -76,7 +81,7 @@ internal sealed class MainWindow : Form, ISurface
         _group = new GroupPage(app);
         _viewing = new ViewingPage(app);
         _diagnostics = new DiagnosticsPage(app);
-        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, _diagnostics, _profiles, _settings, _about];
+        _pages = [_home, _mixer, _effects, _equalizer, _speakers, _group, _viewing, _profiles, _settings, _diagnostics, _about];
         foreach (var page in _pages)
         {
             page.Visible = false;

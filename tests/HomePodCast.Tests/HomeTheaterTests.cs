@@ -85,6 +85,34 @@ public class HomeTheaterTests
     }
 
     [Fact]
+    public void The_selected_speaker_or_stereo_pair_names_the_Apple_TV_whose_home_theater_it_belongs_to_whoever_holds_it()
+    {
+        // 2026-11-11: the maintainer's pair reconnected as our own session after a restart (nothing was taken over in that
+        // run), its members still answered pings up to 173 ms late, and 首页 had no notice at 155 ms.
+        const string Tsid = "F3C9C800-4B95-52DB-960A-606EB8785DCE";
+        var tv = AppleTv("书房电视");
+        // While this PC plays to them: in our group (another gid, no pgid), the persistent group still the Apple TV's.
+        string ours = "flags=0x1A0404 gcgl=0 igl=0 gid=17F4B42E-B414-496B-9BE5-30909E033864 gpn=卧室 tsid=" + Tsid +
+                      " psgid=" + TheaterGroup + " psgsz=3 psgtp=1";
+        var left = Device("卧室", "02:DC:8E:68:21:FB", "192.168.50.226", "AudioAccessory6,1", ours);
+        var right = Device("卧室 (2)", "02:DC:8E:68:21:FC", "192.168.50.79", "AudioAccessory6,1", ours);
+        List<AirPlayDevice> scan = [left, right, tv];
+        Assert.Null(HomeTheater.HolderOf(left, scan));                                     // not held by the Apple TV now
+        Assert.Same(tv, HomeTheater.OwnerOfSelection(StereoPairs.PairId(Tsid), scan));     // its home theater all the same
+        Assert.Same(tv, HomeTheater.OwnerOfSelection("02:DC:8E:68:21:FB", scan));          // a single HomePod, by its id
+        Assert.Same(tv, HomeTheater.OwnerOfSelection("02dc8e6821fb", scan));               // however the id is written
+
+        Assert.Null(HomeTheater.OwnerOfSelection(StereoPairs.PairId(Tsid), [left, right])); // the Apple TV not found (yet)
+        Assert.Null(HomeTheater.OwnerOfSelection(StereoPairs.PairId(Tsid), []));            // nothing scanned yet
+        Assert.Null(HomeTheater.OwnerOfSelection(null, scan));
+        Assert.Null(HomeTheater.OwnerOfSelection(tv.DeviceId, scan));                       // an Apple TV is nobody's speaker
+        Assert.Null(HomeTheater.OwnerOfSelection(Standalone.DeviceId, [Standalone, tv]));   // no home theater: no notice
+
+        var (links, rechts) = StereoPairTests.IdlePair();                                    // a pair of no home theater
+        Assert.Null(HomeTheater.OwnerOfSelection(StereoPairs.PairId(StereoPairs.Tsid(links)!), [links, rechts, tv]));
+    }
+
+    [Fact]
     public void An_idle_standalone_HomePod_belongs_to_no_home_theater()
     {
         var tv = AppleTv();

@@ -109,6 +109,51 @@ public class HomeVolumeTests
         finally { L.Use(before); }
     });
 
+    /// <summary>
+    /// 5.1 环绕声 (experimental since 1.4) moved to 设置 → 音频 on 2026-11-04: the volume card has only its two switches,
+    /// and the row on 设置 shows the whole description, not a tooltip.
+    /// </summary>
+    [Fact]
+    public void The_surround_switch_is_on_settings_not_on_home() => Sta.Run(() =>
+    {
+        using var host = new Host();
+        Assert.Null(typeof(HomePage).GetField("_surround", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.DoesNotContain(Descendants(host.Page).OfType<ToggleSwitch>(), t => t.Text.Contains("5.1"));
+
+        var surround = TestApp.Field<ToggleSwitch>(host.Settings, "_surround");
+        var row = Assert.IsType<SettingRow>(LogicalLayout.Parent(surround));
+        Assert.Equal("5.1 环绕声（实验性）", row.TitleText.Text);
+        Assert.Equal(SettingsPage.SurroundDescription(), row.DescriptionText.Text);
+        Assert.Contains($"约 {SurroundPolicy.LatencyMs / 1000.0:F1} 秒", row.DescriptionText.Text);
+        int index = host.Settings.Content.Controls.GetChildIndex(row);
+        Assert.Equal("音频", Assert.IsAssignableFrom<TextBlock>(host.Settings.Content.Controls[index - 1]).Text);
+    });
+
+    [Fact]
+    public void The_surround_switch_is_saved_and_follows_the_setting() => Sta.Run(() =>
+    {
+        using var host = new Host();
+        var surround = TestApp.Field<ToggleSwitch>(host.Settings, "_surround");
+        Assert.False(surround.Checked); // off on a fresh config
+
+        // The unit-tests profile's file, which other test classes save to meanwhile: only that a save happened is certain.
+        string file = Path.Combine(AppConfig.Directory, "config.json");
+        var longAgo = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        try { if (File.Exists(file)) File.SetLastWriteTimeUtc(file, longAgo); }
+        catch (IOException) { } // being replaced by another test's save right now
+        surround.Flip();
+        Assert.True(host.App.Config.Surround51);
+        Assert.True(File.Exists(file) && File.GetLastWriteTimeUtc(file) > longAgo, "the switch was not saved");
+        Assert.Equal(StreamState.Idle, host.App.Controller.State); // not connected: nothing to reconnect
+
+        host.App.SetSurround51(false); // as from elsewhere: the switch follows
+        Assert.False(surround.Checked);
+        Assert.False(host.App.Config.Surround51);
+    });
+
+    private static IEnumerable<Control> Descendants(Control parent) =>
+        parent.Controls.Cast<Control>().SelectMany(c => Descendants(c).Prepend(c));
+
     private sealed class Host : IDisposable
     {
         private readonly MainWindow _window;
@@ -127,6 +172,7 @@ public class HomeVolumeTests
                 StartPosition = FormStartPosition.Manual, Location = new Point(-20000, -20000) };
             typeof(TrayApp).GetField("_form", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(App, _window);
             Page = TestApp.Field<HomePage>(_window, "_home");
+            Settings = TestApp.Field<SettingsPage>(_window, "_settings");
             _window.Show(); // An invisible fake app; never starts discovery, capture or a sender.
             _window.ShowSoundOptions();
         }
@@ -134,6 +180,7 @@ public class HomeVolumeTests
         public TrayApp App { get; }
         public FakePcOutput Pc { get; }
         public HomePage Page { get; }
+        public SettingsPage Settings { get; }
 
         public void Dispose()
         {

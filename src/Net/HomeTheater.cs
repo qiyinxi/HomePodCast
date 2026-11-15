@@ -112,6 +112,22 @@ public static class HomeTheater
     }
 
     /// <summary>
+    /// The Apple TV whose home theater the selected speaker belongs to: a single HomePod's, or that of either member of a
+    /// stereo pair (<paramref name="deviceId"/> "pair:&lt;tsid&gt;"); null for none, or while the scan has not found them.
+    /// Whoever plays to the HomePod now: the home theater's link takes its share of the Wi-Fi as long as the setting
+    /// lasts. 2026-11-11: the maintainer's pair, connected as our own session after a restart (nothing was taken over in
+    /// that run), answered pings up to 173 ms late all the same, and 首页 said nothing at 155 ms.
+    /// </summary>
+    public static AirPlayDevice? OwnerOfSelection(string? deviceId, IReadOnlyList<AirPlayDevice> devices)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId)) return null;
+        var speakers = StereoPairs.TryGetTsid(deviceId, out var tsid)
+            ? StereoPairs.Members(devices, tsid)
+            : devices.Where(d => Key(d.DeviceId) == Key(deviceId)).ToList();
+        return speakers.Select(s => OwnerOf(s, devices)).FirstOrDefault(tv => tv != null);
+    }
+
+    /// <summary>
     /// The home-theater Apple TV whose group this speaker plays in now (the one holding its busy flag), or null: no home
     /// theater, the Apple TV not found or not leading, or another sender's group.
     /// </summary>

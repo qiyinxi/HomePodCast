@@ -295,6 +295,10 @@ public sealed class MixerCaptureBusTests
             hub.Apply(new(1, [Root(1, "a")]));
             var samples = new float[882];
             for (int i = 0; i < 100; i++) { hub.Cycle(); fifo.Read(samples); }
+            // A gen0 GC first, as Signals.Allocated does: otherwise a background GC can drop this thread's allocation
+            // context and the count jumps by up to ~8 KB that nothing allocated (2026-10-28: 6008 bytes in the
+            // v1.3.0-beta.5 tag build, while the same commit passed four other runs).
+            GC.Collect(0);
             long allocated = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 1000; i++) { hub.Cycle(); fifo.Read(samples); }
             Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - allocated);

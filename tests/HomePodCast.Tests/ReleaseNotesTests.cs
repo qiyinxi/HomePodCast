@@ -74,6 +74,11 @@ public class ReleaseNotesTests
     [InlineData("https://github.com/qiyinxi/HomePodCast/../other", false)]
     [InlineData("https://github.com/qiyinxi/HomePodCast/%2f..%2fother", false)]
     [InlineData("https://github.com/qiyinxi/HomePodCast/\n", false)]
+    [InlineData("https://github.com/qiyinxi/Akoustra", true)] // the repository's coming name
+    [InlineData("https://github.com/qiyinxi/Akoustra/releases/tag/v2.0.0", true)]
+    [InlineData("https://github.com/qiyinxi/Akoustra.evil/releases", false)]
+    [InlineData("https://github.com/qiyinxi/Akoustra/../other", false)]
+    [InlineData("https://github.com/someone/Akoustra", false)]
     [InlineData("javascript:alert(1)", false)]
     [InlineData("file:///C:/Windows/notepad.exe", false)]
     public void Only_this_repositorys_https_links_can_open(string url, bool allowed) => Assert.Equal(allowed, ReleaseNotes.CanOpen(url));

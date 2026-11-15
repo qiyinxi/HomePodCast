@@ -441,6 +441,40 @@ public class PairingFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task An_Apple_TV_gets_its_volume_once_more_when_audio_flows_and_a_HomePod_does_not()
+    {
+        // 2026-11-07: the maintainer's Apple TV took the whole session and played nothing; pyatv #2642 (the same model and
+        // system) was silent after a volume set before the stream and audible once it was set while the stream ran.
+        static int Volumes(FakeAirPlayReceiver rx) => rx.Requests.Count(r => r == "SET_PARAMETER [encrypted]");
+        var soon = TimeSpan.FromMilliseconds(100);
+
+        using var tv = new FakeAirPlayReceiver(appleTv: true);
+        var store = NewStore();
+        store.Save(tv.DeviceId, tv.Name, await PairAsync(tv, "0482"));
+        using (await AirPlayClient.ConnectAsync(IPAddress.Loopback, tv.Port,
+                   new StreamOptions(150, 20) { Pairings = store, DeviceId = tv.DeviceId, AppleTvVolumeResendAfter = soon },
+                   Fifo(), CancellationToken.None).WaitAsync(Timeout))
+        {
+            Assert.Equal(1, Volumes(tv));                          // with the connect, as before
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (Volumes(tv) < 2 && DateTime.UtcNow < deadline) await Task.Delay(20);
+            Assert.Equal(2, Volumes(tv));
+            await Task.Delay(300);
+            Assert.Equal(2, Volumes(tv));                          // once, not every 100 ms
+        }
+
+        using var homePod = new FakeAirPlayReceiver(appleTv: false);
+        using (await AirPlayClient.ConnectAsync(IPAddress.Loopback, homePod.Port,
+                   new StreamOptions(150, 20) { AppleTvVolumeResendAfter = soon }, Fifo(), CancellationToken.None).WaitAsync(Timeout))
+        {
+            await Task.Delay(400);
+            Assert.Equal(1, Volumes(homePod));                     // a HomePod's session stays exactly as it was
+        }
+        Assert.Empty(tv.Errors);
+        Assert.Empty(homePod.Errors);
+    }
+
+    [Fact]
     public async Task A_pairing_the_tv_no_longer_knows_asks_to_pair_again()
     {
         using var tv = new FakeAirPlayReceiver(appleTv: true);

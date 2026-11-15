@@ -246,7 +246,9 @@ public class VideoWindowTests
     {
         Assert.Equal(new LocalStatus(356, "1.1.0"), StatusDelay.Read("{\"app\":\"HomePodCast\",\"version\":\"1.1.0\",\"streaming\":true,\"videoDelayMs\":356}"));
         Assert.Equal(new LocalStatus(0, null), StatusDelay.Read("{\"app\":\"HomePodCast\",\"streaming\":false}"));
+        Assert.Equal(new LocalStatus(120, "2.0.0"), StatusDelay.Read("{\"app\":\"Akoustra\",\"version\":\"2.0.0\",\"streaming\":true,\"videoDelayMs\":120}"));
         Assert.Throws<InvalidDataException>(() => StatusDelay.Read("{\"app\":\"other\",\"streaming\":false}"));
+        Assert.Throws<InvalidDataException>(() => StatusDelay.Read("{\"app\":\"akoustra\",\"streaming\":false}"));
         Assert.Throws<InvalidDataException>(() => StatusDelay.Read("{\"app\":\"HomePodCast\",\"streaming\":true,\"videoDelayMs\":2001}"));
         Assert.Equal(0, StatusDelay.Effective(10, -20)); Assert.Equal(2000, StatusDelay.Effective(1900, 200));
     }

@@ -8,6 +8,7 @@ public sealed partial class AudioFifo
 
     internal void WriteMixer(Dictionary<uint, float[]> contributions, int frames)
     {
+        RequireStereo();
         if (frames <= 0) return;
         if (frames > _capacity) throw new ArgumentOutOfRangeException(nameof(frames));
         lock (_lock)
@@ -38,6 +39,7 @@ public sealed partial class AudioFifo
     /// <summary>Remove only this root's unconsumed sound, preserving the other apps and their queued frame positions.</summary>
     internal void RemoveMixerSource(uint id)
     {
+        RequireStereo();
         lock (_lock)
         {
             if (_mixerContributions == null || !_mixerContributions.Remove(id)) return;
@@ -53,4 +55,10 @@ public sealed partial class AudioFifo
     }
 
     internal int MixerLedgerSources => _mixerContributions?.Count ?? 0;
+
+    /// <summary>The hub's per-app ledger is stereo: a 5.1 FIFO is only ever written by the surround capture.</summary>
+    private void RequireStereo()
+    {
+        if (_channels != 2) throw new InvalidOperationException($"the mixer ledger is stereo; this FIFO has {_channels} channels");
+    }
 }

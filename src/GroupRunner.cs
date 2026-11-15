@@ -35,6 +35,9 @@ internal sealed class GroupRunner(
     /// and whether it was stopped (cancelled, so its members get a TEARDOWN).
     /// </summary>
     public event Action<string?, bool>? StreamEnded;
+
+    /// <summary>Raised on the loop when an attempt failed before it streamed (not when it was stopped), with its exception.</summary>
+    public event Action<Exception>? ConnectFailed;
     public event Action? StoppedForUserAction;
 
     /// <summary>Runs until cancelled; returns true if it gave up because another sender took a speaker over.</summary>
@@ -71,6 +74,7 @@ internal sealed class GroupRunner(
             {
                 lostText = Describe(ex);
                 Log.Warn($"group failed: {DescribeForLog(ex)}");
+                ConnectFailed?.Invoke(ex);
                 if (Find<FirewallBlockedException>(ex) != null) FirewallBlocked?.Invoke();
                 stopIdle = Find<RaopUnsupportedException>(ex) != null || Find<RaopPasswordRequiredException>(ex) != null
                     || Find<RaopBusyException>(ex) != null || Find<RaopRefusedException>(ex) != null
@@ -133,7 +137,7 @@ internal sealed class GroupRunner(
     /// <summary><see cref="Describe"/> for the log: speaker names marked (Log.Name), so a diagnostic report leaves them out.</summary>
     internal static string DescribeForLog(Exception ex) => ex switch
     {
-        GroupMemberException g => $"{Log.Name(g.Member)}: {DescribeForLog(g.InnerException!)}",
+        GroupMemberException g => $"{Log.Name(g.Member)}{(g.Step is { } step ? $" during {step}" : "")}: {DescribeForLog(g.InnerException!)}",
         AirPlayException => AirPlayException.ForLog(ex),
         _ => $"{ex.GetType().Name}: {ex.Message}",
     };
