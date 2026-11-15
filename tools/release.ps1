@@ -335,16 +335,21 @@ function Get-SnapshotRunHint($run, [string] $branch) {
         "If the code is broken, fix it on dev, delete the snapshot ($drop) and run this again: it takes a new snapshot of dev with the same beta number")
 }
 
-# Other releases going on, one line each: an open PR to main or a promotion branch's CI running (tools/release.ps1
-# -Promote), and tag builds still running, other than $ownTag's. $mainPrs: the open PRs to main (number, headRefName,
-# url); $runs: recent push runs of the build workflow.
+# Other releases going on, one line each: an open release PR to main or a promotion branch's CI running
+# (tools/release.ps1 -Promote), and tag builds still running, other than $ownTag's. $mainPrs: the open PRs to main
+# (number, headRefName, isCrossRepository, url); $runs: recent push runs of the build workflow.
 function Find-ReleaseInProgress([object[]] $mainPrs, [object[]] $runs, [string] $ownTag) {
-    foreach ($pr in @($mainPrs | Where-Object { $_ })) { "PR #$($pr.number) $($pr.headRefName) -> main is open: $($pr.url)" }
+    foreach ($pr in @($mainPrs | Where-Object { $_ -and (Test-ReleasePr $_) })) { "PR #$($pr.number) $($pr.headRefName) -> main is open: $($pr.url)" }
     foreach ($run in @($runs | Where-Object { $_ -and $_.status -ne 'completed' })) {
         if ($run.headBranch -cmatch $TagPattern -and $run.headBranch -cne $ownTag) { "the tag build of $($run.headBranch) is $($run.status): $($run.url)" }
         elseif ($run.headBranch -cmatch '^release/\d+\.\d+\.\d+$') { "the CI of $($run.headBranch) is $($run.status) (a promotion): $($run.url)" }
     }
 }
+
+# Only -Promote's own PR (release/X.Y.Z of this repository -> main) is a release. 2026-11-15: a contributor's feature PR
+# from a fork, opened against main by mistake, stopped every beta until it was retargeted; such PRs are listed, not
+# waited for.
+function Test-ReleasePr([object] $pr) { -not $pr.isCrossRepository -and "$($pr.headRefName)" -cmatch '^release/\d+\.\d+\.\d+$' }
 
 # The release/snapshot/* branches on the remote.
 function Get-SnapshotBranch {
@@ -373,7 +378,10 @@ function Get-CommitPushRun([string] $sha) {
 
 # One release at a time; with -WhatIf only a warning, so that the rest of the plan shows.
 function Assert-OneRelease([string] $ownTag) {
-    $prs = @(Invoke-GhJson pr list @R --base main --state open --json 'number,headRefName,url')
+    $prs = @(Invoke-GhJson pr list @R --base main --state open --json 'number,headRefName,isCrossRepository,url')
+    foreach ($pr in @($prs | Where-Object { $_ -and -not (Test-ReleasePr $_) })) {
+        Write-Caution "PR #$($pr.number) $($pr.headRefName) -> main is open but is no release PR (not release/X.Y.Z of this repository): not waited for. main changes only through release PRs; retarget it to dev ($($pr.url))"
+    }
     $runs = @(Invoke-GhJson run list @R --workflow $Workflow --event push --limit 100 --json $RunFields)
     $busy = @(Find-ReleaseInProgress $prs $runs $ownTag)
     if (-not $busy) { Write-Info 'no other release going on: no PR to main, no promotion or other tag build running'; return }
@@ -1009,7 +1017,10 @@ function Invoke-SelfTest {
 
     Write-Host 'Other releases going on'
     Test-Case 'nothing going on' { @(Find-ReleaseInProgress @() @((Run 'dev' 'in_progress'), (Run 'v1.1.0-beta.5' 'completed' 'success'))).Count -eq 0 }
-    Test-Case 'an open PR to main' { @(Find-ReleaseInProgress @([pscustomobject]@{ number = 50; headRefName = 'release/1.1.0'; url = 'u' }) @()).Count -eq 1 }
+    Test-Case 'an open release PR to main' { @(Find-ReleaseInProgress @([pscustomobject]@{ number = 50; headRefName = 'release/1.1.0'; isCrossRepository = $false; url = 'u' }) @()).Count -eq 1 }
+    Test-Case "a fork's feature PR to main is no release" { @(Find-ReleaseInProgress @([pscustomobject]@{ number = 119; headRefName = 'feat/live-microphone-calibration'; isCrossRepository = $true; url = 'u' }) @()).Count -eq 0 }
+    Test-Case "a fork's release/X.Y.Z branch is no release either" { @(Find-ReleaseInProgress @([pscustomobject]@{ number = 51; headRefName = 'release/1.1.0'; isCrossRepository = $true; url = 'u' }) @()).Count -eq 0 }
+    Test-Case "this repository's feature branch to main is no release" { @(Find-ReleaseInProgress @([pscustomobject]@{ number = 52; headRefName = 'feature/x'; isCrossRepository = $false; url = 'u' }) @()).Count -eq 0 }
     Test-Case 'another tag build running' { "$(Find-ReleaseInProgress @() @(Run 'v1.1.0-beta.5' 'in_progress') 'v1.1.0-beta.6')" -match 'tag build of v1\.1\.0-beta\.5' }
     Test-Case 'its own tag build is no other release' { @(Find-ReleaseInProgress @() @(Run 'v1.1.0-beta.6' 'in_progress') 'v1.1.0-beta.6').Count -eq 0 }
     Test-Case "a promotion branch's CI running" { "$(Find-ReleaseInProgress @() @(Run 'release/1.1.0' 'queued'))" -match 'promotion' }
