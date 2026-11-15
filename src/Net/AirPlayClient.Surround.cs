@@ -134,6 +134,8 @@ public sealed partial class AirPlayClient
         body.Remove("timingPort");
         foreach (var (key, value) in PtpSessionBody(uuid, _rtsp.LocalIp, clockId)) body[key] = value;
         body["name"] = "HomePodCast";
+        // Experiments from the command line only (`stream --surround --apple-tv --session key=value`).
+        if (options.SessionSetupExtras != null) foreach (var (key, value) in options.SessionSetupExtras) body[key] = value;
         if (Log.Verbose) Log.Debug($"5.1 SETUP session request: {BPlist.Describe(body)}");
         var session = BPlist.ReadDict(Expect(_rtsp.RtspPlist("SETUP", body), "SETUP session").Body);
         int eventPort = Convert.ToInt32(session.GetValueOrDefault("eventPort") ?? 0L);

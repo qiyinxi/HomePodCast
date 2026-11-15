@@ -13,7 +13,7 @@ These protect the maintainer's own setup. Breaking one has happened before and c
   is truly needed, ask first, and use a test profile (`HOMEPODCAST_PROFILE=<name>`: own config folder and
   single-instance name) whose config has `AutoConnect` false and no `DeviceId`. GUI checks belong in CI (`gui-smoke`).
 - **Nothing audible.** Never stream captured audio or tones to a real speaker unless the maintainer asked for that
-  test; then at most 25 % volume (`--cap`). Protocol experiments use `HomePodCast.exe stream --silent --cap 10`.
+  test; then at most 35 % volume (`--cap`; 25 % until 2026-11-12). Protocol experiments use `HomePodCast.exe stream --silent --cap 10`.
   Never set `HOMEPODCAST_LIVE_AUDIO`.
 - **Don't take over a speaker another device is using** (an iPhone, the Apple TV's home theater) without the
   maintainer's explicit OK for that test.
