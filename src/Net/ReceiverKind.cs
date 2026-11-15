@@ -62,7 +62,8 @@ public static class ReceiverKinds
     public static string Label(ReceiverKind kind) => kind switch
     {
         ReceiverKind.HomePod => "",
-        ReceiverKind.AppleTv => L.T("Apple TV（实验性）"), // experimental since 1.1
+        // 2026-11-14: the maintainer heard an Apple TV play through its home-theater HomePods, so no label any more.
+        ReceiverKind.AppleTv => L.T("Apple TV"),
         ReceiverKind.AppleAirPlay1 or ReceiverKind.ThirdPartyAirPlay1 => L.T("AirPlay 1 · 兼容模式（实验性）"), // experimental since 1.1
         ReceiverKind.ThirdPartyAirPlay2 => L.T("AirPlay 2 · 第三方（实验性，未在实机上测试）"), // experimental since 1.1
         _ => L.T("未知 AirPlay 设备（实验性）"), // experimental since 1.1

@@ -467,7 +467,8 @@ public class SpeakerInfoTests
 
         panel.PageShown();
         var texts = Texts(panel);
-        Assert.Single(texts, t => t.Contains(ReceiverKinds.Label(ReceiverKind.AppleTv)));
+        // Exact: since 2026-11-14 the label is plain 「Apple TV」, which the model line contains too.
+        Assert.Single(texts, t => t == ReceiverKinds.Label(ReceiverKind.AppleTv));
         Assert.DoesNotContain(realtime, texts); // not connected: no 连接协议 line, and no line saying so
 
         protocol = ReceiverProtocol.AirPlay2Realtime;
