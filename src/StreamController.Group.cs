@@ -209,6 +209,7 @@ public sealed partial class StreamController
         EffectiveLatencyMs = Math.Max(SafeLatency(latencyMs), (_groupArrivalToRenderMs ?? 0) + SafetyMarginMs);
         if (EffectiveLatencyMs != latencyMs)
             Log.Warn($"latency {latencyMs} ms is below what the speakers can handle; using {EffectiveLatencyMs} ms");
+        if (run.Source == null) FitFifoTo(EffectiveLatencyMs);
         // One groupUUID per connection, shared by every member's session (see GroupPlan).
         var options = new StreamOptions(EffectiveLatencyMs, null)
         {
