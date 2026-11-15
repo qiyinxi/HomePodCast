@@ -50,10 +50,9 @@ internal sealed class SettingsPage : ScrollPage
         var theme = new SettingRow(Glyph.Appearance, L.T("外观"), L.T("浅色或深色；默认跟随 Windows。"), _theme);
         var autostart = _autostartRow = new SettingRow(Glyph.Power, L.T("开机自动启动"), L.T(AutostartText), _autostart);
         var autoconnect = new SettingRow(Glyph.Sync, L.T("启动后自动连接"), L.T("启动时连接上次用的音箱。"), _autoconnect);
-        // Experimental until it has been tried on a real Apple TV (AGENTS.md: a hardware-untested label, not a version
-        // one): whether the Apple TV takes its HomePod back after we disconnect is still unverified.
-        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）");
-        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时（实验性）"), "", _homeTheater);
+        // No longer experimental (maintainer, 2026-11-14): the home theater has been used on the real Apple TV.
+        _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时");
+        _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
         // 夜间自动断开 (NightDisconnectPolicy); the window and the idle time show while it is on.
         var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开（实验性）"), // experimental since 1.1
             L.T("关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；" +
