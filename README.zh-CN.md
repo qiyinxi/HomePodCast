@@ -6,7 +6,7 @@
 
 TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实现的原生 C# 版本，单个 exe 约 350 KB，不需要虚拟声卡。
 
-## 支持的输出——实验性
+## 支持的输出
 
 第三方接收端主要用于听音乐。AirPlay 1 兼容模式和第三方 AirPlay 2 均为实验性；第三方 AirPlay 2 **没有在实机上测试过**。除非打开 5.1 环绕声，HomePod 原有的瞬时配对、NTP、实时 PCM 和场景设置保持原行为。
 

@@ -6,7 +6,7 @@ Streams your Windows PC's sound to a HomePod over AirPlay 2 in real time: a low-
 
 TuneBlade no longer makes a sound on HomePod software 27. HomePodCast is a native C# implementation written from scratch: a single exe of about 350 KB, no virtual sound card needed.
 
-## Supported outputs — experimental
+## Supported outputs
 
 Third-party receivers are intended mainly for music. AirPlay 1 compatibility and third-party AirPlay 2 are experimental; third-party AirPlay 2 has **not been tested on real hardware**. HomePod's existing transient pairing, NTP, realtime PCM and scene settings are unchanged unless 5.1 surround is turned on.
 
