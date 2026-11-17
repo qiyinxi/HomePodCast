@@ -5,12 +5,9 @@ using HomePodCast.Protocol;
 
 namespace HomePodCast.Net;
 
-// experimental since 1.4
-// An experiment for one question (`stream --ptp-realtime --apple-tv`): does an Apple TV whose output is its home-theater
-// HomePods pass on a realtime (type 96) stream when the session is timed with PTP, as an Apple sender's is? 2026-11-12:
-// with NTP timing the realtime stream, and with PTP timing the buffered one (AirPlayClient.Surround.cs), it accepts
-// everything and plays nothing; this is the combination that was left. The session follows the Apple TV's own PTP clock,
-// as the 5.1 path does, and writes its sync packets in that timeline. Nothing in the app uses it.
+// Apple TV realtime (type 96) follows the receiver's PTP timeline. 2026-11-14: the maintainer verified low-latency
+// playback through an Apple TV 4K's home-theater HomePods with the modern stream-connections setup. ConnectAsync uses
+// this path for modern Apple TVs; the CLI entry point also supports the earlier setup for protocol investigations.
 public sealed partial class AirPlayClient
 {
     internal static async Task<AirPlayClient> ConnectAppleTvPtpRealtimeAsync(IPAddress host, int port, StreamOptions options,

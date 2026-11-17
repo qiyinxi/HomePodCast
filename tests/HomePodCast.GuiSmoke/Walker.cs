@@ -345,8 +345,7 @@ internal sealed partial class Walker
 
         Navigate("设置");
         Dialog("hotkeys", Button("快捷键…"), "全局快捷键", "关闭", CheckHotkeys);
-        Navigate("首页");
-        Uia.Invoke(Button("管理配置"));
+        Navigate("使用配置");
         WaitUntil(() => TryPagePane(Uia.Snapshot(MainWindow()), "使用配置") != null, "profile management page", 8000);
         Layout(Uia.Snapshot(MainWindow()), "使用配置");
         CheckThemeSwitch();

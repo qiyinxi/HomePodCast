@@ -6,14 +6,14 @@
 
 TuneBlade 在 HomePod 软件 27 上已经无法出声；HomePodCast 是从头实现的原生 C# 版本，单个 exe 约 350 KB，不需要虚拟声卡。
 
-## 支持的输出——实验性
+## 支持的输出
 
 第三方接收端主要用于听音乐。AirPlay 1 兼容模式和第三方 AirPlay 2 均为实验性；第三方 AirPlay 2 **没有在实机上测试过**。除非打开 5.1 环绕声，HomePod 原有的瞬时配对、NTP、实时 PCM 和场景设置保持原行为。
 
 | 输出类型 | 连接方式 | 验证情况 |
 | --- | --- | --- |
 | HomePod | AirPlay 2 低延迟；5.1 环绕声走缓冲 AirPlay 2（1.4 起实验性） | 一台 HomePod 第二代实机（5.1：只用测试音验证过协议和声道） |
-| Apple TV HD / 4K | PIN 配对后的 AirPlay 2 低延迟 | 假接收端；未实机验证 |
+| Apple TV HD / 4K | PIN 配对后的 AirPlay 2 低延迟 | 2026-11-14 已实测 Apple TV 4K 第三代及家庭影院 HomePod；其他型号用假接收端验证 |
 | 较老的 Apple AirPlay 接收端 | AirPlay 1 兼容 | CI 中的 shairport-sync；未实机验证 |
 | 第三方 AirPlay 2 | 低延迟 → 已广播的 AirPlay 1 → 缓冲；记住成功方式 | CI 中的 shairport-sync AirPlay 2 + nqptp；未实机验证 |
 | 第三方 AirPlay 1 | AirPlay 1 兼容 | CI 中的经典 shairport-sync |

@@ -403,6 +403,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - **airplay-compat-e2e / aac-fixture**：经典 shairport-sync 的未加密、RSA 与密码场景，以及 shairport-sync AirPlay 2 + nqptp 的实时和 1.0 / 1.5 / 2.0 秒缓冲场景；Windows Media Foundation 生成 AAC，独立解码作参考，对齐后逐样本比较至少 6 秒，检查无缺口与请求延迟 ±50 ms。
 - **ReceiverLatencySelectionTests / ThirdPartyTests / BufferedAudioTests / PtpTests**：每设备设置、HomePod 场景隔离、协议回退、接收端延迟下限、加密帧、配对、时钟选举和校准回调；**gui-smoke** 增加中英德兼容延迟与设置行的页面遍历。
+- **AppleTvPresentationTests / PtpTimelineTests**：Apple TV 的 PTP 会话显示首页实际延迟、缓冲、音箱处理、重传和已推送时长，断开后清空；重传统计只计接收端的有效请求和成功回复。Apple TV 延迟标题和协议不带实验性标注，首页不再放「管理配置」，配置从左侧「使用配置」进入。
 
 
 每次 CI 构建都跑，失败时构建不通过、标签不发布；作业日志里每项检查一行，失败时看作业摘要和它的工件（`gui-screenshots`、`msi-e2e-logs`、`update-e2e-logs`、`msix-e2e-logs`、`extension-e2e-screenshots`）。细节见 `docs/RELEASING.md`。「实机确认过」写的是以前在真实设备上确认的日期。
