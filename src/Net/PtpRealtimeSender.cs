@@ -35,6 +35,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private Thread? _sender;
     private Task _resends = Task.CompletedTask;
     private long _packets;
+    private long _retransmitted, _retransmitRequests;
     private int _disposed;
     private long? _startAt;
     private ReceiverPcmReader? _readAudio;
@@ -49,6 +50,8 @@ internal sealed class PtpRealtimeSender : IDisposable
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public long StartedAt { get; private set; }
     public long PacketsSent => Interlocked.Read(ref _packets);
+    public long Retransmitted => Interlocked.Read(ref _retransmitted);
+    public long RetransmitRequests => Interlocked.Read(ref _retransmitRequests);
     public Action<long>? OnsetSent { get; set; }
     public event Action<Exception>? Failed;
 
@@ -58,7 +61,7 @@ internal sealed class PtpRealtimeSender : IDisposable
         : this(local, peer, dataPort, controlPort, control, key, ssrc, latency, alac, fifo, effects,
             new PtpTimeline(clock.TimeAt, () => clock.ClockId, () => clock.IsMaster), modernStream) { }
 
-    /// <summary>The same stream on a timeline that is not this PC's own clock (the Apple TV experiment follows the receiver's).</summary>
+    /// <summary>The same stream on a timeline that is not this PC's own clock (Apple TV follows the receiver's).</summary>
     public PtpRealtimeSender(IPAddress local, IPAddress peer, int dataPort, int controlPort, UdpClient control,
         byte[] key, uint ssrc, int latency, bool alac, AudioFifo fifo, IAudioEffect? effects, PtpTimeline clock,
         bool modernStream = false)
@@ -226,12 +229,14 @@ internal sealed class PtpRealtimeSender : IDisposable
                     || (request.Buffer[1] & 0x7f) != 0x55) continue;
                 ushort begin = BinaryPrimitives.ReadUInt16BigEndian(request.Buffer.AsSpan(4));
                 int count = Math.Min(64, (int)BinaryPrimitives.ReadUInt16BigEndian(request.Buffer.AsSpan(6)));
+                Interlocked.Add(ref _retransmitRequests, count);
                 for (int i = 0; i < count; i++)
                 {
                     byte[]? packet; lock (_history) _history.TryGetValue(unchecked((ushort)(begin + i)), out packet);
                     if (packet == null) continue;
                     byte[] reply = [0x80, 0xd6, packet[2], packet[3], .. packet];
                     await _control.SendAsync(reply, request.RemoteEndPoint, _stop.Token);
+                    Interlocked.Increment(ref _retransmitted);
                 }
             }
         }

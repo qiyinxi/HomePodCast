@@ -5,6 +5,14 @@ namespace HomePodCast.Tests;
 
 public class ReceiverLatencySelectionTests
 {
+    [Fact]
+    public void Apple_tv_realtime_is_supported_while_third_party_protocols_keep_their_warning()
+    {
+        Assert.Equal(L.T("AirPlay 2 低延迟"), ReceiverProtocols.Label(ReceiverProtocol.AirPlay2Realtime, ReceiverKind.AppleTv));
+        Assert.Equal(L.T("AirPlay 2 低延迟"), ReceiverProtocols.Label(ReceiverProtocol.AirPlay2Realtime, ReceiverKind.HomePod));
+        Assert.Equal(L.T("AirPlay 2 低延迟（实验性）"), ReceiverProtocols.Label(ReceiverProtocol.AirPlay2Realtime, ReceiverKind.ThirdPartyAirPlay2));
+    }
+
     private static AirPlayDevice Device(string model, bool modern = false) => new("Test", model, IPAddress.Loopback,
         7001, model, new Dictionary<string, string> { ["srcvers"] = modern ? "366.0" : "220.68" });
 

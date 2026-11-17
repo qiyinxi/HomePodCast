@@ -24,7 +24,7 @@ internal sealed class ReceiverLatencyPanel : StackPanel
         _compatibility.Items.AddRange(ReceiverLatencies.CompatibilityChoices.Select(ms => L.F("{0:F1} 秒", ms / 1000.0)));
         _compatibility.AccessibleName = L.T("兼容模式延迟（实验性）"); // experimental since 1.1
         _choice = new SettingRow(Glyph.Sync, L.T("兼容模式延迟（实验性）"), "", _compatibility); // experimental since 1.1
-        _realtime.AccessibleName = L.T("设备延迟（实验性）"); // experimental since 1.1
+        _realtime.AccessibleName = L.T("设备延迟");
         Controls.AddRange([_protocol, _value, _choice, _realtime, _hint, _warning, _lag]);
         _compatibility.SelectionChangeCommitted += (_, _) =>
         {
@@ -61,7 +61,7 @@ internal sealed class ReceiverLatencyPanel : StackPanel
         _loading = true;
         if (_device != selection.Device.DeviceId) { _wait.Stop(); _pendingDevice = null; }
         _device = selection.Device.DeviceId;
-        _protocol.Text = ReceiverKinds.Label(selection.Device.Kind) + " · " + ReceiverProtocols.Label(selection.Protocol);
+        _protocol.Text = ReceiverKinds.Label(selection.Device.Kind) + " · " + ReceiverProtocols.Label(selection.Protocol, selection.Device.Kind);
         if (_pendingDevice == null || selection.Compatibility)
         {
             _value.Text = $"{selection.Value} ms";

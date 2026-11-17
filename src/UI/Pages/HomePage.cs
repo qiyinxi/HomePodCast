@@ -207,16 +207,12 @@ internal sealed class HomePage : ScrollPage
         _latency.AccessibleName = L.T("延迟");
         var number = Ui.Row(12, _latencyHint, _latencyValue, _latencyHint);
         var slider = Ui.Row(4, _latency, minus, _latency, plus);
-        // 管理配置 in the header: in the picker's row it left the picker 「Pr…」 wide in German (the GUI smoke test's screenshots).
-        var manage = new FluentButton(L.T("管理配置"), ButtonKind.Subtle);
         var header = _sceneHeader = Ui.Header(L.T("场景"));
-        var head = Ui.Row(8, header, header, manage);
         var profiles = Ui.Row(8, _profiles, _profiles, _profileApply);
         _homePodLatency = Ui.Stack(10, _scenes, profiles, number, _lag, slider, _movieHint);
         _receiverLatency = new ReceiverLatencyPanel(_app);
         _receiverLatency.LatencyChanged += () => { ShowLatency(); LatencyChanged?.Invoke(); _app.KickPlayers(); };
-        var card = Ui.Card(head, _homePodLatency, _receiverLatency, _destinationLatency);
-        manage.Click += (_, _) => _app.ShowProfiles(FindForm()!);
+        var card = Ui.Card(header, _homePodLatency, _receiverLatency, _destinationLatency);
         _profileApply.Click += (_, _) =>
         {
             if (_profiles.SelectedIndex >= 0 && _profiles.SelectedIndex < _profileIds.Length)
@@ -442,9 +438,9 @@ internal sealed class HomePage : ScrollPage
                 L.F("此去处的延迟可在「{0}」逐个调整。", L.T("混音器")) : "";
         if (scopedGroup && _app.Controller.Capture?.ExtraLatencyMs is > 0)
             _destinationLatency.Text += "\n" + L.F("按程序采集额外延迟约 {0} ms。", Audio.RoutedCapture.RoutedExtraLatencyMs);
-        _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟（实验性）"); // experimental since 1.1
+        _sceneHeader.Text = selection == null ? L.T("场景") : L.T("设备延迟");
         if (scopedGroup) _sceneHeader.Text = L.T("各去处状态（实验性）"); // experimental since 1.3
-        _sceneHeader.Wrap = selection != null; // Long receiver labels share the header with 管理配置.
+        _sceneHeader.Wrap = selection != null;
         int ms = selection?.Value ?? (scopedGroup ? cfg.LatencyMs : _tuner.Value);
         _latency.Value = _tuner.Value;
         _scenes.SelectedIndex = Array.IndexOf(Scenes.All, cfg.Scene);
@@ -633,7 +629,7 @@ internal sealed class HomePage : ScrollPage
 #endif
         var c = _app.Controller;
         ShowGroupOutputStatus();
-        var s = c.ActiveSender;
+        var retransmissions = c.RetransmissionStats;
         bool streaming = c.AudioSessionIdentity != null && c.State == StreamState.Streaming;
         bool live = streaming && c.HealthWatched && _app.ReceiverSelection == null; // a single speaker or a stereo pair: the network is watched
         int arrivalToRender = c.SpeakerProcessingMs; // the speaker's own time, as the floor assumes it (a group: its slowest member's)
@@ -678,7 +674,7 @@ internal sealed class HomePage : ScrollPage
             ? (_app.ReceiverSelection != null ? c.ReceiverSession?.ArrivalToRenderMs ?? c.Client?.ArrivalToRenderMs : c.ArrivalToRenderMs)?.ToString()
             : null);
         _effective.SetValue(streaming ? c.EffectiveLatencyMs.ToString() : null);
-        _resent.SetValue(streaming && s != null ? $"{s.Retransmitted}/{s.RetransmitRequests}" : null);
+        _resent.SetValue(streaming && retransmissions is { } stats ? $"{stats.Sent}/{stats.Requested}" : null);
         ShowNetwork(verdict, live);
         ShowPcSound();
     }

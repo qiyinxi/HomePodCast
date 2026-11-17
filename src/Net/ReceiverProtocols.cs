@@ -18,6 +18,10 @@ public static class ReceiverProtocols
         return protocols;
     }
 
+    public static string Label(ReceiverProtocol protocol, ReceiverKind kind) =>
+        protocol == ReceiverProtocol.AirPlay2Realtime && kind is ReceiverKind.HomePod or ReceiverKind.AppleTv
+            ? L.T("AirPlay 2 低延迟") : Label(protocol);
+
     public static string Label(ReceiverProtocol protocol) => protocol switch
     {
         ReceiverProtocol.Auto => L.T("自动"),

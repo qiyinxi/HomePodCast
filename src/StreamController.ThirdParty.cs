@@ -14,7 +14,8 @@ public sealed partial class StreamController
     internal Func<CancellationToken, Task<List<AirPlayDevice>>>? BrowseReceivers { get; set; }
     public event Action<string, ReceiverProtocol, int?>? ReceiverProtocolConnected;
     public ReceiverProtocol? ActiveProtocol => _receiverSession?.Protocol
-        ?? (_raopClient != null ? ReceiverProtocol.Raop : ActiveSender != null ? ReceiverProtocol.AirPlay2Realtime : null);
+        ?? (_raopClient != null ? ReceiverProtocol.Raop
+            : ActiveSender != null || _client?.PtpRealtime != null ? ReceiverProtocol.AirPlay2Realtime : null);
 
     private bool UsesThirdPartyPath(AirPlayDevice? device)
     {
