@@ -802,9 +802,14 @@ internal sealed class HomePage : ScrollPage
     internal const int HomeTheaterLatencyMs = 300;
 
     /// <summary>Shown as soon as such a HomePod streams below <see cref="HomeTheaterLatencyMs"/>, before any dropout.</summary>
+    /// <remarks>
+    /// The way out it names (here and in <see cref="NetworkHintText"/>) is the Apple TV itself in the speaker list: since
+    /// 2026-11-14 a stream to the Apple TV plays through these HomePods at low latency. Until 2026-11-26 it said to set
+    /// the Apple TV's audio output back to the TV, which gives the home theater up; the maintainer asked for this instead.
+    /// </remarks>
     internal static string HomeTheaterNotice(string speaker, string appleTv) =>
         L.F("{0}是 Apple TV「{1}」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 {2} ms 时可能断音。" +
-            "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 {2} ms", speaker, appleTv, HomeTheaterLatencyMs)
+            "在音箱列表里改选「{1}」直接连接 Apple TV 最管用，也可以把延迟调到 {2} ms", speaker, appleTv, HomeTheaterLatencyMs)
             .Replace(" ms", " ms");
 
     /// <summary>
@@ -825,9 +830,9 @@ internal sealed class HomePage : ScrollPage
         {
             (_, { } ms) when homeTheater => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms。" +
                                                 "这台 HomePod 是 Apple TV「{2}」的家庭影院音箱，它们之间的连接会定时占用 Wi-Fi，" +
-                                                "在 Apple TV 上把音频输出改回电视更管用", n, ms, homeTheaterTv),
+                                                "在音箱列表里改选「{2}」直接连接 Apple TV 更管用", n, ms, homeTheaterTv),
             (_, null) when homeTheater => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次）。这台 HomePod 是 Apple TV「{1}」" +
-                                              "的家庭影院音箱，它们之间的连接会定时占用 Wi-Fi：在 Apple TV 上把音频输出改回电视最管用", n, homeTheaterTv),
+                                              "的家庭影院音箱，它们之间的连接会定时占用 Wi-Fi：在音箱列表里改选「{1}」直接连接 Apple TV 最管用", n, homeTheaterTv),
             (NetworkHop.Speaker, { } ms) => L.F("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms。" +
                                                  "HomePod 如果连在 2.4G 上，改连 5G 更管用", n, ms),
             (NetworkHop.Pc, { } ms) => L.F("电脑这边的 Wi-Fi 最近不太稳（10 分钟内可能断音 {0} 次），建议把延迟调到 {1} ms", n, ms),
