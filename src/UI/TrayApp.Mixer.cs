@@ -102,6 +102,7 @@ internal sealed partial class TrayApp
         controller.CompatibilityLatency = id => controller.ReceiverSettings(id)?.CompatibilityLatencyMs ?? 2000;
         controller.ReceiverPassword = id => RaopPassword.Unprotect(id, Config.RaopPasswordsProtected.GetValueOrDefault(RaopPassword.Key(id)));
         controller.CapturedOutputId = () => CaptureEndpoint.Captured(Routing.CaptureDeviceId, _knownDefaultOutputId);
+        UseFifoMemory(controller); // a controller made here starts its FIFO from the remembered target too
         // 5.1 环绕声 (experimental since 1.4): only a single speaker played alone. The hub and the routing are read when a
         // connect attempt asks, and the capture reads the device choice and per-app routing live: routing turned on
         // mid-session changes no signature, so the 5.1 capture has to notice it itself (and end the session).
@@ -122,6 +123,7 @@ internal sealed partial class TrayApp
             // The startup controller's are wired in InitFirewall and InitTakeover; one made here needs its own.
             WatchFirewall(controller, () => config.Host);
             WatchOwnSession(controller);
+            WatchFifoTarget(controller);
             controller.HostResolved += host =>
             {
                 config.Host = host;

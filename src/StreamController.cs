@@ -61,14 +61,73 @@ public sealed partial class StreamController : IDisposable
     internal static int FifoCeilingFor(int latencyMs, int fifoTargetMs) =>
         Math.Max(fifoTargetMs, Math.Clamp(latencyMs / 2, MaxFifoTargetMs, FifoCeilingMs));
 
-    /// <summary>The FIFO's ceiling for the connection about to start (see <see cref="FifoCeilingFor"/>).</summary>
-    private void FitFifoTo(int latencyMs)
+    /// <summary>
+    /// The FIFO's ceiling for the connection about to start (see <see cref="FifoCeilingFor"/>), and within it the target
+    /// an earlier run learned (<see cref="RestoreFifoTarget"/>).
+    /// </summary>
+    internal void FitFifoTo(int latencyMs)
     {
         int ms = FifoCeilingFor(latencyMs, (int)Math.Round(_fifo.BaseTargetFrames * 1000.0 / RtpSender.SampleRate));
-        if (ms * RtpSender.SampleRate / 1000 == _fifo.MaxTargetFrames) return;
-        _fifo.SetMaxTarget(ms * RtpSender.SampleRate / 1000);
-        Log.Info($"fifo: may grow to {ms} ms on dropouts (latency {latencyMs} ms)");
+        if (ms * RtpSender.SampleRate / 1000 != _fifo.MaxTargetFrames)
+        {
+            _fifo.SetMaxTarget(ms * RtpSender.SampleRate / 1000);
+            Log.Info($"fifo: may grow to {ms} ms on dropouts (latency {latencyMs} ms)");
+        }
+        RestoreFifoTarget();
     }
+
+    /// <summary>
+    /// What the capture takes its sound from, as the name the learned FIFO target is remembered under (the app: the
+    /// captured output device's id). The late packets that grow the target are that device's, so another device never
+    /// inherits its buffer. Null (nobody remembers, or no device is known): nothing is restored or reported.
+    /// </summary>
+    public Func<string?>? FifoMemoryKey { get; set; }
+
+    /// <summary>The FIFO target (ms) remembered for a <see cref="FifoMemoryKey"/>, or null. Called on the stream's thread.</summary>
+    public Func<string, int?>? RememberedFifoTargetMs { get; set; }
+
+    private volatile string? _fifoKey; // the capture device the FIFO's target belongs to
+
+    /// <summary>
+    /// Before a connection's sender starts: the FIFO starts from the target remembered for the capture device, as far as
+    /// its ceiling allows, instead of learning it again from audible dropouts. 2026-11-26, the maintainer's log (a
+    /// virtual sound card, an Apple TV at 100 ms): the target had reached its 50 ms ceiling; after the restart for an
+    /// update two dropouts in the session's first minute and a half took it from 16 to 20 and 24 ms, as after the
+    /// restart before. A capture device other than the one the target was learned on starts from the configured
+    /// target, or from its own remembered one.
+    /// </summary>
+    internal void RestoreFifoTarget()
+    {
+        if (FifoMemoryKey?.Invoke() is not { Length: > 0 } key) return;
+        if (_fifoKey is { } learnedOn && !SameFifoKey(learnedOn, key))
+        {
+            if (_fifo.TargetFrames > _fifo.BaseTargetFrames)
+                Log.Info($"fifo: another capture device, so not the {_fifo.TargetMs:F0} ms learned on the one before");
+            _fifo.ForgetLearnedTarget();
+        }
+        _fifoKey = key;
+        if (RememberedFifoTargetMs?.Invoke(key) is { } ms && _fifo.RestoreTarget(ms * RtpSender.SampleRate / 1000))
+            Log.Info($"fifo: starts at {_fifo.TargetMs:F0} ms, learned from this capture device's dropouts earlier ({ms} ms remembered)");
+    }
+
+    /// <summary>
+    /// What to remember: the stereo FIFO's target (ms) and the capture device it belongs to; 0 ms while it is at the
+    /// configured target (nothing learned, or relaxed all the way back). Null before the first connection, and while
+    /// another device is captured than at the last connect: whose late packets grew it since is not known.
+    /// </summary>
+    public (string Key, int TargetMs)? LearnedFifoTarget
+    {
+        get
+        {
+            if (_fifoKey is not { } key || !SameFifoKey(key, FifoMemoryKey?.Invoke())) return null;
+            int frames = _fifo.TargetFrames;
+            return (key, frames > _fifo.BaseTargetFrames ? (int)Math.Round(frames * 1000.0 / RtpSender.SampleRate) : 0);
+        }
+    }
+
+    // Endpoint ids from different Windows APIs may differ in case (Audio.CaptureEndpoint.Same).
+    private static bool SameFifoKey(string a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
     private readonly object _lock = new();
     private ICaptureSource? _capture;
     private AirPlayClient? _client;

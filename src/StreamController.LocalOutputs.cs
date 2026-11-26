@@ -50,6 +50,7 @@ public sealed partial class StreamController
         run.TookOver = await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(run.Trigger, run.Streamed, run.EndedBySpeaker), run.Key,
             required.Select(m => new BusyTarget(m.DeviceId, m.Label, m.Address, m.Port)).ToList(), ct, run.EndedBySpeaker, run.TakenFrom);
         EnsureCapture(ct);
+        RestoreFifoTarget(); // within the ceiling the FIFO has: this path sets none (FitFifoTo)
         LocalOutputSet? locals = null;
         RaopOutputSet? raops = null;
         DlnaOutputSet? dlnas = null;

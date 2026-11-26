@@ -93,6 +93,34 @@ public class MixerControllerWiringTests
         Assert.False(config.LastOwnSession!.Clean);
     }
 
+    [Fact]
+    public async Task Another_speakers_fifo_starts_from_the_remembered_target_and_its_sessions_end_saves_what_it_learned()
+    {
+        // 2026-11-26: a controller made for a destination is new at every connect, like the startup one at every start.
+        const string card = "{0.0.0.00000000}.{1111cccc-2222-3333-4444-5555dddd5555}";
+        var config = MixerRoutingV2Tests.Speaker();
+        config.CaptureDeviceId = card;
+        config.RememberFifoTarget(card, 40);
+        var (_, mixer, created) = await SwitchToAnotherSpeaker(config);
+        await using var ownedMixer = mixer;
+
+        created.FitFifoTo(100); // its connection: up to 50 ms
+        Assert.Equal(44100 * 40 / 1000, created.Fifo.TargetFrames);
+
+        SetState(created, StreamState.Streaming);
+        Raise(created, nameof(StreamController.Changed));
+        created.Fifo.RestoreTarget(44100 * 46 / 1000); // where two more dropouts would have left it
+        Raise(created, nameof(StreamController.Changed)); // still streaming (a volume change): nothing to save yet
+        Assert.Equal(40, config.FifoLearnedTargetFor(card));
+
+        SetState(created, StreamState.Idle); // disconnected: the mixer lets this controller go
+        Raise(created, nameof(StreamController.Changed));
+        Assert.Equal(46, config.FifoLearnedTargetFor(card));
+    }
+
+    private static void SetState(StreamController controller, StreamState state) =>
+        typeof(StreamController).GetProperty(nameof(StreamController.State))!.SetValue(controller, state);
+
     /// <summary>The app's own watch of Controller's session (InitTakeover), without its minute's timer.</summary>
     private static void StartTakeover(TrayApp app)
     {

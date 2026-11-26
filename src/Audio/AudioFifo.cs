@@ -220,7 +220,8 @@ public sealed partial class AudioFifo
         Underruns++;
         if (MaxTargetFrames <= 0) return;
         // Measured 2026-10-08: relaxing from 16 back to 15 ms dropped out again 10 minutes later. Remember the
-        // level that failed and stay at least 2 ms above it for the rest of the session.
+        // level that failed and stay at least 2 ms above it for the rest of the session. (The target itself is
+        // remembered across runs, see RestoreTarget; the floor is not.)
         _floorFrames = Math.Min(Math.Max(_floorFrames, TargetFrames + 2 * _msFrames), MaxTargetFrames);
         // Grow by what was missing, at least GrowMs. 2026-11-15: Windows delivered nothing for 26 to 100 ms a few times
         // an hour; at 4 ms a dropout the target would have needed dozens of them to cover one.
@@ -240,6 +241,41 @@ public sealed partial class AudioFifo
             MaxTargetFrames = Math.Max(frames, BaseTargetFrames);
             _floorFrames = Math.Min(_floorFrames, MaxTargetFrames);
             if (TargetFrames > MaxTargetFrames) SetTarget(MaxTargetFrames);
+        }
+    }
+
+    /// <summary>
+    /// Starts a connection from a target learned in an earlier run (StreamController.RestoreFifoTarget): never above
+    /// <see cref="MaxTargetFrames"/>, and only ever upward, so it never undoes what this run learned or relaxed to. No
+    /// floor comes with it: it relaxes like a target that grew here. 2026-11-26: every start began at the base again,
+    /// and a virtual sound card that needs 50 ms replayed its dropouts (16 → 20 → 24 ms in a session's first two
+    /// minutes) after each update or restart. Called before the connection's sender reads: it primes to the new target.
+    /// </summary>
+    /// <returns>True when the target was raised.</returns>
+    public bool RestoreTarget(int frames)
+    {
+        lock (_lock)
+        {
+            frames = Math.Min(frames, MaxTargetFrames); // not adaptive (0): nothing to restore
+            if (frames <= TargetFrames) return false;
+            SetTarget(frames);
+            _cleanReads = 0;
+            _priming = true;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Back to the configured target, with no floor: what was learned belonged to another capture device (see
+    /// <see cref="RestoreTarget"/>). Called before a connection's sender reads.
+    /// </summary>
+    public void ForgetLearnedTarget()
+    {
+        lock (_lock)
+        {
+            _floorFrames = 0;
+            _cleanReads = 0;
+            if (TargetFrames != BaseTargetFrames) SetTarget(BaseTargetFrames);
         }
     }
 

@@ -45,6 +45,7 @@ public sealed partial class StreamController
                 await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key,
                     [new BusyTarget(device.DeviceId, device.Name, device.Address, device.Port)], ct);
                 EnsureCapture(ct);
+                RestoreFifoTarget(); // within the ceiling the FIFO has: this path sets none (FitFifoTo)
                 var options = new ReceiverConnectOptions(250, Muted ? 0 : Volume, VolumeCapPercent, Pairings,
                     ReceiverPassword?.Invoke(device.DeviceId), Effects, Log.Info) { TimingPorts = ReceiverTimingPorts };
                 var session = await ThirdPartyConnections.ConnectAsync(device, ReceiverSettings?.Invoke(device.DeviceId), options, _fifo, ct,
