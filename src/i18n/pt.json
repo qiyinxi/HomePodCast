@@ -446,7 +446,7 @@
   "音箱校准失败：{0}": "Falha de calibração: {0}",
   "影院播放失败：{0}": "Falha de reprodução de cinema: {0}",
   "系统默认": "Predefinição do sistema",
-  "夜间自动断开（实验性）": "Desligar à noite (experimental)",
+  "夜间自动断开": "Desligar à noite",
   "关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。": "Para quando os ecrãs estão desligados mas o PC continua ligado: no horário abaixo, o HomePod é desligado quando o teclado, o rato e o som ficam inativos durante algum tempo, para que outros dispositivos o possam usar. No fim do horário volta a ligar-se, como a ligação automática ao iniciar: nunca interrompe um dispositivo que esteja a reproduzir.",
   "开始时间": "Início",
   "结束时间": "Fim",

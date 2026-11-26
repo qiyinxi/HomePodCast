@@ -54,7 +54,7 @@ internal sealed class SettingsPage : ScrollPage
         _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时");
         _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
         // 夜间自动断开 (NightDisconnectPolicy); the window and the idle time show while it is on.
-        var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开（实验性）"), // experimental since 1.1
+        var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开"), // no longer experimental (maintainer, 2026-11-26; first released in 1.1)
             L.T("关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；" +
                 "时段结束时自动重新连接，和启动时自动连接一样，不会抢正在播放的设备。"), _night);
         foreach (var time in NightDisconnectPolicy.TimeChoices)
