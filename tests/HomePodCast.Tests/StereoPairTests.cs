@@ -36,7 +36,7 @@ public class StereoPairTests
         Assert.Equal("pair:" + Tsid, pair.DeviceId);
         Assert.True(StereoPairs.TryGetTsid(pair.DeviceId, out var tsid));
         Assert.Equal(Tsid, tsid);
-        Assert.Contains("实验性", pair.Model);
+        Assert.Equal(L.T("立体声对"), pair.Model); // no longer 「立体声对 · 实验性」 (maintainer, 2026-11-26)
         Assert.Same(Standalone, list.Single(d => d.Name == "卧室")); // the single HomePod is untouched
 
         // Members come back in a stable order (by device id) whatever order mDNS answered in.
