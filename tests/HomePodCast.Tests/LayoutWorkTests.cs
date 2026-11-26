@@ -448,10 +448,11 @@ public class LayoutWorkTests
         var inputs = All(after.Page).Where(control => LogicalLayout.IsInput(control) && control.IsHandleCreated).ToArray();
         output.WriteLine($"Settings: {Handles(before.Page)} -> {Handles(after.Page)} HWNDs, {panels.Length} logical panels, {inputs.Length} created native inputs");
         // 音频 → 5.1 环绕声 (experimental since 1.4, moved here from 首页): one more row and input, natively two more windows.
-        Assert.Equal(23, Handles(before.Page));
-        Assert.Equal(12, Handles(after.Page));
-        Assert.Equal(14, panels.Length);
-        Assert.Equal(10, inputs.Length);
+        // 常规 → Apple TV 无声时断开 (experimental since 1.5): the same again.
+        Assert.Equal(25, Handles(before.Page));
+        Assert.Equal(13, Handles(after.Page));
+        Assert.Equal(15, panels.Length);
+        Assert.Equal(11, inputs.Length);
         Assert.All(panels, panel => { Assert.True(panel.ParentPainted); Assert.False(panel.IsHandleCreated); });
         Assert.All(inputs, input => Assert.Same(after.Page.Content, input.Parent));
         Assert.Equal(2 + inputs.Length, Handles(after.Page));

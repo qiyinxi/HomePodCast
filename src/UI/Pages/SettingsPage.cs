@@ -20,6 +20,7 @@ internal sealed class SettingsPage : ScrollPage
     private static readonly HomeTheaterMode[] HomeTheaterModes = [HomeTheaterMode.TakeOver, HomeTheaterMode.Ask];
     private readonly Segmented _homeTheater = new(L.T("临时接管"), L.T("先询问"));
     private readonly SettingRow _homeTheaterRow;
+    private readonly ToggleSwitch _appleTvIdle = new(); // experimental since 1.5
     private readonly ToggleSwitch _night = new();
     private readonly FluentComboBox _nightFrom = new(), _nightUntil = new(), _nightIdle = new();
     private readonly SettingRow _nightWindowRow, _nightIdleRow;
@@ -53,6 +54,10 @@ internal sealed class SettingsPage : ScrollPage
         // No longer experimental (maintainer, 2026-11-14): the home theater has been used on the real Apple TV.
         _homeTheater.AccessibleName = L.T("HomePod 当 Apple TV 家庭影院音箱时");
         _homeTheaterRow = new SettingRow(Glyph.Video, L.T("HomePod 当 Apple TV 家庭影院音箱时"), "", _homeTheater);
+        // AppleTvIdlePolicy: off unless turned on (maintainer, 2026-11-26, after a beta that had it on for everyone).
+        var appleTvIdle = new SettingRow(Glyph.Microphone, L.T("Apple TV 无声时断开（实验性）"), // experimental since 1.5
+            L.F("推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；" +
+                "重连时开头大约一秒的声音会丢。", AppleTvIdlePolicy.ClampSeconds(app.Config.AppleTvIdleReleaseSeconds)), _appleTvIdle);
         // 夜间自动断开 (NightDisconnectPolicy); the window and the idle time show while it is on.
         var night = new SettingRow(Glyph.Moon, L.T("夜间自动断开（实验性）"), // experimental since 1.1
             L.T("关屏不关机时用：在下面的时段里，键盘鼠标和声音都闲置一段时间后断开 HomePod，让其他设备可以用；" +
@@ -85,10 +90,10 @@ internal sealed class SettingsPage : ScrollPage
         var audio = Ui.Section(L.T("音频"));
         var surround = new SettingRow(Glyph.Speaker, L.T("5.1 环绕声（实验性）"), SurroundDescription(), _surround); // experimental since 1.4
 
-        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+        Content.Controls.AddRange([general, language, theme, autostart, autoconnect, _homeTheaterRow, appleTvIdle, night, _nightWindowRow, _nightIdleRow,
             sound, cap, _volumeKeysRow, _hotkeysRow, audio, surround]);
         foreach (var header in new Control[] { general, sound, audio }) Content.GapBefore[header] = 20;
-        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, night, _nightWindowRow, _nightIdleRow,
+        foreach (var row in new Control[] { language, theme, autostart, autoconnect, _homeTheaterRow, appleTvIdle, night, _nightWindowRow, _nightIdleRow,
             cap, _volumeKeysRow, _hotkeysRow, surround }) Content.GapBefore[row] = 4;
         Content.GapBefore[general] = 12;
 
@@ -132,6 +137,7 @@ internal sealed class SettingsPage : ScrollPage
             _app.SetHomeTheaterMode(HomeTheaterModes[_homeTheater.SelectedIndex]);
             ShowHomeTheater();
         };
+        _appleTvIdle.Toggled += (_, _) => _app.SetAppleTvIdleRelease(_appleTvIdle.Checked);
         _night.Toggled += (_, _) => SetNight();
         _nightFrom.SelectionChangeCommitted += (_, _) => SetNight();
         _nightUntil.SelectionChangeCommitted += (_, _) => SetNight();
@@ -280,6 +286,7 @@ internal sealed class SettingsPage : ScrollPage
         ShowAutostart();
         _autoconnect.Checked = cfg.AutoConnect;
         ShowHomeTheater();
+        _appleTvIdle.Checked = cfg.AppleTvIdleRelease;
         ShowNight();
         ShowVolumeKeys();
         ShowSoundOptions();

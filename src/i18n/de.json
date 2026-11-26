@@ -459,6 +459,8 @@
   "开始和结束时间相同，不会断开。": "Beginn und Ende sind gleich, daher wird nie getrennt.",
   "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder",
   "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Kein Ton: Apple TV vorübergehend getrennt; verbindet sich wieder, sobald Ton kommt",
+  "Apple TV 无声时断开（实验性）": "Apple TV ohne Ton trennen (experimentell)",
+  "推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；重连时开头大约一秒的声音会丢。": "Solange die App an ein Apple TV streamt, reagieren die HomePods seines Heimkinos nicht auf Siri. Wenn eingeschaltet, wird das Apple TV nach {0} Sekunden ohne Ton getrennt und wieder verbunden, sobald der PC etwas abspielt; beim Wiederverbinden geht etwa die erste Sekunde des Tons verloren.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimentell: Das drahtlose Kino wurde noch nicht mit mehreren echten HomePods getestet. Kanäle, Synchronisation und Messungen können falsch sein.",
   "音箱位置": "Lautsprecherpositionen",
   "延迟测量": "Verzögerungsmessung",

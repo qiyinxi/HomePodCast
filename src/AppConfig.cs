@@ -257,9 +257,15 @@ public sealed class AppConfig
     public int NightDisconnectIdleMinutes { get; set; } = NightDisconnectPolicy.DefaultIdleMinutes;
 
     /// <summary>
-    /// A stream to an Apple TV is ended after this many seconds without sound and connects again at the next sound
-    /// (<see cref="AppleTvIdlePolicy"/>: while the session is up, its home-theater HomePods ignore "Hey Siri"). 0: never.
+    /// Apple TV 无声时断开 (experimental since 1.5): a stream to an Apple TV is ended after
+    /// <see cref="AppleTvIdleReleaseSeconds"/> without sound and connects again at the next sound
+    /// (<see cref="AppleTvIdlePolicy"/>: while the session is up, its home-theater HomePods ignore "Hey Siri").
+    /// Off unless turned on: 1.5.0 beta 4 released for everyone, and wrote its 60 seconds into configs, so this is its own
+    /// switch and not "seconds above zero".
     /// </summary>
+    public bool AppleTvIdleRelease { get; set; }
+
+    /// <summary>The time for <see cref="AppleTvIdleRelease"/> (config.json only; 0: never).</summary>
     public int AppleTvIdleReleaseSeconds { get; set; } = AppleTvIdlePolicy.DefaultSeconds;
 
     /// <summary>
