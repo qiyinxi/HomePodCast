@@ -9,7 +9,7 @@ internal sealed partial class TrayApp
 {
     private readonly System.Windows.Forms.Timer _appleTvIdleTimer = new() { Interval = (int)AppleTvIdlePolicy.CheckInterval.TotalMilliseconds };
     private readonly Audio.OutputMeter _outputMeter = new();
-    private readonly AppleTvIdleWatch _appleTvIdle = new();
+    private AppleTvIdleWatch _appleTvIdle; // a struct that changes: not readonly (see AppleTvIdleWatch)
 
     /// <summary>The idle release ended the stream, and connects it at the next sound.</summary>
     private bool _appleTvReleased => _appleTvIdle.Released;

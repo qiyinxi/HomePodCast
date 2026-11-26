@@ -63,8 +63,10 @@ public static class AppleTvIdlePolicy
 /// one destination): a session the maintainer had just started by hand was ended 60 ms after it came up, because the
 /// connect before it was a minute old; and a stream connected that way while released would have been connected once
 /// more at the next sound.
+/// A struct, kept in a field that is not readonly: the tests build TrayApp without running its constructor
+/// (TestApp.Create), where a class's field would be null at the first connect.
 /// </summary>
-public sealed class AppleTvIdleWatch
+public struct AppleTvIdleWatch
 {
     private long? _notStreamingMs; // the last check at which the stream was not up
     private bool _stopped;         // the stream the release ended has been seen idle
