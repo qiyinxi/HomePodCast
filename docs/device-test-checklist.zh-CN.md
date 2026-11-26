@@ -141,7 +141,7 @@
 
 ### 十二、夜间自动断开（1.1 新增）
 
-设置 → 常规 →「夜间自动断开（实验性）」。测之前把「闲置多久后断开」设成 5 分钟，时段设成包含现在的一段（比如现在 22:10，就设 22:00 到 23:00）。音量不超过 25%。本节各项：改了 `src/NightDisconnectPolicy.cs`、`src/Audio/SoundActivity.cs`、`src/UI/TrayApp.NightDisconnect.cs` 或 `src/Native.cs` 的 `SinceLastInput` 才需要重测。
+设置 → 常规 →「夜间自动断开」。测之前把「闲置多久后断开」设成 5 分钟，时段设成包含现在的一段（比如现在 22:10，就设 22:00 到 23:00）。音量不超过 25%。本节各项：改了 `src/NightDisconnectPolicy.cs`、`src/Audio/SoundActivity.cs`、`src/UI/TrayApp.NightDisconnect.cs` 或 `src/Native.cs` 的 `SinceLastInput` 才需要重测。
 
 1. - [ ] 推流时关掉显示器（虚拟屏照常开着），不碰键鼠、不放声音：约 5 分钟后断开（检查每 30 秒一次，最多晚 30 秒），首页和托盘提示「夜间已自动断开，23:00 自动重新连接」，日志里有 `night disconnect: no keyboard or mouse input for … min, no sound for … min`；这时 iPhone 能直接隔空播放到 HomePod（单元测试：NightDisconnectTests；仍需实机：真实的键鼠空闲时间）
 2. - [ ] 不碰键鼠、但一直放视频或音乐：不断开；停掉播放 5 分钟后才断开（仍需实机：−60 dBFS 的门限对真实声音合不合适，很小声的背景音算不算有声音）
@@ -280,7 +280,9 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 12. - [ ] 立体声对被接管时卡顿（2026-11-10 新增）：卧室这对是 Apple TV 的家庭影院音箱，首页连上、延迟低于 300 ms：首页出现「卧室是 Apple TV「…」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi……」和「应用」（以前只有单只 HomePod 有）；点「应用」后延迟变成 300 ms，还卡吗？____。日志每分钟有一行 `group network: ping=…`，卡顿前后的几行和 `group stats` 一起发我。2026-11-10：这对音箱在 200 ms 下仍然卡，45 分钟里没有一次重发请求；从接网线的电脑每 50 ms ping 一次、连续 5 分钟，两只音箱每秒约两次同时晚回，几乎每次都超过 60 ms，超过 108 ms（200 ms 留给网络的全部）的有 27 和 32 次，最大 172 ms，Apple TV 和路由器始终 1 ms 以内，所以提示的延迟从 200 改成 300 ms。2026-11-11（1.4.0 测试版 3，500 ms 下 50 分钟）：没有重发请求；音箱晚回超过 60 ms 的有 1424 次（约每分钟 28 次），超过 108 ms 的 106 次，超过 150 ms 的 12 次，最大 173 ms，没有超过 208 ms 的；之后改成 155 ms 仍然卡，而首页没有提示：那次是程序更新后重连自己的会话，没有经过「接管」，提示只认接管。现在只要选中的音箱（或立体声对的任何一只）是某台 Apple TV 的家庭影院音箱就提示，不管这次连接有没有接管（单元测试：TakeoverControllerTests、HomeNetworkTextTests、HomeTheaterTests，立体声对有网络监测和提示、多房间分组没有；仍需实机：提示出现、300 ms 够不够）。改了 `src/StreamController.Network.cs` 的 `WatchGroupNetwork` 才需要重测
 13. - [ ] Apple TV 正在播放时去连这对（2026-11-10 新增）：Apple TV 的声音最多被打断两次，之后状态停在「卧室是 Apple TV「…」的家庭影院音箱，Apple TV 正连着它」，日志有 `takeover: the speaker closed our connection 2 times in a row`，不再每 30 秒抢一次（2026-11-07 抢了 160 次）；再点「连接」会重新试两次（单元测试：TakeoverPolicyTests、TakeoverControllerTests；仍需实机：Apple TV 的声音只断两次）
 
-#### 立体声对（等有两只 HomePod 配成立体声对时再测）
+#### 立体声对
+
+2026-11-26：维护者决定不再标「实验性」。卧室这一对从 2026-11-03 起一直在用（界面里连接，几十分钟到几小时的推流，见下面各条的日期）。下面没打勾的是当时没有专门听或没有试的，不是已知问题。
 
 做法依据公开资料：两只音箱各连一路、都收到完整立体声，由这对音箱自己分左右；两路共用一个 groupUUID 和同一时间线（NTP）。「只连接主音箱」是为了验证主音箱会不会转发，默认关闭。以下命令都在安装目录运行，音量一律加 `--volume 20`。本节各项：改了 `src/Net/StereoPairs.cs`、`src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/Net/SpeakerGroup.cs`、`src/StreamController.Group.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 
@@ -438,7 +440,7 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
   - 「仅在 Windows 静音时」：Windows 静音时按音量 +/−、静音键，HomePod 音量跟着变，Windows 保持静音（VolumeKeyForwardingTests、VolumeKeyModeTests）
   - 快捷键 Ctrl+Alt+PageUp / PageDown / Insert / N（HotkeyTests、GlitchMarkerTests；用户 2026-10-08 实机确认过）
   - 睡眠唤醒后自动重连；iPhone 抢占 HomePod 后电脑端不抢回、托盘显示被占用（TakeoverControllerTests、TakeoverPolicyTests、GroupRunnerTests；用户 2026-10-08 实机确认过）
-  - 夜间自动断开（实验性）：默认关；时段可以跨午夜（23:00–07:00 含 23:00、不含 07:00），开始和结束相同时从不断开；键鼠和声音都闲置够了才断开，只放声音或只动键鼠都不断开，时段开始前就闲置的时间也算；时段结束时只重连它自己断开的，中间手动连接或断开过就不重连，关掉这个设置也不重连；声音在所有音效之后测（HomePod 实际播放的），门限 −60 dBFS；断开后状态写「夜间已自动断开，07:00 自动重新连接」；设置能保存，旧配置没有这一项时是关的（NightDisconnectTests）
+  - 夜间自动断开：默认关；时段可以跨午夜（23:00–07:00 含 23:00、不含 07:00），开始和结束相同时从不断开；键鼠和声音都闲置够了才断开，只放声音或只动键鼠都不断开，时段开始前就闲置的时间也算；时段结束时只重连它自己断开的，中间手动连接或断开过就不重连，关掉这个设置也不重连；声音在所有音效之后测（HomePod 实际播放的），门限 −60 dBFS；断开后状态写「夜间已自动断开，07:00 自动重新连接」；设置能保存，旧配置没有这一项时是关的（NightDisconnectTests）
   - 测试版本机上「更新渠道」默认是「测试版」，正式版本机上默认是「正式版」；在测试版上切到「正式版」再检查（最新正式版比本机旧时）显示「当前测试版比最新正式版新……」，没有「更新」按钮（ReleaseSelectionTests、UpdateViewTests）
   - 统一多音箱页：旧 split/swap 与影院配置迁移，加载、保存、使用配置、文件播放均不意外改变实时组成员和位置，旧界面过渡期间仍能改 split/swap/offset（GroupSettingsTests）；音源限制位置、每台延迟与偏移、单台实时保留低延迟路径（GroupFormTests）；完整立体声输出保留左右并沿用环绕下混（CinemaTests）。
   - 音箱房间图：实际绘制方向符合前置、5.1 和 7.1 角度，窄／宽布局位置不重叠；空位下混去向直接采用现有混音规则；点选／键盘／声学测量高亮不启动声音；修改共用已有草稿，清空位置回到完整立体声并保留多个输出，切换立体声音源保留环绕位置（SpeakerRoomTests）。GUI 的全部 15 种语言、150% 专用分组场景检查可见视口里的位置和编辑控件，键盘与延迟草稿联动，生成的无声 5.1／7.1 文件仅检查布局并截图，不点播放、应用或测量（Walker.SpeakerRoom.cs，gui-output-groups-0 至 -4）。

@@ -255,6 +255,59 @@ public class HomeTheaterTests
         Assert.Equal(["卧室"], reading.BusyNames);
     }
 
+    /// <summary>The Apple TV's /info with this TXT record inside.</summary>
+    private static Dictionary<string, object?> AppleTvInfo(string txt) => new()
+    {
+        ["name"] = "客厅",
+        ["model"] = "AppleTV14,1",
+        ["statusFlags"] = 0x18644L,
+        ["txtAirPlay"] = SpeakerInfoTests.Txt(txt.Split(' ')),
+    };
+
+    /// <summary>The Apple TV while it plays in another sender's group (this PC's own session to it looks the same).</summary>
+    private const string AppleTvInAnotherGroup = "flags=0x38644 gcgl=0 gid=" + IPhoneGroup + " igl=0 model=AppleTV14,1 pgm=2 pgmid=0 psgid=" +
+                                                 TheaterGroup + " psgsz=2 psgtp=1";
+
+    private static SpeakerInfoCache CacheOf(Func<Dictionary<string, object?>> appleTv) => new((address, _) =>
+        Task.FromResult<IReadOnlyDictionary<string, object?>>(address.Equals(AppleTv().Address) ? appleTv() : HeldInfo()));
+
+    [Fact]
+    public async Task A_stale_scan_of_the_Apple_TV_does_not_hide_that_it_holds_its_speakers()
+    {
+        // 2026-11-26: scanned while this PC streamed to the Apple TV; the session is over, the Apple TV leads again.
+        string fresh = AppleTv().Txt.Aggregate("", (s, kv) => s + (s.Length > 0 ? " " : "") + kv.Key + "=" + kv.Value);
+        var reader = new InfoBusyReader(CacheOf(() => AppleTvInfo(fresh)), () => [Bedroom(), AppleTv(txt: AppleTvInAnotherGroup)]);
+        var reading = await reader.ReadAsync([BedroomTarget], CancellationToken.None);
+        Assert.Equal(BusyHolder.HomeTheater, reading.Holder);
+        Assert.Equal("客厅", reading.HomeTheater!.Name);
+        Assert.Contains("held by its home-theater Apple TV", reading.Detail);
+    }
+
+    [Fact]
+    public async Task A_stale_scan_does_not_take_the_speakers_from_a_sender_playing_through_the_Apple_TV()
+    {
+        // The scan says the Apple TV leads; by now an iPhone plays through it.
+        var reader = new InfoBusyReader(CacheOf(() => AppleTvInfo(AppleTvInAnotherGroup)), () => [Bedroom(), AppleTv()]);
+        var reading = await reader.ReadAsync([BedroomTarget], CancellationToken.None);
+        Assert.Equal(BusyHolder.OtherSender, reading.Holder);
+        Assert.Null(reading.HomeTheater);
+    }
+
+    [Fact]
+    public async Task An_Apple_TV_that_cannot_be_read_is_judged_by_the_scan()
+    {
+        var unreachable = new SpeakerInfoCache((address, _) => address.Equals(AppleTv().Address)
+            ? Task.FromException<IReadOnlyDictionary<string, object?>>(new IOException("no answer"))
+            : Task.FromResult<IReadOnlyDictionary<string, object?>>(HeldInfo()));
+        var reading = await new InfoBusyReader(unreachable, () => [Bedroom(), AppleTv()]).ReadAsync([BedroomTarget], CancellationToken.None);
+        Assert.Equal(BusyHolder.HomeTheater, reading.Holder);
+
+        // An answer from that address that is not an Apple TV's (the address went to another device) is not its TXT.
+        var other = new SpeakerInfoCache((_, _) => Task.FromResult<IReadOnlyDictionary<string, object?>>(HeldInfo()));
+        reading = await new InfoBusyReader(other, () => [Bedroom(), AppleTv()]).ReadAsync([BedroomTarget], CancellationToken.None);
+        Assert.Equal(BusyHolder.HomeTheater, reading.Holder);
+    }
+
     // ---------------------------------------------------------------- what the UI shows
 
     [Fact]
@@ -271,6 +324,22 @@ public class HomeTheaterTests
         AirPlayDevice Member(AirPlayDevice d) =>
             d with { Txt = new Dictionary<string, string>(d.Txt, StringComparer.OrdinalIgnoreCase) { ["psgid"] = TheaterGroup } };
         Assert.Equal("客厅（Apple TV，家庭影院：Büro 2）", UI.Pages.HomePage.DeviceLabel(tv, [Member(links), Member(rechts), tv]));
+    }
+
+    [Fact]
+    public void The_picker_names_the_kind_of_receiver_once()
+    {
+        // 2026-11-26: the maintainer's picker read 「书房电视（Apple TV，家庭影院：Home Theater） · Apple TV」.
+        var tv = AppleTv();
+        Assert.Equal(ReceiverKind.AppleTv, tv.Kind);
+        Assert.Equal("客厅（Apple TV，家庭影院：卧室）", UI.Pages.HomePage.PickerLabel(tv, [Bedroom(), tv]));
+        Assert.Equal("客厅（Apple TV 4K 第三代）", UI.Pages.HomePage.PickerLabel(tv, [tv]));
+        Assert.Equal("卧室（HomePod 第二代）", UI.Pages.HomePage.PickerLabel(Bedroom(), [Bedroom(), tv]));
+
+        // A receiver whose label does not say what it is keeps the kind after it.
+        var other = new AirPlayDevice("客厅音响", "AA:BB:CC:DD:EE:01", IPAddress.None, 7000, "Receiver-X1", new Dictionary<string, string>());
+        string label = UI.Pages.HomePage.DeviceLabel(other, [other]);
+        Assert.Equal($"{label} · {ReceiverKinds.Label(other.Kind)}", UI.Pages.HomePage.PickerLabel(other, [other]));
     }
 
     [Fact]

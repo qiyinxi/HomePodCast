@@ -573,11 +573,11 @@ public class HomeNetworkTextTests
             var suggested = HomePage.NetworkHintText(Threatened(hop, 135), "客厅");
             Assert.StartsWith("HomePod 那边的 Wi-Fi 最近不太稳（10 分钟内可能断音 3 次），建议把延迟调到 135 ms。", suggested);
             Assert.Contains("Apple TV「客厅」的家庭影院音箱", suggested);
-            Assert.EndsWith("在 Apple TV 上把音频输出改回电视更管用", suggested);
+            Assert.EndsWith("在音箱列表里改选「客厅」直接连接 Apple TV 更管用", suggested);
             Assert.DoesNotContain("5G", suggested);
 
             var capped = HomePage.NetworkHintText(Threatened(hop, null), "客厅");
-            Assert.EndsWith("在 Apple TV 上把音频输出改回电视最管用", capped);
+            Assert.EndsWith("在音箱列表里改选「客厅」直接连接 Apple TV 最管用", capped);
             Assert.DoesNotContain("5G", capped);
         }
         // The PC's own Wi-Fi is still the PC's.
@@ -593,7 +593,7 @@ public class HomeNetworkTextTests
         // stuttered on the maintainer's pair (its members answered pings up to 172 ms late, twice a second).
         Assert.Equal(300, HomePage.HomeTheaterLatencyMs);
         Assert.Equal("卧室是 Apple TV「客厅」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi，延迟低于 300 ms 时可能断音。" +
-                     "打游戏时在 Apple TV 上把音频输出改回电视最管用，也可以把延迟调到 300 ms",
+                     "在音箱列表里改选「客厅」直接连接 Apple TV 最管用，也可以把延迟调到 300 ms",
             HomePage.HomeTheaterNotice("卧室", "客厅"));
     }
 

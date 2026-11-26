@@ -22,7 +22,8 @@ public sealed record BusyReading(SpeakerBusy State, IReadOnlyList<string> BusyNa
     public AirPlayDevice? HomeTheater { get; init; }
 
     /// <param name="HomeTheater">A busy member's home-theater Apple TV holding it now (<see cref="Net.HomeTheater.HolderOf(GroupMembership, IReadOnlyList{AirPlayDevice})"/>).</param>
-    public sealed record Member(string Name, SpeakerBusy State, string Detail, AirPlayDevice? HomeTheater = null);
+    /// <param name="HomeTheaterSpeaker">A busy member that is some Apple TV's home-theater speaker (it has a psgid), held by it or not.</param>
+    public sealed record Member(string Name, SpeakerBusy State, string Detail, AirPlayDevice? HomeTheater = null, bool HomeTheaterSpeaker = false);
 
     public static BusyReading Combine(IReadOnlyList<Member> members)
     {
@@ -66,7 +67,7 @@ public sealed record BusyReading(SpeakerBusy State, IReadOnlyList<string> BusyNa
         var tv = Net.HomeTheater.HolderOf(group, scan);
         if (tv != null) detail += $", held by its home-theater Apple TV {Log.Name(tv.Name)} ({group.Describe()})";
         else if (group.PersistentGroupId != null) detail += $", a home-theater speaker in another group ({group.Describe()})";
-        return new Member(name, SpeakerBusy.Busy, detail, tv);
+        return new Member(name, SpeakerBusy.Busy, detail, tv, group.PersistentGroupId != null);
     }
 }
 
@@ -97,6 +98,30 @@ public sealed class InfoBusyReader(SpeakerInfoCache cache, Func<IReadOnlyList<Ai
     {
         var entries = await Task.WhenAll(targets.Select(t => cache.RefreshAsync(t.DeviceId, t.Name, t.Address, log: false, port: t.Port))).WaitAsync(ct);
         var devices = scan?.Invoke() ?? [];
-        return BusyReading.Combine(targets.Zip(entries, (t, e) => BusyReading.Of(t, e, devices)).ToList());
+        List<BusyReading.Member> Members(IReadOnlyList<AirPlayDevice> known) => targets.Zip(entries, (t, e) => BusyReading.Of(t, e, known)).ToList();
+        var members = Members(devices);
+        // Whether the Apple TV holds its speakers is decided from the Apple TV's group now, not from the last scan's.
+        // 2026-11-26: the maintainer streamed to the Apple TV (during that session it sits in this PC's group, igl=0), a scan
+        // ran meanwhile, and five seconds after the session they picked its HomePod pair: the scan still showed the Apple TV
+        // as a member of another group, so the pair read as "another sender's" and 临时接管 asked instead of connecting.
+        // The other way round a stale "leads its group" would take the speakers from an iPhone playing through the Apple TV.
+        if (members.Any(m => m is { State: SpeakerBusy.Busy, HomeTheaterSpeaker: true }) && devices.Any(HomeTheater.IsAppleTv))
+            members = Members(await WithFreshAppleTvsAsync(devices, ct));
+        return BusyReading.Combine(members);
+    }
+
+    /// <summary>The scan with each Apple TV's TXT record replaced by the one in its /info, where that could be read.</summary>
+    private async Task<IReadOnlyList<AirPlayDevice>> WithFreshAppleTvsAsync(IReadOnlyList<AirPlayDevice> devices, CancellationToken ct)
+    {
+        var result = devices.ToList();
+        var tvs = Enumerable.Range(0, result.Count).Where(i => HomeTheater.IsAppleTv(result[i])).ToList();
+        var read = await Task.WhenAll(tvs.Select(i => cache.RefreshAsync(result[i].DeviceId, result[i].Name, result[i].Address, log: false, port: result[i].Port))).WaitAsync(ct);
+        for (int n = 0; n < tvs.Count; n++)
+        {
+            // Only an answer from an Apple TV: the address may belong to another device by now.
+            if (read[n] is not { State: SpeakerInfoState.Ready, Info: { } info } || !HomeTheater.IsAppleTvModel(info.GetValueOrDefault("model") as string)) continue;
+            if (TxtRecord.FromInfo(info) is { Count: > 0 } txt) result[tvs[n]] = result[tvs[n]] with { Txt = txt };
+        }
+        return result;
     }
 }

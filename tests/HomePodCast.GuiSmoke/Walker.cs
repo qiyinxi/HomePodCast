@@ -685,10 +685,10 @@ internal sealed partial class Walker
             "the HomePod-only output switch is duplicated on Settings");
         // 夜间自动断开 is off on a fresh config. Not switched on here: inside its window on an idle runner it would end the
         // connection to the fake HomePod that the next steps check.
-        var night = Find(page, n => n.Name == T("夜间自动断开（实验性）") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var night = Find(page, n => n.Name == T("夜间自动断开") && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
-            $"「{T("夜间自动断开（实验性）")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+            $"「{T("夜间自动断开")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
         // Apple TV 无声时断开 (experimental since 1.5): off on a fresh config. Never flipped here.
         string idleTitle = T("Apple TV 无声时断开（实验性）");
         var idle = Find(page, n => n.Name == idleTitle && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
