@@ -281,6 +281,10 @@ CI 無法連到 HomePod，所以 `dev` 合併到 `main` 之前，要在實機上
 
 除非使用者明確要求，HomePodCast 不會將任何資訊傳送到其他連網系統：它只和你在區域網路中選定的 AirPlay 揚聲器通訊，不收集、不上傳任何資料；本機狀態介面只監聽 127.0.0.1。唯一發往區域網路以外的請求是檢查更新（見[更新](#更新)），只在你按「檢查更新」或開啟自動檢查後才會送出。以英文原文為準：[Privacy policy](README.md#privacy-policy)。
 
+## 贊助支持
+
+HomePodCast 免費、開源，由一個人用業餘時間維護。如果它幫到了你，給個星星能讓更多人看到它，也可以[請開發者喝杯咖啡](docs/SUPPORT.md)。
+
 ## 致謝
 
 - [pyatv](https://github.com/postlund/pyatv)（MIT）：通訊協定流程的參考，配對演算法以其相依套件 srptools 為對照。

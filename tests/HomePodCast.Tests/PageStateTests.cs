@@ -21,6 +21,9 @@ public class PageStateTests
         var titles = All<SettingRow>(page).Select(r => r.TitleText.Text).ToList();
         Assert.Contains($"HomePodCast {ReleaseVersion.CurrentText}", titles);
         Assert.Contains(L.F("当前版本 {0}", ReleaseVersion.CurrentText), titles);
+        Assert.Contains(L.T("赞赏"), titles); // the unpackaged versions; the Store version has no such row
+        Assert.True(AboutPage.ShowsSupport(packaged: false));
+        Assert.False(AboutPage.ShowsSupport(packaged: true));
     });
 
     [Fact]
