@@ -95,7 +95,7 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 - **Experimental features**: a feature first released in 1.Y.z is labelled experimental (UI, README, release notes)
   until 1.(Y+1).0 drops the label, unless a known problem keeps it. Put `// experimental since 1.Y` next to each label
   in the code so the bump can find them (`git grep "experimental since 1.1"`). Labels that say a feature was never
-  tested on real hardware (stereo pairs, multi-room, Apple TV pairing) stay until it has been.
+  tested on real hardware (multi-room, the wireless cinema) stay until it has been.
 
 ## Working alongside the other agent
 

@@ -46,7 +46,7 @@ internal sealed partial class GroupPanel : StackPanel
             for (int i = 0; i < legacy.Members.Count; i++)
                 _capturePositions[GroupPlan.Key(legacy.Members[i].DeviceId)] = PositionFor(legacy.ChannelsFor(i));
         Gap = 10;
-        Controls.Add(new TextBlock(L.T("实验性功能：立体声对和多房间同步还没有在真实设备上验证过，可能不同步、没有声音或连不上。"),
+        Controls.Add(new TextBlock(L.T("实验性功能：多房间同步还没有在真实设备上验证过，可能不同步、没有声音或连不上。"),
             TextStyle.BodyStrong, TextRole.Caution, wrap: true)); // experimental since 1.1; hardware untested
         Controls.Add(Ui.Note(L.T("实时采集会先混成立体声，只能选择完整立体声、左或右。5.1 / 7.1 文件可以分配中置、低音和环绕位置；未分配的声道混入相邻音箱。")));
         Controls.Add(Ui.Note(L.T("离散声道和本地文件分组仅支持 HomePod。第三方 AirPlay 2 和 AirPlay 1 可加入实时分组，需校准；第三方分组尚未在实机上验证。"))); // experimental since 1.2; hardware untested

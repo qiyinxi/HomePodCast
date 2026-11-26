@@ -279,7 +279,9 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 12. - [ ] 立体声对被接管时卡顿（2026-11-10 新增）：卧室这对是 Apple TV 的家庭影院音箱，首页连上、延迟低于 300 ms：首页出现「卧室是 Apple TV「…」的家庭影院音箱：它们之间的连接会定时占用 Wi-Fi……」和「应用」（以前只有单只 HomePod 有）；点「应用」后延迟变成 300 ms，还卡吗？____。日志每分钟有一行 `group network: ping=…`，卡顿前后的几行和 `group stats` 一起发我。2026-11-10：这对音箱在 200 ms 下仍然卡，45 分钟里没有一次重发请求；从接网线的电脑每 50 ms ping 一次、连续 5 分钟，两只音箱每秒约两次同时晚回，几乎每次都超过 60 ms，超过 108 ms（200 ms 留给网络的全部）的有 27 和 32 次，最大 172 ms，Apple TV 和路由器始终 1 ms 以内，所以提示的延迟从 200 改成 300 ms。2026-11-11（1.4.0 测试版 3，500 ms 下 50 分钟）：没有重发请求；音箱晚回超过 60 ms 的有 1424 次（约每分钟 28 次），超过 108 ms 的 106 次，超过 150 ms 的 12 次，最大 173 ms，没有超过 208 ms 的；之后改成 155 ms 仍然卡，而首页没有提示：那次是程序更新后重连自己的会话，没有经过「接管」，提示只认接管。现在只要选中的音箱（或立体声对的任何一只）是某台 Apple TV 的家庭影院音箱就提示，不管这次连接有没有接管（单元测试：TakeoverControllerTests、HomeNetworkTextTests、HomeTheaterTests，立体声对有网络监测和提示、多房间分组没有；仍需实机：提示出现、300 ms 够不够）。改了 `src/StreamController.Network.cs` 的 `WatchGroupNetwork` 才需要重测
 13. - [ ] Apple TV 正在播放时去连这对（2026-11-10 新增）：Apple TV 的声音最多被打断两次，之后状态停在「卧室是 Apple TV「…」的家庭影院音箱，Apple TV 正连着它」，日志有 `takeover: the speaker closed our connection 2 times in a row`，不再每 30 秒抢一次（2026-11-07 抢了 160 次）；再点「连接」会重新试两次（单元测试：TakeoverPolicyTests、TakeoverControllerTests；仍需实机：Apple TV 的声音只断两次）
 
-#### 立体声对（等有两只 HomePod 配成立体声对时再测）
+#### 立体声对
+
+2026-11-26：维护者决定不再标「实验性」。卧室这一对从 2026-11-03 起一直在用（界面里连接，几十分钟到几小时的推流，见下面各条的日期）。下面没打勾的是当时没有专门听或没有试的，不是已知问题。
 
 做法依据公开资料：两只音箱各连一路、都收到完整立体声，由这对音箱自己分左右；两路共用一个 groupUUID 和同一时间线（NTP）。「只连接主音箱」是为了验证主音箱会不会转发，默认关闭。以下命令都在安装目录运行，音量一律加 `--volume 20`。本节各项：改了 `src/Net/StereoPairs.cs`、`src/GroupPlan.cs`、`src/GroupRunner.cs`、`src/Net/SpeakerGroup.cs`、`src/StreamController.Group.cs` 或 `src/Net/RtpSender.cs` 的多路发送才需要重测。
 

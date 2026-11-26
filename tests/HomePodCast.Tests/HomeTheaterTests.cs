@@ -274,6 +274,22 @@ public class HomeTheaterTests
     }
 
     [Fact]
+    public void The_picker_names_the_kind_of_receiver_once()
+    {
+        // 2026-11-26: the maintainer's picker read 「书房电视（Apple TV，家庭影院：Home Theater） · Apple TV」.
+        var tv = AppleTv();
+        Assert.Equal(ReceiverKind.AppleTv, tv.Kind);
+        Assert.Equal("客厅（Apple TV，家庭影院：卧室）", UI.Pages.HomePage.PickerLabel(tv, [Bedroom(), tv]));
+        Assert.Equal("客厅（Apple TV 4K 第三代）", UI.Pages.HomePage.PickerLabel(tv, [tv]));
+        Assert.Equal("卧室（HomePod 第二代）", UI.Pages.HomePage.PickerLabel(Bedroom(), [Bedroom(), tv]));
+
+        // A receiver whose label does not say what it is keeps the kind after it.
+        var other = new AirPlayDevice("客厅音响", "AA:BB:CC:DD:EE:01", IPAddress.None, 7000, "Receiver-X1", new Dictionary<string, string>());
+        string label = UI.Pages.HomePage.DeviceLabel(other, [other]);
+        Assert.Equal($"{label} · {ReceiverKinds.Label(other.Kind)}", UI.Pages.HomePage.PickerLabel(other, [other]));
+    }
+
+    [Fact]
     public void A_first_start_prefers_a_HomePod_that_no_Apple_TV_holds_but_still_picks_one()
     {
         var tv = AppleTv();

@@ -140,7 +140,8 @@ public static class StereoPairs
             ["members"] = string.Join(",", members.Select(m => m.DeviceId)),
         };
         if (Leader(members) is { } leader) txt["leader"] = leader.DeviceId;
-        return new AirPlayDevice(name, PairId(tsid), members[0].Address, members[0].Port, L.T("立体声对 · 实验性"), txt);
+        // No longer experimental (maintainer, 2026-11-26): their pair has been streamed to since 2026-11-03, for hours at a time.
+        return new AirPlayDevice(name, PairId(tsid), members[0].Address, members[0].Port, L.T("立体声对"), txt);
     }
 
     /// <summary>

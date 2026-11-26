@@ -516,13 +516,7 @@ internal sealed class HomePage : ScrollPage
         _devices = devices;
         _device.Items.Clear();
         var scan = _app.LastScan;
-        foreach (var d in devices)
-        {
-            string label = DeviceLabel(d, scan);
-            string kind = ReceiverKinds.Label(d.Kind);
-            // A pair's entry has no model of its own (Unknown), but is two HomePods: no 「· 未知 AirPlay 设备」 after it.
-            _device.Items.Add(d.Kind is ReceiverKind.HomePod || StereoPairs.IsPairId(d.DeviceId) ? label : $"{label} · {kind}");
-        }
+        foreach (var d in devices) _device.Items.Add(PickerLabel(d, scan));
         _device.SelectedIndex = SelectedIndex(devices, _app.Config.DeviceId);
         ShowSpeaker();
     }
@@ -590,6 +584,19 @@ internal sealed class HomePage : ScrollPage
         if (HomeTheater.IsAppleTv(d) && HomeTheater.SpeakerNames(d, scan) is { } speakers)
             return L.F("{0}（Apple TV，家庭影院：{1}）", d.Name, speakers);
         return L.F("{0}（{1}）", d.Name, FriendlyModel(d.Model));
+    }
+
+    /// <summary>
+    /// The picker's line: <see cref="DeviceLabel"/>, and the kind of receiver after it where the label does not say it.
+    /// A HomePod's label is its model. A pair's entry has no model of its own (Unknown), but is two HomePods: no
+    /// 「· 未知 AirPlay 设备」 after it. 2026-11-26: an Apple TV read 「书房电视（Apple TV，家庭影院：…） · Apple TV」.
+    /// </summary>
+    internal static string PickerLabel(AirPlayDevice d, IReadOnlyList<AirPlayDevice> scan)
+    {
+        string label = DeviceLabel(d, scan);
+        string kind = ReceiverKinds.Label(d.Kind);
+        return d.Kind is ReceiverKind.HomePod || StereoPairs.IsPairId(d.DeviceId) || label.Contains(kind, StringComparison.OrdinalIgnoreCase)
+            ? label : $"{label} · {kind}";
     }
 
     public void UpdateState()
