@@ -36,6 +36,12 @@ node --test (Get-ChildItem extension/test -Filter *.test.js).FullName
 ```
 
 - A Debug build goes to `app\HomePodCast.exe`: a firewall rule on the maintainer's PC points at that path, so keep it.
+- That rule is for the main checkout's path only. Windows Firewall shows its alert for every other exe path that opens a
+  listening socket, and the alert needs the maintainer's admin approval (2026-11-26: a worktree's own
+  `app\HomePodCast.exe` put it on their screen while they were away). So before a command that opens a session to a
+  speaker (`stream`, `remote`, group and surround tests; `info` only connects out and is fine), copy the worktree's `app\`
+  build into the main checkout's `app\` and run it from there, or use a path that already has a rule
+  (`Get-NetFirewallApplicationFilter | Where-Object Program -like '*HomePodCast*'`). Never add a rule yourself.
 - The C# tests use in-process fakes (AirPlay receiver, HomePod, Apple TV, release feed, local API); they need no
   speaker and make no sound. Every change keeps them green, and new behaviour gets a test.
 - Tests listen on loopback only (`IPAddress.Loopback`, never `Any` or a LAN address), fakes and the code under test
