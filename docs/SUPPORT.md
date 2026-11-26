@@ -10,8 +10,11 @@ Ways to help that cost nothing:
 
 ## Donate
 
-<!-- TODO(maintainer): the payment methods (a link, or the code images under docs/support/). -->
-The payment methods will be listed here.
+On Afdian (爱发电; WeChat Pay and Alipay): <https://ifdian.net/a/qiyinxi>, or scan the code:
+
+<img src="support/afdian-qiyinxi.png" alt="QR code of https://ifdian.net/a/qiyinxi" width="200">
+
+The page is the maintainer's own, shared with their other open-source projects.
 
 Microsoft is not the fundraiser or sponsor of these donations.
 
@@ -28,7 +31,10 @@ HomePodCast 免费、开源（GPL-3.0），由一个人用业余时间维护。�
 
 ## 赞赏
 
-<!-- TODO(maintainer): 收款方式（链接，或放在 docs/support/ 下的赞赏码图片）。 -->
-收款方式会列在这里。
+爱发电（支持微信和支付宝）：<https://ifdian.net/a/qiyinxi>，也可以扫码：
+
+<img src="support/afdian-qiyinxi.png" alt="https://ifdian.net/a/qiyinxi 的二维码" width="200">
+
+这是维护者个人的主页，和其他开源项目共用。
 
 这些赞赏与 Microsoft 无关，Microsoft 不是募款方或赞助方。
