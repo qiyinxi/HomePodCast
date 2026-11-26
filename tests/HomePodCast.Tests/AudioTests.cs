@@ -312,4 +312,79 @@ public class AudioFifoTests
         Assert.Equal(baseTarget, fifo.MaxTargetFrames);
         Assert.Equal(baseTarget, fifo.TargetFrames);
     }
+
+    [Fact]
+    public void A_remembered_target_is_restored_up_to_the_ceiling_and_only_upward()
+    {
+        // 2026-11-26: every start of the app began at the base, and the sound card's dropouts were replayed.
+        var (fifo, _) = Clocked(16);
+        int baseTarget = fifo.TargetFrames, margin = fifo.CapFrames - fifo.TargetFrames;
+        Assert.False(fifo.RestoreTarget(44100 * 50 / 1000));     // not adaptive: nothing to restore
+        Assert.Equal(baseTarget, fifo.TargetFrames);
+
+        fifo.SetMaxTarget(44100 * 50 / 1000);                    // the connection's ceiling is known
+        Assert.True(fifo.RestoreTarget(44100 * 40 / 1000));
+        Assert.Equal(44100 * 40 / 1000, fifo.TargetFrames);
+        Assert.Equal(fifo.TargetFrames + margin, fifo.CapFrames);
+
+        Assert.False(fifo.RestoreTarget(44100 * 30 / 1000));     // never below what this run has
+        Assert.False(fifo.RestoreTarget(44100 * 10 / 1000));     // nor below the base
+        Assert.Equal(44100 * 40 / 1000, fifo.TargetFrames);
+
+        Assert.True(fifo.RestoreTarget(44100 * 80 / 1000));      // more than the ceiling allows: the ceiling
+        Assert.Equal(fifo.MaxTargetFrames, fifo.TargetFrames);
+    }
+
+    [Fact]
+    public void A_restored_target_is_primed_to_and_relaxes_like_a_learned_one()
+    {
+        var (fifo, _) = Clocked(16);
+        fifo.SetMaxTarget(44100 * 50 / 1000);
+        fifo.RelaxAfterReads = 10;
+        int baseTarget = fifo.TargetFrames;
+        fifo.Write(new float[1000 * 2]);                          // 22 ms: enough for the base, not for 40 ms
+        fifo.RestoreTarget(44100 * 40 / 1000);
+
+        var dest = new float[352 * 2];
+        Assert.False(fifo.Read(dest));                            // the sender starts once 40 ms are there
+        fifo.Write(new float[1000 * 2]);
+        Assert.True(fifo.Read(dest));
+        Assert.Equal(0, fifo.Underruns);
+
+        for (int i = 0; i < 9; i++)
+        {
+            fifo.Write(new float[352 * 2]);
+            Assert.True(fifo.Read(dest));
+        }
+        Assert.Equal(44100 * 40 / 1000 - 44, fifo.TargetFrames);  // ten clean reads: 1 ms back, as after a dropout
+        for (int i = 0; i < 400; i++)
+        {
+            fifo.Write(new float[352 * 2]);
+            fifo.Read(dest);
+        }
+        Assert.Equal(baseTarget, fifo.TargetFrames);              // no floor came with it: all the way to the base
+    }
+
+    [Fact]
+    public void Forgetting_what_was_learned_goes_back_to_the_base_and_drops_the_floor()
+    {
+        var (fifo, advance) = Clocked(16);
+        fifo.SetMaxTarget(44100 * 50 / 1000);
+        fifo.RelaxAfterReads = 1;
+        int baseTarget = fifo.TargetFrames, margin = fifo.CapFrames - fifo.TargetFrames;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(20);
+        fifo.Write(new float[352 * 2]);                           // a dropout at 16 ms -> 36 ms, floor 18 ms
+        Assert.Equal(baseTarget + 20 * 44, fifo.TargetFrames);
+
+        fifo.ForgetLearnedTarget();                               // another capture device is captured now
+        Assert.Equal(baseTarget, fifo.TargetFrames);
+        Assert.Equal(baseTarget + margin, fifo.CapFrames);
+
+        fifo.RestoreTarget(baseTarget + 44);                      // 17 ms remembered for that one: under the old floor
+        fifo.Write(new float[2000 * 2]);
+        Assert.True(fifo.Read(new float[352 * 2]));
+        Assert.Equal(baseTarget, fifo.TargetFrames);              // relaxes: the other device's floor is gone
+    }
 }

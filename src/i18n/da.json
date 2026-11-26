@@ -458,6 +458,8 @@
   "开始和结束时间相同，不会断开。": "Start og slut er ens, så forbindelsen afbrydes aldrig.",
   "夜间已自动断开，{0} 自动重新连接": "Afbrudt for natten; opretter forbindelse igen kl. {0}",
   "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Ingen lyd: Apple TV er midlertidigt afbrudt og tilsluttes igen, når der er lyd",
+  "Apple TV 无声时断开（实验性）": "Afbryd Apple TV uden lyd (eksperimentelt)",
+  "推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；重连时开头大约一秒的声音会丢。": "Mens appen streamer til et Apple TV, reagerer HomePods i dets hjemmebiograf ikke på Siri. Når dette er slået til, afbrydes Apple TV efter {0} sekunder uden lyd og tilsluttes igen, så snart pc'en afspiller noget; ved gentilslutningen går cirka det første sekund af lyden tabt.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Eksperimentelt: trådløs biograf er endnu ikke testet med flere rigtige HomePods. Kanaler, synkronisering og målinger kan være forkerte.",
   "音箱位置": "Højttalerplacering",
   "延迟测量": "Måling af forsinkelse",

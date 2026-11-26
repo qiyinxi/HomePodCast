@@ -458,6 +458,8 @@
   "开始和结束时间相同，不会断开。": "Begin en eind zijn gelijk, dus de verbinding wordt nooit verbroken.",
   "夜间已自动断开，{0} 自动重新连接": "Verbroken voor de nacht; maakt om {0} weer verbinding",
   "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Geen geluid: verbinding met Apple TV tijdelijk verbroken; maakt weer verbinding zodra er geluid is",
+  "Apple TV 无声时断开（实验性）": "Apple TV zonder geluid verbreken (experimenteel)",
+  "推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；重连时开头大约一秒的声音会丢。": "Zolang de app naar een Apple TV streamt, reageren de HomePods van de thuisbioscoop niet op Siri. Als dit aan staat, wordt de verbinding met de Apple TV na {0} seconden zonder geluid verbroken en weer gemaakt zodra de pc iets afspeelt; bij het opnieuw verbinden gaat ongeveer de eerste seconde van dat geluid verloren.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimenteel: de draadloze bioscoop is nog niet getest met meerdere echte HomePods. Kanalen, synchronisatie en metingen kunnen niet kloppen.",
   "音箱位置": "Speakerposities",
   "延迟测量": "Vertraging meten",

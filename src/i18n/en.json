@@ -458,6 +458,8 @@
   "开始和结束时间相同，不会断开。": "Start and end are the same, so it never disconnects.",
   "夜间已自动断开，{0} 自动重新连接": "Disconnected for the night; connects again at {0}",
   "没有声音，已暂时断开 Apple TV，有声音时自动连接": "No sound: disconnected from the Apple TV for now; connects again when sound plays",
+  "Apple TV 无声时断开（实验性）": "Disconnect a silent Apple TV (experimental)",
+  "推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；重连时开头大约一秒的声音会丢。": "While this app streams to an Apple TV, the HomePods of its home theater do not react to Siri. When on, the Apple TV is disconnected after {0} seconds without sound and connected again as soon as the PC plays something; the reconnect loses about the first second of that sound.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimental: the wireless cinema has not yet been tested with several real HomePods. Channels, sync and measurements may be wrong.",
   "音箱位置": "Speaker positions",
   "延迟测量": "Delay measurement",

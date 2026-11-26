@@ -689,6 +689,12 @@ internal sealed partial class Walker
         var nightState = night == null ? null : Native.MsaaState(night.Hwnd);
         Expect(nightState is { } ns && (ns & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
             $"「{T("夜间自动断开")}」 is not off on a fresh config (state {nightState?.ToString("X") ?? "not found"})");
+        // Apple TV 无声时断开 (experimental since 1.5): off on a fresh config. Never flipped here.
+        string idleTitle = T("Apple TV 无声时断开（实验性）");
+        var idle = Find(page, n => n.Name == idleTitle && n.Type != "Text" && n.Hwnd != IntPtr.Zero);
+        var idleState = idle == null ? null : Native.MsaaState(idle.Hwnd);
+        Expect(idleState is { } its && (its & Native.STATE_SYSTEM_CHECKED) == 0, "设置",
+            $"「{idleTitle}」 is not off on a fresh config (state {idleState?.ToString("X") ?? "not found"})");
         // 5.1 环绕声 (experimental since 1.4): off on a fresh config, on where the scenario turned it on. Never flipped here.
         string surroundTitle = T("5.1 环绕声（实验性）");
         bool surroundOn = _s.Kind == "surround-fallback";

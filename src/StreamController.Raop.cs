@@ -43,6 +43,7 @@ public sealed partial class StreamController
                 await WaitUntilFreeAsync(TakeoverPolicy.RetryTrigger(trigger, streamed), key,
                     [new BusyTarget(device.DeviceId, device.Name, device.Address, device.RaopPort ?? device.Port)], ct, false, null);
                 EnsureCapture(ct);
+                RestoreFifoTarget(); // within the ceiling the FIFO has: this path sets none (FitFifoTo)
                 int selectedLatency = CompatibilityLatency?.Invoke(device.DeviceId) ?? 2000;
                 EffectiveLatencyMs = selectedLatency is 1000 or 1500 or 2000 ? selectedLatency : 2000;
                 var audio = new float[RaopAudio.FramesPerPacket * 2];

@@ -458,6 +458,8 @@
   "开始和结束时间相同，不会断开。": "Alku ja loppu ovat samat, joten yhteyttä ei katkaista.",
   "夜间已自动断开，{0} 自动重新连接": "Yhteys katkaistu yöksi; yhdistää uudelleen klo {0}",
   "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Ei ääntä: yhteys Apple TV:hen katkaistu toistaiseksi; yhdistää uudelleen, kun ääntä kuuluu",
+  "Apple TV 无声时断开（实验性）": "Katkaise yhteys äänettömään Apple TV:hen (kokeellinen)",
+  "推到 Apple TV 时，它家庭影院里的 HomePod 不响应 Siri。打开后，{0} 秒没有声音就断开 Apple TV，电脑一出声自动连回；重连时开头大约一秒的声音会丢。": "Kun sovellus suoratoistaa Apple TV:hen, sen kotiteatterin HomePodit eivät reagoi Siriin. Kun asetus on päällä, yhteys Apple TV:hen katkaistaan {0} sekunnin hiljaisuuden jälkeen ja yhdistetään uudelleen heti, kun tietokone toistaa jotain; uudelleenyhdistettäessä äänen alusta jää pois noin sekunti.",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Kokeellinen: langatonta elokuvateatteria ei ole vielä testattu useilla oikeilla HomePodeilla. Kanavat, synkronointi ja mittaukset voivat olla vääriä.",
   "音箱位置": "Kaiuttimien paikat",
   "延迟测量": "Viiveen mittaus",

@@ -38,6 +38,48 @@ public sealed class AppConfig
     public const int DefaultFifoTargetMs = 16;
 
     /// <summary>
+    /// The FIFO target (ms) the adaptive FIFO had learned when it last streamed, per captured output device (its endpoint
+    /// id: the chosen capture device, or the Windows default output while that is followed): the next start begins there
+    /// instead of at <see cref="FifoTargetMs"/> (StreamController.RestoreFifoTarget), within the connection's ceiling. It
+    /// follows the target down as it relaxes; an entry goes once the target is back at the configured one. 2026-11-26:
+    /// kept in memory only, each restart of the app replayed a virtual sound card's dropouts until the target had grown
+    /// again. Saved when a session ends, about once a minute while streaming, and at quit (UI/TrayApp.FifoMemory.cs).
+    /// </summary>
+    public Dictionary<string, int> FifoLearnedTargetMs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The target remembered for a capture device, or null.</summary>
+    internal int? FifoLearnedTargetFor(string captureDeviceId) =>
+        FifoLearnedTargetMs.TryGetValue(captureDeviceId, out int ms) ? ms : null;
+
+    /// <summary>
+    /// Remembers a capture device's learned target (0 or less: forgets it). True when that changed anything. Read on the
+    /// stream threads as well (StreamController.RememberedFifoTargetMs), so a changed copy takes the dictionary's place.
+    /// </summary>
+    internal bool RememberFifoTarget(string captureDeviceId, int targetMs)
+    {
+        targetMs = Math.Min(targetMs, MaxFifoLearnedTargetMs);
+        if (targetMs <= 0 ? !FifoLearnedTargetMs.ContainsKey(captureDeviceId) : FifoLearnedTargetFor(captureDeviceId) == targetMs)
+            return false;
+        var next = new Dictionary<string, int>(FifoLearnedTargetMs, StringComparer.OrdinalIgnoreCase);
+        if (targetMs <= 0) next.Remove(captureDeviceId);
+        else next[captureDeviceId] = targetMs;
+        FifoLearnedTargetMs = next;
+        return true;
+    }
+
+    /// <summary>The highest ceiling a connection gives the FIFO (StreamController.FifoCeilingFor).</summary>
+    internal const int MaxFifoLearnedTargetMs = 100;
+
+    /// <summary>As read from a file: endpoint ids whatever their case (Audio.CaptureEndpoint.Same), sane values only.</summary>
+    private static Dictionary<string, int> NormalizeFifoLearned(Dictionary<string, int>? read)
+    {
+        var targets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (id, ms) in read ?? [])
+            if (!string.IsNullOrWhiteSpace(id) && ms > 0) targets[id] = Math.Min(ms, MaxFifoLearnedTargetMs);
+        return targets;
+    }
+
+    /// <summary>
     /// How much later than the requested playout delay the HomePod is actually heard, relative to the
     /// picture (PC-side capture + speaker output). Phone-video measurement 2026-10-07: 120 ms → 156 ms.
     /// </summary>
@@ -257,9 +299,15 @@ public sealed class AppConfig
     public int NightDisconnectIdleMinutes { get; set; } = NightDisconnectPolicy.DefaultIdleMinutes;
 
     /// <summary>
-    /// A stream to an Apple TV is ended after this many seconds without sound and connects again at the next sound
-    /// (<see cref="AppleTvIdlePolicy"/>: while the session is up, its home-theater HomePods ignore "Hey Siri"). 0: never.
+    /// Apple TV 无声时断开 (experimental since 1.5): a stream to an Apple TV is ended after
+    /// <see cref="AppleTvIdleReleaseSeconds"/> without sound and connects again at the next sound
+    /// (<see cref="AppleTvIdlePolicy"/>: while the session is up, its home-theater HomePods ignore "Hey Siri").
+    /// Off unless turned on: 1.5.0 beta 4 released for everyone, and wrote its 60 seconds into configs, so this is its own
+    /// switch and not "seconds above zero".
     /// </summary>
+    public bool AppleTvIdleRelease { get; set; }
+
+    /// <summary>The time for <see cref="AppleTvIdleRelease"/> (config.json only; 0: never).</summary>
     public int AppleTvIdleReleaseSeconds { get; set; } = AppleTvIdlePolicy.DefaultSeconds;
 
     /// <summary>
@@ -346,6 +394,7 @@ public sealed class AppConfig
         text = File.ReadAllText(path);
         var cfg = JsonSerializer.Deserialize<AppConfig>(text, Json) ?? throw new JsonException("the file holds null");
         if (cfg.FifoTargetMs == 12) cfg.FifoTargetMs = DefaultFifoTargetMs; // the 0.1 default, never set by hand
+        cfg.FifoLearnedTargetMs = NormalizeFifoLearned(cfg.FifoLearnedTargetMs);
         cfg.VolumeKeys = VolumeKeyRules.Migrate(cfg.ForwardVolumeKeys, cfg.VolumeKeys);
         cfg.ForwardVolumeKeys = null;
         cfg.ManualDevices ??= [];
