@@ -187,7 +187,7 @@ internal sealed partial class TrayApp
             if (Mixer.DestinationForKey(key) != null) await Mixer.ReconnectAsync(key, trigger);
             else if (MixerDestinationResolver.Resolve(Config, MixerRoutes.Read(Config).Settings?.Default ?? MixerRoute.Current, LastScan).Key == key)
             {
-                _wantConnected = true; _nightDisconnected = false;
+                _wantConnected = true; _nightDisconnected = false; ResetAppleTvIdle();
                 await Mixer.ConnectAsync(Config, trigger, key);
             }
         }

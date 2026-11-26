@@ -42,7 +42,7 @@ internal sealed partial class TrayApp
     {
         if (_quitting) return;
         var restart = new AppRestart.Request("because a .NET update removed the runtime this copy started on",
-            Tray: !_form.Visible, Connected: _wantConnected || _nightDisconnected);
+            Tray: !_form.Visible, Connected: _wantConnected || _nightDisconnected || _appleTvReleased);
         Log.Info($"runtime: 「立即重启」 ({(restart.Tray ? "into the tray" : "with the window")}, " +
                  $"{(restart.Connected == true ? "connecting again" : "not connected")}, {Controller.State})");
         AppRestart.Requested = restart;
