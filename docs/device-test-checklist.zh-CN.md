@@ -24,6 +24,7 @@
 - [x] 建立参数实验：HomePod 报告的处理时间固定 85 ms（只有 `moviePlayback` 模式会升到 112），现有参数已是最低（Claude 2026-10-08 实机测过）。改了 `src/Net/AirPlayClient.cs` 的 SETUP 参数才需要重测
 - [x] 自动连接真实的 HomePod，首页推流状态：已连接、缓冲、音箱处理 85 ms、断音 0（Claude 2026-10-08 实机测过；连假 HomePod 时的首页：CI 自动测试：gui-smoke）。改了 `src/UI/TrayApp.cs` 的自动连接才需要重测
 - [x] 30 分钟稳定性（105 ms、完整采集链路、UU 虚拟声卡）：网络侧 0 跳包 0 重传；固定 12 ms 缓冲断音 25 次 → 改成自适应缓冲后 2 次（稳定在 18 ms）。之后又加了“不退回到出过断音的大小”，见「测试记录」（Claude 2026-10-08 实机测过）。改了 `src/Audio/AudioFifo.cs` 的自适应缓冲或采集（`src/Audio/LoopbackCapture.cs`）才需要重测
+- [ ] 记住学到的缓冲（UU 虚拟声卡、Apple TV 100 ms）：先用到日志里的 `fifo dropout` 行写着 `target 2x ms` 以上，退出再启动（或装一次更新），连上后日志有一行 `fifo: starts at … ms, learned from this capture device's dropouts earlier`，首页「缓冲」从那个数起步，头几分钟不再出现 `target 20 ms`、`target 24 ms` 这两次断音（用户 2026-11-26 反馈：更新重启后两次大断音，日志里缓冲从 16 ms 重新涨）。换一个采集设备再连，缓冲回到 16 ms。逻辑由 FifoMemoryTests／AudioFifoTests 覆盖，真实声卡上断音是否不再重演要听一次。改了 `src/Audio/AudioFifo.cs` 的 RestoreTarget、`src/StreamController.cs` 的 RestoreFifoTarget 或 `src/UI/TrayApp.FifoMemory.cs` 才需要重测
 - 手机 60 帧录像测延迟（最重要）：诊断 → 音画同步测试 → 开始，手机离屏幕和音箱都约 50 cm，录 15 秒以上，**发原文件**（不要经微信压缩）。改了 `src/Scenes.cs`、`src/Audio/AudioFifo.cs`、`src/Net/RtpSender.cs`、`src/Net/TimingServer.cs` 或 `src/UI/SyncTestForm.cs` 才需要重测
   - [x] 场景「游戏」（105 ms）：声音比画面晚 **118 ms**（8 下，115–125；目标 ≤ 145）。手机录像本身约 ±10 ms 误差（用户 2026-10-08 录像）
   - [x] 场景「推荐」（120 ms）：**137 ms**（10 下，124–144；上次 156）。当时缓冲被误涨到 20 ms（beta.4 已修），修好后应再少约 4 ms（用户 2026-10-08 录像）

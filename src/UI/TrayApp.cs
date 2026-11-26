@@ -87,6 +87,7 @@ internal sealed partial class TrayApp : ApplicationContext
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
         InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
         InitAppleTvIdle(); // after InitNightDisconnect: its sound measurement (TrayApp.AppleTvIdle.cs)
+        InitFifoMemory(); // before the first connect: its FIFO starts from the target learned before (TrayApp.FifoMemory.cs)
         InitMixer();
         InitRuntimeWatch(resume); // after InitUpdate: its balloon (TrayApp.Runtime.cs)
 
@@ -581,6 +582,7 @@ internal sealed partial class TrayApp : ApplicationContext
         _api?.Dispose();
         // A Start still running would otherwise begin a stream after the Stop below (it never faults).
         connecting.Wait(TimeSpan.FromSeconds(10));
+        DisposeFifoMemory(); // while the sessions are still up: what their FIFOs learned (TrayApp.FifoMemory.cs)
         try { _cinemaSession?.ReleaseSuperseded(); Mixer?.DisposeAsync().AsTask().GetAwaiter().GetResult(); _legacyController?.Dispose(); Controller.Dispose(); }
         finally { DisposePcMute(); } // and the PC's sound once the stream has stopped (not both playing meanwhile)
         DisposeTakeover(); // saves how our session ended (cleanly, by us)

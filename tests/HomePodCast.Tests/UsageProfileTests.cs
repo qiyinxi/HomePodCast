@@ -259,6 +259,7 @@ public class UsageProfileTests
         [nameof(AppConfig.LastUsageProfileId)] = "which profile was applied last",
         [nameof(AppConfig.ArrivalToRenderMs)] = "measured by the speaker at every connection",
         [nameof(AppConfig.FifoTargetMs)] = "tuned for this PC",
+        [nameof(AppConfig.FifoLearnedTargetMs)] = "what each capture device's dropouts taught the FIFO on this PC, whatever the use",
         [nameof(AppConfig.VideoDelayExtraMs)] = "calibration",
         [nameof(AppConfig.LocalApiPort)] = "the browser extension's port",
         [nameof(AppConfig.VideoWindowModuleDirectory)] = "optional viewing companion installation, unrelated to audio profiles",
