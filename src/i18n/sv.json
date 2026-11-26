@@ -458,6 +458,7 @@
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Ingen inmatning med tangentbord eller mus och inget ljud i HomePod under så lång tid.",
   "开始和结束时间相同，不会断开。": "Start och slut är samma, så den kopplas aldrig från.",
   "夜间已自动断开，{0} 自动重新连接": "Frånkopplad för natten; ansluter igen kl. {0}",
+  "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Inget ljud: Apple TV är tillfälligt frånkopplad och ansluts igen när ljud spelas",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimentellt: trådlös bio har ännu inte testats med flera riktiga HomePod-högtalare. Kanaler, synkronisering och mätningar kan bli fel.",
   "音箱位置": "Högtalarplacering",
   "延迟测量": "Fördröjningsmätning",

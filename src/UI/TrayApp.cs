@@ -86,6 +86,7 @@ internal sealed partial class TrayApp : ApplicationContext
         InitializeGroupInteractions();
         InitPairing(); // before the first connect: an Apple TV's stored pairing is used (TrayApp.Pairing.cs)
         InitNightDisconnect(); // after InitEffects, before the first connect (TrayApp.NightDisconnect.cs)
+        InitAppleTvIdle(); // after InitNightDisconnect: its sound measurement (TrayApp.AppleTvIdle.cs)
         InitMixer();
         InitRuntimeWatch(resume); // after InitUpdate: its balloon (TrayApp.Runtime.cs)
 
@@ -170,7 +171,7 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         if (Mixer != null)
         {
-            _wantConnected = true; _nightDisconnected = false;
+            _wantConnected = true; _nightDisconnected = false; ResetAppleTvIdle();
             // Copied here, on the UI thread: the queue may run it later, while this thread changes the config's lists.
             var config = Config.Snapshot();
             PostConnection(() =>
@@ -188,6 +189,7 @@ internal sealed partial class TrayApp : ApplicationContext
         }
         _wantConnected = true;
         _nightDisconnected = false;
+        ResetAppleTvIdle();
         // The settings are taken now; a volume set before the queued start runs is kept (volumeAsOf).
         string? id = Config.DeviceId;
         string? host = Config.Host;
@@ -206,6 +208,7 @@ internal sealed partial class TrayApp : ApplicationContext
     {
         _wantConnected = false;
         _nightDisconnected = false; // the user's own disconnect: 夜间自动断开 doesn't connect it again
+        ResetAppleTvIdle(); // nor does the Apple TV idle release
         PostConnection(() => StopAllOutputs());
     }
 
@@ -569,6 +572,7 @@ internal sealed partial class TrayApp : ApplicationContext
         DisposeFirewall();
         DisposeUpdate();
         DisposeNightDisconnect();
+        DisposeAppleTvIdle();
         DisposeCaptureWatch();
         DisposeSound();
         DisposeEffects();

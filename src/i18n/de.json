@@ -458,6 +458,7 @@
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "So lange keine Eingabe mit Tastatur oder Maus und kein Ton auf dem HomePod.",
   "开始和结束时间相同，不会断开。": "Beginn und Ende sind gleich, daher wird nie getrennt.",
   "夜间已自动断开，{0} 自动重新连接": "Für die Nacht getrennt; verbindet sich um {0} wieder",
+  "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Kein Ton: Apple TV vorübergehend getrennt; verbindet sich wieder, sobald Ton kommt",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Experimentell: Das drahtlose Kino wurde noch nicht mit mehreren echten HomePods getestet. Kanäle, Synchronisation und Messungen können falsch sein.",
   "音箱位置": "Lautsprecherpositionen",
   "延迟测量": "Verzögerungsmessung",

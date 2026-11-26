@@ -257,6 +257,12 @@ public sealed class AppConfig
     public int NightDisconnectIdleMinutes { get; set; } = NightDisconnectPolicy.DefaultIdleMinutes;
 
     /// <summary>
+    /// A stream to an Apple TV is ended after this many seconds without sound and connects again at the next sound
+    /// (<see cref="AppleTvIdlePolicy"/>: while the session is up, its home-theater HomePods ignore "Hey Siri"). 0: never.
+    /// </summary>
+    public int AppleTvIdleReleaseSeconds { get; set; } = AppleTvIdlePolicy.DefaultSeconds;
+
+    /// <summary>
     /// HOMEPODCAST_PROFILE (development/testing): its own config folder and single-instance name. A new
     /// profile starts with AutoConnect off and a random local API port, so a test copy never grabs the
     /// speaker or the real instance's port.
@@ -353,6 +359,7 @@ public sealed class AppConfig
         // As Audio.AppRouting reads it: the playback config (TrayApp.PlaybackConfig) shows this one, never a copy of it.
         cfg.CaptureDeviceId = string.IsNullOrWhiteSpace(cfg.CaptureDeviceId) ? null : cfg.CaptureDeviceId.Trim();
         cfg.NightDisconnectIdleMinutes = NightDisconnectPolicy.ClampIdleMinutes(cfg.NightDisconnectIdleMinutes);
+        cfg.AppleTvIdleReleaseSeconds = AppleTvIdlePolicy.ClampSeconds(cfg.AppleTvIdleReleaseSeconds);
         AvCalibrations.Normalize(cfg);
         GroupSettings.Normalize(cfg);
         OutputGroups.Normalize(cfg);

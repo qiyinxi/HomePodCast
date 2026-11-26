@@ -219,6 +219,12 @@ Apple TV 的其他情况（改了 `src/Net/Mdns.cs`、`src/Net/SpeakerBusy.cs`�
 
 - [ ] `HomePodCast.exe scan --txt`：Apple TV 出现在列表里，记下它的型号和 flags
 - [ ] 直接推到 Apple TV（它接电视或功放出声）：能连上、有声音；用同步测试录像，记下延迟 ____ ms
+- [ ] 静音时放开 Apple TV（2026-11-26 新增；当天实机：会话挂着时家庭影院的两只 HomePod 灯常亮、喊「嘿 Siri」没有反应，断开马上恢复）。连上 Apple TV 后不放声音：约 60 秒后首页写「没有声音，已暂时断开 Apple TV，有声音时自动连接」，日志有 `Apple TV idle: no sound for … s`，**这时 HomePod 的灯灭了、Siri 有反应吗**；再放声音：自动连上（日志 `Apple TV idle: the PC plays something, connecting again`），开头大约丢多久的声音 ____ 秒；断开状态下点「连接」再点「断开」后放声音：不会自己连上。`config.json` 里 `AppleTvIdleReleaseSeconds` 设 0 是关掉（单元测试：AppleTvIdleTests；仍需实机：Siri 恢复、读到的输出电平、重连丢多少声音）。改了 `src/AppleTvIdlePolicy.cs`、`src/Audio/OutputMeter.cs` 或 `src/UI/TrayApp.AppleTvIdle.cs` 才需要重测
+- [ ] 哪个字段让家庭影院的 HomePod 不听 Siri（2026-11-26 新增，还没有结论）。当天无声试过的（`stream --ptp-realtime --apple-tv --silent --cap 10`，每种 10 秒，都带 `--session senderSupportsRelay=true --setup supportsDynamicStreamID=true --setup streamConnections=@文件.json`）：六种组合 Apple TV 全部接受，状态标志都是 0x38644，HomePod 的标志、`_companion-link` 的 `rpFl`、`_hap` 的 `s#` 在会话前后都不变，所以**没有不用人听就能判断 Siri 状态的读数**。能看出差别的只有流 SETUP 回的 `arrivalToRenderLatencyMs`：
+  - `isMedia=false usingScreen=true`（程序现在用的，会响、Siri 不应）：7 ms；去掉会话的 `isScreenMirroringSession` 也是 7 ms
+  - `isMedia=true usingScreen=true`：**27 ms**，是另一条渲染路径，没有听过
+  - `usingScreen=false`（`isMedia` 真假都一样）：4 ms，和 11-11 那些不出声的推流相同
+  - 要人在音箱旁边试：先用现在的组合确认灯亮、Siri 不应，再换 `--setup isMedia=true --setup usingScreen=true --tone --volume 20`：有声音吗？灯亮吗？喊 Siri 有反应吗？延迟多了多少
 - [ ] 家庭影院模式（HomePod 设为 Apple TV 的默认扬声器）下，推到 Apple TV：HomePod 出声吗？延迟 ____ ms，和直连 HomePod 的 141 ms 比哪个低。2026-11-07（Apple TV 4K 第三代，tvOS 27，家庭影院是一对 HomePod）：配对、会话、对时都正常，没有重发请求，但没有声音，HomePod 的灯也不亮。已经排除和还要试的：
   - [x] 界面里连 Apple TV，连上约 2 秒后补发一次音量（日志 `Apple TV: sending the volume again now that audio flows`）。2026-11-11（1.4.0 测试版 3）：补发了，仍然没有声音（单元测试：PairingFlowTests，只补发一次、HomePod 不补发）
   - [x] 命令行推提示音，维护者在听，2026-11-11：提前量 2 秒、同步包带延迟（`--legacy-sync`）、完全照 pyatv 的参数（自报 iPhone、latencyMin 11025、同步包提前 1.5 秒）、音量 50%、换会话参数（`isMultiSelectAirPlay=false`、`groupUUID`、`senderSupportsRelay=true`），全部没有声音。每次 Apple TV 都回 200、一直向电脑对时、没有重发请求，状态里多出第 17 位（会话进行中），两只 HomePod 的 TXT 不变

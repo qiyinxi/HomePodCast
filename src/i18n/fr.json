@@ -458,6 +458,7 @@
   "这段时间里键盘鼠标没有操作，HomePod 也一直没有声音。": "Aucune saisie au clavier ou à la souris et aucun son sur le HomePod pendant ce temps.",
   "开始和结束时间相同，不会断开。": "Le début et la fin sont identiques : aucune déconnexion.",
   "夜间已自动断开，{0} 自动重新连接": "Déconnecté pour la nuit ; reconnexion à {0}",
+  "没有声音，已暂时断开 Apple TV，有声音时自动连接": "Aucun son : Apple TV déconnectée pour l’instant ; reconnexion dès qu’un son est lu",
   "实验性功能：无线影院还没有在多台真实的 HomePod 上验证过，声道、同步和测量结果都可能不对。": "Expérimental : le cinéma sans fil n'a pas encore été testé avec plusieurs vrais HomePod. Les canaux, la synchronisation et les mesures peuvent être erronés.",
   "音箱位置": "Position des enceintes",
   "延迟测量": "Mesure des délais",

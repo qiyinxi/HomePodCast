@@ -38,6 +38,7 @@ internal sealed partial class TrayApp : ICinemaHost
         // The cinema retries within its own group; a network change or a wake must not start the system capture instead.
         _wantConnected = false;
         _nightDisconnected = false;
+        ResetAppleTvIdle();
         _fx!.MicOn = false; // the microphone is mixed into the system capture, which the cinema replaces
         volume = VolumeLimit.Clamp(volume, Config.VolumeCapPercent);
         int latency = Math.Max(Config.LatencyMs, 200);
