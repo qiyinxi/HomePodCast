@@ -289,6 +289,10 @@ CI 无法连接 HomePod，所以 `dev` 合并到 `main` 之前要在真机上做
 
 除非用户明确要求，HomePodCast 不会向其他联网系统传输任何信息：它只和你在局域网里选中的 AirPlay 音箱通信，不收集、不上传任何数据；本机状态接口只监听 127.0.0.1。唯一发往局域网以外的请求是检查更新（见[更新](#更新)），只在你点「检查更新」或打开自动检查后才会发出。以英文原文为准：[Privacy policy](README.md#privacy-policy)。
 
+## 赞赏支持
+
+HomePodCast 免费、开源，由一个人用业余时间维护。如果它帮到了你，点个星星能让更多人看到它，也可以[请开发者喝杯咖啡](docs/SUPPORT.md)。
+
 ## 致谢
 
 - [pyatv](https://github.com/postlund/pyatv)（MIT）：协议流程参考，配对算法以其依赖 srptools 为对照。

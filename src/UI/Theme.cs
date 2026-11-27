@@ -391,4 +391,5 @@ internal static class Glyph
     public const string Flag = "";
     public const string Folder = "";
     public const string FavoriteStar = "\uE734";
+    public const string Heart = "\uEB51";
 }

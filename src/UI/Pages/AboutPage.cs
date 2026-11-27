@@ -7,6 +7,18 @@ namespace HomePodCast.UI.Pages;
 internal sealed class AboutPage : ScrollPage
 {
     public const string RepositoryUrl = "https://github.com/qiyinxi/HomePodCast";
+
+    /// <summary>
+    /// Where the ways to support the maintainer are listed: a page in the repository, so they can change without a release.
+    /// </summary>
+    public const string SupportUrl = RepositoryUrl + "/blob/main/docs/SUPPORT.md";
+
+    /// <summary>
+    /// The Microsoft Store version shows no way to donate: Store policy 10.8.2 (version 7.20, read 2026-11-26) wants voluntary
+    /// donations to go through its payment request API or a "secure third-party purchase API" declared in Partner Center,
+    /// and a page of payment codes is not clearly one.
+    /// </summary>
+    internal static bool ShowsSupport(bool packaged) => !packaged;
     private readonly TrayApp _app;
     // 更新: one row for the version, the check's status and its actions (UpdateStatusRow), the channel, automatic checks
     private static readonly UpdateChannel[] Channels = [UpdateChannel.Stable, UpdateChannel.Beta];
@@ -39,9 +51,15 @@ internal sealed class AboutPage : ScrollPage
         };
         var starRow = new SettingRow(Glyph.FavoriteStar, L.T("点个星星"), L.T("点个星星是对开发者最大的鼓励~"), star);
 
+        var support = new FluentButton(L.T("赞赏"), ButtonKind.Link, Glyph.Heart) { AccessibleName = L.T("赞赏") };
+        var supportRow = new SettingRow(Glyph.Heart, L.T("赞赏"), L.T("如果它帮到了你，可以请开发者喝杯咖啡~"), support);
+        support.Click += (_, _) => AppEnvironment.OpenUri(SupportUrl);
+
         var license = new FluentButton("GPL-3.0", ButtonKind.Link, Glyph.OpenInNew);
         var licenseRow = new SettingRow(Glyph.Info, L.T("许可证"), "GNU General Public License v3.0", license);
-        Content.Controls.AddRange([aboutRow, starRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]);
+        Content.Controls.AddRange(ShowsSupport(AppEnvironment.IsPackaged)
+            ? [aboutRow, starRow, supportRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]
+            : [aboutRow, starRow, licenseRow, updates, _updateRow.Row, _channelRow, _autoUpdateRow]);
         link.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl);
         star.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl);
         license.Click += (_, _) => AppEnvironment.OpenUri(RepositoryUrl + "/blob/dev/LICENSE");

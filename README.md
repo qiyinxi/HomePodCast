@@ -323,6 +323,10 @@ on the local network that the user selects, and its status endpoint listens on 1
 request outside the local network is the update check (see [Updates](#updates)), made only when the user
 clicks "Check for updates" or turns on automatic checks.
 
+## Support the project
+
+HomePodCast is free and open source, and one person maintains it in their spare time. If it is useful to you, a star helps others find it, and you can [buy the developer a coffee](docs/SUPPORT.md).
+
 ## Acknowledgements
 
 - [pyatv](https://github.com/postlund/pyatv) (MIT): reference for the protocol flow; its dependency srptools serves as the reference for the pairing algorithm.
