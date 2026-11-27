@@ -393,14 +393,21 @@ public sealed class RoutedCapture : ICaptureSource
 
     /// <summary>
     /// Where the time of a capture stall went: waits that ended without a packet (Windows delivered nothing), the last
-    /// wait, and this thread's own work (with the device checks in it).
+    /// wait, and this thread's own work (with the device checks in it). Audio that Windows had and delivered late
+    /// arrives as a backlog about as long as the hole; when clearly less arrives (<see cref="AudioFifo.SourcePauseMarginMs"/>,
+    /// the FIFO's own rule), the line says what that points to. 2026-11-27: hundreds of "197 ms without a packet … then
+    /// 10 ms arrived at once" lines at song-length spacing read like late delivery, and were the player stopping its
+    /// stream at each track change.
     /// </summary>
     internal static string StallMessage(double gapMs, double lastWaitMs, bool signalled, int emptyWaits, double emptyWaitMs,
         double workedMs, double checkMs, double arrivedMs) =>
         $"capture: {gapMs:F0} ms without a packet while audio played (" +
         (emptyWaits > 0 ? $"{emptyWaits} {(emptyWaits == 1 ? "wait" : "waits")} of {emptyWaitMs:F0} ms in all ended without one, then " : "") +
         $"waited {lastWaitMs:F0} ms for Windows' signal, which {(signalled ? "came" : "did not come")}; this thread worked " +
-        $"{Math.Max(0, workedMs):F0} ms, {checkMs:F0} ms of it asking Windows about the output device), then {arrivedMs:F0} ms arrived at once";
+        $"{Math.Max(0, workedMs):F0} ms, {checkMs:F0} ms of it asking Windows about the output device), then {arrivedMs:F0} ms arrived at once" +
+        (arrivedMs + AudioFifo.SourcePauseMarginMs < gapMs ? StallLooksLikePause : "");
+
+    internal const string StallLooksLikePause = ": no backlog, so this looks like the playing app pausing its stream, not late delivery";
 
     /// <summary>Open clients for new targets (one per cycle: activation can take a few ms), close stale ones.</summary>
     private void Reconcile(RoutePlan plan, Dictionary<uint, Client> clients, Dictionary<uint, long> failed,

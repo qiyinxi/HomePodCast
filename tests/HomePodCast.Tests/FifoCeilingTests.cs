@@ -28,4 +28,25 @@ public class FifoCeilingTests
         Assert.DoesNotContain("ended without one", single);
         Assert.Contains("waited 17 ms for Windows' signal, which came; this thread worked 0 ms", single);
     }
+
+    [Fact]
+    public void A_stall_log_says_when_no_backlog_arrived()
+    {
+        // 2026-11-27: "197 ms without a packet … then 10 ms arrived at once", every three to four minutes: the player
+        // stopped its stream at each track change. Audio that was only delivered late would have come all at once.
+        string pause = RoutedCapture.StallMessage(gapMs: 197, lastWaitMs: 2, signalled: true, emptyWaits: 16, emptyWaitMs: 195,
+            workedMs: 0, checkMs: 0, arrivedMs: 10);
+        Assert.Contains("then 10 ms arrived at once", pause);
+        Assert.EndsWith(RoutedCapture.StallLooksLikePause, pause);
+        Assert.Contains("the playing app pausing its stream, not late delivery", pause);
+
+        string late = RoutedCapture.StallMessage(gapMs: 100, lastWaitMs: 1, signalled: true, emptyWaits: 8, emptyWaitMs: 96,
+            workedMs: 2, checkMs: 0, arrivedMs: 100);
+        Assert.EndsWith("then 100 ms arrived at once", late);           // the backlog came: late delivery, as before
+
+        // Within the FIFO's margin (AudioFifo.SourcePauseMarginMs): a packet that was a few ms late says nothing more.
+        Assert.EndsWith("then 10 ms arrived at once", RoutedCapture.StallMessage(17, 17, true, 0, 0, 0, 0, 10));
+        Assert.EndsWith("then 10 ms arrived at once", RoutedCapture.StallMessage(30, 6, true, 2, 24, 0, 0, 10));
+        Assert.EndsWith(RoutedCapture.StallLooksLikePause, RoutedCapture.StallMessage(31, 7, true, 2, 24, 0, 0, 10));
+    }
 }

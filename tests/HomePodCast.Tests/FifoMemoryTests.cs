@@ -29,7 +29,10 @@ public class FifoMemoryTests
 
     private static int TargetMs(StreamController c) => (int)Math.Round(c.Fifo.TargetFrames * 1000.0 / c.Fifo.SampleRate);
 
-    /// <summary>The capture delivers nothing for <paramref name="ms"/> while the sender reads: one dropout.</summary>
+    /// <summary>
+    /// The capture delivers nothing for <paramref name="ms"/> while the sender reads, then what it missed comes at once
+    /// (at least a packet): one dropout. Late audio, not a source that paused (AudioFifo.SourcePauseMarginMs).
+    /// </summary>
     private static void Dropout(AudioFifo fifo, int ms)
     {
         long now = 0;
@@ -38,7 +41,7 @@ public class FifoMemoryTests
         var dest = new float[352 * 2];
         while (fifo.Read(dest)) { }
         now += ms * Stopwatch.Frequency / 1000;
-        fifo.Write(new float[352 * 2]);
+        fifo.Write(new float[Math.Max(352, ms * fifo.SampleRate / 1000) * 2]);
     }
 
     [Fact]
@@ -217,12 +220,47 @@ public class FifoMemoryTests
             // A file from before the setting, and one edited by hand.
             File.WriteAllText(path, """{ "DeviceId": "AA:BB", "LatencyMs": 120 }""");
             Assert.Empty(AppConfig.Load(path).FifoLearnedTargetMs);
-            File.WriteAllText(path, """{ "FifoLearnedTargetMs": { "card": 5000, "": 40, "gone": -3 } }""");
+            File.WriteAllText(path, """{ "FifoLearnedTargetMs2": { "card": 5000, "": 40, "gone": -3 } }""");
             loaded = AppConfig.Load(path);
             Assert.Equal(100, loaded.FifoLearnedTargetFor("CARD"));
             Assert.Single(loaded.FifoLearnedTargetMs);
-            File.WriteAllText(path, """{ "FifoLearnedTargetMs": null }""");
+            File.WriteAllText(path, """{ "FifoLearnedTargetMs2": null }""");
             Assert.Empty(AppConfig.Load(path).FifoLearnedTargetMs);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Targets_that_1_5_0_beta_5_remembered_are_dropped_once()
+    {
+        // 2026-11-27: they were learned from dropouts that were none (the player stopping its stream at each track change
+        // took the target to its ceiling), so the name they were stored under is no longer read.
+        var path = Path.Combine(Path.GetTempPath(), $"homepodcast-fifo-{Guid.NewGuid():N}", "config.json");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, $$"""{ "DeviceId": "AA:BB", "LatencyMs": 250, "FifoLearnedTargetMs": { "{{Card}}": 50 } }""");
+            var loaded = AppConfig.Load(path);
+            Assert.Equal("AA:BB", loaded.DeviceId);                   // the file still loads, with everything else in it
+            Assert.Equal(250, loaded.LatencyMs);
+            Assert.Null(loaded.FifoLearnedTargetFor(Card));
+            Assert.Empty(loaded.FifoLearnedTargetMs);
+
+            using (var c = Controller(() => Card, loaded))
+            {
+                c.FitFifoTo(100);
+                Assert.Equal(16, TargetMs(c));                        // starts from the configured target again
+            }
+
+            loaded.RememberFifoTarget(Card, 24);                      // what is learned from now on is kept, under the new name
+            loaded.Save(path);
+            string saved = File.ReadAllText(path);
+            Assert.Contains("\"FifoLearnedTargetMs2\"", saved);
+            Assert.DoesNotContain("\"FifoLearnedTargetMs\"", saved);  // the old values are gone from the file
+            Assert.Equal(24, AppConfig.Load(path).FifoLearnedTargetFor(Card));
         }
         finally
         {

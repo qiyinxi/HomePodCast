@@ -57,6 +57,8 @@ public sealed partial class StreamController : IDisposable
     /// fixed ceiling before) and at most 100 ms. 2026-11-15: on the maintainer's PC Windows delivered nothing for 26 to
     /// 100 ms a few times an hour; each was a dropout, and raising the latency to 200 ms did not help while the FIFO
     /// stayed at 30 ms. Who chose a higher latency accepts that much delay, so the FIFO may use part of it.
+    /// (2026-11-27: most of those holes are now read as the player pausing between two tracks, which no buffer covers
+    /// and which no longer grows the target, see AudioFifo's remarks; the ceiling stays for audio that really comes late.)
     /// </summary>
     internal static int FifoCeilingFor(int latencyMs, int fifoTargetMs) =>
         Math.Max(fifoTargetMs, Math.Clamp(latencyMs / 2, MaxFifoTargetMs, FifoCeilingMs));

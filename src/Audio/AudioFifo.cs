@@ -8,15 +8,37 @@ namespace HomePodCast.Audio;
 /// Keeps latency bounded: overflow trims back to the target; underflow pads silence and re-primes.
 /// </summary>
 /// <remarks>
-/// An empty FIFO is only a dropout if the producer comes back quickly: WASAPI loopback stops delivering
+/// An empty FIFO is only a dropout if audio that existed reached it late: WASAPI loopback stops delivering
 /// altogether while nothing plays, so "the music was paused" also drains it. The FIFO therefore decides when
-/// data resumes: within <see cref="DropoutWindowMs"/> it was a dropout (counted in <see cref="Underruns"/>, and
-/// with an adaptive target the target grows), later it was the source going quiet (<see cref="IdleGaps"/>).
+/// data resumes, by how long it was dry and by how much arrives:
+/// <list type="bullet">
+/// <item>later than <see cref="DropoutWindowMs"/>: the source went quiet (<see cref="IdleGaps"/>);</item>
+/// <item>sooner, but dry for more than <see cref="SourcePauseMarginMs"/> longer than the audio the resuming write
+/// brings: the source paused for a moment (<see cref="IdleGaps"/> as well);</item>
+/// <item>otherwise a dropout (<see cref="Underruns"/>, and with an adaptive target the target grows).</item>
+/// </list>
+/// A FIFO can only absorb late delivery: audio that was produced on time and reached the capture late comes as a
+/// backlog that covers the hole. When the source itself paused, nothing was late, only an ordinary packet follows,
+/// and a larger buffer would have changed nothing. 2026-11-27, the maintainer's PC: at every track change the player
+/// (a web player in msedge; NetEase Cloud Music alike) stops its audio stream for a moment, and Windows delivers no
+/// packets meanwhile. The log had hundreds of capture holes just under 200 ms at song-length spacing, each followed by
+/// one 10 ms packet; each counted as a dropout and took the target to its ceiling (50 to 100 ms of latency), for good.
 /// </remarks>
 public sealed partial class AudioFifo
 {
-    /// <summary>Data that resumes within this time after the FIFO ran dry means an audible dropout.</summary>
+    /// <summary>
+    /// Data that resumes within this time after the FIFO ran dry can mean an audible dropout (see
+    /// <see cref="SourcePauseMarginMs"/>); later, the source had gone quiet.
+    /// </summary>
     public const int DropoutWindowMs = 200;
+
+    /// <summary>
+    /// A FIFO that was dry for more than this much longer than the audio the resuming write brings was not waiting for
+    /// late audio: the source had paused (see the remarks). The margin is two 10 ms capture periods: a backlog may be a
+    /// period short of the time that passed, and a sender that read a burst leaves the FIFO dry for a few ms before an
+    /// ordinary packet; both stay dropouts.
+    /// </summary>
+    public const int SourcePauseMarginMs = 20;
 
     private readonly float[] _buf;
     private readonly int _capacity; // frames
@@ -53,7 +75,10 @@ public sealed partial class AudioFifo
     /// <summary>Audible dropouts: the FIFO ran dry while the source was still playing.</summary>
     public long Underruns { get; private set; }
 
-    /// <summary>The FIFO ran dry because the source went quiet (paused, nothing playing).</summary>
+    /// <summary>
+    /// The FIFO ran dry because the source went quiet (paused, nothing playing, a player's short stop between two
+    /// tracks): no dropout, and the target stays.
+    /// </summary>
     public long IdleGaps { get; private set; }
 
     public long Overflows { get; private set; }
@@ -94,7 +119,7 @@ public sealed partial class AudioFifo
         }
         lock (_lock)
         {
-            if (_dryPending) ClassifyDry();
+            if (_dryPending) ClassifyDry(frames);
             if (_count + frames > _capacity) Skip(_count + frames - _capacity); // ring full: oldest go first
             int write = (_read + _count) % _capacity;
             if (channels == 2)
@@ -207,12 +232,25 @@ public sealed partial class AudioFifo
         }
     }
 
-    /// <summary>The source is writing again after the FIFO ran dry: a dropout, or just the end of a quiet spell.</summary>
-    private void ClassifyDry()
+    /// <summary>
+    /// The source is writing again (<paramref name="arrivedFrames"/> in this write) after the FIFO ran dry: a dropout,
+    /// or just the end of a quiet spell or of a short pause of the source.
+    /// </summary>
+    private void ClassifyDry(int arrivedFrames)
     {
         _dryPending = false;
         if (_dryAt < _graceUntil) return; // the new sender's start-up burst
-        if (Clock() - _dryAt > DropoutWindowMs * Stopwatch.Frequency / 1000)
+        long dry = Clock() - _dryAt;
+        if (dry > DropoutWindowMs * Stopwatch.Frequency / 1000)
+        {
+            IdleGaps++;
+            return;
+        }
+        // Dry for clearly longer than what now arrives: the audio was not late, there was none (the remarks above). The
+        // capture writes everything that was waiting in one piece, so late delivery brings its backlog with it: 100 ms
+        // dry, then 100 ms at once, stays a dropout below; 180 ms dry, then one 10 ms packet, does not.
+        long arrived = arrivedFrames * Stopwatch.Frequency / SampleRate;
+        if (dry > arrived + SourcePauseMarginMs * Stopwatch.Frequency / 1000)
         {
             IdleGaps++;
             return;
@@ -224,8 +262,11 @@ public sealed partial class AudioFifo
         // remembered across runs, see RestoreTarget; the floor is not.)
         _floorFrames = Math.Min(Math.Max(_floorFrames, TargetFrames + 2 * _msFrames), MaxTargetFrames);
         // Grow by what was missing, at least GrowMs. 2026-11-15: Windows delivered nothing for 26 to 100 ms a few times
-        // an hour; at 4 ms a dropout the target would have needed dozens of them to cover one.
-        long dryMs = (Clock() - _dryAt) * 1000 / Stopwatch.Frequency;
+        // an hour; at 4 ms a dropout the target would have needed dozens of them to cover one. (2026-11-27: only one
+        // 10 ms packet came after those holes, so the longer ones were most likely the player pausing between two
+        // tracks, which no longer gets here. That is a reading of the log, not a measurement of each hole. Late delivery
+        // of that size still grows the target by what was missing.)
+        long dryMs = dry * 1000 / Stopwatch.Frequency;
         int grow = (int)Math.Clamp(dryMs, GrowMs, 1000) * _msFrames;
         if (MaxTargetFrames > TargetFrames) SetTarget(Math.Min(TargetFrames + grow, MaxTargetFrames));
     }
