@@ -227,7 +227,12 @@ public sealed class RoutedCapture : ICaptureSource
 
             Routed = routed;
             DeviceName = routed ? L.F("{0}（按程序分流）", name) : name;
-            Log.Info($"capturing \"{name}\" {rate} Hz, {(routed ? "per app (process loopback)" : "whole output")}" +
+            // The endpoint's whole mix format, not only its rate. 2026-11-20: music came out as nothing but crackle after the
+            // default output went back and forth between a remote-desktop virtual device and the monitor; a reconnect
+            // fixed it, and the log could not show whether the device that came back had another format.
+            string format = endpoint == null ? "" : $" {endpoint.Format.Channels} ch {(endpoint.Format.IsFloat ? "float" : "pcm")}" +
+                                                    $"{endpoint.Format.BitsPerSample} (block {endpoint.Format.BlockAlign})";
+            Log.Info($"capturing \"{name}\" {rate} Hz{format}, {(routed ? "per app (process loopback)" : "whole output")}" +
                      $"{(follow ? "" : ", chosen capture device")}");
             DeviceChanged?.Invoke(DeviceName);
 
