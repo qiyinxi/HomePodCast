@@ -268,6 +268,41 @@ public class CoordinatedReceiverSessionTests
     }
 
     [Fact]
+    public async Task A_PTP_realtime_packet_that_goes_out_late_is_counted_and_the_rest_keep_their_times()
+    {
+        // 2026-11-27: an Apple TV session logged nothing about its sender, so stutter there could not be told from the
+        // network's. Late packets are counted as the HomePod sender counts them, and the minute's line shows them.
+        using var fake = new FakeAirPlayReceiver(false) { ModelOverride = "ThirdParty" };
+        using var guard = new CancellationTokenSource(Guard);
+        using var clocks = new PtpClockPool();
+        var options = new StreamOptions(250, 10);
+        using var client = await PrepareRealtime(fake, options, clocks, guard.Token);
+        var history = History(250);
+        int reads = 0;
+        long start = MediaClock.Now + MediaClock.FromMs(250);
+        client.StartCoordinatedPtp(options, (ticks, stereo) =>
+        {
+            // The third packet's audio takes 30 ms: the next three are due before it is out, none 60 ms late.
+            if (Interlocked.Increment(ref reads) == 3) Thread.Sleep(30);
+            return history.Read(ticks, stereo);
+        }, start, true);
+        var sender = client.PtpRealtime!;
+        await Until(() => sender.LateWakeups > 0 && fake.Rtp.Audio.Count >= 10, () => client.LostReason);
+        Assert.Null(client.LostReason);
+        Assert.InRange(sender.MaxLateMs, 2, 60); // later than that is jumped over, not sent
+        // Late or not, a packet carries the RTP time of its place on the timeline.
+        foreach (var packet in fake.Rtp.Audio.Select(p => p.Bytes).ToList())
+            Assert.Equal(unchecked(sender.RtpBase + (uint)(unchecked((ushort)(FakeReceiver.Seq(packet) - sender.FirstSeq)) * 352)),
+                FakeReceiver.Rtp(packet));
+
+        string line = StreamController.PtpStatsLine(48, 50, 3, 2, 1, 197, 0, sender.PacketsSent, sender.LateWakeups,
+            sender.MaxLateMs, 0, 4, 5, "ping=1/2/3ms");
+        Assert.StartsWith("stats (PTP realtime): fifo=48ms target=50ms drift=3ppm underruns=2 idle=1 maxGap=197ms overflows=0 " +
+                          $"sent={sender.PacketsSent} late={sender.LateWakeups} maxLate=", line);
+        Assert.EndsWith("ms skipped=0 rtx=4/5 ping=1/2/3ms", line);
+    }
+
+    [Fact]
     public async Task A_PTP_realtime_stall_of_seconds_still_ends_the_session_with_its_reason()
     {
         // A suspend or a debugger, not a busy moment: the receiver has given the session up meanwhile.

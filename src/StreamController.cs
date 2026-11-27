@@ -479,6 +479,15 @@ public sealed partial class StreamController : IDisposable
             LogSurroundStats(client, surround);
             return;
         }
+        if (client?.PtpRealtime is { } ptp)
+        {
+            // 2026-11-27: an Apple TV session logged no stats at all, so a report of stutter at 500 ms latency left
+            // nothing to read: whether the FIFO ran dry, the sender woke late, or the Apple TV asked for resends.
+            Log.Info(PtpStatsLine(_fifo.Depth * 1000.0 / RtpSender.SampleRate, _fifo.TargetMs, _capture?.DriftPpm ?? 0,
+                _fifo.Underruns, _fifo.IdleGaps, _capture?.TakeMaxGapMs() ?? 0, _fifo.Overflows, ptp.PacketsSent,
+                ptp.LateWakeups, ptp.MaxLateMs, ptp.SkippedPackets, ptp.Retransmitted, ptp.RetransmitRequests, _net?.TakeSummary()));
+            return;
+        }
         var s = client?.Sender;
         if (s == null) return;
         Log.Info($"stats: fifo={_fifo.Depth * 1000.0 / RtpSender.SampleRate:F0}ms target={_fifo.TargetMs:F0}ms " +
@@ -488,6 +497,13 @@ public sealed partial class StreamController : IDisposable
                  $"maxLate={s.MaxLateMs:F1}ms skipped={s.SkippedPackets} rtx={s.Retransmitted}/{s.RetransmitRequests} " +
                  $"rtxMiss={s.RetransmitMisses} ntp={client!.TimingRequests} {_net?.TakeSummary()}");
     }
+
+    /// <summary>The minute's line of a realtime PTP session (an Apple TV): the HomePod line's fields that this sender has.</summary>
+    internal static string PtpStatsLine(double fifoMs, double targetMs, double driftPpm, long underruns, long idle, double maxGapMs,
+        long overflows, long sent, long late, double maxLateMs, long skipped, long resent, long resendRequests, string? network) =>
+        $"stats (PTP realtime): fifo={fifoMs:F0}ms target={targetMs:F0}ms drift={driftPpm:F0}ppm underruns={underruns} idle={idle} " +
+        $"maxGap={maxGapMs:F0}ms overflows={overflows} sent={sent} late={late} maxLate={maxLateMs:F1}ms skipped={skipped} " +
+        $"rtx={resent}/{resendRequests} {network}";
 
     private NetworkWatch? _net; // the current session's; a disposed one just reports nothing new
 
