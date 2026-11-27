@@ -18,6 +18,9 @@ internal sealed record PtpTimeline(Func<long, ulong> TimeAt, Func<ulong> ClockId
 internal sealed class PtpRealtimeSender : IDisposable
 {
     private static readonly long LateLimit = MediaClock.FromMs(60);
+
+    /// <summary>A stall longer than this ends the session (see <see cref="Send"/>); shorter ones are jumped over.</summary>
+    private static readonly long GiveUpLimit = MediaClock.FromMs(2000);
     private readonly UdpClient _audio, _control;
     private readonly IPEndPoint _controlPeer;
     private readonly CounterCipher _cipher;
@@ -34,7 +37,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly object _lifecycle = new();
     private Thread? _sender;
     private Task _resends = Task.CompletedTask;
-    private long _packets;
+    private long _packets, _skipped;
     private long _retransmitted, _retransmitRequests;
     private int _disposed;
     private long? _startAt;
@@ -50,6 +53,9 @@ internal sealed class PtpRealtimeSender : IDisposable
     public ushort FirstSeq { get; } = (ushort)RandomNumberGenerator.GetInt32(65536);
     public long StartedAt { get; private set; }
     public long PacketsSent => Interlocked.Read(ref _packets);
+
+    /// <summary>Packets never sent because the sender jumped its timeline over them after a stall on this PC.</summary>
+    public long SkippedPackets => Interlocked.Read(ref _skipped);
     public long Retransmitted => Interlocked.Read(ref _retransmitted);
     public long RetransmitRequests => Interlocked.Read(ref _retransmitRequests);
     public Action<long>? OnsetSent { get; set; }
@@ -162,14 +168,27 @@ internal sealed class PtpRealtimeSender : IDisposable
                 long late = MediaClock.Now - deadline;
                 if (late > LateLimit)
                 {
-                    if (sent) throw new IOException($"PTP realtime sender missed its deadline: packet {n} {MediaClock.ToMs(late):F0} ms late");
-                    // Nothing has gone out yet, so the receiver loses nothing if this leg joins the common timeline
-                    // where it is now, as RtpSender does after a stall: a later packet with the RTP time the epoch gives
-                    // it, and still none sent more than 60 ms late. Its Start came late (the group's RTSP round trips, a
-                    // busy machine) or it woke late for packet 0. 2026-10-17: with forced GCs running on this PC, the
-                    // test's Start returned 425-648 ms after the epoch it had chosen, and failing cost the session.
+                    // Too long for a stall of this PC (a suspend, a debugger): the receiver has given the session up by now.
+                    if (sent && late > GiveUpLimit)
+                        throw new IOException($"PTP realtime sender missed its deadline: packet {n} {MediaClock.ToMs(late):F0} ms late");
+                    // Join the timeline where it is now, as RtpSender does after a stall: a later packet with the RTP time
+                    // the epoch gives it, and still none sent more than 60 ms late. The receiver hears the packets jumped
+                    // over as a hole of that length, and nothing else changes.
+                    // Before the first packet the receiver loses nothing at all: this leg's Start came late (the group's
+                    // RTSP round trips, a busy machine) or it woke late for packet 0. 2026-10-17: with forced GCs running
+                    // on this PC, the test's Start returned 425-648 ms after the epoch it had chosen, and failing cost the
+                    // session.
+                    // After it, a stall used to end the session. 2026-11-26, the maintainer's log (a stream to an Apple TV):
+                    // "packet 189431 236 ms late" was followed by a reconnect, about 4 s without sound for a hole of a
+                    // quarter of a second.
                     long skip = (long)(late * 44100.0 / 352 / MediaClock.Frequency);
-                    Log.Warn($"PTP realtime sender {MediaClock.ToMs(late):F0} ms late for packet {n} before sending any, joins at packet {n + skip}");
+                    if (sent)
+                    {
+                        Interlocked.Add(ref _skipped, skip);
+                        if (_readAudio == null) _fifo.DiscardToTarget(); // what piled up meanwhile would play late
+                        Log.Warn($"PTP realtime sender stalled {MediaClock.ToMs(late):F0} ms at packet {n}, skipped {skip} packets");
+                    }
+                    else Log.Warn($"PTP realtime sender {MediaClock.ToMs(late):F0} ms late for packet {n} before sending any, joins at packet {n + skip}");
                     n += skip;
                     continue;
                 }

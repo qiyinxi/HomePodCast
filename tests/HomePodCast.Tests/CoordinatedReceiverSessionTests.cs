@@ -233,8 +233,10 @@ public class CoordinatedReceiverSessionTests
     }
 
     [Fact]
-    public async Task A_PTP_realtime_stall_after_the_first_packet_still_ends_the_session_with_its_reason()
+    public async Task A_PTP_realtime_stall_after_the_first_packet_jumps_over_what_it_missed()
     {
+        // 2026-11-26, the maintainer's stream to an Apple TV: a wake 236 ms late ended the session ("missed its deadline:
+        // packet 189431 236 ms late"), and the reconnect cost about 4 s of sound for a quarter of a second missed.
         using var fake = new FakeAirPlayReceiver(false) { ModelOverride = "ThirdParty" };
         using var guard = new CancellationTokenSource(Guard);
         using var clocks = new PtpClockPool();
@@ -247,6 +249,39 @@ public class CoordinatedReceiverSessionTests
         {
             // The third packet's audio takes 200 ms to come, so the packets after it cannot be on time any more.
             if (Interlocked.Increment(ref reads) == 3) Thread.Sleep(200);
+            return history.Read(ticks, stereo);
+        }, start, true);
+        var sender = client.PtpRealtime!;
+        await Until(() => sender.SkippedPackets > 0 && fake.Rtp.Audio.Count >= 10, () => client.LostReason);
+        Assert.Null(client.LostReason);
+
+        // Every packet keeps the sequence number and RTP time its place on the timeline gives it; the ones jumped over
+        // are simply missing, at least the 60 ms that count as too late.
+        var packets = fake.Rtp.Audio.Select(p => p.Bytes).ToList();
+        var places = packets.Select(p => (int)unchecked((ushort)(FakeReceiver.Seq(p) - sender.FirstSeq))).ToList();
+        for (int i = 0; i < packets.Count; i++)
+            Assert.Equal(unchecked(sender.RtpBase + (uint)(places[i] * 352)), FakeReceiver.Rtp(packets[i]));
+        int hole = places.Zip(places.Skip(1), (a, b) => b - a - 1).Max();
+        Assert.True(hole >= 60 * 44100 / 1000 / 352, $"the largest hole is {hole} packets");
+        Assert.True(sender.SkippedPackets >= hole);
+        Assert.Empty(fake.Errors);
+    }
+
+    [Fact]
+    public async Task A_PTP_realtime_stall_of_seconds_still_ends_the_session_with_its_reason()
+    {
+        // A suspend or a debugger, not a busy moment: the receiver has given the session up meanwhile.
+        using var fake = new FakeAirPlayReceiver(false) { ModelOverride = "ThirdParty" };
+        using var guard = new CancellationTokenSource(Guard);
+        using var clocks = new PtpClockPool();
+        var options = new StreamOptions(250, 10);
+        using var client = await PrepareRealtime(fake, options, clocks, guard.Token);
+        var history = History(250);
+        int reads = 0;
+        long start = MediaClock.Now + MediaClock.FromMs(250);
+        client.StartCoordinatedPtp(options, (ticks, stereo) =>
+        {
+            if (Interlocked.Increment(ref reads) == 3) Thread.Sleep(2300);
             return history.Read(ticks, stereo);
         }, start, true);
         await Until(() => client.LostReason != null, () => null);
