@@ -104,6 +104,11 @@ public sealed class LoopbackCapture : ICaptureSource
             {
                 ready.WaitOne(20); // loopback signals nothing while the endpoint is silent
 
+                // Everything that is waiting goes into the FIFO as one write, as in RoutedCapture: after late delivery
+                // that is the whole backlog, and its size is how the FIFO tells late audio from a source that paused
+                // (AudioFifo.SourcePauseMarginMs). Written packet by packet, a backlog's first 10 ms would look like the
+                // one packet after a pause.
+                resampled.Clear();
                 while (true)
                 {
                     int hr = capture.GetNextPacketSize(out uint pending);
@@ -126,8 +131,10 @@ public sealed class LoopbackCapture : ICaptureSource
                     else ToStereo(data, (int)frames, fmt, span);
                     capture.ReleaseBuffer(frames);
 
-                    resampled.Clear();
                     resampler.Process(span, resampled);
+                }
+                if (resampled.Count > 0)
+                {
                     _fifo.Write(CollectionsMarshal.AsSpan(resampled));
                     TrackPeak(CollectionsMarshal.AsSpan(resampled));
                     SteerDrift(resampler);

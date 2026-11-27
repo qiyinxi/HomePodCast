@@ -44,7 +44,14 @@ public sealed class AppConfig
     /// follows the target down as it relaxes; an entry goes once the target is back at the configured one. 2026-11-26:
     /// kept in memory only, each restart of the app replayed a virtual sound card's dropouts until the target had grown
     /// again. Saved when a session ends, about once a minute while streaming, and at quit (UI/TrayApp.FifoMemory.cs).
+    /// <para>
+    /// Stored as "FifoLearnedTargetMs2". 2026-11-27: what 1.5.0 beta 5 saved as "FifoLearnedTargetMs" was learned from
+    /// dropouts that were none (a player stopping its stream at each track change took the target to its ceiling, see
+    /// AudioFifo's remarks), so those values are dropped once: the old name is not read (an unknown property in the file
+    /// is skipped) and is gone from the file at the next save.
+    /// </para>
     /// </summary>
+    [JsonPropertyName("FifoLearnedTargetMs2")]
     public Dictionary<string, int> FifoLearnedTargetMs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The target remembered for a capture device, or null.</summary>

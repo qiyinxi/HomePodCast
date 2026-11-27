@@ -124,7 +124,9 @@ public class AudioFifoTests
     [Fact]
     public void Overflow_trims_back_to_target_and_underflow_pads_and_reprimes()
     {
-        var fifo = new AudioFifo(44100, targetMs: 12, capMs: 46);
+        // The clock stands still: on the real one, a test thread held up for some 20 ms between the dry read and the
+        // write below would make this the source pausing (AudioFifo.SourcePauseMarginMs), not a dropout.
+        var fifo = new AudioFifo(44100, targetMs: 12, capMs: 46) { Clock = () => 0 };
         int target = fifo.TargetFrames, cap = fifo.CapFrames;
         fifo.Write(new float[(cap + 100) * 2]);
         Assert.Equal(target, fifo.Depth);
@@ -157,8 +159,8 @@ public class AudioFifoTests
         var (fifo, advance) = Clocked();
         fifo.Write(new float[600 * 2]);
         Drain(fifo);
-        advance(30);                      // a late burst from the capture device
-        fifo.Write(new float[600 * 2]);
+        advance(30);                      // a late burst from the capture device: the 30 ms it held back, at once
+        fifo.Write(new float[1323 * 2]);
         Assert.Equal(1, fifo.Underruns);
         Assert.Equal(0, fifo.IdleGaps);
 
@@ -167,6 +169,63 @@ public class AudioFifoTests
         fifo.Write(new float[600 * 2]);
         Assert.Equal(1, fifo.Underruns);
         Assert.Equal(1, fifo.IdleGaps);
+    }
+
+    [Fact]
+    public void A_source_that_paused_for_a_moment_is_no_dropout_and_grows_nothing()
+    {
+        // 2026-11-27, the maintainer's PC: at every track change the player stops its audio stream for a moment and
+        // Windows delivers nothing meanwhile; then one ordinary 10 ms packet comes, no backlog. Each of these counted as
+        // a dropout and took the target to its ceiling, where it stayed and was remembered across restarts.
+        var (fifo, advance) = Clocked(16);
+        fifo.MaxTargetFrames = 44100 * 100 / 1000;
+        int target = fifo.TargetFrames, cap = fifo.CapFrames;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(180);                                             // within the 200 ms window
+        fifo.Write(new float[441 * 2]);                           // one packet: nothing had been late
+        Assert.Equal(0, fifo.Underruns);
+        Assert.Equal(1, fifo.IdleGaps);
+        Assert.Equal(target, fifo.TargetFrames);
+        Assert.Equal(cap, fifo.CapFrames);
+
+        // No floor was left behind either: a target raised later relaxes all the way to the base (after a dropout at
+        // the base it would stop 2 ms above it).
+        fifo.RelaxAfterReads = 1;
+        fifo.RestoreTarget(target + 5 * 44);
+        var dest = new float[352 * 2];
+        for (int i = 0; i < 20; i++)
+        {
+            fifo.Write(new float[352 * 2]);
+            fifo.Read(dest);
+        }
+        Assert.Equal(target, fifo.TargetFrames);
+        Assert.Equal(0, fifo.Underruns);
+    }
+
+    [Theory]
+    [InlineData(4, 10, true)]      // the sender read a burst: dry for a few ms before the next ordinary packet
+    [InlineData(15, 10, true)]
+    [InlineData(25, 10, true)]     // a packet that came late, within the margin
+    [InlineData(40, 10, false)]    // one packet after 40 ms: 30 ms of audio never existed
+    [InlineData(180, 10, false)]   // a track change
+    [InlineData(100, 100, true)]   // late delivery: the backlog covers the hole
+    [InlineData(100, 90, true)]    // a capture period short of it
+    [InlineData(180, 100, false)]  // too little even for late delivery
+    [InlineData(250, 250, false)]  // beyond the window the source was quiet, whatever arrives
+    public void What_arrives_after_a_dry_spell_tells_late_audio_from_a_source_that_paused(int dryMs, int arrivedMs, bool dropout)
+    {
+        var (fifo, advance) = Clocked(16);
+        fifo.MaxTargetFrames = 44100 * 200 / 1000;
+        int target = fifo.TargetFrames;
+        fifo.Write(new float[2000 * 2]);
+        Drain(fifo);
+        advance(dryMs);
+        fifo.Write(new float[44100 * arrivedMs / 1000 * 2]);
+        Assert.Equal(dropout ? 1 : 0, fifo.Underruns);
+        Assert.Equal(dropout ? 0 : 1, fifo.IdleGaps);
+        // A dropout grows the target by the dry time, at least GrowMs, as before; a pause leaves it alone.
+        Assert.Equal(dropout ? target + Math.Max(dryMs, fifo.GrowMs) * 44 : target, fifo.TargetFrames);
     }
 
     [Fact]
@@ -275,19 +334,20 @@ public class AudioFifoTests
     public void A_long_dropout_grows_the_target_by_what_was_missing_up_to_the_ceiling()
     {
         // 2026-11-15: Windows delivered nothing for 26 to 100 ms a few times an hour; 4 ms a dropout never caught up.
+        // 2026-11-27: the audio that was late comes with it, at once; a hole followed by one packet is a pause, not this.
         var (fifo, advance) = Clocked();                          // 12 ms base
         fifo.MaxTargetFrames = 44100 * 100 / 1000;
         fifo.Write(new float[2000 * 2]);
         Drain(fifo);
         advance(26);
-        fifo.Write(new float[352 * 2]);
+        fifo.Write(new float[44100 * 26 / 1000 * 2]);
         Assert.Equal(1, fifo.Underruns);
         Assert.Equal(529 + 26 * 44, fifo.TargetFrames);           // 12 + 26 ms
 
         fifo.Write(new float[2000 * 2]);                          // primed again
         Drain(fifo);
         advance(150);                                             // still a dropout (within 200 ms), more than the ceiling allows
-        fifo.Write(new float[352 * 2]);
+        fifo.Write(new float[44100 * 150 / 1000 * 2]);
         Assert.Equal(2, fifo.Underruns);
         Assert.Equal(fifo.MaxTargetFrames, fifo.TargetFrames);
     }
@@ -301,7 +361,7 @@ public class AudioFifoTests
         fifo.Write(new float[2000 * 2]);
         Drain(fifo);
         advance(80);
-        fifo.Write(new float[352 * 2]);
+        fifo.Write(new float[44100 * 80 / 1000 * 2]);            // 80 ms late, and all of it at once: a dropout
         Assert.True(fifo.TargetFrames > 44100 * 30 / 1000);
 
         fifo.SetMaxTarget(44100 * 30 / 1000);                    // the next connection has a lower latency
