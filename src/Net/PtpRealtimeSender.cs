@@ -37,7 +37,7 @@ internal sealed class PtpRealtimeSender : IDisposable
     private readonly object _lifecycle = new();
     private Thread? _sender;
     private Task _resends = Task.CompletedTask;
-    private long _packets, _skipped;
+    private long _packets, _skipped, _lateWakeups, _maxLateTicks;
     private long _retransmitted, _retransmitRequests;
     private int _disposed;
     private long? _startAt;
@@ -56,6 +56,10 @@ internal sealed class PtpRealtimeSender : IDisposable
 
     /// <summary>Packets never sent because the sender jumped its timeline over them after a stall on this PC.</summary>
     public long SkippedPackets => Interlocked.Read(ref _skipped);
+
+    /// <summary>Packets after the first that went out more than 2 ms after their time, and the latest of them (as RtpSender counts).</summary>
+    public long LateWakeups => Interlocked.Read(ref _lateWakeups);
+    public double MaxLateMs => MediaClock.ToMs(Interlocked.Read(ref _maxLateTicks));
     public long Retransmitted => Interlocked.Read(ref _retransmitted);
     public long RetransmitRequests => Interlocked.Read(ref _retransmitRequests);
     public Action<long>? OnsetSent { get; set; }
@@ -146,24 +150,21 @@ internal sealed class PtpRealtimeSender : IDisposable
         try
         {
             using var mmcss = Native.EnterMmcss("Pro Audio");
+            // This loop waited with WaitHandle.WaitOne(ms), which ends on the system timer's tick. 2026-11-27, the
+            // maintainer's PC, a plain process: WaitOne(7) took 15.5 ms (median of 300; 13.9 to 30.3), two packets' time.
+            // So packets went out in pairs, each up to a tick late, and the FIFO was read two packets at once, which a
+            // 16 ms target cannot feed: an Apple TV session began with "fifo dropout … target 20 ms", "… target 24 ms".
+            using var timer = new Native.PreciseTimer();
             var audio = new float[704]; var pcm = new short[704];
-            var stopped = _stop.Token.WaitHandle;
+            IntPtr stopped = _stop.Token.WaitHandle.SafeWaitHandle.DangerousGetHandle(); // lives until this thread has exited
             long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
             int quiet = 0;
             bool sent = false, firstSync = true;
             while (!_stop.IsCancellationRequested)
             {
                 long deadline = start + (long)(n * 352.0 * MediaClock.Frequency / 44100);
-                if (_startAt != null)
-                {
-                    while (MediaClock.Now < deadline)
-                        if (stopped.WaitOne(Math.Max(1, (int)MediaClock.ToMs(deadline - MediaClock.Now)))) return;
-                }
-                else
-                {
-                    int wait = (int)MediaClock.ToMs(deadline - MediaClock.Now);
-                    if (wait > 0 && stopped.WaitOne(wait)) return;
-                }
+                for (long left; (left = deadline - MediaClock.Now) > 0;)
+                    if (timer.WaitFor(stopped, left)) return;
                 if (!_clock.Usable()) throw new IOException("PTP master changed; reconnect is required");
                 long late = MediaClock.Now - deadline;
                 if (late > LateLimit)
@@ -191,6 +192,11 @@ internal sealed class PtpRealtimeSender : IDisposable
                     else Log.Warn($"PTP realtime sender {MediaClock.ToMs(late):F0} ms late for packet {n} before sending any, joins at packet {n + skip}");
                     n += skip;
                     continue;
+                }
+                if (sent && late > MediaClock.FromMs(2))
+                {
+                    Interlocked.Increment(ref _lateWakeups);
+                    if (late > Interlocked.Read(ref _maxLateTicks)) Interlocked.Exchange(ref _maxLateTicks, late);
                 }
                 if (MediaClock.Now >= nextSync)
                 {
