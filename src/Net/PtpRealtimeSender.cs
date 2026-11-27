@@ -156,7 +156,7 @@ internal sealed class PtpRealtimeSender : IDisposable
             // 16 ms target cannot feed: an Apple TV session began with "fifo dropout … target 20 ms", "… target 24 ms".
             using var timer = new Native.PreciseTimer();
             var audio = new float[704]; var pcm = new short[704];
-            IntPtr stopped = _stop.Token.WaitHandle.SafeWaitHandle.DangerousGetHandle(); // lives until this thread has exited
+            long stopCheck = MediaClock.FromMs(20); // a wait for a far start is cut up, so that stopping never waits for it
             long start = StartedAt = _startAt ?? MediaClock.Now, n = 0, nextSync = start;
             int quiet = 0;
             bool sent = false, firstSync = true;
@@ -164,7 +164,10 @@ internal sealed class PtpRealtimeSender : IDisposable
             {
                 long deadline = start + (long)(n * 352.0 * MediaClock.Frequency / 44100);
                 for (long left; (left = deadline - MediaClock.Now) > 0;)
-                    if (timer.WaitFor(stopped, left)) return;
+                {
+                    timer.Sleep(Math.Min(left, stopCheck));
+                    if (_stop.IsCancellationRequested) return;
+                }
                 if (!_clock.Usable()) throw new IOException("PTP master changed; reconnect is required");
                 long late = MediaClock.Now - deadline;
                 if (late > LateLimit)
